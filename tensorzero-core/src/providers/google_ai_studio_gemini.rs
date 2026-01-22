@@ -57,8 +57,9 @@ const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
     request_url: Url,
@@ -499,6 +500,7 @@ impl<'a> GeminiContent<'a> {
                         signature,
                         summary: _,
                         provider_type: _,
+                        extra_data: _,
                     },
                 ) => {
                     // Gemini never produces 'thought: true' at the moment, and there's no documentation
@@ -1044,6 +1046,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -1058,6 +1061,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             _ => {
@@ -1092,6 +1096,7 @@ fn content_part_to_tensorzero_chunk(
             summary_text: None,
             signature: Some(thought_signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 
@@ -1158,6 +1163,7 @@ fn convert_part_to_output(
                     text: Some(text),
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             // Handle 'thought' with no other fields
@@ -1169,6 +1175,7 @@ fn convert_part_to_output(
                     text: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             _ => {
@@ -1199,6 +1206,7 @@ fn convert_part_to_output(
             text: None,
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
     match part.data {
@@ -1288,13 +1296,25 @@ struct GeminiUsageMetadata {
     // Gemini doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thoughts_token_count: Option<u32>,
 }
 
 impl From<GeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GeminiUsageMetadata) -> Self {
+        // Sum candidates + thoughts tokens for output_tokens
+        let output_tokens = match (
+            usage_metadata.candidates_token_count,
+            usage_metadata.thoughts_token_count,
+        ) {
+            (Some(c), Some(t)) => Some(c + t),
+            (Some(c), None) => Some(c),
+            (None, Some(t)) => Some(t),
+            (None, None) => None,
+        };
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
+            output_tokens,
         }
     }
 }
@@ -1384,6 +1404,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: first_candidate.finish_reason.map(Into::into),
                 id: model_inference_id,
@@ -1566,6 +1587,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2083,6 +2105,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2186,6 +2209,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2321,6 +2345,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2630,6 +2655,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2696,6 +2722,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2766,6 +2793,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2826,6 +2854,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2883,6 +2912,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
+                thoughts_token_count: None,
             }),
         };
 
@@ -2931,6 +2961,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
+                thoughts_token_count: None,
             }),
         };
 
@@ -3011,6 +3042,7 @@ mod tests {
                 usage_metadata: Some(GeminiUsageMetadata {
                     prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
+                    thoughts_token_count: None,
                 }),
             };
 

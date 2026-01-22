@@ -244,7 +244,7 @@ retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.multi_hop_rag_agent.variants."gemini-2.5-flash"]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
+model = "google_ai_studio_gemini::gemini-2.5-flash"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
 retries = { num_retries = 4, max_delay_s = 10 }
 
@@ -272,7 +272,7 @@ retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.compact_context.variants."gemini-2.5-flash"]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
+model = "google_ai_studio_gemini::gemini-2.5-flash"
 system_template = "functions/compact_context/baseline/system_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
 

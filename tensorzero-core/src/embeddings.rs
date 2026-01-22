@@ -14,6 +14,7 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
@@ -80,6 +81,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             timeout_ms: None,
             provider_name: Arc::from(provider_type.to_string()),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
         Ok(EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
@@ -126,7 +128,6 @@ impl UninitializedEmbeddingModelConfig {
         self,
         provider_types: &ProviderTypesConfig,
         default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingModelConfig, Error> {
         // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
         // field via StoredEmbeddingModelConfig when loading from snapshot)
@@ -134,12 +135,7 @@ impl UninitializedEmbeddingModelConfig {
 
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
             let provider_config = config
-                .load(
-                    provider_types,
-                    name.clone(),
-                    default_credentials,
-                    http_client.clone(),
-                )
+                .load(provider_types, name.clone(), default_credentials)
                 .await?;
             Ok::<_, Error>((name, provider_config))
         }))
@@ -154,8 +150,9 @@ impl UninitializedEmbeddingModelConfig {
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
@@ -534,6 +531,7 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             cached: false,
             finish_reason: None,
             raw_usage: response.raw_usage,
+            relay_raw_response: None,
         })
     }
 }
@@ -547,8 +545,9 @@ pub trait EmbeddingProvider {
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
     Azure(AzureProvider),
@@ -557,20 +556,23 @@ pub enum EmbeddingProviderConfig {
     Dummy(DummyProvider),
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,
     pub timeout_ms: Option<u64>,
     pub provider_name: Arc<str>,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 #[derive(Clone, Debug)]
 pub struct EmbeddingProviderRequestInfo {
     pub provider_name: Arc<str>,
     pub extra_body: Option<ExtraBodyConfig>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 impl From<&EmbeddingProviderInfo> for EmbeddingProviderRequestInfo {
@@ -578,6 +580,7 @@ impl From<&EmbeddingProviderInfo> for EmbeddingProviderRequestInfo {
         EmbeddingProviderRequestInfo {
             provider_name: val.provider_name.clone(),
             extra_body: val.extra_body.clone(),
+            extra_headers: val.extra_headers.clone(),
         }
     }
 }
@@ -586,7 +589,7 @@ impl From<&EmbeddingProviderRequestInfo> for ModelProviderRequestInfo {
     fn from(val: &EmbeddingProviderRequestInfo) -> Self {
         crate::model::ModelProviderRequestInfo {
             provider_name: val.provider_name.clone(),
-            extra_headers: None, // Embeddings don't use extra headers yet
+            extra_headers: val.extra_headers.clone(),
             extra_body: val.extra_body.clone(),
         }
     }
@@ -600,12 +603,8 @@ impl EmbeddingProviderInfo {
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request)
             .await?;
         let response_fut = self.inner.embed(
             request,
@@ -627,15 +626,11 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        let postgres_connection_info = clients.postgres_connection_info.clone();
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
             async move {
-                if let Err(e) = ticket_borrow
-                    .return_tickets(&postgres_connection_info, resource_usage)
-                    .await
-                {
+                if let Err(e) = ticket_borrow.return_tickets(resource_usage).await {
                     tracing::error!("Failed to return rate limit tickets: {}", e);
                 }
             }
@@ -656,6 +651,8 @@ pub struct UninitializedEmbeddingProviderConfig {
     // in config/stored.rs which accepts the deprecated field and migrates it.
     #[serde(default)]
     pub extra_body: Option<ExtraBodyConfig>,
+    #[serde(default)]
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 impl UninitializedEmbeddingProviderConfig {
@@ -664,35 +661,39 @@ impl UninitializedEmbeddingProviderConfig {
         provider_types: &ProviderTypesConfig,
         provider_name: Arc<str>,
         default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingProviderInfo, Error> {
         let provider_config = self
             .config
-            .load(provider_types, default_credentials, http_client)
+            .load(provider_types, default_credentials)
             .await?;
         // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
         // field via StoredEmbeddingProviderConfig when loading from snapshot)
         let timeout_ms = self.timeout_ms;
 
         let extra_body = self.extra_body;
+        let extra_headers = self.extra_headers;
+
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::OpenAI(provider),
                 timeout_ms,
                 provider_name,
                 extra_body,
+                extra_headers,
             },
             ProviderConfig::Azure(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Azure(provider),
                 timeout_ms,
                 provider_name,
                 extra_body,
+                extra_headers,
             },
             ProviderConfig::OpenRouter(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::OpenRouter(provider),
                 timeout_ms,
                 provider_name,
                 extra_body,
+                extra_headers,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
@@ -700,6 +701,7 @@ impl UninitializedEmbeddingProviderConfig {
                 timeout_ms,
                 provider_name,
                 extra_body,
+                extra_headers,
             },
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
@@ -799,6 +801,7 @@ mod tests {
         cache::{CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         model_table::ProviderTypeDefaultCredentials,
+        rate_limiting::{RateLimitingManager, ScopeInfo},
     };
 
     use super::*;
@@ -814,6 +817,7 @@ mod tests {
             timeout_ms: None,
             provider_name: Arc::from("error".to_string()),
             extra_body: None,
+            extra_headers: None,
         };
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -824,6 +828,7 @@ mod tests {
             timeout_ms: None,
             provider_name: Arc::from("good".to_string()),
             extra_body: None,
+            extra_headers: None,
         };
         let fallback_embedding_model = EmbeddingModelConfig {
             routing: vec!["error".to_string().into(), "good".to_string().into()],
@@ -852,15 +857,16 @@ mod tests {
                         enabled: CacheEnabledMode::Off,
                     },
                     tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
+                    rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: crate::rate_limiting::ScopeInfo {
+                    scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
                         api_key_public_id: None,
                     },
                     relay: None,
                     include_raw_usage: false,
+                    include_raw_response: false,
                 },
             )
             .await;
@@ -898,6 +904,7 @@ mod tests {
             },
             timeout_ms: None,
             extra_body: Some(extra_body_config.clone()),
+            extra_headers: None,
         };
 
         let provider_info = uninitialized_config
@@ -905,7 +912,6 @@ mod tests {
                 &ProviderTypesConfig::default(),
                 Arc::from("test_provider"),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -915,5 +921,51 @@ mod tests {
         let loaded_extra_body = provider_info.extra_body.unwrap();
         assert_eq!(loaded_extra_body.data.len(), 1);
         assert_eq!(loaded_extra_body.data[0], replacement);
+    }
+
+    #[tokio::test]
+    async fn test_embedding_provider_config_with_extra_header() {
+        use crate::inference::types::extra_headers::{
+            ExtraHeader, ExtraHeaderKind, ExtraHeadersConfig,
+        };
+
+        let replacement = ExtraHeader {
+            name: "test".to_string(),
+            kind: ExtraHeaderKind::Value("header".to_string()),
+        };
+        let extra_headers_config = ExtraHeadersConfig {
+            data: vec![replacement.clone()],
+        };
+
+        let uninitialized_config = UninitializedEmbeddingProviderConfig {
+            config: UninitializedProviderConfig::OpenAI {
+                model_name: "text-embedding-ada-002".to_string(),
+                api_base: None,
+                api_key_location: Some(crate::model::CredentialLocationWithFallback::Single(
+                    crate::model::CredentialLocation::None,
+                )),
+                api_type: Default::default(),
+                include_encrypted_reasoning: false,
+                provider_tools: Vec::new(),
+            },
+            timeout_ms: None,
+            extra_body: None,
+            extra_headers: Some(extra_headers_config.clone()),
+        };
+
+        let provider_info = uninitialized_config
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("test_provider"),
+                &ProviderTypeDefaultCredentials::default(),
+            )
+            .await
+            .unwrap();
+
+        // Verify the extra_headers is preserved
+        assert!(provider_info.extra_headers.is_some());
+        let loaded_extra_headers = provider_info.extra_headers.unwrap();
+        assert_eq!(loaded_extra_headers.data.len(), 1);
+        assert_eq!(loaded_extra_headers.data[0], replacement);
     }
 }

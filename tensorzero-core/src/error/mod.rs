@@ -290,6 +290,9 @@ pub enum ErrorDetails {
     DynamicEndpointNotFound {
         key_name: String,
     },
+    DynamicRegionNotFound {
+        key_name: String,
+    },
     DynamicJsonSchema {
         message: String,
     },
@@ -522,6 +525,12 @@ pub enum ErrorDetails {
         result_type: &'static str,
         message: String,
     },
+    ValkeyConnection {
+        message: String,
+    },
+    ValkeyQuery {
+        message: String,
+    },
     ProviderNotFound {
         provider_name: String,
     },
@@ -649,6 +658,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicRegionNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::EvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
@@ -716,6 +726,8 @@ impl ErrorDetails {
             ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::ValkeyConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::ValkeyQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::RateLimitExceeded { .. } => tracing::Level::WARN,
             ErrorDetails::RateLimitMissingMaxTokens => tracing::Level::WARN,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
@@ -798,6 +810,7 @@ impl ErrorDetails {
             ErrorDetails::EvaluationRun { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::DynamicRegionNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
@@ -871,6 +884,8 @@ impl ErrorDetails {
             ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1142,6 +1157,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
                 write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
+            }
+            ErrorDetails::DynamicRegionNotFound { key_name } => {
+                write!(f, "Dynamic region '{key_name}' not found in credentials")
             }
             ErrorDetails::DynamicTemplateLoad { internal } => match internal {
                 AnalysisError::ParseError(err) => {
@@ -1514,6 +1532,12 @@ impl std::fmt::Display for ErrorDetails {
                 ),
                 None => write!(f, "Postgres query failed: {message}"),
             },
+            ErrorDetails::ValkeyConnection { message } => {
+                write!(f, "Error connecting to Valkey: {message}")
+            }
+            ErrorDetails::ValkeyQuery { message } => {
+                write!(f, "Valkey query failed: {message}")
+            }
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
             }
@@ -1689,6 +1713,14 @@ impl From<sqlx::Error> for Error {
     }
 }
 
+impl From<redis::RedisError> for Error {
+    fn from(err: redis::RedisError) -> Self {
+        Self::new(ErrorDetails::ValkeyQuery {
+            message: err.to_string(),
+        })
+    }
+}
+
 impl From<AnalysisError> for Error {
     fn from(err: AnalysisError) -> Self {
         Self::new(ErrorDetails::DynamicTemplateLoad { internal: err })
@@ -1734,6 +1766,17 @@ impl From<autopilot_client::AutopilotError> for Error {
             autopilot_client::AutopilotError::ToolCallNotFound(id) => {
                 Self::new(ErrorDetails::Autopilot {
                     message: format!("Tool call not found: {id}"),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::PartialSpawnFailure { errors, .. } => {
+                let failed_ids: Vec<_> = errors.iter().map(|(id, _)| id.to_string()).collect();
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!(
+                        "Failed to spawn {} approved tool call(s): {}",
+                        errors.len(),
+                        failed_ids.join(", ")
+                    ),
                     status_code: None,
                 })
             }

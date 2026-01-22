@@ -200,17 +200,7 @@ export default function AutopilotSessionsPage({
             </Suspense>
           </TableBody>
         </Table>
-        <Suspense
-          key={location.search}
-          fallback={
-            <PageButtons
-              onPreviousPage={() => {}}
-              onNextPage={() => {}}
-              disablePrevious
-              disableNext
-            />
-          }
-        >
+        <Suspense key={location.search} fallback={<PageButtons disabled />}>
           <PaginationContent
             data={sessionsData}
             offset={offset}

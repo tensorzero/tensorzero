@@ -1,6 +1,6 @@
 [package]
 name = "provider-proxy"
-version = "0.1.0"
+version = "0.0.0"
 rust-version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -21,7 +21,7 @@ hyper = { version = "1.7.0", features = ["client", "server", "http1", "http2"] }
 hyper-util = "0.1.19"
 moka = { version = "0.12.10", features = ["sync"] }
 pin-project = "1.1.10"
-rcgen = "0.14.6"
+rcgen = "0.14.7"
 reqwest.workspace = true
 rustls = "0.23.35"
 serde = { workspace = true }

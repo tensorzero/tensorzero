@@ -4,7 +4,11 @@ test("workflow evaluation project page should render and show correct informatio
   page,
 }) => {
   await page.goto("/workflow-evaluations/projects/beerqa-agentic-rag");
-  await expect(page.getByText("Workflow Evaluation Project")).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Projects", { exact: true }),
+  ).toBeVisible();
   // Check that the run selector is visible
   await expect(
     page.getByText("Select workflow evaluation runs to compare..."),

@@ -45,8 +45,9 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Hyperbolic";
 pub const PROVIDER_TYPE: &str = "hyperbolic";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct HyperbolicProvider {
     model_name: String,
     #[serde(skip)]
@@ -505,6 +506,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,
@@ -559,10 +561,9 @@ mod tests {
             ..Default::default()
         };
 
-        let hyperbolic_request =
-            HyperbolicRequest::new("meta-llama/Meta-Llama-3-70B-Instruct", &request_with_tools)
-                .await
-                .expect("failed to create Hyperbolic Request during test");
+        let hyperbolic_request = HyperbolicRequest::new("openai/gpt-oss-20b", &request_with_tools)
+            .await
+            .expect("failed to create Hyperbolic Request during test");
 
         assert_eq!(hyperbolic_request.messages.len(), 1);
         assert_eq!(hyperbolic_request.temperature, Some(0.5));

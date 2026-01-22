@@ -373,6 +373,24 @@ impl http_body::Body for TensorzeroBodyWrapper {
     }
 }
 
+#[pin_project]
+/// A wrapper over a bytes stream that holds on to a `LimitedClientTicket`
+/// We use this to extend the lifetime of our ticket until the stream is fully consumed
+pub struct TensorzeroBytesStream {
+    #[pin]
+    inner: std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>,
+    /// Held to keep the ticket alive until the stream is dropped
+    ticket: LimitedClientTicket<'static>,
+}
+
+impl Stream for TensorzeroBytesStream {
+    type Item = Result<bytes::Bytes, reqwest::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.project().inner.poll_next(cx)
+    }
+}
+
 impl TensorzeroResponseWrapper {
     pub fn status(&self) -> StatusCode {
         self.response.status()
@@ -399,6 +417,14 @@ impl TensorzeroResponseWrapper {
 
     pub async fn bytes(self) -> Result<bytes::Bytes, reqwest::Error> {
         self.response.bytes().await
+    }
+
+    /// Returns a stream of bytes, preserving our `LimitedClientTicket` until the stream is fully consumed
+    pub fn bytes_stream(self) -> TensorzeroBytesStream {
+        TensorzeroBytesStream {
+            inner: Box::pin(self.response.bytes_stream()),
+            ticket: self.ticket,
+        }
     }
 
     /// Converts this `TensorzeroResponseWrapper` into an `http::Response<TensorzeroBodyWrapper>`.

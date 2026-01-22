@@ -33,10 +33,6 @@ pub async fn convert_stream_error(
     request_id: Option<&str>,
 ) -> Error {
     let base_message = e.to_string();
-    let message = match request_id {
-        Some(id) => format!("{base_message} [request_id: {id}]"),
-        None => base_message,
-    };
     // If we get an invalid status code, content type, or generic transport error,
     // then we assume that we're never going to be able to read more chunks from the stream,
     // The `wrap_provider_stream` function will bail out when it sees this error,
@@ -45,28 +41,47 @@ pub async fn convert_stream_error(
     match e {
         reqwest_eventsource::Error::InvalidStatusCode(_, resp)
         | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+            let raw_response = resp.text().await.ok();
+            let message = match (&raw_response, request_id) {
+                (Some(body), Some(id)) => format!("{base_message}: {body} [request_id: {id}]"),
+                (Some(body), None) => format!("{base_message}: {body}"),
+                (None, Some(id)) => format!("{base_message} [request_id: {id}]"),
+                (None, None) => base_message,
+            };
             ErrorDetails::FatalStreamError {
                 message,
                 provider_type,
                 raw_request: Some(raw_request),
-                raw_response: resp.text().await.ok(),
+                raw_response,
             }
             .into()
         }
-        reqwest_eventsource::Error::Transport(_) => ErrorDetails::FatalStreamError {
-            message,
-            provider_type,
-            raw_request: Some(raw_request),
-            raw_response: None,
+        reqwest_eventsource::Error::Transport(_) => {
+            let message = match request_id {
+                Some(id) => format!("{base_message} [request_id: {id}]"),
+                None => base_message,
+            };
+            ErrorDetails::FatalStreamError {
+                message,
+                provider_type,
+                raw_request: Some(raw_request),
+                raw_response: None,
+            }
+            .into()
         }
-        .into(),
-        _ => ErrorDetails::InferenceServer {
-            message,
-            raw_request: Some(raw_request),
-            raw_response: None,
-            provider_type,
+        _ => {
+            let message = match request_id {
+                Some(id) => format!("{base_message} [request_id: {id}]"),
+                None => base_message,
+            };
+            ErrorDetails::InferenceServer {
+                message,
+                raw_request: Some(raw_request),
+                raw_response: None,
+                provider_type,
+            }
+            .into()
         }
-        .into(),
     }
 }
 
@@ -306,20 +321,27 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
             let (message, raw_response) = match e {
                 reqwest_eventsource::Error::InvalidStatusCode(status, resp) => {
                     let body = resp.text().await.ok();
-                    (
-                        format!("Error sending request: InvalidStatusCode({status})"),
-                        body,
-                    )
+                    let message = match &body {
+                        Some(b) => {
+                            format!("Error sending request: InvalidStatusCode({status}): {b}")
+                        }
+                        None => format!("Error sending request: InvalidStatusCode({status})"),
+                    };
+                    (message, body)
                 }
                 reqwest_eventsource::Error::InvalidContentType(content_type, resp) => {
                     let body = resp.text().await.ok();
-                    (
-                        format!(
+                    let message = match &body {
+                        Some(b) => format!(
+                            "Error sending request: InvalidContentType({}): {b}",
+                            content_type.to_str().unwrap_or("<invalid>")
+                        ),
+                        None => format!(
                             "Error sending request: InvalidContentType({})",
                             content_type.to_str().unwrap_or("<invalid>")
                         ),
-                        body,
-                    )
+                    };
+                    (message, body)
                 }
                 other => (
                     format!(
@@ -1090,7 +1112,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut body,
@@ -1126,7 +1148,7 @@ mod tests {
                 },
             },
             ModelProviderRequestInfo {
-                extra_headers: None,
+                extra_headers: Default::default(),
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
             },
@@ -1146,7 +1168,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut "test".into(),
@@ -1288,7 +1310,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut body,

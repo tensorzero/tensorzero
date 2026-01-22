@@ -2,8 +2,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// The ordering direction.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum OrderDirection {
     #[serde(rename = "ascending")]
     Asc,

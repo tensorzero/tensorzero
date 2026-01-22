@@ -2,6 +2,7 @@ use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap};
+use tensorzero_derive::TensorZeroDeserialize;
 
 use tensorzero_core::providers::openai::{
     OpenAIFileID, OpenAIRequestMessage, OpenAISFTTool, SystemOrDeveloper, prepare_openai_messages,
@@ -31,8 +32,9 @@ pub struct OpenAIFineTuningRequest {
     pub validation_file: Option<OpenAIFileID>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum OpenAIFineTuningMethod {
     #[serde(rename = "dpo")]
     Dpo {

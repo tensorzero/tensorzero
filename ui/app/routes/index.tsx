@@ -1,4 +1,5 @@
 import { Link, type RouteHandle, Await, useAsyncError } from "react-router";
+import { LayoutErrorBoundary } from "~/components/ui/error";
 import * as React from "react";
 import { Card } from "~/components/ui/card";
 import { PageLayout } from "~/components/layout/PageLayout";
@@ -49,9 +50,9 @@ function DirectoryCard({
   return (
     <Link to={source} className="block">
       <Card className="border-border hover:border-border-hover group flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
-        <div className="bg-bg-tertiary h-8 w-8 rounded-lg p-2">
+        <div className="bg-bg-tertiary group-hover:bg-card-highlight h-8 w-8 rounded-lg p-2 transition-colors">
           <Icon
-            className="text-fg-secondary group-hover:text-fg-primary transition-colors"
+            className="text-fg-secondary group-hover:text-card-highlight-icon transition-colors"
             size={16}
           />
         </div>
@@ -127,7 +128,6 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
 export async function loader() {
   const httpClient = getTensorZeroClient();
 
-  // Create the promises
   const countsInfoPromise = httpClient.listFunctionsWithInferenceCount();
   const episodesPromise = httpClient.queryEpisodeTableBounds();
   const datasetMetadataPromise = httpClient.listDatasets({});
@@ -142,7 +142,6 @@ export async function loader() {
     .countDistinctModelsUsed()
     .then((response) => response.model_count);
 
-  // Create derived promises - these will be stable references
   const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
     const total = countsInfo.reduce(
       (acc, curr) => acc + curr.inference_count,
@@ -180,7 +179,6 @@ export async function loader() {
     (runs) => `evaluations, ${runs} runs`,
   );
 
-  // We need to create a special promise for the inference evaluations that includes the config count
   const inferenceEvaluationsDesc = Promise.all([
     configPromise,
     numEvaluationRunsPromise,
@@ -363,4 +361,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </div>
     </PageLayout>
   );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <LayoutErrorBoundary error={error} />;
 }

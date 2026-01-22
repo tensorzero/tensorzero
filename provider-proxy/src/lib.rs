@@ -64,6 +64,7 @@ fn save_cache_body(
     path: PathBuf,
     parts: http::response::Parts,
     body: BytesMut,
+    serialized_request: Option<String>,
 ) -> Result<(), anyhow::Error> {
     let path_str = path.to_string_lossy().into_owned();
     tracing::info!(path = path_str, "Finished processing request");
@@ -96,6 +97,7 @@ fn save_cache_body(
     let json_response =
         http_serde_ext::response::serialize(&reconstructed, serde_json::value::Serializer)
             .with_context(|| format!("Failed to serialize response for path {path_str}"))?;
+
     let json_str = serde_json::to_string(&json_response)
         .with_context(|| format!("Failed to stringify response for path {path_str}"))?;
 
@@ -112,10 +114,20 @@ fn save_cache_body(
     .with_context(|| format!("Failed to create tempfile for path {path_str}"))?;
     tmpfile
         .write_all(json_str.as_bytes())
-        .with_context(|| format!("Failed to write to file for path {path_str}"))?;
+        .with_context(|| format!("Failed to write response to file for path {path_str}"))?;
     tmpfile
         .write_all(b"\n")
-        .with_context(|| format!("Failed to write EOL newline to file for path {path_str}"))?;
+        .with_context(|| format!("Failed to write newline to file for path {path_str}"))?;
+    // If serialized_request is provided, write it as a second line for debugging purposes.
+    // This line is not read when loading from cache - it's purely for debugging.
+    if let Some(request_str) = serialized_request {
+        tmpfile
+            .write_all(request_str.as_bytes())
+            .with_context(|| format!("Failed to write request to file for path {path_str}"))?;
+        tmpfile.write_all(b"\n").with_context(|| {
+            format!("Failed to write final newline to file for path {path_str}")
+        })?;
+    }
     tmpfile
         .persist(&path)
         .with_context(|| format!("Failed to rename tempfile to {path_str}"))?;
@@ -198,6 +210,30 @@ async fn check_cache<
     let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
         .with_context(|| "Failed to serialize request")?;
     let hash = hash_value(&json_request)?;
+
+    // Capture the serialized request for potential debugging storage
+    // Convert the body from bytes array to a UTF-8 string for readability
+    let serialized_request_for_cache = if args.save_request_body {
+        let mut json_request_for_cache = json_request.clone();
+        if let Some(body_array) = json_request_for_cache
+            .get("body")
+            .and_then(|b| b.as_array())
+        {
+            let body_bytes: Vec<u8> = body_array
+                .iter()
+                .map(|v| v.as_u64().expect("body byte should be a number") as u8)
+                .collect();
+            let body_str =
+                String::from_utf8(body_bytes).with_context(|| "Request body is not valid UTF-8")?;
+            json_request_for_cache["body"] = serde_json::Value::String(body_str);
+        }
+        Some(
+            serde_json::to_string(&json_request_for_cache)
+                .with_context(|| "Failed to stringify request for cache")?,
+        )
+    } else {
+        None
+    };
     let filename = format!(
         "{}-{}",
         request.uri().host().expect("Missing request host"),
@@ -244,9 +280,16 @@ async fn check_cache<
         let resp = tokio::task::spawn_blocking(move || {
             let file = std::fs::read_to_string(path)
                 .with_context(|| format!("Failed to read cache file {path_str}"))?;
-            let response: serde_json::Value = serde_json::from_str(&file).with_context(|| {
-                format!("Failed to deserialize response to JSON from {path_str}")
-            })?;
+            // Only read the first line (the response JSON).
+            // The second line (if present) contains the serialized request for debugging and is ignored.
+            let first_line = file
+                .lines()
+                .next()
+                .with_context(|| format!("Cache file is empty: {path_str}"))?;
+            let response: serde_json::Value =
+                serde_json::from_str(first_line).with_context(|| {
+                    format!("Failed to deserialize response to JSON from {path_str}")
+                })?;
             let response: hyper::Response<Bytes> = http_serde_ext::response::deserialize(response)
                 .with_context(|| format!("Failed to deserialize HTTP response from {path_str}"))?;
             Ok::<_, anyhow::Error>(
@@ -305,7 +348,9 @@ async fn check_cache<
                                 // This ensures that any retries from the caller (e.g. tensorzero e2e tests)
                                 // will happen after the first response was fully written to disk,
                                 // ensuring that newer retries will overwrite the response from older retries on disk.
-                                if let Err(e) = save_cache_body(path, parts, body) {
+                                if let Err(e) =
+                                    save_cache_body(path, parts, body, serialized_request_for_cache)
+                                {
                                     tracing::error!(
                                         err = e.as_ref() as &dyn std::error::Error,
                                         "Failed to save cache body"
@@ -373,6 +418,10 @@ pub struct Args {
     pub remove_user_agent_non_amazon: bool,
     #[arg(long, default_value = "read-old-write-new")]
     pub mode: CacheMode,
+    /// If `true`, saves the request body in the cached output for debugging purposes.
+    /// The saved request body is not used when reading from the cache.
+    #[arg(long, default_value = "true")]
+    pub save_request_body: bool,
 }
 
 fn find_duplicate_header(headers: &http::HeaderMap) -> Option<HeaderName> {

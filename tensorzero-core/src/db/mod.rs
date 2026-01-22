@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::types::PgInterval;
+use std::future::Future;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -11,7 +11,6 @@ use mockall::automock;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
-use crate::rate_limiting::ActiveRateLimitKey;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
 pub mod clickhouse;
@@ -22,8 +21,13 @@ pub mod inference_count;
 pub mod inferences;
 pub mod model_inferences;
 pub mod postgres;
+pub mod rate_limiting;
 pub mod stored_datapoint;
+pub mod valkey;
 pub mod workflow_evaluation_queries;
+
+// For backcompat, re-export everything from the rate_limiting module
+pub use rate_limiting::*;
 
 #[async_trait]
 pub trait ClickHouseConnection:
@@ -39,35 +43,37 @@ pub trait HealthCheckable {
     async fn health(&self) -> Result<(), Error>;
 }
 
-#[async_trait]
 #[cfg_attr(test, automock)]
 pub trait SelectQueries {
-    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
+    fn count_distinct_models_used(&self) -> impl Future<Output = Result<u32, Error>> + Send;
 
-    async fn get_model_usage_timeseries(
+    fn get_model_usage_timeseries(
         &self,
         time_window: TimeWindow,
         max_periods: u32,
-    ) -> Result<Vec<ModelUsageTimePoint>, Error>;
+    ) -> impl Future<Output = Result<Vec<ModelUsageTimePoint>, Error>> + Send;
 
-    async fn get_model_latency_quantiles(
+    fn get_model_latency_quantiles(
         &self,
         time_window: TimeWindow,
-    ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
+    ) -> impl Future<Output = Result<Vec<ModelLatencyDatapoint>, Error>> + Send;
 
-    async fn query_episode_table(
+    fn query_episode_table(
         &self,
         limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
-    ) -> Result<Vec<EpisodeByIdRow>, Error>;
+    ) -> impl Future<Output = Result<Vec<EpisodeByIdRow>, Error>> + Send;
 
-    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
+    fn query_episode_table_bounds(
+        &self,
+    ) -> impl Future<Output = Result<TableBoundsWithCount, Error>> + Send;
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TimeWindow {
     Minute,
     Hour,
@@ -92,8 +98,9 @@ impl TimeWindow {
     }
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelUsageTimePoint {
     pub period_start: DateTime<Utc>,
     pub model_name: String,
@@ -105,8 +112,9 @@ pub struct ModelUsageTimePoint {
     pub count: Option<u64>,
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelLatencyDatapoint {
     pub model_name: String,
     // should be an array of quantiles_len u64
@@ -116,8 +124,9 @@ pub struct ModelLatencyDatapoint {
     pub count: u64,
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EpisodeByIdRow {
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_u64")]
@@ -127,8 +136,9 @@ pub struct EpisodeByIdRow {
     pub last_inference_id: Uuid,
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TableBoundsWithCount {
     pub first_id: Option<Uuid>,
     pub last_id: Option<Uuid>,
@@ -141,60 +151,9 @@ impl<T: SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Sen
 {
 }
 
-pub trait RateLimitQueries {
-    /// This function will fail if any of the requests individually fail.
-    /// It is an atomic operation so no tickets will be consumed if any request fails.
-    async fn consume_tickets(
-        &self,
-        requests: &[ConsumeTicketsRequest],
-    ) -> Result<Vec<ConsumeTicketsReceipt>, Error>;
-
-    async fn return_tickets(
-        &self,
-        requests: Vec<ReturnTicketsRequest>,
-    ) -> Result<Vec<ReturnTicketsReceipt>, Error>;
-
-    async fn get_balance(
-        &self,
-        key: &str,
-        capacity: u64,
-        refill_amount: u64,
-        refill_interval: PgInterval,
-    ) -> Result<u64, Error>;
-}
-
-#[derive(Debug)]
-pub struct ConsumeTicketsRequest {
-    pub key: ActiveRateLimitKey,
-    pub requested: u64,
-    pub capacity: u64,
-    pub refill_amount: u64,
-    pub refill_interval: PgInterval,
-}
-
-#[derive(Debug)]
-pub struct ConsumeTicketsReceipt {
-    pub key: ActiveRateLimitKey,
-    pub success: bool,
-    pub tickets_remaining: u64,
-    pub tickets_consumed: u64,
-}
-
-pub struct ReturnTicketsRequest {
-    pub key: ActiveRateLimitKey,
-    pub returned: u64,
-    pub capacity: u64,
-    pub refill_amount: u64,
-    pub refill_interval: PgInterval,
-}
-
-pub struct ReturnTicketsReceipt {
-    pub key: ActiveRateLimitKey,
-    pub balance: u64,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct TableBounds {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
@@ -216,11 +175,10 @@ pub trait ExperimentationQueries {
     ) -> Result<String, Error>;
 }
 
-#[async_trait]
 #[cfg_attr(test, automock)]
 pub trait ConfigQueries {
-    async fn get_config_snapshot(
+    fn get_config_snapshot(
         &self,
         snapshot_hash: SnapshotHash,
-    ) -> Result<ConfigSnapshot, Error>;
+    ) -> impl Future<Output = Result<ConfigSnapshot, Error>> + Send;
 }

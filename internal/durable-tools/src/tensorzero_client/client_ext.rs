@@ -15,9 +15,9 @@ use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
     FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
-    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
-    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
-    WriteConfigRequest, WriteConfigResponse,
+    GetInferencesRequest, GetInferencesResponse, InferenceOutput, InferenceResponse,
+    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -445,6 +445,20 @@ impl TensorZeroClient for Client {
             .map_err(TensorZeroClientError::TensorZero)
     }
 
+    async fn get_inferences(
+        &self,
+        request: GetInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        ClientExt::get_inferences(
+            self,
+            request.ids,
+            request.function_name,
+            request.output_source,
+        )
+        .await
+        .map_err(TensorZeroClientError::TensorZero)
+    }
+
     // ========== Optimization Operations ==========
 
     async fn launch_optimization_workflow(
@@ -697,12 +711,59 @@ impl TensorZeroClient for Client {
                     })
                     .collect();
 
+                // Build per-datapoint results if requested
+                let datapoint_results = if params.include_datapoint_results {
+                    let mut results = Vec::with_capacity(
+                        evaluation_stats.evaluation_infos.len()
+                            + evaluation_stats.evaluation_errors.len(),
+                    );
+
+                    // Add successful evaluations (inference succeeded, some evaluators may have failed)
+                    for info in &evaluation_stats.evaluation_infos {
+                        let evaluations: HashMap<String, Option<f64>> = info
+                            .evaluations
+                            .iter()
+                            .map(|(name, value)| {
+                                let score = value.as_ref().and_then(|v| {
+                                    v.as_f64()
+                                        .or_else(|| v.as_bool().map(|b| if b { 1.0 } else { 0.0 }))
+                                });
+                                (name.clone(), score)
+                            })
+                            .collect();
+
+                        results.push(super::DatapointResult {
+                            datapoint_id: info.datapoint.id(),
+                            success: true,
+                            evaluations,
+                            evaluator_errors: info.evaluator_errors.clone(),
+                            error: None,
+                        });
+                    }
+
+                    // Add failed evaluations (inference or datapoint-level failure)
+                    for error in &evaluation_stats.evaluation_errors {
+                        results.push(super::DatapointResult {
+                            datapoint_id: error.datapoint_id,
+                            success: false,
+                            evaluations: HashMap::new(),
+                            evaluator_errors: HashMap::new(),
+                            error: Some(error.message.clone()),
+                        });
+                    }
+
+                    Some(results)
+                } else {
+                    None
+                };
+
                 Ok(RunEvaluationResponse {
                     evaluation_run_id,
                     num_datapoints,
                     num_successes: evaluation_stats.evaluation_infos.len(),
                     num_errors: evaluation_stats.evaluation_errors.len(),
                     stats: stats_response,
+                    datapoint_results,
                 })
             }
         }

@@ -1,13 +1,13 @@
-[models."meta-llama/Meta-Llama-3-70B-Instruct"]
+[models."openai/gpt-oss-20b"]
 routing = ["hyperbolic"]
 
-[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+[models."openai/gpt-oss-20b".providers.hyperbolic]
 type = "hyperbolic"
-model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+model_name = "openai/gpt-oss-20b"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
+model = "openai/gpt-oss-20b"

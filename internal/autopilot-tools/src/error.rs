@@ -5,8 +5,9 @@
 //! and can be deserialized back for programmatic error handling.
 
 use durable_tools::{NonControlToolError, ToolError};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value as JsonValue;
+use tensorzero_derive::TensorZeroDeserialize;
 use thiserror::Error;
 
 /// Error type for autopilot tools.
@@ -17,7 +18,7 @@ use thiserror::Error;
 /// ```json
 /// { "kind": "ClientError", "operation": "inference", "message": "connection timeout" }
 /// ```
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "kind")]
 pub enum AutopilotToolError {
     /// TensorZero client operation failed.

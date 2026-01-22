@@ -4,10 +4,12 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use rlt::{BenchSuite, IterInfo, IterReport, Status};
 use sqlx::PgPool;
-use sqlx::postgres::types::PgInterval;
 use tensorzero_core::{
-    db::{ConsumeTicketsRequest, RateLimitQueries, postgres::PostgresConnectionInfo},
-    rate_limiting::ActiveRateLimitKey,
+    db::{
+        ConsumeTicketsRequest, RateLimitQueries, postgres::PostgresConnectionInfo,
+        valkey::ValkeyConnectionInfo,
+    },
+    rate_limiting::{ActiveRateLimitKey, RateLimitInterval},
 };
 use tokio::time::Instant;
 
@@ -50,12 +52,32 @@ impl Contention {
 pub struct BucketSettings {
     pub capacity: i64,
     pub refill_amount: i64,
-    pub interval: PgInterval,
+    pub interval: RateLimitInterval,
+}
+
+/// Backend-agnostic client for rate limiting
+#[derive(Clone)]
+pub enum RateLimitClient {
+    Postgres(PostgresConnectionInfo),
+    Valkey(ValkeyConnectionInfo),
+}
+
+impl RateLimitClient {
+    pub async fn consume_tickets(
+        &self,
+        requests: &[ConsumeTicketsRequest],
+    ) -> Result<Vec<tensorzero_core::db::ConsumeTicketsReceipt>, tensorzero_core::error::Error>
+    {
+        match self {
+            RateLimitClient::Postgres(client) => client.consume_tickets(requests).await,
+            RateLimitClient::Valkey(client) => client.consume_tickets(requests).await,
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct RateLimitBenchmark {
-    pub client: PostgresConnectionInfo,
+    pub client: RateLimitClient,
     pub bucket_settings: Arc<BucketSettings>,
     pub contention: Contention,
     pub tickets_per_request: u64,
@@ -64,7 +86,7 @@ pub struct RateLimitBenchmark {
 }
 
 pub struct WorkerState {
-    pub client: PostgresConnectionInfo,
+    pub client: RateLimitClient,
     pub bucket_settings: Arc<BucketSettings>,
 }
 
@@ -160,14 +182,21 @@ pub async fn create_postgres_pool(pool_size: u32) -> Result<PgPool> {
     Ok(pool)
 }
 
+pub async fn create_valkey_client() -> Result<ValkeyConnectionInfo> {
+    let valkey_url = std::env::var("TENSORZERO_VALKEY_URL")
+        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+
+    let client = ValkeyConnectionInfo::new(&valkey_url)
+        .await
+        .map_err(|e| anyhow!("Failed to connect to Valkey: {e}"))?;
+
+    Ok(client)
+}
+
 pub fn create_bucket_settings(capacity: i64, refill_amount: i64) -> BucketSettings {
     BucketSettings {
         capacity,
         refill_amount,
-        interval: PgInterval {
-            months: 0,
-            days: 0,
-            microseconds: 1_000_000, // 1 second
-        },
+        interval: RateLimitInterval::Second,
     }
 }

@@ -15,9 +15,9 @@ use pyo3::prelude::*;
 /// We test against Amazon S3, GCS, Cloudflare R2, and Minio
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[export_schema]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StorageKind {
     #[schemars(title = "StorageKindS3Compatible")]
     S3Compatible {
@@ -28,7 +28,7 @@ pub enum StorageKind {
         /// An extra prefix to prepend to the object key.
         /// This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
         #[cfg(feature = "e2e_tests")]
-        #[ts(skip)]
+        #[cfg_attr(feature = "ts-bindings", ts(skip))]
         #[serde(default)]
         prefix: String,
     },
@@ -44,8 +44,9 @@ pub enum StorageKind {
 /// This is part of the public API for `File`s. In particular, this is useful for roundtripping
 /// unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
 /// file data first.
-#[derive(ts_rs::TS, Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoragePath {
@@ -54,7 +55,7 @@ pub struct StoragePath {
         serialize_with = "serialize_storage_path",
         deserialize_with = "deserialize_storage_path"
     )]
-    #[ts(type = "string")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     #[schemars(with = "String")]
     pub path: object_store::path::Path,
 }

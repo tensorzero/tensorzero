@@ -70,8 +70,9 @@ lazy_static! {
 pub const PROVIDER_NAME: &str = "Fireworks";
 pub const PROVIDER_TYPE: &str = "fireworks";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FireworksProvider {
     model_name: String,
     #[serde(skip)]
@@ -783,6 +784,7 @@ fn fireworks_to_tensorzero_chunk(
                 summary_text: None,
                 id: THINK_CHUNK_ID.to_string(),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(text) = choice.delta.content {
@@ -803,6 +805,7 @@ fn fireworks_to_tensorzero_chunk(
                                 summary_text: None,
                                 id: thinking_state.get_id(),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             }));
                         }
                     }
@@ -915,6 +918,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 signature: None,
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(raw_text) = message.content {
@@ -926,6 +930,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                     signature: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             if !clean_text.is_empty() {
@@ -957,6 +962,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_response,
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: finish_reason.map(FireworksFinishReason::into),
                 id: model_inference_id,

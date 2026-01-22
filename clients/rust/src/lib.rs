@@ -112,7 +112,6 @@ pub use tensorzero_optimizers::endpoints::{
 };
 
 // Keep git module for Git-related extension traits
-#[cfg(feature = "git")]
 mod git;
 
 #[cfg(feature = "e2e_tests")]
@@ -122,7 +121,6 @@ pub mod test_helpers;
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
 
-#[cfg(feature = "git")]
 use crate::git::GitInfo;
 
 // NOTE(shuyangli): For methods that delegate to APIs in the gateway, the arguments generally are flattened from the request type for
@@ -679,7 +677,6 @@ impl ClientExt for Client {
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
         // Apply the git information to the tags so it gets stored for our workflow evaluation run
-        #[cfg(feature = "git")]
         if let Ok(git_info) = GitInfo::new() {
             params.tags.extend(git_info.into_tags());
         }
@@ -1307,7 +1304,7 @@ impl ClientExt for Client {
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     launch_optimization(
                         &gateway.handle.app_state.http_client,
                         params,
@@ -1316,7 +1313,7 @@ impl ClientExt for Client {
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await?)
             }
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
@@ -1337,7 +1334,7 @@ impl ClientExt for Client {
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                with_embedded_timeout(*timeout, async {
+                Box::pin(with_embedded_timeout(*timeout, async {
                     launch_optimization_workflow(
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.config.clone(),
@@ -1346,7 +1343,7 @@ impl ClientExt for Client {
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await
             }
             ClientMode::HTTPGateway(client) => {

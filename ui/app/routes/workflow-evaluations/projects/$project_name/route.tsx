@@ -1,5 +1,9 @@
-import { PageHeader, SectionLayout } from "~/components/layout/PageLayout";
-import { PageLayout } from "~/components/layout/PageLayout";
+import {
+  PageHeader,
+  SectionLayout,
+  PageLayout,
+  Breadcrumbs,
+} from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
 import { WorkflowEvalRunSelector } from "~/routes/workflow-evaluations/projects/$project_name/WorkflowEvalRunSelector";
 import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
@@ -102,7 +106,20 @@ export default function WorkflowEvaluationProjectPage({
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
-        <PageHeader label="Workflow Evaluation Project" name={projectName} />
+        <PageHeader
+          eyebrow={
+            <Breadcrumbs
+              segments={[
+                {
+                  label: "Workflow Evaluations",
+                  href: "/workflow_evaluations",
+                },
+                { label: "Projects" },
+              ]}
+            />
+          }
+          name={projectName}
+        />
         <SectionLayout>
           <WorkflowEvalRunSelector
             projectName={projectName}
