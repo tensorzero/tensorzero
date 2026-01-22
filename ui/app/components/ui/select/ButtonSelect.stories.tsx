@@ -13,6 +13,8 @@ const mockItems = [
 ];
 
 const manyItems = Array.from({ length: 100 }, (_, i) => `variant-${i + 1}`);
+const virtualizedItems = Array.from({ length: 500 }, (_, i) => `item-${i + 1}`);
+const stressTestItems = Array.from({ length: 1000 }, (_, i) => `item-${i + 1}`);
 
 const meta: Meta<typeof ButtonSelect> = {
   title: "UI/ButtonSelect",
@@ -236,6 +238,124 @@ export const NonSearchable: Story = {
         emptyMessage="No items available"
         onSelect={(item) => updateArgs({ selected: item })}
       />
+    );
+  },
+};
+
+/**
+ * With 100+ items, virtualization kicks in automatically.
+ * Only visible items are rendered in the DOM for better performance.
+ */
+export const Virtualized: Story = {
+  render: function Render() {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+
+    return (
+      <div>
+        <p className="text-fg-muted mb-4 text-sm">
+          500 items with virtualization (threshold=100). Should scroll smoothly.
+        </p>
+        <ButtonSelect
+          items={virtualizedItems}
+          selected={selected ?? null}
+          trigger="Select item"
+          placeholder="Search 500 items..."
+          emptyMessage="No items found"
+          virtualizeThreshold={100}
+          onSelect={(item) => updateArgs({ selected: item })}
+        />
+      </div>
+    );
+  },
+};
+
+/**
+ * Stress test with 1000 items to verify virtualization performance.
+ */
+export const VirtualizedStressTest: Story = {
+  render: function Render() {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+
+    return (
+      <div>
+        <p className="text-fg-muted mb-4 text-sm">
+          Stress test: 1000 items with virtualization.
+        </p>
+        <ButtonSelect
+          items={stressTestItems}
+          selected={selected ?? null}
+          trigger="Select item"
+          placeholder="Search 1000 items..."
+          emptyMessage="No items found"
+          virtualizeThreshold={100}
+          onSelect={(item) => updateArgs({ selected: item })}
+        />
+      </div>
+    );
+  },
+};
+
+/**
+ * Keyboard navigation in virtualized mode.
+ * - Arrow Up/Down: Move highlight
+ * - Home/End: Jump to first/last
+ * - PageUp/PageDown: Jump ~8 items
+ * - Enter: Select highlighted item
+ */
+export const VirtualizedKeyboardNav: Story = {
+  render: function Render() {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+
+    return (
+      <div>
+        <p className="text-fg-muted mb-4 text-sm">
+          <strong>Keyboard shortcuts:</strong> Arrow Up/Down, Home/End,
+          PageUp/PageDown, Enter
+        </p>
+        <ButtonSelect
+          items={virtualizedItems}
+          selected={selected ?? null}
+          trigger="Use arrow keys..."
+          placeholder="Search items..."
+          emptyMessage="No items found"
+          virtualizeThreshold={100}
+          onSelect={(item) => updateArgs({ selected: item })}
+        />
+        {selected && (
+          <p className="text-fg-secondary mt-4 text-sm">
+            Selected: <strong>{selected}</strong>
+          </p>
+        )}
+      </div>
+    );
+  },
+};
+
+/**
+ * Virtualized with creation support.
+ */
+export const VirtualizedWithCreation: Story = {
+  render: function Render() {
+    const [{ selected }, updateArgs] = useArgs<{ selected?: string }>();
+
+    return (
+      <div>
+        <p className="text-fg-muted mb-4 text-sm">
+          500 items with creation support. Type a name that does not exist.
+        </p>
+        <ButtonSelect
+          items={virtualizedItems}
+          selected={selected ?? null}
+          trigger="Select or create"
+          placeholder="Search or create..."
+          emptyMessage="No items found"
+          virtualizeThreshold={100}
+          creatable
+          createHeading="Create new"
+          existingHeading="Existing"
+          onSelect={(item) => updateArgs({ selected: item })}
+        />
+      </div>
     );
   },
 };
