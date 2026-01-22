@@ -120,6 +120,17 @@ services:
       - "5778:5778"
       - "9411:9411"
 
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    command: valkey-server --appendonly no
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
   gateway-postgres-migrations:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     environment:

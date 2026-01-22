@@ -1393,53 +1393,55 @@ async fn write_inference(
 }
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
     Json(JsonInferenceResponse),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
     pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     /// DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_response: Option<Vec<RawResponseEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct JsonInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     /// DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_response: Option<Vec<RawResponseEntry>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1859,15 +1861,17 @@ pub struct InferenceModels {
 
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct InferenceParams {
     pub chat_completion: ChatCompletionInferenceParams,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionInferenceParams {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1886,16 +1890,16 @@ pub struct ChatCompletionInferenceParams {
     pub json_mode: Option<JsonMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_sequences: Option<Vec<String>>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<ServiceTier>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
 }

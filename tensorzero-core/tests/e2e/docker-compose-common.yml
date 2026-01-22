@@ -46,6 +46,17 @@ services:
       - MEMCACHED_MAX_MEMORY=64m # Set the maximum memory usage
       - MEMCACHED_THREADS=4 # Number of threads to use
 
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    command: valkey-server --appendonly no
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
   tempo:
     image: grafana/tempo:2.8.2
     command: ["-config.file=/etc/tempo.yaml"]

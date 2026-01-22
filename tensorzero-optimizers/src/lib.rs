@@ -8,7 +8,7 @@
 //! This crate was extracted from `tensorzero-core` to avoid circular dependencies when
 //! optimizers need to depend on the `evaluations` crate.
 
-use async_trait::async_trait;
+use std::future::Future;
 use std::sync::Arc;
 use tensorzero_core::{
     config::{Config, provider_types::ProviderTypesConfig},
@@ -34,7 +34,6 @@ pub mod together_sft;
 // Re-export core types for convenience
 pub use tensorzero_core::optimization::OptimizerOutput;
 
-#[async_trait]
 impl JobHandle for OptimizationJobHandle {
     async fn poll(
         &self,
@@ -83,22 +82,20 @@ impl JobHandle for OptimizationJobHandle {
     }
 }
 
-#[async_trait]
 pub trait JobHandle {
-    async fn poll(
+    fn poll(
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
         provider_types: &ProviderTypesConfig,
-    ) -> Result<OptimizationJobInfo, Error>;
+    ) -> impl Future<Output = Result<OptimizationJobInfo, Error>> + Send;
 }
 
-#[async_trait]
 pub trait Optimizer {
     type Handle: JobHandle;
 
-    async fn launch(
+    fn launch(
         &self,
         client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
@@ -106,10 +103,9 @@ pub trait Optimizer {
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
-    ) -> Result<Self::Handle, Error>;
+    ) -> impl Future<Output = Result<Self::Handle, Error>> + Send;
 }
 
-#[async_trait]
 impl Optimizer for OptimizerInfo {
     type Handle = OptimizationJobHandle;
 
