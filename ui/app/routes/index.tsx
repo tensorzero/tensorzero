@@ -258,6 +258,26 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
 
+          <div id="evaluations" className="flex w-full flex-col gap-2">
+            <h2 className="text-md text-fg-secondary font-medium">
+              Evaluations
+            </h2>
+            <div className="flex flex-col gap-2">
+              <DirectoryCard
+                source="/evaluations"
+                icon={GridCheck}
+                title="Inference Evaluations"
+                description={inferenceEvaluationsDesc}
+              />
+              <DirectoryCard
+                source="/workflow_evaluations"
+                icon={SequenceChecks}
+                title="Workflow Evaluations"
+                description={dynamicEvaluationsDesc}
+              />
+            </div>
+          </div>
+
           <div id="optimization" className="flex w-full flex-col gap-2">
             <h2 className="text-md text-fg-secondary font-medium">
               Optimization
@@ -272,32 +292,26 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
 
-          <div id="workflows" className="flex w-full flex-col gap-2">
-            <h2 className="text-md text-fg-secondary font-medium">Workflows</h2>
+          <div id="data" className="flex w-full flex-col gap-2">
+            <h2 className="text-md text-fg-secondary font-medium">Data</h2>
             <div className="flex flex-col gap-2">
-              <DirectoryCard
-                source="/playground"
-                icon={Playground}
-                title="Playground"
-                description={numVariantsDesc}
-              />
               <DirectoryCard
                 source="/datasets"
                 icon={Dataset}
                 title="Datasets"
                 description={numDatasetsDesc}
               />
+            </div>
+          </div>
+
+          <div id="tools" className="flex w-full flex-col gap-2">
+            <h2 className="text-md text-fg-secondary font-medium">Tools</h2>
+            <div className="flex flex-col gap-2">
               <DirectoryCard
-                source="/evaluations"
-                icon={GridCheck}
-                title="Inference Evaluations"
-                description={inferenceEvaluationsDesc}
-              />
-              <DirectoryCard
-                source="/workflow_evaluations"
-                icon={SequenceChecks}
-                title="Workflow Evaluations"
-                description={dynamicEvaluationsDesc}
+                source="/playground"
+                icon={Playground}
+                title="Playground"
+                description={numVariantsDesc}
               />
             </div>
           </div>
