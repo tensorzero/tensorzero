@@ -46,8 +46,9 @@ use super::{
     infer_model_request_stream, prepare_model_inference_request,
 };
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MixtureOfNConfig {
     weight: Option<f64>,
     candidates: Vec<String>,
@@ -85,9 +86,10 @@ impl MixtureOfNConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -98,16 +100,18 @@ pub struct UninitializedMixtureOfNConfig {
     pub fuser: UninitializedFuserConfig,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedFuserConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
@@ -944,6 +948,7 @@ impl FuserConfig {
 mod tests {
     use crate::rate_limiting::ScopeInfo;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use tokio_stream::StreamExt;
     use uuid::Uuid;
@@ -1884,7 +1889,7 @@ mod tests {
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
         );
-        assert_eq!(exported.fuser.inner.model, "gpt-4".into());
+        assert_eq!(exported.fuser.inner.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.fuser.inner.temperature, Some(0.3));
     }
 
@@ -1912,7 +1917,7 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.fuser.inner.model, "fuser-model".into());
+        assert_eq!(exported.fuser.inner.model, Arc::<str>::from("fuser-model"));
         assert_eq!(exported.fuser.inner.temperature, Some(0.1));
         assert_eq!(exported.fuser.inner.max_tokens, Some(50));
         assert_eq!(exported.fuser.inner.seed, Some(99));

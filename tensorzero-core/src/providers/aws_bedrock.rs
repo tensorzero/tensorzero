@@ -54,8 +54,9 @@ const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
 /// AWS Bedrock provider using direct HTTP calls.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
@@ -697,9 +698,13 @@ fn convert_converse_response(
         content = prefill_json_response(content)?;
     }
 
-    // Extract usage
+    // Extract usage - include cache tokens in input_tokens
+    // AWS Bedrock reports cache tokens separately from input_tokens
+    let total_input_tokens = response.usage.input_tokens as u32
+        + response.usage.cache_read_input_tokens.unwrap_or(0) as u32
+        + response.usage.cache_write_input_tokens.unwrap_or(0) as u32;
     let usage = Usage {
-        input_tokens: Some(response.usage.input_tokens as u32),
+        input_tokens: Some(total_input_tokens),
         output_tokens: Some(response.usage.output_tokens as u32),
     };
 
@@ -1057,8 +1062,13 @@ fn process_stream_event(
                     )
                 });
 
+            // Include cache tokens in input_tokens
+            // AWS Bedrock reports cache tokens separately from input_tokens
+            let total_input_tokens = event.usage.input_tokens as u32
+                + event.usage.cache_read_input_tokens.unwrap_or(0) as u32
+                + event.usage.cache_write_input_tokens.unwrap_or(0) as u32;
             let usage = Some(Usage {
-                input_tokens: Some(event.usage.input_tokens as u32),
+                input_tokens: Some(total_input_tokens),
                 output_tokens: Some(event.usage.output_tokens as u32),
             });
 

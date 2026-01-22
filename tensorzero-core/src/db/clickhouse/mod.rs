@@ -333,7 +333,6 @@ impl HealthCheckable for ClickHouseConnectionInfo {
     }
 }
 
-#[async_trait]
 impl ConfigQueries for ClickHouseConnectionInfo {
     async fn get_config_snapshot(
         &self,

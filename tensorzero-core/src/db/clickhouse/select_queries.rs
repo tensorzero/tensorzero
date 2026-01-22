@@ -5,7 +5,6 @@ use crate::{
     },
     serde_util::deserialize_u64,
 };
-use async_trait::async_trait;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -16,7 +15,6 @@ use crate::{
 
 use super::ClickHouseConnectionInfo;
 
-#[async_trait]
 impl SelectQueries for ClickHouseConnectionInfo {
     /// Retrieves a timeseries of model usage data.
     /// This will return max_periods complete time periods worth of data if present

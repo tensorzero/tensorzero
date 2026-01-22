@@ -514,11 +514,11 @@ async fn setup_autopilot_client(
                 })
             })?;
 
-            // Require deployment_id (from ClickHouse) for autopilot
+            // Require `deployment_id` (from ClickHouse) for autopilot
             if deployment_id.is_none() {
                 return Err(Error::new(ErrorDetails::AppState {
                     message:
-                        "Autopilot client requires ClickHouse; set `TENSORZERO_CLICKHOUSE_URL`."
+                        "Failed to fetch the deployment ID from ClickHouse. Please make sure that ClickHouse is running and accessible."
                             .to_string(),
                 }));
             }

@@ -1,6 +1,5 @@
 //! OpenAI Supervised Fine-Tuning (SFT) optimizer implementation
 
-use async_trait::async_trait;
 use futures::future::try_join_all;
 use secrecy::ExposeSecret;
 use std::sync::Arc;
@@ -33,7 +32,6 @@ use crate::{
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
-#[async_trait]
 impl Optimizer for OpenAISFTConfig {
     type Handle = OpenAISFTJobHandle;
 
@@ -191,7 +189,6 @@ impl Optimizer for OpenAISFTConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for OpenAISFTJobHandle {
     async fn poll(
         &self,

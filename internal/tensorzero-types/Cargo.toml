@@ -17,13 +17,14 @@ serde_path_to_error.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
 thiserror.workspace = true
 tracing.workspace = true
-ts-rs.workspace = true
+ts-rs = { workspace = true, optional = true }
 url = { workspace = true, features = ["serde"] }
 
 [features]
 default = []
 pyo3 = ["dep:pyo3"]
 e2e_tests = []
+ts-bindings = ["dep:ts-rs"]
 
 [dependencies.pyo3]
 workspace = true

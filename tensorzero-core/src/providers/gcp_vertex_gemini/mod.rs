@@ -90,8 +90,9 @@ const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
 /// * In streaming mode, 'thought: true' parts with non-text content produce an error (since we don't have "unknown" blocks in streaming mode)
 ///
 /// In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GCPVertexGeminiProvider {
     api_v1_base_url: Url,
     request_url: String,
@@ -105,8 +106,9 @@ pub struct GCPVertexGeminiProvider {
     batch_config: Option<BatchConfig>,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 struct BatchConfig {
     input_uri_prefix: String,
     output_uri_prefix: String,
@@ -4119,7 +4121,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.0-flash-lite").unwrap();
+            prepare_tools(&request_with_tools, "gemini-2.5-flash-lite").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4648,18 +4650,18 @@ mod tests {
             "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`"
         );
 
-        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001", "google").unwrap_err().to_string();
+        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.5-flash", "google").unwrap_err().to_string();
         assert_eq!(
             non_google_publisher,
-            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`"
+            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.5-flash`"
         );
 
-        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001", "google").unwrap();
+        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash", "google").unwrap();
         assert_eq!(
             valid_model_url,
             ShorthandUrl::Publisher {
                 location: "us-central1",
-                model_id: "gemini-2.0-flash-001"
+                model_id: "gemini-2.5-flash"
             }
         );
 

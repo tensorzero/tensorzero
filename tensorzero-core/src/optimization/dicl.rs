@@ -27,8 +27,9 @@ fn default_append_to_existing_variants() -> bool {
 
 /// Initialized DICL optimization configuration (per-job settings only).
 /// Credentials come from `provider_types.openai.defaults` in the gateway configuration.
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DiclOptimizationConfig {
     pub embedding_model: Arc<str>,
     pub variant_name: String,
@@ -43,8 +44,9 @@ pub struct DiclOptimizationConfig {
 
 /// Uninitialized DICL optimization configuration (per-job settings only).
 /// Credentials come from `provider_types.openai.defaults` in the gateway configuration.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "DICLOptimizationConfig"))]
 pub struct UninitializedDiclOptimizationConfig {
     pub embedding_model: String,
@@ -179,8 +181,9 @@ impl UninitializedDiclOptimizationConfig {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DiclOptimizationJobHandle {
     pub embedding_model: String,

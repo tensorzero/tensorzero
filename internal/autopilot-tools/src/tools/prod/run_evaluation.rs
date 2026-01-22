@@ -47,6 +47,11 @@ pub struct RunEvaluationToolParams {
     /// Defaults to On (caching enabled) to match the evaluations CLI behavior.
     #[serde(default = "default_inference_cache")]
     pub inference_cache: CacheEnabledMode,
+    /// Include per-datapoint results in the response.
+    /// When true, the response will include individual results for each datapoint.
+    /// Default is false to avoid response bloat for large evaluations.
+    #[serde(default)]
+    pub include_datapoint_results: bool,
 }
 
 fn default_concurrency() -> usize {
@@ -121,6 +126,10 @@ impl ToolMetadata for RunEvaluationTool {
                     "type": "string",
                     "enum": ["on", "off", "read_only"],
                     "description": "Cache configuration for inference requests (default: 'on')."
+                },
+                "include_datapoint_results": {
+                    "type": "boolean",
+                    "description": "Include per-datapoint results in the response (default: false)."
                 }
             },
             "required": ["evaluation_name", "variant_name"]
@@ -152,6 +161,7 @@ impl SimpleTool for RunEvaluationTool {
             inference_cache: llm_params.inference_cache,
             max_datapoints: llm_params.max_datapoints,
             precision_targets: llm_params.precision_targets,
+            include_datapoint_results: llm_params.include_datapoint_results,
         };
 
         ctx.client()

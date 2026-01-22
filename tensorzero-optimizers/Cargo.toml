@@ -11,13 +11,13 @@ workspace = true
 [features]
 e2e_tests = ["tensorzero/e2e_tests"]
 optimization_tests = ["e2e_tests"]
+ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
 evaluations = { path = "../evaluations" }
 
 # Core async and serialization
-async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
@@ -48,7 +48,7 @@ mime = { workspace = true }
 tracing = { workspace = true }
 
 # ts-rs
-ts-rs = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
