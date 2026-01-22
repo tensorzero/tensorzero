@@ -162,11 +162,11 @@ This can be more efficient, but may result in different content being observed i
 ### `global_outbound_http_timeout_ms`
 
 - **Type:** integer
-- **Required:** no (default: `300000` = 5 minutes)
+- **Required:** no (default: `900000` = 15 minutes)
 
 Sets the global timeout in milliseconds for all outbound HTTP requests made by TensorZero to external services such as model providers and APIs.
 
-By default, all HTTP requests will timeout after 5 minutes (300,000 ms).
+By default, all HTTP requests will timeout after 15 minutes (900,000 ms).
 This timeout is intentionally set high to accommodate slow model responses, but you can customize it based on your requirements.
 
 The `global_outbound_http_timeout_ms` acts as an upper bound for all more specific timeout configurations in your system.
@@ -334,7 +334,7 @@ If your `model_name` is not a basic string, it can be escaped with quotation mar
 For example, periods are not allowed in basic strings, so you can define `llama-3.1-8b-instruct` as `[models."llama-3.1-8b-instruct"]`.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku-20240307]
+[models.claude-haiku-4-5]
 # fieldA = ...
 # fieldB = ...
 # ...
@@ -612,10 +612,10 @@ Defines the model name to use with the Anthropic API.
 See <a href="https://docs.anthropic.com/en/docs/about-claude/models#model-names" target="_blank">Anthropic's documentation</a> for the list of available model names.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.anthropic]
+[models.claude-haiku-4-5.providers.anthropic]
 # ...
 type = "anthropic"
-model_name = "claude-3-haiku-20240307"
+model_name = "claude-haiku-4-5"
 # ...
 ```
 
@@ -633,7 +633,7 @@ The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.anthropic]
+[models.claude-haiku-4-5.providers.anthropic]
 # ...
 type = "anthropic"
 api_key_location = "dynamic::anthropic_api_key"
@@ -650,7 +650,7 @@ api_key_location = "dynamic::anthropic_api_key"
 Overrides the base URL used for Anthropic Messages API requests. The value should include the full endpoint path (for example `https://example.com/v1/messages`).
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.anthropic]
+[models.claude-haiku-4-5.providers.anthropic]
 # ...
 type = "anthropic"
 api_base = "https://example.com/v1/messages"
@@ -673,7 +673,7 @@ When enabled:
 ```toml title="tensorzero.toml"
 [models.claude_structured.providers.anthropic]
 type = "anthropic"
-model_name = "claude-sonnet-4-5-20250929"
+model_name = "claude-sonnet-4-5"
 beta_structured_outputs = true
 ```
 
@@ -726,9 +726,9 @@ endpoint_url = "https://bedrock-runtime.cn-north-1.amazonaws.com.cn"
 </Note>
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.aws_bedrock]
+[models.claude-haiku-4-5.providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "anthropic.claude-haiku-4-5-v1:0"
 region = "us-east-1"
 endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
 # or: endpoint_url = "env::BEDROCK_ENDPOINT_URL"
@@ -751,10 +751,10 @@ Defines the model ID to use with the AWS Bedrock API.
 See <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html" target="_blank">AWS Bedrock's documentation</a> for the list of available model IDs.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.aws_bedrock]
+[models.claude-haiku-4-5.providers.aws_bedrock]
 # ...
 type = "aws_bedrock"
-model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "anthropic.claude-haiku-4-5-v1:0"
 # ...
 ```
 
@@ -782,7 +782,7 @@ The supported locations are:
 - `sdk` - use AWS SDK auto-detection (may slow down initialization in non-AWS environments)
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.aws_bedrock]
+[models.claude-haiku-4-5.providers.aws_bedrock]
 # ...
 type = "aws_bedrock"
 region = "us-east-2"
@@ -911,7 +911,7 @@ Currently, the only supported `hosted_provider` options are:
 For example, if you're using Ollama, you can set:
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.aws_sagemaker]
+[models.claude-haiku-4-5.providers.aws_sagemaker]
 # ...
 type = "aws_sagemaker"
 hosted_provider = "openai"
@@ -926,7 +926,7 @@ hosted_provider = "openai"
 Defines the model name to use with the AWS SageMaker API.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.aws_sagemaker]
+[models.claude-haiku-4-5.providers.aws_sagemaker]
 # ...
 type = "aws_sagemaker"
 model_name = "gemma3:1b"
@@ -949,7 +949,7 @@ The supported locations are:
 - `sdk` - use AWS SDK auto-detection (may slow down initialization in non-AWS environments)
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.aws_sagemaker]
+[models.claude-haiku-4-5.providers.aws_sagemaker]
 # ...
 type = "aws_sagemaker"
 region = "us-east-2"
@@ -1155,7 +1155,7 @@ The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `path_from_env::ENV
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.gcp_vertex]
+[models.claude-haiku-4-5.providers.gcp_vertex]
 # ...
 type = "gcp_vertex_anthropic"
 credential_location = "dynamic::gcp_credentials_path"
@@ -1183,7 +1183,7 @@ Use `model_id` for off-the-shelf models and `endpoint_id` for fine-tuned models 
 Defines the location (region) of the GCP Vertex AI Anthropic model.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.gcp_vertex]
+[models.claude-haiku-4-5.providers.gcp_vertex]
 # ...
 type = "gcp_vertex_anthropic"
 location = "us-central1"
@@ -1200,10 +1200,10 @@ Defines the model ID of the GCP Vertex AI model.
 See <a href="https://docs.anthropic.com/en/api/claude-on-vertex-ai#api-model-names" target="_blank">Anthropic's GCP documentation</a> for the list of available model IDs.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku.providers.gcp_vertex]
+[models.claude-haiku-4-5.providers.gcp_vertex]
 # ...
 type = "gcp_vertex_anthropic"
-model_id = "claude-3-haiku@20240307"
+model_id = "claude-haiku-4-5@20251001"
 # ...
 ```
 
@@ -1217,7 +1217,7 @@ Use `model_id` for off-the-shelf models and `endpoint_id` for fine-tuned models 
 Defines the project ID of the GCP Vertex AI model.
 
 ```toml title="tensorzero.toml"
-[models.claude-3-haiku-2024030.providers.gcp_vertex]
+[models.claude-haiku-4-5-2024030.providers.gcp_vertex]
 # ...
 type = "gcp_vertex"
 project_id = "your-project-id"
@@ -2810,7 +2810,7 @@ For example, periods are not allowed in basic strings, so you can define `llama-
 [functions.draft-email.variants."llama-3.1-8b-instruct"]
 # ...
 
-[functions.draft-email.variants.claude-3-haiku]
+[functions.draft-email.variants.claude-haiku-4-5]
 # ...
 ```
 

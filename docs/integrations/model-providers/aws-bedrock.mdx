@@ -29,12 +29,12 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.claude_3_haiku_20240307]
+[models.claude_haiku_4_5]
 routing = ["aws_bedrock"]
 
-[models.claude_3_haiku_20240307.providers.aws_bedrock]
+[models.claude_haiku_4_5.providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 
 [functions.my_function_name]
@@ -42,7 +42,7 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "claude_3_haiku_20240307"
+model = "claude_haiku_4_5"
 ```
 
 See the [list of available models on AWS Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html).
@@ -50,7 +50,7 @@ See the [list of available models on AWS Bedrock](https://docs.aws.amazon.com/be
 <Tip>
 
 Many AWS Bedrock models are only available through cross-region inference profiles.
-For those models, the `model_id` requires special prefix (e.g. the `us.` prefix in `us.anthropic.claude-sonnet-4-5-20250929-v1:0`).
+For those models, the `model_id` requires special prefix (e.g. the `us.` prefix in `us.anthropic.claude-haiku-4-5-20251001-v1:0`).
 See the [AWS documentation on inference profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html).
 
 </Tip>
