@@ -160,8 +160,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-// --- Skeleton Components ---
-
 function ActionsSkeleton() {
   return (
     <div className="flex flex-wrap gap-2">
@@ -248,8 +246,6 @@ function InferenceContentSkeleton({ id }: { id?: string }) {
   );
 }
 
-// --- Error Component ---
-
 function InferenceErrorState({ id }: { id?: string }) {
   return (
     <>
@@ -269,16 +265,7 @@ function InferenceErrorState({ id }: { id?: string }) {
 }
 
 function InferenceContent({ data }: { data: InferenceDetailData }) {
-  const {
-    inference,
-    input,
-    model_inferences,
-    usedVariants,
-    feedback,
-    feedback_bounds,
-    hasDemonstration,
-    latestFeedbackByMetric,
-  } = data;
+  const { inference, feedback, feedback_bounds } = data;
   const navigate = useNavigate();
 
   // Feedback pagination
