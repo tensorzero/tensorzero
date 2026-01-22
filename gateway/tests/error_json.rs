@@ -15,7 +15,7 @@ async fn test_no_error_json() {
         .unwrap();
     assert_eq!(
         inference_response,
-        r#"{"error":"Failed to parse the request body as JSON: EOF while parsing a value at line 1 column 0 (400 Bad Request)"}"#
+        r#"{"error":{"message":"Failed to parse the request body as JSON: EOF while parsing a value at line 1 column 0 (400 Bad Request)"}}"#
     );
 }
 
@@ -32,6 +32,6 @@ async fn test_error_json() {
         .unwrap();
     assert_eq!(
         inference_response,
-        r#"{"error":"Failed to parse the request body as JSON: EOF while parsing a value at line 1 column 0 (400 Bad Request)","error_json":{"JsonRequest":{"message":"Failed to parse the request body as JSON: EOF while parsing a value at line 1 column 0 (400 Bad Request)"}}}"#
+        r#"{"error":{"message":"Failed to parse the request body as JSON: EOF while parsing a value at line 1 column 0 (400 Bad Request)"},"error_json":{"JsonRequest":{"message":"Failed to parse the request body as JSON: EOF while parsing a value at line 1 column 0 (400 Bad Request)"}}}"#
     );
 }
