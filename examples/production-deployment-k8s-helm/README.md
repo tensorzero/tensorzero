@@ -157,7 +157,7 @@ To deploy ClickHouse using Altinity's Helm chart:
 
 The chart includes a `ConfigMap` with the following default configuration:
 
-- Model configuration for Claude 3.5 Haiku
+- Model configuration for Claude Haiku 4.5
 - Function configuration for chat completions
 
 You can customize the installation by creating a values file `custom-values.yaml`:

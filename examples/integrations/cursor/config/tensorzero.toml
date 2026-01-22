@@ -13,7 +13,7 @@ model = "openai::gpt-4.1"
 [functions.cursorzero.variants."claude-4.5"]
 weight = 1
 type = "chat_completion"
-model = "anthropic::claude-sonnet-4-5-20250929"
+model = "anthropic::claude-sonnet-4-5"
 
 [functions.cursorzero.variants."gemini-2.5-pro"]
 weight = 1

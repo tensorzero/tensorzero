@@ -29,7 +29,7 @@ async fn get_providers() -> E2ETestProviders {
     let claude_thinking_provider = E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock-thinking".to_string(),
-        model_name: "claude-sonnet-4-5-20250929-thinking-aws-bedrock".into(),
+        model_name: "claude-sonnet-4-5-thinking-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     };
@@ -37,7 +37,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock".to_string(),
-        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
@@ -48,7 +48,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock-extra-body".to_string(),
-        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
@@ -56,7 +56,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock-extra-headers".to_string(),
-        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
@@ -65,21 +65,21 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "aws-bedrock".to_string(),
-            model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+            model_name: "claude-haiku-4-5-aws-bedrock".into(),
             model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "aws-bedrock-implicit".to_string(),
-            model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+            model_name: "claude-haiku-4-5-aws-bedrock".into(),
             model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "aws-bedrock-strict".to_string(),
-            model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+            model_name: "claude-haiku-4-5-aws-bedrock".into(),
             model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
@@ -88,7 +88,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws_bedrock_json_mode_off".to_string(),
-        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
@@ -116,7 +116,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock-dynamic-region".to_string(),
-        model_name: "claude-3-haiku-aws-bedrock-dynamic-region".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock-dynamic-region".into(),
         model_provider_name: "aws-bedrock-dynamic-region".into(),
         credentials: HashMap::from([("aws_bedrock_region".to_string(), "us-east-1".to_string())]),
     }];
@@ -242,7 +242,7 @@ async fn test_inference_with_explicit_region() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "claude-3-haiku-20240307-us-east-1");
+    assert_eq!(model_name, "claude-haiku-4-5-us-east-1");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "aws-bedrock-us-east-1");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();

@@ -25,7 +25,7 @@ use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::feedback::internal::{
     LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
 };
-use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo};
+use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, ActionResponse};
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
@@ -294,10 +294,15 @@ impl TensorZeroClient for Client {
                         TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
 
+                let action_input = ActionInputInfo {
+                    snapshot_hash,
+                    input,
+                };
+
                 let response = http
                     .http_client
                     .post(url)
-                    .json(&input)
+                    .json(&action_input)
                     .send()
                     .await
                     .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))?;
@@ -325,20 +330,17 @@ impl TensorZeroClient for Client {
                     input,
                 };
 
-                let result = tensorzero_core::endpoints::internal::action::action(
-                    &gateway.handle.app_state,
-                    action_input,
-                )
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-                })?;
+                let result = crate::action::action(&gateway.handle.app_state, action_input)
+                    .await
+                    .map_err(|e| {
+                        TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                            source: e.into(),
+                        })
+                    })?;
 
                 match result {
-                    tensorzero_core::endpoints::internal::action::ActionResponse::Inference(
-                        response,
-                    ) => Ok(response),
-                    tensorzero_core::endpoints::internal::action::ActionResponse::Feedback(_) => {
+                    ActionResponse::Inference(response) => Ok(response),
+                    ActionResponse::Feedback(_) => {
                         Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
                             source: tensorzero_core::error::Error::new(
                                 tensorzero_core::error::ErrorDetails::InternalError {
