@@ -146,7 +146,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <Link to="/" className="flex items-center gap-2">
                   <LayoutGrid className="h-4 w-4" />
-                  <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                  <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
                     Overview
                   </span>
                 </Link>
@@ -161,7 +161,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 >
                   <Link to="/autopilot" className="flex items-center gap-2">
                     <Chat className="h-4 w-4" />
-                    <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                    <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
                       Autopilot
                     </span>
                   </Link>
@@ -176,7 +176,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <Link to="/playground" className="flex items-center gap-2">
                   <Playground className="h-4 w-4" />
-                  <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                  <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
                     Playground
                   </span>
                 </Link>
@@ -186,9 +186,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
         {navigation.map((section) => (
           <SidebarGroup key={section.title}>
-            {state === "expanded" && (
-              <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
-            )}
+            <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
             <SidebarGroupContent className="flex flex-col gap-1">
               {section.items?.map((item) => (
                 <SidebarMenuItem key={item.title} className="list-none">
@@ -203,7 +201,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <item.icon className="h-4 w-4" />
-                      <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                      <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
                         {item.title}
                       </span>
                     </Link>
@@ -225,7 +223,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           >
             <Link to="/api-keys" className="flex items-center gap-2">
               <KeyRound className="h-4 w-4" />
-              <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+              <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
                 API Keys
               </span>
             </Link>
@@ -243,10 +241,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               rel="noopener noreferrer"
             >
               <Documentation className="h-4 w-4" />
-              <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+              <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
                 Docs
               </span>
-              <span className="ml-auto transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+              <span className="ml-auto whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
                 ↗
               </span>
             </Link>

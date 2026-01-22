@@ -49,11 +49,15 @@ export default function TensorZeroStatusIndicator({
   const content = (
     <div className="text-fg-muted flex h-8 items-center gap-2 overflow-hidden p-2 text-xs">
       {statusDot}
-      <span className="truncate">{statusText}</span>
+      <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+        {statusText}
+      </span>
       {status && !versionsMatch && !collapsed && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="text-[10px] text-yellow-600">(!)</span>
+            <span className="text-[10px] text-yellow-600 transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+              (!)
+            </span>
           </TooltipTrigger>
           <TooltipContent side="right" align="center">
             Version mismatch: UI {uiVersion}. Please make sure your UI has the
