@@ -4,12 +4,14 @@ import { useReadOnly } from "~/context/read-only";
 import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 interface GenerateKeyButtonProps {
-  onClick: () => void;
+  onClick?: () => void;
   className?: string;
+  disabled?: boolean;
 }
 
 export function GenerateKeyButton({
   className,
+  disabled,
   ...props
 }: GenerateKeyButtonProps) {
   const isReadOnly = useReadOnly();
@@ -20,7 +22,7 @@ export function GenerateKeyButton({
         variant="outline"
         size="sm"
         className={className}
-        disabled={isReadOnly}
+        disabled={isReadOnly || disabled}
         {...props}
       >
         <Plus className="text-fg-tertiary mr-2 h-4 w-4" aria-hidden />

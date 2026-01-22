@@ -1,30 +1,64 @@
 import type { Route } from "./+types/route";
-import {
-  data,
-  isRouteErrorResponse,
-  useNavigate,
-  type RouteHandle,
-} from "react-router";
+import { Await, data, useNavigate, type RouteHandle } from "react-router";
+import { Suspense, useState } from "react";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { useState } from "react";
 import { logger } from "~/utils/logger";
+import { PageErrorContent } from "~/components/ui/error";
 import {
   getPostgresClient,
   isPostgresAvailable,
+  PostgresConnectionError,
 } from "~/utils/postgres.server";
 import AuthTable from "./AuthTable";
 import { AuthActions } from "./AuthActions";
 import { GenerateApiKeyModal } from "./GenerateApiKeyModal";
-import { PostgresRequiredState } from "~/components/ui/PostgresRequiredState";
+import {
+  ErrorContentCard,
+  ErrorContentHeader,
+  ErrorInlineCode,
+  TroubleshootingSection,
+} from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertTriangle, Database } from "lucide-react";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
+import type { KeyInfo } from "~/types/tensorzero";
 
 export const handle: RouteHandle = {
   crumb: () => ["TensorZero API Keys"],
 };
+
+type ApiKeysResult =
+  | { status: "success"; apiKeys: KeyInfo[] }
+  | { status: "connection_error"; message: string };
+
+async function fetchApiKeys(
+  limit: number,
+  offset: number,
+): Promise<ApiKeysResult> {
+  try {
+    const postgresClient = await getPostgresClient();
+    const apiKeys = await postgresClient.listApiKeys(limit, offset);
+    return { status: "success", apiKeys };
+  } catch (error) {
+    if (error instanceof PostgresConnectionError) {
+      logger.error("Failed to connect to Postgres", error);
+      return { status: "connection_error", message: error.message };
+    }
+    throw error;
+  }
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -36,21 +70,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 10,000", { status: 400 });
   }
 
+  // Quick sync check - if not configured, return immediately
   if (!isPostgresAvailable()) {
     return {
-      postgresAvailable: false,
-      apiKeys: [],
+      postgresAvailable: false as const,
+      apiKeysPromise: null,
       offset: 0,
       limit: 0,
     };
   }
 
-  const postgresClient = await getPostgresClient();
-  const apiKeys = await postgresClient.listApiKeys(limit, offset);
-
+  // Return immediately, defer the actual postgres work
   return {
-    postgresAvailable: true,
-    apiKeys,
+    postgresAvailable: true as const,
+    apiKeysPromise: fetchApiKeys(limit, offset),
     offset,
     limit,
   };
@@ -76,6 +109,11 @@ export async function action({ request }: Route.ActionArgs) {
       };
     } catch (error) {
       logger.error("Failed to generate API key", error);
+      if (error instanceof PostgresConnectionError) {
+        return {
+          error: "Unable to connect to database. Please try again later.",
+        };
+      }
       return {
         error: "Failed to generate API key. Please try again.",
       };
@@ -99,6 +137,11 @@ export async function action({ request }: Route.ActionArgs) {
       };
     } catch (error) {
       logger.error("Failed to disable API key", error);
+      if (error instanceof PostgresConnectionError) {
+        return {
+          error: "Unable to connect to database. Please try again later.",
+        };
+      }
       return {
         error: "Failed to disable API key. Please try again.",
       };
@@ -131,6 +174,11 @@ export async function action({ request }: Route.ActionArgs) {
       };
     } catch (error) {
       logger.error("Failed to update API key description", error);
+      if (error instanceof PostgresConnectionError) {
+        return {
+          error: "Unable to connect to database. Please try again later.",
+        };
+      }
       return {
         error: "Failed to update API key description. Please try again.",
       };
@@ -142,15 +190,173 @@ export async function action({ request }: Route.ActionArgs) {
   };
 }
 
-export default function AuthPage({ loaderData }: Route.ComponentProps) {
+function DisabledPageContent() {
+  return (
+    <>
+      <AuthActions disabled />
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-0 whitespace-nowrap">Public ID</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead className="w-0 whitespace-nowrap">Created</TableHead>
+            <TableHead className="w-0"></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {[1, 2, 3].map((i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <div className="bg-muted h-4 w-24 rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="bg-muted h-4 w-48 rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="bg-muted h-4 w-20 rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="flex gap-2">
+                  <div className="bg-muted h-8 w-8 rounded" />
+                  <div className="bg-muted h-8 w-8 rounded" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <PageButtons
+        onPreviousPage={() => {}}
+        onNextPage={() => {}}
+        disablePrevious
+        disableNext
+      />
+    </>
+  );
+}
+
+function ApiKeysLoadingState() {
+  return (
+    <PageLayout>
+      <PageHeader heading="TensorZero API Keys" />
+      <SectionLayout>
+        <div className="flex flex-wrap gap-2">
+          <Skeleton className="h-8 w-32" />
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-0 whitespace-nowrap">Public ID</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead className="w-0 whitespace-nowrap">Created</TableHead>
+              <TableHead className="w-0"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[1, 2, 3].map((i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-48" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 w-8" />
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Skeleton className="h-9 w-9 rounded-md" />
+          <Skeleton className="h-9 w-9 rounded-md" />
+        </div>
+      </SectionLayout>
+    </PageLayout>
+  );
+}
+
+function PostgresNotConfiguredState() {
+  return (
+    <PageLayout className="relative min-h-[calc(100vh-4rem)]">
+      <PageHeader heading="TensorZero API Keys" />
+      <SectionLayout className="opacity-50">
+        <DisabledPageContent />
+      </SectionLayout>
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8 pt-16 pb-20">
+        <div className="pointer-events-auto">
+          <ErrorContentCard>
+            <ErrorContentHeader
+              icon={Database}
+              title="Postgres Not Configured"
+              description="Postgres database connection is required to manage API keys. Set the TENSORZERO_POSTGRES_URL environment variable and restart the UI server."
+            />
+          </ErrorContentCard>
+        </div>
+      </div>
+    </PageLayout>
+  );
+}
+
+function PostgresConnectionErrorState({ message }: { message: string }) {
+  return (
+    <PageLayout className="relative min-h-[calc(100vh-4rem)]">
+      <PageHeader heading="TensorZero API Keys" />
+      <SectionLayout className="opacity-50">
+        <DisabledPageContent />
+      </SectionLayout>
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8 pt-16 pb-20">
+        <div className="pointer-events-auto">
+          <ErrorContentCard>
+            <ErrorContentHeader
+              icon={AlertTriangle}
+              title="Unable to Connect to Postgres"
+              description={message}
+            />
+            <TroubleshootingSection>
+              <span>Verify Postgres is running and accessible</span>
+              <span>
+                Check that{" "}
+                <ErrorInlineCode>TENSORZERO_POSTGRES_URL</ErrorInlineCode> is
+                correct
+              </span>
+              <span>Ensure network connectivity to the database host</span>
+              <span>Verify database credentials and permissions</span>
+            </TroubleshootingSection>
+          </ErrorContentCard>
+        </div>
+      </div>
+    </PageLayout>
+  );
+}
+
+function ApiKeysContent({
+  result,
+  offset,
+  limit,
+}: {
+  result: ApiKeysResult;
+  offset: number;
+  limit: number;
+}) {
   const navigate = useNavigate();
-  const { postgresAvailable, apiKeys, offset, limit } = loaderData;
   const [generateModalIsOpen, setGenerateModalIsOpen] = useState(false);
   const [modalKey, setModalKey] = useState(0);
 
-  if (!postgresAvailable) {
-    return <PostgresRequiredState />;
+  if (result.status === "connection_error") {
+    return <PostgresConnectionErrorState message={result.message} />;
   }
+
+  const { apiKeys } = result;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -171,7 +377,6 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
 
   const handleCloseModal = () => {
     setGenerateModalIsOpen(false);
-    // Reset to first page after creating API key
     if (offset > 0) {
       const searchParams = new URLSearchParams(window.location.search);
       searchParams.set("offset", "0");
@@ -202,30 +407,24 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
+export default function AuthPage({ loaderData }: Route.ComponentProps) {
+  const { postgresAvailable, apiKeysPromise, offset, limit } = loaderData;
 
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
+  if (!postgresAvailable) {
+    return <PostgresNotConfiguredState />;
   }
+
+  return (
+    <Suspense fallback={<ApiKeysLoadingState />}>
+      <Await resolve={apiKeysPromise}>
+        {(result) => (
+          <ApiKeysContent result={result} offset={offset} limit={limit} />
+        )}
+      </Await>
+    </Suspense>
+  );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <PageErrorContent error={error} />;
 }
