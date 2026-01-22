@@ -210,7 +210,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter className="relative">
         <ReadOnlyBadge />
-        {state === "expanded" && <TensorZeroStatusIndicator />}
+        <TensorZeroStatusIndicator collapsed={state === "collapsed"} />
         <SidebarMenuItem className="list-none">
           <SidebarMenuButton
             asChild
@@ -246,6 +246,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenuItem>
         <SidebarMenuItem className="list-none">
           <SidebarMenuButton
+            className="w-auto cursor-pointer"
             tooltip={state === "collapsed" ? "Toggle sidebar" : undefined}
             onClick={toggleSidebar}
           >
