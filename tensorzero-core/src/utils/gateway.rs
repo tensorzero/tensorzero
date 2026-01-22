@@ -211,7 +211,7 @@ impl GatewayHandle {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let config = Arc::new(Box::pin(config.into_config(&clickhouse_connection_info)).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
-        let valkey_connection_info = setup_valkey(valkey_url).await?;
+        let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
@@ -507,16 +507,11 @@ pub async fn setup_postgres(
 ///
 /// # Arguments
 /// * `valkey_url` - Optional Valkey URL (from `TENSORZERO_VALKEY_URL` env var)
-pub async fn setup_valkey(valkey_url: Option<String>) -> Result<ValkeyConnectionInfo, Error> {
+pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionInfo, Error> {
     match valkey_url {
-        Some(url) => {
-            tracing::info!("Connecting to Valkey...");
-            ValkeyConnectionInfo::new(&url).await
-        }
+        Some(url) => ValkeyConnectionInfo::new(url).await,
         None => {
-            tracing::debug!(
-                "Valkey not configured: `TENSORZERO_VALKEY_URL` is not set. Rate limiting will use PostgreSQL if available."
-            );
+            tracing::debug!("Disabling Valkey: `TENSORZERO_VALKEY_URL` is not set.");
             Ok(ValkeyConnectionInfo::Disabled)
         }
     }

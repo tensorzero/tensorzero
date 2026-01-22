@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used, clippy::missing_panics_doc)]
+#![expect(clippy::expect_used, clippy::unwrap_used, clippy::missing_panics_doc)]
 
 use std::collections::HashMap;
 
@@ -58,6 +58,26 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
+        valkey_url: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Client {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
+
+    let tmp_config = NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(tmp_config.path().to_owned()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url: None,
         timeout: None,
         verify_credentials: true,

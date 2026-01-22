@@ -663,7 +663,8 @@ async fn test_config_valid() {
     });
 
     // This should not error
-    let _client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
+    let _client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
 }
 
 // ============================================================================

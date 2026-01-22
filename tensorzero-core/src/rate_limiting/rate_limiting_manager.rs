@@ -73,7 +73,7 @@ impl RateLimitingManager {
         // If the backend is explicitly configured, use it if it is available.
         if config.backend == RateLimitingBackend::Valkey {
             if valkey_available {
-                tracing::info!("Using Valkey for rate limiting");
+                tracing::debug!("Using Valkey for rate limiting");
                 return Ok(Self::new(config, Arc::new(valkey_connection_info.clone())));
             }
             return Err(Error::new(ErrorDetails::Config {
@@ -83,7 +83,7 @@ impl RateLimitingManager {
 
         if config.backend == RateLimitingBackend::Postgres {
             if postgres_available {
-                tracing::info!("Using Postgres for rate limiting");
+                tracing::debug!("Using Postgres for rate limiting");
                 return Ok(Self::new(
                     config,
                     Arc::new(postgres_connection_info.clone()),
@@ -96,11 +96,11 @@ impl RateLimitingManager {
 
         // Otherwise, pick Valkey and Postgres in this order.
         if valkey_available {
-            tracing::info!("Using Valkey for rate limiting");
+            tracing::debug!("Using Valkey for rate limiting");
             return Ok(Self::new(config, Arc::new(valkey_connection_info.clone())));
         }
         if postgres_available {
-            tracing::info!("Using Postgres for rate limiting");
+            tracing::debug!("Using Postgres for rate limiting");
             return Ok(Self::new(
                 config,
                 Arc::new(postgres_connection_info.clone()),

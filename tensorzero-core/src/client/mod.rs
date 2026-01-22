@@ -603,9 +603,8 @@ impl ClientBuilder {
                     })?
                 };
 
-                // Set up Valkey connection from explicit URL or fall back to environment variable
-                let valkey_url = valkey_url.clone().or_else(|| env::var("TENSORZERO_VALKEY_URL").ok());
-                let valkey_connection_info = setup_valkey(valkey_url).await.map_err(|e| {
+                // Set up Valkey connection from explicit URL
+                let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
                     ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
                         source: e.into(),
                     })
@@ -777,7 +776,7 @@ impl ClientBuilder {
             })?;
 
         // Setup Valkey with runtime URL
-        let valkey_connection_info = setup_valkey(valkey_url).await.map_err(|e| {
+        let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
             ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
         })?;
 

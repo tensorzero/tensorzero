@@ -68,8 +68,12 @@ pub struct DisabledRateLimitQueries;
 impl RateLimitQueries for DisabledRateLimitQueries {
     async fn consume_tickets(
         &self,
-        _requests: &[ConsumeTicketsRequest],
+        requests: &[ConsumeTicketsRequest],
     ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
+        if requests.is_empty() {
+            return Ok(vec![]);
+        }
+
         Err(Error::new(ErrorDetails::Config {
             message: "Rate limiting should be disabled but `consume_tickets` is called".to_string(),
         }))
@@ -77,8 +81,12 @@ impl RateLimitQueries for DisabledRateLimitQueries {
 
     async fn return_tickets(
         &self,
-        _requests: Vec<ReturnTicketsRequest>,
+        requests: Vec<ReturnTicketsRequest>,
     ) -> Result<Vec<ReturnTicketsReceipt>, Error> {
+        if requests.is_empty() {
+            return Ok(vec![]);
+        }
+
         Err(Error::new(ErrorDetails::Config {
             message: "Rate limiting should be disabled but `return_tickets` is called".to_string(),
         }))
