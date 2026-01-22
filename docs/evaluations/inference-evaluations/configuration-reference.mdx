@@ -227,20 +227,17 @@ Here we list only the configuration for variants that differs from the configura
 type = "llm_judge"
 optimize = "max"
 
-[evaluations.email-guardrails.evaluators.check-signature.variants."claude_sonnet_4_5"]
+[evaluations.email-guardrails.evaluators.check-signature.variants.claude_sonnet_4_5]
 type = "chat_completion"
 model = "anthropic::claude-sonnet-4-5"
 temperature = 0.1
 system_instructions = "./evaluations/email-guardrails/check-signature/system_instructions.txt"
 # ... other chat completion configuration ...
 
-[evaluations.email-guardrails.evaluators.check-signature.variants."mix3claude_sonnet_4_5"]
+[evaluations.email-guardrails.evaluators.check-signature.variants.mix_of_3]
 active = true  # if we run the `email-guardrails` evaluation, this is the variant we'll use for the check-signature evaluator
 type = "experimental_mixture_of_n"
 candidates = ["claude_sonnet_4_5", "claude_sonnet_4_5", "claude_sonnet_4_5"]
-
-
-
 ```
 
 ###### `active`
@@ -255,9 +252,10 @@ Sets which of the variants should be used for evaluation runs.
 [evaluations.email-guardrails.evaluators.check-signature]
 # ...
 
-[evaluations.email-guardrails.evaluators.check-signature.variants."mix3claude_sonnet_4_5"]
+[evaluations.email-guardrails.evaluators.check-signature.variants.mix_of_3]
 active = true # if we run the `email-guardrails` evaluation, this is the variant we'll use for the check-signature evaluator
 type = "experimental_mixture_of_n"
+# ...
 ```
 
 ###### `system_instructions`
