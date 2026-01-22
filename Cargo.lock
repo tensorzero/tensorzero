@@ -1836,6 +1836,7 @@ dependencies = [
  "durable-tools",
  "durable-tools-spawn",
  "evaluations",
+ "indexmap 2.13.0",
  "mockall",
  "schemars 1.2.0",
  "secrecy",
