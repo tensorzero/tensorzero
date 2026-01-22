@@ -17,7 +17,6 @@ tensorzero-core = { path = "../tensorzero-core" }
 evaluations = { path = "../evaluations" }
 
 # Core async and serialization
-async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }

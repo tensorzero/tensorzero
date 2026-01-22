@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -41,30 +42,31 @@ pub trait HealthCheckable {
     async fn health(&self) -> Result<(), Error>;
 }
 
-#[async_trait]
 #[cfg_attr(test, automock)]
 pub trait SelectQueries {
-    async fn count_distinct_models_used(&self) -> Result<u32, Error>;
+    fn count_distinct_models_used(&self) -> impl Future<Output = Result<u32, Error>> + Send;
 
-    async fn get_model_usage_timeseries(
+    fn get_model_usage_timeseries(
         &self,
         time_window: TimeWindow,
         max_periods: u32,
-    ) -> Result<Vec<ModelUsageTimePoint>, Error>;
+    ) -> impl Future<Output = Result<Vec<ModelUsageTimePoint>, Error>> + Send;
 
-    async fn get_model_latency_quantiles(
+    fn get_model_latency_quantiles(
         &self,
         time_window: TimeWindow,
-    ) -> Result<Vec<ModelLatencyDatapoint>, Error>;
+    ) -> impl Future<Output = Result<Vec<ModelLatencyDatapoint>, Error>> + Send;
 
-    async fn query_episode_table(
+    fn query_episode_table(
         &self,
         limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
-    ) -> Result<Vec<EpisodeByIdRow>, Error>;
+    ) -> impl Future<Output = Result<Vec<EpisodeByIdRow>, Error>> + Send;
 
-    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
+    fn query_episode_table_bounds(
+        &self,
+    ) -> impl Future<Output = Result<TableBoundsWithCount, Error>> + Send;
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
@@ -166,11 +168,10 @@ pub trait ExperimentationQueries {
     ) -> Result<String, Error>;
 }
 
-#[async_trait]
 #[cfg_attr(test, automock)]
 pub trait ConfigQueries {
-    async fn get_config_snapshot(
+    fn get_config_snapshot(
         &self,
         snapshot_hash: SnapshotHash,
-    ) -> Result<ConfigSnapshot, Error>;
+    ) -> impl Future<Output = Result<ConfigSnapshot, Error>> + Send;
 }
