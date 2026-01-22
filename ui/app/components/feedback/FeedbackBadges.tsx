@@ -2,7 +2,7 @@ import { Badge } from "~/components/ui/badge";
 import type { FeedbackRow } from "~/types/tensorzero";
 import type { FeedbackConfig } from "~/utils/config/feedback";
 
-// Move the getBadgeStyle function from MetricSelector
+// Badge styles using orange/amber/yellow spectrum for visual cohesion
 const getBadgeStyle = (
   property: "type" | "optimize" | "level",
   value: string | undefined,
@@ -13,9 +13,9 @@ const getBadgeStyle = (
         case "boolean":
           return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300";
         case "float":
-          return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300";
+          return "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300";
         case "demonstration":
-          return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300";
+          return "bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-300";
         case undefined:
           return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
         default:
@@ -25,13 +25,13 @@ const getBadgeStyle = (
     case "optimize":
       if (!value) return "";
       return value === "max"
-        ? "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-300"
-        : "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300";
+        ? "bg-orange-200 text-orange-800 dark:bg-orange-800 dark:text-orange-200"
+        : "bg-amber-200 text-amber-700 dark:bg-amber-800 dark:text-amber-200";
 
     case "level":
       return value === "episode"
-        ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300"
-        : "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300";
+        ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"
+        : "bg-yellow-200 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200";
 
     default:
       return "";
