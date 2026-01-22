@@ -247,7 +247,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
 
         {/* Main sections grid */}
-        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
           <div id="observability" className="flex w-full flex-col gap-2">
             <h2 className="text-md text-fg-secondary font-medium">
               Observability
