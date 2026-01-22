@@ -84,7 +84,7 @@ function SectionCountValue({ value }: { value: number | bigint }) {
 export function PageCount({ count }: { count: CountValue }) {
   if (count instanceof Promise) {
     return (
-      <Suspense fallback={<Skeleton className="h-8 w-16" />}>
+      <Suspense fallback={<Skeleton className="h-6 w-16" />}>
         <Await
           resolve={count}
           errorElement={<CountErrorTooltip variant={CountVariant.Page} />}
@@ -104,7 +104,7 @@ export function PageCount({ count }: { count: CountValue }) {
 export function SectionCount({ count }: { count: CountValue }) {
   if (count instanceof Promise) {
     return (
-      <Suspense fallback={<Skeleton className="h-6 w-12" />}>
+      <Suspense fallback={<Skeleton className="h-5 w-12" />}>
         <Await
           resolve={count}
           errorElement={<CountErrorTooltip variant={CountVariant.Section} />}
