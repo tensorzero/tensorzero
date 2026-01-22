@@ -149,6 +149,10 @@
 //!     executor.register_simple_tool::<SearchTool>().await;
 //!     executor.register_task_tool::<ResearchTool>().await;
 //!
+//!     // For runtime-configured tools, register instances instead
+//!     // executor.register_simple_tool_instance(SearchTool::new(config)).await;
+//!     // executor.register_task_tool_instance(ResearchTool::new(config)).await;
+//!
 //!     let episode_id = Uuid::now_v7();
 //!     executor.spawn_tool::<ResearchTool>(
 //!         ResearchParams { topic: "rust".into() },

@@ -103,17 +103,11 @@ impl ToolExecutor {
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
     /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    pub async fn register_task_tool<T: TaskTool>(&self) -> Result<&Self, ToolError> {
-        // Register with tool registry
-        {
-            let mut registry = self.registry.write().await;
-            registry.register_task_tool::<T>()?;
-        }
-
-        // Register the adapter with durable
-        self.durable.register::<TaskToolAdapter<T>>().await?;
-
-        Ok(self)
+    ///
+    /// This uses `Default` to construct the tool. For runtime-configured tools,
+    /// use [`Self::register_task_tool_instance`].
+    pub async fn register_task_tool<T: TaskTool + Default>(&self) -> Result<&Self, ToolError> {
+        self.register_task_tool_instance(T::default()).await
     }
 
     /// Register a `SimpleTool`.
@@ -125,9 +119,53 @@ impl ToolExecutor {
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
     /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
+    ///
+    /// This uses `Default` to construct the tool. For runtime-configured tools,
+    /// use [`Self::register_simple_tool_instance`].
     pub async fn register_simple_tool<T: SimpleTool + Default>(&self) -> Result<&Self, ToolError> {
+        self.register_simple_tool_instance(T::default()).await
+    }
+
+    /// Register a `TaskTool` instance.
+    ///
+    /// This registers the tool with both the tool registry and the durable
+    /// client (so it can be executed by workers).
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
+    pub async fn register_task_tool_instance<T: TaskTool>(
+        &self,
+        tool: T,
+    ) -> Result<&Self, ToolError> {
+        let tool = {
+            let mut registry = self.registry.write().await;
+            registry.register_task_tool_instance(tool)?
+        };
+
+        self.durable
+            .register_instance(TaskToolAdapter::new(tool))
+            .await?;
+
+        Ok(self)
+    }
+
+    /// Register a `SimpleTool` instance.
+    ///
+    /// `SimpleTools` don't need to be registered with the durable client
+    /// since they run inside `TaskTool` steps.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
+    pub async fn register_simple_tool_instance<T: SimpleTool>(
+        &self,
+        tool: T,
+    ) -> Result<&Self, ToolError> {
         let mut registry = self.registry.write().await;
-        registry.register_simple_tool::<T>()?;
+        registry.register_simple_tool_instance(tool)?;
         Ok(self)
     }
 
@@ -142,20 +180,25 @@ impl ToolExecutor {
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool<T: TaskTool>(
+    ///
+    /// This uses `Default` to determine the task name. For runtime-configured
+    /// tools, use [`Self::spawn_tool_by_name`] with the registered name.
+    pub async fn spawn_tool<T: TaskTool + Default>(
         &self,
         llm_params: T::LlmParams,
         side_info: T::SideInfo,
         episode_id: Uuid,
         options: SpawnOptions,
     ) -> anyhow::Result<SpawnResult> {
+        let tool = T::default();
+        let tool_name = tool.name();
         let wrapped = TaskToolParams {
             llm_params,
             side_info,
             episode_id,
         };
         self.durable
-            .spawn_with_options::<TaskToolAdapter<T>>(wrapped, options)
+            .spawn_by_name(tool_name.as_ref(), serde_json::to_value(wrapped)?, options)
             .await
             .map_err(Into::into)
     }
@@ -208,6 +251,9 @@ impl ToolExecutor {
     /// # Errors
     ///
     /// Returns an error if spawning the tool fails.
+    ///
+    /// This uses `Default` to determine the task name. For runtime-configured
+    /// tools, use [`Self::spawn_tool_by_name_with`] with the registered name.
     pub async fn spawn_tool_with<'e, T, E>(
         &self,
         executor: E,
@@ -217,16 +263,23 @@ impl ToolExecutor {
         options: SpawnOptions,
     ) -> anyhow::Result<SpawnResult>
     where
-        T: TaskTool,
+        T: TaskTool + Default,
         E: Executor<'e, Database = Postgres>,
     {
+        let tool = T::default();
+        let tool_name = tool.name();
         let wrapped = TaskToolParams {
             llm_params,
             side_info,
             episode_id,
         };
         self.durable
-            .spawn_with_options_with::<TaskToolAdapter<T>, E>(executor, wrapped, options)
+            .spawn_by_name_with(
+                executor,
+                tool_name.as_ref(),
+                serde_json::to_value(wrapped)?,
+                options,
+            )
             .await
             .map_err(Into::into)
     }

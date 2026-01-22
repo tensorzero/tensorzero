@@ -76,18 +76,12 @@ pub trait ErasedSimpleTool: ErasedTool {
 }
 
 /// Wrapper that implements [`ErasedTool`] for `TaskTool` types.
-pub struct ErasedTaskToolWrapper<T: TaskTool>(T);
+pub struct ErasedTaskToolWrapper<T: TaskTool>(Arc<T>);
 
 impl<T: TaskTool> ErasedTaskToolWrapper<T> {
     /// Create a new wrapper with the given tool instance.
-    pub fn new(tool: T) -> Self {
+    pub fn new(tool: Arc<T>) -> Self {
         Self(tool)
-    }
-}
-
-impl<T: TaskTool> Default for ErasedTaskToolWrapper<T> {
-    fn default() -> Self {
-        Self::new(T::default())
     }
 }
 
@@ -213,8 +207,21 @@ impl ToolRegistry {
     /// # Errors
     ///
     /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
-    pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
-        let tool = T::default();
+    pub fn register_task_tool<T: TaskTool + Default>(&mut self) -> Result<&mut Self, ToolError> {
+        let _ = self.register_task_tool_instance(T::default())?;
+        Ok(self)
+    }
+
+    /// Register a `TaskTool` instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn register_task_tool_instance<T: TaskTool>(
+        &mut self,
+        tool: T,
+    ) -> Result<Arc<T>, ToolError> {
+        let tool = Arc::new(tool);
         let name = tool.name();
         if self.tools.contains_key(name.as_ref()) {
             return Err(NonControlToolError::DuplicateToolName {
@@ -223,9 +230,9 @@ impl ToolRegistry {
             .into());
         }
 
-        let wrapper = Arc::new(ErasedTaskToolWrapper::new(tool));
+        let wrapper = Arc::new(ErasedTaskToolWrapper::new(tool.clone()));
         self.tools.insert(name.into_owned(), wrapper);
-        Ok(self)
+        Ok(tool)
     }
 
     /// Register a `SimpleTool`.
@@ -233,8 +240,23 @@ impl ToolRegistry {
     /// # Errors
     ///
     /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
-    pub fn register_simple_tool<T: SimpleTool>(&mut self) -> Result<&mut Self, ToolError> {
-        let tool = T::default();
+    pub fn register_simple_tool<T: SimpleTool + Default>(
+        &mut self,
+    ) -> Result<&mut Self, ToolError> {
+        let _ = self.register_simple_tool_instance(T::default())?;
+        Ok(self)
+    }
+
+    /// Register a `SimpleTool` instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn register_simple_tool_instance<T: SimpleTool>(
+        &mut self,
+        tool: T,
+    ) -> Result<Arc<T>, ToolError> {
+        let tool = Arc::new(tool);
         let name = tool.name();
         if self.tools.contains_key(name.as_ref()) {
             return Err(NonControlToolError::DuplicateToolName {
@@ -243,11 +265,12 @@ impl ToolRegistry {
             .into());
         }
 
-        let tool = Arc::new(tool);
+        let name = name.into_owned();
         self.tools
-            .insert(name.to_string(), tool.clone() as Arc<dyn ErasedTool>);
-        self.simple_tools.insert(name.into_owned(), tool);
-        Ok(self)
+            .insert(name.clone(), tool.clone() as Arc<dyn ErasedTool>);
+        self.simple_tools
+            .insert(name, tool.clone() as Arc<dyn ErasedSimpleTool>);
+        Ok(tool)
     }
 
     /// Get a tool by name.

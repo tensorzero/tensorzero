@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use durable::{Task, TaskContext, TaskResult};
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use crate::context::{ToolAppState, ToolContext};
 use crate::error::ToolResult as ToolExecResult;
@@ -137,7 +138,7 @@ use crate::tool_metadata::ToolMetadata;
 /// }
 /// ```
 #[async_trait]
-pub trait TaskTool: ToolMetadata + Default {
+pub trait TaskTool: ToolMetadata {
     /// Execute the tool logic.
     ///
     /// This is called by the durable worker when the tool is invoked.
@@ -163,18 +164,12 @@ pub use durable_tools_spawn::TaskToolParams;
 /// Adapter that implements `durable::Task` for any `TaskTool`.
 ///
 /// This allows `TaskTools` to be registered with the durable worker.
-pub struct TaskToolAdapter<T: TaskTool>(T);
+pub struct TaskToolAdapter<T: TaskTool>(Arc<T>);
 
 impl<T: TaskTool> TaskToolAdapter<T> {
     /// Create a new adapter instance wrapping the given tool.
-    pub fn new(tool: T) -> Self {
+    pub fn new(tool: Arc<T>) -> Self {
         Self(tool)
-    }
-}
-
-impl<T: TaskTool> Default for TaskToolAdapter<T> {
-    fn default() -> Self {
-        Self::new(T::default())
     }
 }
 

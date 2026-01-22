@@ -3,6 +3,7 @@
 //! Integration tests that require Postgres are in `tests/integration.rs`.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -182,7 +183,7 @@ mod registry_tests {
     #[test]
     fn register_task_tool_adds_to_tools_map() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         assert!(registry.get("echo_task").is_some());
         assert_eq!(registry.len(), 1);
@@ -191,7 +192,9 @@ mod registry_tests {
     #[test]
     fn register_simple_tool_adds_to_both_maps() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         // Should be in both tools and simple_tools
         assert!(registry.get("echo_simple").is_some());
@@ -434,13 +437,13 @@ mod erasure_tests {
 
     #[test]
     fn erased_task_tool_wrapper_exposes_name() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         assert_eq!(wrapper.name(), "echo_task");
     }
 
     #[test]
     fn erased_task_tool_wrapper_exposes_description() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         assert_eq!(
             wrapper.description().as_ref(),
             "Echoes the input message (durable)"
@@ -449,19 +452,19 @@ mod erasure_tests {
 
     #[test]
     fn erased_task_tool_wrapper_exposes_timeout() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         assert_eq!(wrapper.timeout(), Duration::from_secs(60));
     }
 
     #[test]
     fn erased_task_tool_wrapper_default_timeout() {
-        let wrapper = ErasedTaskToolWrapper::<DefaultTimeoutTaskTool>::default();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(DefaultTimeoutTaskTool));
         assert_eq!(wrapper.timeout(), Duration::from_secs(60));
     }
 
     #[test]
     fn erased_task_tool_wrapper_is_durable_true() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         assert!(wrapper.is_durable());
     }
 
@@ -490,7 +493,7 @@ mod erasure_tests {
 
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::default();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         let schema = wrapper.parameters_schema().unwrap();
 
         // The schema should be an object with a "message" property

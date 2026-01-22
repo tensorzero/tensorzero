@@ -47,7 +47,13 @@ pub struct ClientTaskToolWrapper<T: TaskTool> {
     inner: T,
 }
 
-impl<T: TaskTool> Default for ClientTaskToolWrapper<T> {
+impl<T: TaskTool> ClientTaskToolWrapper<T> {
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
+}
+
+impl<T: TaskTool + Default> Default for ClientTaskToolWrapper<T> {
     fn default() -> Self {
         Self {
             inner: T::default(),
@@ -179,7 +185,14 @@ pub struct ClientSimpleToolWrapper<T: SimpleTool> {
     inner: T,
 }
 
-impl<T: SimpleTool> Default for ClientSimpleToolWrapper<T> {
+impl<T: SimpleTool> ClientSimpleToolWrapper<T> {
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
+}
+
+impl<T: SimpleTool + Default> Default for ClientSimpleToolWrapper<T> {
     fn default() -> Self {
         Self {
             inner: T::default(),
@@ -217,7 +230,7 @@ struct SimpleToolStepParams<L, S> {
 }
 
 #[async_trait]
-impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T>
+impl<T: SimpleTool + Default> TaskTool for ClientSimpleToolWrapper<T>
 where
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
     <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
@@ -288,7 +301,7 @@ where
 /// success or failure. This ensures tool errors are checkpointed rather than
 /// causing step retries. The error is converted to structured JSON for
 /// programmatic parsing by the autopilot API.
-async fn execute_simple_tool_step<T: SimpleTool>(
+async fn execute_simple_tool_step<T: SimpleTool + Default>(
     params: SimpleToolStepParams<T::LlmParams, T::SideInfo>,
     state: ToolAppState,
 ) -> anyhow::Result<Result<T::Output, serde_json::Value>> {
@@ -727,14 +740,14 @@ mod tests {
 
     #[test]
     fn test_client_tool_wrapper_metadata_delegation() {
-        let wrapper = ClientTaskToolWrapper::<TestTaskTool>::default();
+        let wrapper = ClientTaskToolWrapper::new(TestTaskTool);
         assert_eq!(wrapper.name(), "test_task_tool");
         assert_eq!(wrapper.description(), "A test task tool for unit testing");
     }
 
     #[test]
     fn test_client_simple_tool_wrapper_metadata_delegation() {
-        let wrapper = ClientSimpleToolWrapper::<TestSimpleTool>::default();
+        let wrapper = ClientSimpleToolWrapper::new(TestSimpleTool);
         assert_eq!(wrapper.name(), "test_simple_tool");
         assert_eq!(wrapper.description(), "A test simple tool for unit testing");
     }
