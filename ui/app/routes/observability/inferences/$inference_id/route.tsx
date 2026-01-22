@@ -36,31 +36,11 @@ export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
 };
 
-interface InferenceLoaderData {
-  inference: Awaited<
-    ReturnType<ReturnType<typeof getTensorZeroClient>["getInferences"]>
-  >["inferences"][0];
-  resolvedInput: Awaited<ReturnType<typeof loadFileDataForStoredInput>>;
-  model_inferences: Awaited<ReturnType<typeof resolveModelInferences>>;
-  usedVariants: string[];
-  feedback: Awaited<
-    ReturnType<ReturnType<typeof getTensorZeroClient>["getFeedbackByTargetId"]>
-  >;
-  feedback_bounds: Awaited<
-    ReturnType<
-      ReturnType<typeof getTensorZeroClient>["getFeedbackBoundsByTargetId"]
-    >
-  >;
-  hasDemonstration: boolean;
-  newFeedbackId: string | null;
-  latestFeedbackByMetric: Record<string, string>;
-}
-
 async function fetchInferenceData(
   request: Request,
   inference_id: string,
-  inference: InferenceLoaderData["inference"],
-): Promise<Omit<InferenceLoaderData, "newFeedbackId">> {
+  inference: InferenceDetailData["inference"],
+): Promise<InferenceDetailData> {
   const url = new URL(request.url);
   const newFeedbackId = url.searchParams.get("newFeedbackId");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
@@ -131,11 +111,11 @@ async function fetchInferenceData(
     inference.function_name === DEFAULT_FUNCTION
       ? await tensorZeroClient.getUsedVariants(inference.function_name)
       : [];
-  const resolvedInput = await loadFileDataForStoredInput(inference.input);
+  const input = await loadFileDataForStoredInput(inference.input);
 
   return {
     inference,
-    resolvedInput,
+    input,
     model_inferences,
     usedVariants,
     feedback,
@@ -288,14 +268,10 @@ function InferenceErrorState({ id }: { id?: string }) {
   );
 }
 
-function InferenceContent({
-  data,
-}: {
-  data: Omit<InferenceLoaderData, "newFeedbackId">;
-}) {
+function InferenceContent({ data }: { data: InferenceDetailData }) {
   const {
     inference,
-    resolvedInput,
+    input,
     model_inferences,
     usedVariants,
     feedback,
@@ -338,18 +314,6 @@ function InferenceContent({
     !feedback_bounds.first_id ||
     feedback_bounds.first_id === bottomFeedback.id;
 
-  // Build the data object for InferenceDetailContent
-  const inferenceData: InferenceDetailData = {
-    inference,
-    input: resolvedInput,
-    model_inferences,
-    feedback,
-    feedback_bounds,
-    hasDemonstration,
-    latestFeedbackByMetric,
-    usedVariants,
-  };
-
   // Handle feedback added callback - extract newFeedbackId from the API redirect URL
   // and navigate to the page URL with the newFeedbackId
   const handleFeedbackAdded = (redirectUrl?: string) => {
@@ -370,7 +334,7 @@ function InferenceContent({
 
   return (
     <InferenceDetailContent
-      data={inferenceData}
+      data={data}
       onFeedbackAdded={handleFeedbackAdded}
       feedbackFooter={
         <PageButtons
