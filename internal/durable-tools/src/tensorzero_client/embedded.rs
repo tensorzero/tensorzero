@@ -180,7 +180,7 @@ impl TensorZeroClient for EmbeddedClient {
     ) -> Result<InferenceResponse, TensorZeroClientError> {
         Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
             source: Error::new(ErrorDetails::InternalError {
-                message: "action endpoint is not supported for embedded client".to_string(),
+                message: "Action endpoint is not supported for embedded client".to_string(),
             })
             .into(),
         }))

@@ -614,7 +614,7 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
                 source: Error::new(ErrorDetails::InternalError {
-                    message: "action endpoint is not supported for embedded gateway mode"
+                    message: "Action endpoint is not supported for embedded gateway mode"
                         .to_string(),
                 })
                 .into(),

@@ -325,7 +325,7 @@ impl TensorZeroClient for Client {
                 Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(
                         tensorzero_core::error::ErrorDetails::InternalError {
-                            message: "action endpoint is not supported for embedded gateway mode"
+                            message: "Action endpoint is not supported for embedded gateway mode"
                                 .to_string(),
                         },
                     )
