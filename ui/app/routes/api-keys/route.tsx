@@ -1,7 +1,9 @@
 import type { Route } from "./+types/route";
+import { Suspense, useState } from "react";
 import {
+  Await,
   data,
-  isRouteErrorResponse,
+  useAsyncError,
   useNavigate,
   type RouteHandle,
 } from "react-router";
@@ -11,8 +13,8 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { useState } from "react";
 import { logger } from "~/utils/logger";
+import { PageErrorContent } from "~/components/ui/error";
 import {
   getPostgresClient,
   isPostgresAvailable,
@@ -21,10 +23,101 @@ import AuthTable from "./AuthTable";
 import { AuthActions } from "./AuthActions";
 import { GenerateApiKeyModal } from "./GenerateApiKeyModal";
 import { PostgresRequiredState } from "~/components/ui/PostgresRequiredState";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
+import type { KeyInfo } from "~/types/tensorzero";
 
 export const handle: RouteHandle = {
   crumb: () => ["TensorZero API Keys"],
 };
+
+export type ApiKeysData = {
+  apiKeys: KeyInfo[];
+  offset: number;
+  limit: number;
+};
+
+function ApiKeysPageHeader() {
+  return <PageHeader heading="TensorZero API Keys" />;
+}
+
+function ApiKeysContentSkeleton() {
+  return (
+    <>
+      <ApiKeysPageHeader />
+      <SectionLayout>
+        <div className="flex flex-wrap gap-2">
+          <Skeleton className="h-8 w-32" />
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-0 whitespace-nowrap">Public ID</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead className="w-0 whitespace-nowrap">Created</TableHead>
+              <TableHead className="w-0"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[1, 2, 3].map((i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-48" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 w-8" />
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Skeleton className="h-9 w-9 rounded-md" />
+          <Skeleton className="h-9 w-9 rounded-md" />
+        </div>
+      </SectionLayout>
+    </>
+  );
+}
+
+function ApiKeysErrorState() {
+  const error = useAsyncError();
+  return (
+    <>
+      <ApiKeysPageHeader />
+      <SectionLayout>
+        <PageErrorContent error={error} />
+      </SectionLayout>
+    </>
+  );
+}
+
+async function fetchApiKeys(
+  limit: number,
+  offset: number,
+): Promise<ApiKeysData> {
+  const postgresClient = await getPostgresClient();
+  const apiKeys = await postgresClient.listApiKeys(limit, offset);
+  return { apiKeys, offset, limit };
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -38,21 +131,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   if (!isPostgresAvailable()) {
     return {
-      postgresAvailable: false,
-      apiKeys: [],
-      offset: 0,
-      limit: 0,
+      postgresAvailable: false as const,
+      apiKeysData: null,
     };
   }
 
-  const postgresClient = await getPostgresClient();
-  const apiKeys = await postgresClient.listApiKeys(limit, offset);
-
   return {
-    postgresAvailable: true,
-    apiKeys,
-    offset,
-    limit,
+    postgresAvailable: true as const,
+    apiKeysData: fetchApiKeys(limit, offset),
   };
 }
 
@@ -142,15 +228,11 @@ export async function action({ request }: Route.ActionArgs) {
   };
 }
 
-export default function AuthPage({ loaderData }: Route.ComponentProps) {
+function ApiKeysContent({ data }: { data: ApiKeysData }) {
+  const { apiKeys, offset, limit } = data;
   const navigate = useNavigate();
-  const { postgresAvailable, apiKeys, offset, limit } = loaderData;
   const [generateModalIsOpen, setGenerateModalIsOpen] = useState(false);
   const [modalKey, setModalKey] = useState(0);
-
-  if (!postgresAvailable) {
-    return <PostgresRequiredState />;
-  }
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -171,7 +253,6 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
 
   const handleCloseModal = () => {
     setGenerateModalIsOpen(false);
-    // Reset to first page after creating API key
     if (offset > 0) {
       const searchParams = new URLSearchParams(window.location.search);
       searchParams.set("offset", "0");
@@ -181,8 +262,8 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <PageLayout>
-      <PageHeader heading="TensorZero API Keys" />
+    <>
+      <ApiKeysPageHeader />
       <SectionLayout>
         <AuthActions onGenerateKey={handleOpenModal} />
         <AuthTable apiKeys={apiKeys} />
@@ -198,34 +279,29 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
         isOpen={generateModalIsOpen}
         onClose={handleCloseModal}
       />
+    </>
+  );
+}
+
+export default function ApiKeysPage({ loaderData }: Route.ComponentProps) {
+  const { postgresAvailable, apiKeysData } = loaderData;
+
+  if (!postgresAvailable) {
+    return <PostgresRequiredState />;
+  }
+
+  return (
+    <PageLayout>
+      <Suspense fallback={<ApiKeysContentSkeleton />}>
+        <Await resolve={apiKeysData} errorElement={<ApiKeysErrorState />}>
+          {(resolvedData) => <ApiKeysContent data={resolvedData} />}
+        </Await>
+      </Suspense>
     </PageLayout>
   );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
+  return <PageErrorContent error={error} />;
 }
