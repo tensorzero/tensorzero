@@ -165,7 +165,7 @@ jobs:
           # Create batch prediction job
           job = aiplatform.BatchPredictionJob.submit(
               job_display_name=f'gemini-batch-{timestamp}',
-              model_name='publishers/google/models/gemini-2.0-flash-001',
+              model_name='publishers/google/models/gemini-2.5-flash',
               instances_format='jsonl',
               predictions_format='jsonl',
               gcs_source=f'gs://{bucket_name}/{input_blob_name}',
