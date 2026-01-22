@@ -5,7 +5,7 @@ on:
   #   workflows: ["General Checks"]
   #   types:
   #     - completed
-  workflow_dispatch:  # placeholder to silence errors
+  workflow_dispatch: # placeholder to silence errors
 
 jobs:
   generate-patch:
