@@ -112,7 +112,7 @@ export default function WorkflowEvaluationProjectPage({
               segments={[
                 {
                   label: "Workflow Evaluations",
-                  href: "/workflow_evaluations",
+                  href: "/workflow-evaluations",
                 },
                 { label: "Projects" },
               ]}
