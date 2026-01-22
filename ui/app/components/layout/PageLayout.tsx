@@ -57,11 +57,11 @@ function PageHeader({
         {eyebrow && (
           <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>
         )}
-        <div>
+        <div className="flex items-center gap-2">
           {title && (
             <h1
               className={cn(
-                "inline align-middle text-2xl font-medium",
+                "text-2xl font-medium",
                 !heading && name && "font-mono",
               )}
             >
@@ -69,11 +69,7 @@ function PageHeader({
             </h1>
           )}
           {count !== undefined && <PageCount count={count} />}
-          {tag && (
-            <span className="ml-3 inline-flex items-center align-middle">
-              {tag}
-            </span>
-          )}
+          {tag && <span className="ml-1 inline-flex items-center">{tag}</span>}
         </div>
       </div>
       {children && <div className="mt-8 flex flex-col gap-8">{children}</div>}
