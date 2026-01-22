@@ -36,7 +36,9 @@ function CountErrorTooltip({ variant }: { variant: CountVariantType }) {
         <span
           className={cn(
             "cursor-help font-medium text-red-500 dark:text-red-400",
-            variant === CountVariant.Page ? "text-2xl" : "text-xl",
+            variant === CountVariant.Page
+              ? "ml-2 align-middle text-2xl"
+              : "text-xl",
           )}
         >
           —
@@ -55,7 +57,7 @@ function CountErrorTooltip({ variant }: { variant: CountVariantType }) {
 function PageCountValue({ value }: { value: number | bigint }) {
   return (
     <span
-      className="text-fg-muted text-2xl font-medium"
+      className="text-fg-muted ml-2 align-middle text-2xl font-medium"
       data-testid="count-display"
     >
       {value.toLocaleString()}
@@ -84,7 +86,11 @@ function SectionCountValue({ value }: { value: number | bigint }) {
 export function PageCount({ count }: { count: CountValue }) {
   if (count instanceof Promise) {
     return (
-      <Suspense fallback={<Skeleton className="h-8 w-24" />}>
+      <Suspense
+        fallback={
+          <Skeleton className="ml-2 inline-block h-6 w-16 align-middle" />
+        }
+      >
         <Await
           resolve={count}
           errorElement={<CountErrorTooltip variant={CountVariant.Page} />}
