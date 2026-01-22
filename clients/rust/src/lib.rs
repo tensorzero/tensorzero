@@ -1304,7 +1304,7 @@ impl ClientExt for Client {
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     launch_optimization(
                         &gateway.handle.app_state.http_client,
                         params,
@@ -1313,7 +1313,7 @@ impl ClientExt for Client {
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await?)
             }
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
@@ -1334,7 +1334,7 @@ impl ClientExt for Client {
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                with_embedded_timeout(*timeout, async {
+                Box::pin(with_embedded_timeout(*timeout, async {
                     launch_optimization_workflow(
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.config.clone(),
@@ -1343,7 +1343,7 @@ impl ClientExt for Client {
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await
             }
             ClientMode::HTTPGateway(client) => {

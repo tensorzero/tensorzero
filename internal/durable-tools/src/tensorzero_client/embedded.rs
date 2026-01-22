@@ -37,9 +37,9 @@ use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, RunEvaluationParams,
-    RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, DatapointResult, EvaluatorStatsResponse,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    RunEvaluationParams, RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -534,12 +534,58 @@ impl TensorZeroClient for EmbeddedClient {
             })
             .collect();
 
+        // Build per-datapoint results if requested
+        let datapoint_results = if params.include_datapoint_results {
+            let mut results = Vec::with_capacity(
+                evaluation_stats.evaluation_infos.len() + evaluation_stats.evaluation_errors.len(),
+            );
+
+            // Add successful evaluations (inference succeeded, some evaluators may have failed)
+            for info in &evaluation_stats.evaluation_infos {
+                let evaluations: HashMap<String, Option<f64>> = info
+                    .evaluations
+                    .iter()
+                    .map(|(name, value)| {
+                        let score = value.as_ref().and_then(|v| {
+                            v.as_f64()
+                                .or_else(|| v.as_bool().map(|b| if b { 1.0 } else { 0.0 }))
+                        });
+                        (name.clone(), score)
+                    })
+                    .collect();
+
+                results.push(DatapointResult {
+                    datapoint_id: info.datapoint.id(),
+                    success: true,
+                    evaluations,
+                    evaluator_errors: info.evaluator_errors.clone(),
+                    error: None,
+                });
+            }
+
+            // Add failed evaluations (inference or datapoint-level failure)
+            for error in &evaluation_stats.evaluation_errors {
+                results.push(DatapointResult {
+                    datapoint_id: error.datapoint_id,
+                    success: false,
+                    evaluations: HashMap::new(),
+                    evaluator_errors: HashMap::new(),
+                    error: Some(error.message.clone()),
+                });
+            }
+
+            Some(results)
+        } else {
+            None
+        };
+
         Ok(RunEvaluationResponse {
             evaluation_run_id,
             num_datapoints,
             num_successes: evaluation_stats.evaluation_infos.len(),
             num_errors: evaluation_stats.evaluation_errors.len(),
             stats: stats_response,
+            datapoint_results,
         })
     }
 }

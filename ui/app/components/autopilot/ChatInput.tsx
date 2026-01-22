@@ -31,6 +31,7 @@ type ChatInputProps = {
   ) => void;
   onMessageFailed?: (error: Error) => void;
   disabled?: boolean;
+  submitDisabled?: boolean;
   className?: string;
   isNewSession?: boolean;
 };
@@ -40,6 +41,7 @@ export function ChatInput({
   onMessageSent,
   onMessageFailed,
   disabled = false,
+  submitDisabled = false,
   className,
   isNewSession = false,
 }: ChatInputProps) {
@@ -104,9 +106,12 @@ export function ChatInput({
     }
   }, [fetcher.state, fetcher.data]);
 
+  const canSend =
+    text.trim().length > 0 && !isSubmitting && !disabled && !submitDisabled;
+
   const handleSend = useCallback(() => {
     const trimmedText = text.trim();
-    if (!trimmedText || isSubmitting) return;
+    if (!trimmedText || isSubmitting || submitDisabled) return;
 
     pendingTextRef.current = trimmedText;
 
@@ -123,19 +128,19 @@ export function ChatInput({
         encType: "application/json",
       },
     );
-  }, [text, isSubmitting, sessionId, fetcher]);
+  }, [text, isSubmitting, submitDisabled, sessionId, fetcher]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSend();
+        if (canSend) {
+          handleSend();
+        }
       }
     },
-    [handleSend],
+    [canSend, handleSend],
   );
-
-  const canSend = text.trim().length > 0 && !isSubmitting && !disabled;
 
   return (
     <div className={cn("flex items-end gap-2", className)}>

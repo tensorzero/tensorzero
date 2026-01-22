@@ -13,8 +13,9 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Request to count inferences matching the given parameters.
-#[derive(Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct CountInferencesRequest {
     /// Optional function name to filter inferences by.
     pub function_name: Option<String>,
@@ -38,8 +39,9 @@ pub struct CountInferencesRequest {
 }
 
 /// Response containing the count of matching inferences.
-#[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CountInferencesResponse {
     /// The count of inferences matching the query parameters.
     pub count: u64,

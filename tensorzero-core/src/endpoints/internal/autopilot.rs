@@ -30,12 +30,13 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 ///
 /// This is the request type used by the HTTP handler. The `deployment_id` is
 /// injected from the gateway's app state, so it's not included in this request.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CreateEventGatewayRequest {
     pub payload: EventPayload,
     /// Used for idempotency when adding events to an existing session.
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default)]
     pub previous_user_message_event_id: Option<Uuid>,
 }
@@ -44,8 +45,9 @@ pub struct CreateEventGatewayRequest {
 ///
 /// This is the request type used by the HTTP handler. The `deployment_id` and
 /// `tensorzero_version` are injected from the gateway's app state.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ApproveAllToolCallsGatewayRequest {
     /// Only approve tool calls with event IDs <= this value.
     /// Prevents race condition where new tool calls arrive after client fetched the list.

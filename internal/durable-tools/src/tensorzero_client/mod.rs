@@ -42,7 +42,7 @@ pub use autopilot_client::{
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 use mockall::automock;
 
 /// Error type for TensorZero client operations.
@@ -105,6 +105,11 @@ pub struct RunEvaluationParams {
     /// evaluation may stop early for that evaluator.
     #[serde(default)]
     pub precision_targets: HashMap<String, f32>,
+    /// Include per-datapoint results in the response.
+    /// When true, the response will include individual results for each datapoint.
+    /// Default is false to avoid response bloat for large evaluations.
+    #[serde(default)]
+    pub include_datapoint_results: bool,
 }
 
 /// Statistics for a single evaluator.
@@ -116,6 +121,27 @@ pub struct EvaluatorStatsResponse {
     pub stderr: f32,
     /// Number of samples.
     pub count: usize,
+}
+
+/// Result for a single datapoint evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatapointResult {
+    /// ID of the datapoint that was evaluated.
+    pub datapoint_id: Uuid,
+    /// Whether the evaluation succeeded (inference + at least one evaluator ran).
+    pub success: bool,
+    /// Per-evaluator scores for this datapoint.
+    /// Only populated for successful evaluations.
+    #[serde(default)]
+    pub evaluations: HashMap<String, Option<f64>>,
+    /// Per-evaluator error messages for evaluators that failed on this datapoint.
+    /// A datapoint can have both successful evaluations and evaluator errors
+    /// if some evaluators succeeded while others failed.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub evaluator_errors: HashMap<String, String>,
+    /// Error message if the entire datapoint evaluation failed (e.g., inference error).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Response from running an evaluation.
@@ -131,6 +157,9 @@ pub struct RunEvaluationResponse {
     pub num_errors: usize,
     /// Per-evaluator statistics.
     pub stats: HashMap<String, EvaluatorStatsResponse>,
+    /// Per-datapoint results (only populated if `include_datapoint_results` was true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub datapoint_results: Option<Vec<DatapointResult>>,
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
@@ -139,7 +168,7 @@ pub struct RunEvaluationResponse {
 /// call inference and autopilot operations without directly depending on
 /// the concrete client type.
 #[async_trait]
-#[cfg_attr(test, automock)]
+#[cfg_attr(any(test, feature = "test-support"), automock)]
 pub trait TensorZeroClient: Send + Sync + 'static {
     /// Run inference with the given parameters.
     ///
