@@ -39,6 +39,8 @@ type = "chat_completion"
 model = "gpt_4o_mini"
 ```
 
+For variant types that require multiple model inferences (e.g. best-of-N sampling), the `routing` fallback applies to each individual model inference separately.
+
 ## Variant Retries
 
 We can add a `retries` field to a variant to specify the number of times to retry that variant if it fails.
@@ -214,6 +216,17 @@ Separately, you can set a global timeout for the entire inference request using 
 
 Embedding models and embedding model providers support a `timeout_ms` configuration field.
 
-## Technical Notes
+### Global Timeout
 
-- For variant types that require multiple model inferences (e.g. best-of-N sampling), the `routing` fallback applies to each individual model inference separately.
+You can set a global timeout for all outbound HTTP requests using `gateway.global_outbound_http_timeout_ms` in your configuration.
+By default, this is set to 15 minutes to accommodate slow model responses.
+
+```toml
+[gateway]
+global_outbound_http_timeout_ms = 900_000 # 15 minutes
+```
+
+This global timeout acts as an upper bound for all more specific timeout configurations.
+Any variant-level, model-level, provider-level, or embedding model timeouts must be less than or equal to this global timeout.
+
+See the [Configuration Reference](/gateway/configuration-reference#global_outbound_http_timeout_ms) for more details.

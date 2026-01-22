@@ -162,11 +162,11 @@ This can be more efficient, but may result in different content being observed i
 ### `global_outbound_http_timeout_ms`
 
 - **Type:** integer
-- **Required:** no (default: `300000` = 5 minutes)
+- **Required:** no (default: `900000` = 15 minutes)
 
 Sets the global timeout in milliseconds for all outbound HTTP requests made by TensorZero to external services such as model providers and APIs.
 
-By default, all HTTP requests will timeout after 5 minutes (300,000 ms).
+By default, all HTTP requests will timeout after 15 minutes (900,000 ms).
 This timeout is intentionally set high to accommodate slow model responses, but you can customize it based on your requirements.
 
 The `global_outbound_http_timeout_ms` acts as an upper bound for all more specific timeout configurations in your system.
