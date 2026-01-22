@@ -3071,6 +3071,18 @@ async fn test_precision_targets_parameter() {
     )
     .await
     .expect("Should load evaluator feedback from ClickHouse");
+    assert_eq!(
+        clickhouse_feedback["tags"]["tensorzero::autopilot::session_id"]
+            .as_str()
+            .unwrap(),
+        external_session_id.as_str(),
+        "Evaluator feedback should include external tags"
+    );
+    assert_eq!(
+        clickhouse_feedback["tags"]["custom_tag"].as_str().unwrap(),
+        external_tag_value.as_str(),
+        "Evaluator feedback should include custom external tags"
+    );
     let evaluator_inference_id = Uuid::parse_str(
         clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
             .as_str()

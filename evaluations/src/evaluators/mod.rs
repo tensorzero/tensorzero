@@ -99,6 +99,7 @@ pub(crate) async fn evaluate_inference(
                 let clients = clients.clone();
                 let evaluator_name_clone = evaluator_name.clone();
                 let external_tags = external_tags.clone();
+                let external_tags_for_feedback = external_tags.clone();
 
                 let result = run_evaluator(RunEvaluatorParams {
                     evaluation_config: &evaluation_config,
@@ -150,6 +151,11 @@ pub(crate) async fn evaluate_inference(
                                 );
                             }
                             tags.extend(result.tags());
+                            tags.extend(
+                                external_tags_for_feedback
+                                    .iter()
+                                    .map(|(k, v)| (k.clone(), v.clone())),
+                            );
                             // Only send feedback when send_feedback is true
                             // Dynamic variants have send_feedback=false and skip feedback persistence
                             if send_feedback {
