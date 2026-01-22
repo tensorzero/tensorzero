@@ -5,8 +5,10 @@ import type { Route } from "./+types/route";
 import {
   Await,
   data,
+  isRouteErrorResponse,
   useAsyncError,
   useNavigate,
+  useParams,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
@@ -42,8 +44,13 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
-import { AlertCircle } from "lucide-react";
+import {
+  PageErrorContainer,
+  PageErrorNotice,
+  TableErrorNotice,
+} from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertCircle, AlertTriangle } from "lucide-react";
+import { logger } from "~/utils/logger";
 
 export type InferencesData = {
   inferences: StoredInference[];
@@ -463,6 +470,43 @@ export default function EpisodeDetailPage({
           </Suspense>
         </SectionLayout>
       </SectionsGroup>
+    </PageLayout>
+  );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const params = useParams<{ episode_id: string }>();
+  logger.error(error);
+
+  let message: string;
+  if (isRouteErrorResponse(error)) {
+    message =
+      typeof error.data === "string"
+        ? error.data
+        : `${error.status} ${error.statusText}`;
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = "Failed to load episode";
+  }
+
+  return (
+    <PageLayout>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[{ label: "Episodes", href: "/observability/episodes" }]}
+          />
+        }
+        name={params.episode_id}
+      />
+      <PageErrorContainer>
+        <PageErrorNotice
+          icon={AlertTriangle}
+          title="Error loading episode"
+          description={message}
+        />
+      </PageErrorContainer>
     </PageLayout>
   );
 }
