@@ -10,12 +10,11 @@ use evaluations::stats::EvaluationStats;
 use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
 use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_with_app_state};
 use tensorzero::{
-    ActionResponse, ClientInferenceParams, CreateDatapointRequest,
-    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
-    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
-    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
-    WriteConfigRequest, WriteConfigResponse,
+    ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
+    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+    GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceOutput,
+    InferenceResponse, ListDatapointsRequest, ListInferencesRequest, TensorZeroError,
+    UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
@@ -29,7 +28,7 @@ use tensorzero_core::endpoints::datasets::v1::types::{
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
-use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, action};
+use tensorzero_core::endpoints::internal::action::ActionInput;
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
@@ -176,32 +175,15 @@ impl TensorZeroClient for EmbeddedClient {
 
     async fn action(
         &self,
-        snapshot_hash: SnapshotHash,
-        input: ActionInput,
+        _snapshot_hash: SnapshotHash,
+        _input: ActionInput,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
-        let action_input = ActionInputInfo {
-            snapshot_hash,
-            input,
-        };
-
-        let response = action(&self.app_state, action_input).await.map_err(|e| {
-            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-        })?;
-
-        match response {
-            ActionResponse::Inference(r) => Ok(r),
-            ActionResponse::Feedback(_) => {
-                Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                    source: tensorzero_core::error::Error::new(
-                        tensorzero_core::error::ErrorDetails::InternalError {
-                            message: "Unexpected feedback response from action endpoint"
-                                .to_string(),
-                        },
-                    )
-                    .into(),
-                }))
-            }
-        }
+        Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
+            source: Error::new(ErrorDetails::InternalError {
+                message: "action endpoint is not supported for embedded client".to_string(),
+            })
+            .into(),
+        }))
     }
 
     async fn get_config_snapshot(

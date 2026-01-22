@@ -294,10 +294,15 @@ impl TensorZeroClient for Client {
                         TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
 
+                let action_input = ActionInputInfo {
+                    snapshot_hash,
+                    input,
+                };
+
                 let response = http
                     .http_client
                     .post(url)
-                    .json(&input)
+                    .json(&action_input)
                     .send()
                     .await
                     .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))?;
@@ -316,40 +321,16 @@ impl TensorZeroClient for Client {
                     .await
                     .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
             }
-            ClientMode::EmbeddedGateway {
-                gateway,
-                timeout: _,
-            } => {
-                let action_input = ActionInputInfo {
-                    snapshot_hash,
-                    input,
-                };
-
-                let result = tensorzero_core::endpoints::internal::action::action(
-                    &gateway.handle.app_state,
-                    action_input,
-                )
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-                })?;
-
-                match result {
-                    tensorzero_core::endpoints::internal::action::ActionResponse::Inference(
-                        response,
-                    ) => Ok(response),
-                    tensorzero_core::endpoints::internal::action::ActionResponse::Feedback(_) => {
-                        Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                            source: tensorzero_core::error::Error::new(
-                                tensorzero_core::error::ErrorDetails::InternalError {
-                                    message: "Unexpected feedback response from action endpoint"
-                                        .to_string(),
-                                },
-                            )
-                            .into(),
-                        }))
-                    }
-                }
+            ClientMode::EmbeddedGateway { .. } => {
+                Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(
+                        tensorzero_core::error::ErrorDetails::InternalError {
+                            message: "action endpoint is not supported for embedded gateway mode"
+                                .to_string(),
+                        },
+                    )
+                    .into(),
+                }))
             }
         }
     }
