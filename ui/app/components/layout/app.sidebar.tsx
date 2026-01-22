@@ -116,8 +116,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const activePathUtils = useActivePath();
   const autopilotAvailable = useAutopilotAvailable();
 
-  const filteredNavigation = navigation;
-
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="pb-4">
@@ -148,7 +146,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <Link to="/" className="flex items-center gap-2">
                   <LayoutGrid className="h-4 w-4" />
-                  {state === "expanded" && <span>Overview</span>}
+                  <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                    Overview
+                  </span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -161,7 +161,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 >
                   <Link to="/autopilot" className="flex items-center gap-2">
                     <Chat className="h-4 w-4" />
-                    {state === "expanded" && <span>Autopilot</span>}
+                    <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                      Autopilot
+                    </span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -174,13 +176,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <Link to="/playground" className="flex items-center gap-2">
                   <Playground className="h-4 w-4" />
-                  {state === "expanded" && <span>Playground</span>}
+                  <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                    Playground
+                  </span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarGroupContent>
         </SidebarGroup>
-        {filteredNavigation.map((section) => (
+        {navigation.map((section) => (
           <SidebarGroup key={section.title}>
             {state === "expanded" && (
               <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
@@ -199,7 +203,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <item.icon className="h-4 w-4" />
-                      {state === "expanded" && <span>{item.title}</span>}
+                      <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                        {item.title}
+                      </span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -219,7 +225,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           >
             <Link to="/api-keys" className="flex items-center gap-2">
               <KeyRound className="h-4 w-4" />
-              {state === "expanded" && <span>API Keys</span>}
+              <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                API Keys
+              </span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -235,17 +243,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               rel="noopener noreferrer"
             >
               <Documentation className="h-4 w-4" />
-              {state === "expanded" && (
-                <>
-                  <span>Docs</span>
-                  <span className="ml-auto">↗</span>
-                </>
-              )}
+              <span className="transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                Docs
+              </span>
+              <span className="ml-auto transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                ↗
+              </span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem className="list-none">
           <SidebarMenuButton
+            aria-label="Toggle sidebar"
             className="w-auto cursor-pointer"
             tooltip={state === "collapsed" ? "Toggle sidebar" : undefined}
             onClick={toggleSidebar}
