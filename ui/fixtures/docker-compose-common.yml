@@ -37,7 +37,7 @@ services:
       test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s
 
   mock-provider-api:
