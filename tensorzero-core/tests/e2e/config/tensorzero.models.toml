@@ -490,6 +490,14 @@ routing = ["xai"]
 type = "xai"
 model_name = "grok-4-fast-reasoning"
 
+[models."grok_4_1_fast_non_reasoning_responses"]
+routing = ["xai"]
+
+[models."grok_4_1_fast_non_reasoning_responses".providers.xai]
+type = "xai"
+model_name = "grok-4-1-fast-non-reasoning"
+api_type = "responses"
+
 [models."openai/gpt-oss-20b"]
 routing = ["hyperbolic"]
 

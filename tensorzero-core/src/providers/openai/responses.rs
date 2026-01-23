@@ -103,10 +103,10 @@ pub enum OpenAIResponsesTextConfigFormat {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub(super) struct OpenAIResponsesResponse<'a> {
+pub(crate) struct OpenAIResponsesResponse<'a> {
     #[serde(borrow)]
-    pub(super) output: Vec<OpenAIResponsesOutput<'a>>,
-    pub(super) usage: Option<OpenAIResponsesUsage>,
+    pub(crate) output: Vec<OpenAIResponsesOutput<'a>>,
+    pub(crate) usage: Option<OpenAIResponsesUsage>,
     pub incomplete_details: Option<OpenAIResponsesIncompleteDetails>,
 }
 
@@ -279,7 +279,7 @@ fn openai_responses_usage_from_raw_response(raw_response: &str) -> Option<Value>
         .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
-pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
+pub(crate) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
