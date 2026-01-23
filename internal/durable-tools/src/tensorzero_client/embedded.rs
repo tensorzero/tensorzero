@@ -503,7 +503,7 @@ impl TensorZeroClient for EmbeddedClient {
             }
         }
 
-        // Compute statistics (EvaluatorStats is the same type as EvaluatorStatsResponse)
+        // Compute statistics
         let EvaluationConfig::Inference(inference_config) = &*result.evaluation_config;
         let stats = evaluation_stats.compute_stats(&inference_config.evaluators);
 

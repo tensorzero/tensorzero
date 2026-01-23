@@ -165,6 +165,15 @@ impl SimpleTool for RunEvaluationTool {
             include_datapoint_results: llm_params.include_datapoint_results,
         };
 
+        // Since autopilot sessions always have a config snapshot hash set, we use the action
+        // endpoint to ensure evaluations run against the historical config snapshot.
+        // If this assumption changes (e.g., we want to run against current config), use this instead:
+        //
+        // ctx.client()
+        //     .run_evaluation(params)
+        //     .await
+        //     .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
+
         let snapshot_hash: SnapshotHash =
             side_info
                 .config_snapshot_hash

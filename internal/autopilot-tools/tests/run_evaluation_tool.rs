@@ -22,7 +22,7 @@ fn create_mock_run_evaluation_response() -> RunEvaluationResponse {
     let mut stats = HashMap::new();
     stats.insert(
         "accuracy".to_string(),
-        durable_tools::EvaluatorStatsResponse {
+        durable_tools::EvaluatorStats {
             mean: 0.85,
             stderr: 0.02,
             count: 100,
@@ -426,7 +426,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     let mut stats = HashMap::new();
     stats.insert(
         "accuracy".to_string(),
-        durable_tools::EvaluatorStatsResponse {
+        durable_tools::EvaluatorStats {
             mean: 0.85,
             stderr: 0.05,
             count: 2,
@@ -434,7 +434,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     );
     stats.insert(
         "quality".to_string(),
-        durable_tools::EvaluatorStatsResponse {
+        durable_tools::EvaluatorStats {
             mean: 0.85,
             stderr: 0.0,
             count: 1,

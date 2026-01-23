@@ -7,12 +7,12 @@
 //! gateway mode doesn't support the action endpoint (it would require depending on
 //! durable-tools). The action endpoint is fully functional in HTTP mode.
 
+use durable_tools::CacheEnabledMode;
 use durable_tools::action::{ActionInput, ActionInputInfo, ActionResponse, RunEvaluationParams};
 use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero::{
-    CacheEnabledMode, Client, ClientInferenceParams, Input, InputMessage, InputMessageContent,
-    Role, TensorZeroError,
+    Client, ClientInferenceParams, Input, InputMessage, InputMessageContent, Role, TensorZeroError,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;

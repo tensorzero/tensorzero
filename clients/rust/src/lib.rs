@@ -42,7 +42,6 @@ pub use tensorzero_core::client::{
 pub use tensorzero_core::client::input_handling;
 
 // Re-export other commonly used types from tensorzero-core
-pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::Config;
 pub use tensorzero_core::db::clickhouse::query_builder::{
     BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy,
@@ -75,8 +74,6 @@ pub use tensorzero_core::endpoints::inference::{
     ChatCompletionInferenceParams, InferenceOutput, InferenceParams, InferenceResponse,
     InferenceResponseChunk, InferenceStream,
 };
-// Note: Action types (ActionInput, ActionInputInfo, ActionResponse, etc.) are available
-// from the durable-tools crate. The action endpoint is internal and not exposed via the SDK.
 pub use tensorzero_core::endpoints::internal::config::{
     GetConfigResponse, WriteConfigRequest, WriteConfigResponse,
 };

@@ -36,7 +36,7 @@ use uuid::Uuid;
 use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,
+    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStats, ListEventsParams,
     ListEventsResponse, ListSessionsParams, ListSessionsResponse, RunEvaluationParams,
     RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
@@ -322,22 +322,13 @@ impl TensorZeroClient for Client {
                     .await
                     .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
             }
-            ClientMode::EmbeddedGateway {
-                gateway,
-                timeout: _,
-            } => {
-                let action_input = ActionInputInfo {
-                    snapshot_hash,
-                    input,
-                };
-
-                crate::action::action(&gateway.handle.app_state, action_input)
-                    .await
-                    .map_err(|e| {
-                        TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                            source: e.into(),
-                        })
-                    })
+            ClientMode::EmbeddedGateway { .. } => {
+                // Action endpoint is only available via HTTP gateway.
+                // In embedded mode, callers should use the specific methods directly
+                // (e.g., inference(), feedback(), run_evaluation()).
+                Err(TensorZeroClientError::NotSupported(
+                    "action is only supported in HTTP gateway mode".to_string(),
+                ))
             }
         }
     }
@@ -684,20 +675,8 @@ impl TensorZeroClient for Client {
                 let EvaluationConfig::Inference(inference_config) = &*result.evaluation_config;
                 let stats = evaluation_stats.compute_stats(&inference_config.evaluators);
 
-                // Convert to response format
-                let stats_response: HashMap<String, EvaluatorStatsResponse> = stats
-                    .into_iter()
-                    .map(|(name, s)| {
-                        (
-                            name,
-                            EvaluatorStatsResponse {
-                                mean: s.mean,
-                                stderr: s.stderr,
-                                count: s.count,
-                            },
-                        )
-                    })
-                    .collect();
+                // Convert to response format (EvaluatorStats is already the right type)
+                let stats_response: HashMap<String, EvaluatorStats> = stats;
 
                 // Build per-datapoint results if requested
                 let datapoint_results = if params.include_datapoint_results {

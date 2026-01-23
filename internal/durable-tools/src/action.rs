@@ -26,8 +26,7 @@ use tensorzero_core::utils::gateway::AppStateData;
 
 // Re-export evaluation types from tensorzero_client (single source of truth)
 pub use crate::tensorzero_client::{
-    DatapointResult, EvaluatorStats, EvaluatorStatsResponse, RunEvaluationParams,
-    RunEvaluationResponse,
+    DatapointResult, EvaluatorStats, RunEvaluationParams, RunEvaluationResponse,
 };
 
 // ============================================================================
@@ -312,7 +311,7 @@ async fn collect_evaluation_results(
         }
     }
 
-    // Compute statistics (EvaluatorStats is now the same type as EvaluatorStatsResponse)
+    // Compute statistics
     let stats = evaluation_stats.compute_stats(evaluators);
 
     // Build per-datapoint results if requested

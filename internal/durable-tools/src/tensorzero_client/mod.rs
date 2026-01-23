@@ -90,6 +90,10 @@ fn default_concurrency() -> usize {
     10
 }
 
+fn default_inference_cache() -> CacheEnabledMode {
+    CacheEnabledMode::On
+}
+
 /// Parameters for running an evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEvaluationParams {
@@ -109,7 +113,8 @@ pub struct RunEvaluationParams {
     #[serde(default = "default_concurrency")]
     pub concurrency: usize,
     /// Cache configuration for inference requests.
-    #[serde(default)]
+    /// Defaults to On (caching enabled) to match the evaluations CLI behavior.
+    #[serde(default = "default_inference_cache")]
     pub inference_cache: CacheEnabledMode,
     /// Maximum number of datapoints to evaluate.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,10 +127,6 @@ pub struct RunEvaluationParams {
     #[serde(default)]
     pub include_datapoint_results: bool,
 }
-
-/// Statistics for a single evaluator.
-/// Type alias for `EvaluatorStats` from evaluations crate for backwards compatibility.
-pub type EvaluatorStatsResponse = EvaluatorStats;
 
 /// Result for a single datapoint evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,7 +161,7 @@ pub struct RunEvaluationResponse {
     /// Number of errors.
     pub num_errors: usize,
     /// Per-evaluator statistics.
-    pub stats: HashMap<String, EvaluatorStatsResponse>,
+    pub stats: HashMap<String, EvaluatorStats>,
     /// Per-datapoint results (only populated if include_datapoint_results was true).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datapoint_results: Option<Vec<DatapointResult>>,
