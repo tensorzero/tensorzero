@@ -223,8 +223,9 @@ pub async fn action(
                 app_state.http_client.clone(),
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
+                app_state.valkey_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
-            );
+            )?;
 
             // Build params for run_evaluation_with_app_state
             let run_params = RunEvaluationWithAppStateParams {
