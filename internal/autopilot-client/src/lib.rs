@@ -45,12 +45,14 @@ use std::collections::HashSet;
 
 mod client;
 mod error;
+mod reject_missing_tool;
 mod types;
 
 pub use client::{
     AutopilotClient, AutopilotClientBuilder, DEFAULT_BASE_URL, DEFAULT_SPAWN_QUEUE_NAME,
 };
 pub use error::AutopilotError;
+pub use reject_missing_tool::reject_missing_tool;
 pub use types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotSideInfo, AutopilotStatus,
     AutopilotToolResult, Base64File, CreateEventRequest, CreateEventResponse, ErrorDetail,
