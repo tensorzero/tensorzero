@@ -66,6 +66,7 @@ async def test_async_tool_call_roundtrip_complete_flow(
 
     # Basic result assertions
     assert isinstance(result, ChatInferenceResponse), "Result must be ChatInferenceResponse instance"
+    assert result.content is not None, "Result content must not be None"
     assert len(result.content) == 1, "Result should have exactly 1 content block"
     assert result.content[0].type == "tool_call", "Content block must have type='tool_call'"
     assert isinstance(result.content[0], ToolCall), "Content block must be ToolCall instance"
@@ -263,6 +264,7 @@ async def test_async_tool_call_roundtrip_complete_flow(
 
     # Verify input contains our tool call and tool result
     input_messages = follow_up_inference.input.messages
+    assert input_messages is not None, "Input messages must not be None"
     assert len(input_messages) >= 3, "Should have user, assistant, and follow-up user messages"
 
     # Find assistant message with tool call
@@ -273,6 +275,7 @@ async def test_async_tool_call_roundtrip_complete_flow(
             break
 
     assert assistant_msg is not None, "Should have assistant message in stored input"
+    assert assistant_msg.content is not None, "Assistant message content must not be None"
     assert len(assistant_msg.content) > 0, "Assistant message should have content"
 
     # Verify the tool call was stored correctly (StoredInputMessageContentToolCall)
@@ -356,6 +359,7 @@ async def test_async_tool_call_roundtrip_complete_flow(
         # ============================================================================
 
         datapoint_input_messages = datapoint.input.messages
+        assert datapoint_input_messages is not None, "Datapoint input messages must not be None"
         assert len(datapoint_input_messages) >= 3, "Datapoint should have user, assistant, and follow-up messages"
 
         # Find assistant message with tool call in datapoint input
@@ -366,6 +370,7 @@ async def test_async_tool_call_roundtrip_complete_flow(
                 break
 
         assert datapoint_assistant_msg is not None, "Datapoint should have assistant message"
+        assert datapoint_assistant_msg.content is not None, "Datapoint assistant message content must not be None"
         assert len(datapoint_assistant_msg.content) > 0, "Datapoint assistant message should have content"
 
         # Verify tool call in datapoint input
@@ -482,6 +487,7 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
 
     # Basic result assertions
     assert isinstance(result, ChatInferenceResponse), "Result must be ChatInferenceResponse instance"
+    assert result.content is not None, "Result content must not be None"
     assert len(result.content) == 1, "Result should have exactly 1 content block"
     assert result.content[0].type == "tool_call", "Content block must have type='tool_call'"
     assert isinstance(result.content[0], ToolCall), "Content block must be ToolCall instance"
@@ -679,6 +685,7 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
 
     # Verify input contains our tool call and tool result
     input_messages = follow_up_inference.input.messages
+    assert input_messages is not None, "Input messages must not be None"
     assert len(input_messages) >= 3, "Should have user, assistant, and follow-up user messages"
 
     # Find assistant message with tool call
@@ -689,6 +696,7 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
             break
 
     assert assistant_msg is not None, "Should have assistant message in stored input"
+    assert assistant_msg.content is not None, "Assistant message content must not be None"
     assert len(assistant_msg.content) > 0, "Assistant message should have content"
 
     # Verify the tool call was stored correctly (StoredInputMessageContentToolCall)
@@ -772,6 +780,7 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
         # ============================================================================
 
         datapoint_input_messages = datapoint.input.messages
+        assert datapoint_input_messages is not None, "Datapoint input messages must not be None"
         assert len(datapoint_input_messages) >= 3, "Datapoint should have user, assistant, and follow-up messages"
 
         # Find assistant message with tool call in datapoint input
@@ -782,6 +791,7 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
                 break
 
         assert datapoint_assistant_msg is not None, "Datapoint should have assistant message"
+        assert datapoint_assistant_msg.content is not None, "Datapoint assistant message content must not be None"
         assert len(datapoint_assistant_msg.content) > 0, "Datapoint assistant message should have content"
 
         # Verify tool call in datapoint input

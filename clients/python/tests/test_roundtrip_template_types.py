@@ -94,6 +94,7 @@ async def test_async_template_content_roundtrip_complete_flow(
     # ============================================================================
 
     input_messages = stored_inference.input.messages
+    assert input_messages is not None, "Input messages must not be None"
     assert len(input_messages) >= 1, "Should have at least 1 input message"
 
     # Find user message with template
@@ -104,6 +105,7 @@ async def test_async_template_content_roundtrip_complete_flow(
             break
 
     assert user_msg is not None, "Should have user message in stored input"
+    assert user_msg.content is not None, "User message content must not be None"
     assert len(user_msg.content) > 0, "User message should have content"
 
     # Verify the template was stored correctly (StoredInputMessageContentTemplate)
@@ -177,6 +179,8 @@ async def test_async_template_content_roundtrip_complete_flow(
 
     # Verify template in follow-up input
     follow_up_messages = follow_up_inference.input.messages
+    assert follow_up_messages is not None, "Follow-up messages must not be None"
+
     follow_up_user_msg = None
     for msg in follow_up_messages:
         if msg.role == "user":
@@ -184,6 +188,7 @@ async def test_async_template_content_roundtrip_complete_flow(
             break
 
     assert follow_up_user_msg is not None, "Should have user message in follow-up"
+    assert follow_up_user_msg.content is not None, "Follow-up user message content must not be None"
 
     follow_up_template = None
     for content in follow_up_user_msg.content:
@@ -229,6 +234,7 @@ async def test_async_template_content_roundtrip_complete_flow(
 
         # Verify template in datapoint input
         datapoint_messages = datapoint.input.messages
+        assert datapoint_messages is not None, "Datapoint messages must not be None"
         assert len(datapoint_messages) >= 1, "Datapoint should have at least 1 message"
 
         datapoint_user_msg = None
@@ -238,6 +244,7 @@ async def test_async_template_content_roundtrip_complete_flow(
                 break
 
         assert datapoint_user_msg is not None, "Datapoint should have user message"
+        assert datapoint_user_msg.content is not None, "Datapoint user message content must not be None"
 
         datapoint_template = None
         for content in datapoint_user_msg.content:
@@ -306,11 +313,17 @@ def test_sync_template_content_roundtrip_complete_flow(sync_client: TensorZeroGa
     # Step 3: Verify StoredInputMessageContentTemplate
     # ============================================================================
 
+    input_messages_sync = stored_inference.input.messages
+    assert input_messages_sync is not None, "Input messages must not be None"
+
     user_msg = None
-    for msg in stored_inference.input.messages:
+    for msg in input_messages_sync:
         if msg.role == "user":
             user_msg = msg
             break
+
+    assert user_msg is not None, "User message must not be None"
+    assert user_msg.content is not None, "User message content must not be None"
 
     template_content = None
     for content in user_msg.content:
@@ -367,11 +380,17 @@ def test_sync_template_content_roundtrip_complete_flow(sync_client: TensorZeroGa
         assert isinstance(datapoint, DatapointJson)
 
         # Find template in datapoint
+        datapoint_messages_sync = datapoint.input.messages
+        assert datapoint_messages_sync is not None, "Datapoint messages must not be None"
+
         datapoint_user_msg = None
-        for msg in datapoint.input.messages:
+        for msg in datapoint_messages_sync:
             if msg.role == "user":
                 datapoint_user_msg = msg
                 break
+
+        assert datapoint_user_msg is not None, "Datapoint user message must not be None"
+        assert datapoint_user_msg.content is not None, "Datapoint user message content must not be None"
 
         datapoint_template = None
         for content in datapoint_user_msg.content:
