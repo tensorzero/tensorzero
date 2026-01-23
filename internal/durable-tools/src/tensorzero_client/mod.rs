@@ -21,7 +21,7 @@ pub use tensorzero::{
     PostgresConfig, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
     WriteConfigRequest, WriteConfigResponse,
 };
-use tensorzero::{GetInferencesResponse, ListInferencesRequest};
+use tensorzero::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -310,6 +310,12 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         request: ListInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
+    /// Get specific inferences by their IDs.
+    async fn get_inferences(
+        &self,
+        request: GetInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
     // ========== Optimization Operations ==========
 
     /// Launch an optimization workflow.
@@ -411,17 +417,20 @@ pub fn http_gateway_client(url: Url) -> Result<Arc<dyn TensorZeroClient>, Client
 ///     Some("tensorzero.toml".into()),
 ///     Some("http://localhost:8123".into()),
 ///     None,
+///     None,
 /// ).await?;
 /// ```
 pub async fn embedded_gateway_client(
     config_file: Option<PathBuf>,
     clickhouse_url: Option<String>,
     postgres_config: Option<String>,
+    valkey_url: Option<String>,
 ) -> Result<Arc<dyn TensorZeroClient>, ClientBuilderError> {
     let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file,
         clickhouse_url,
         postgres_config: postgres_config.map(PostgresConfig::Url),
+        valkey_url,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: false,

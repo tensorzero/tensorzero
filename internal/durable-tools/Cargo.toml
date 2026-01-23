@@ -34,6 +34,7 @@ secrecy.workspace = true
 tensorzero-core.workspace = true
 evaluations = { path = "../../evaluations" }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+indexmap = "2.13.0"
 
 [dev-dependencies]
 mockall = "0.14"

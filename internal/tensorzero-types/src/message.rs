@@ -5,7 +5,7 @@
 use crate::content::{Arguments, RawText, System, Template, Text, Thought, Unknown};
 use crate::file::File;
 use crate::role::Role;
-use crate::tool::{ToolCallWrapper, ToolResult};
+use crate::tool::{ToolCallWrapper, ToolCallWrapperJsonSchema, ToolResult};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -37,7 +37,8 @@ pub enum InputMessageContent {
     Text(Text),
     #[schemars(title = "InputMessageContentTemplate")]
     Template(Template),
-    #[schemars(title = "InputMessageContentToolCall")]
+    // `ToolCallWrapper` is `serde(untagged)` so no need to name it.
+    #[schemars(with = "ToolCallWrapperJsonSchema")]
     ToolCall(ToolCallWrapper),
     #[schemars(title = "InputMessageContentToolResult")]
     ToolResult(ToolResult),

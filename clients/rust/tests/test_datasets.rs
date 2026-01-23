@@ -541,7 +541,7 @@ async fn test_create_datapoints_from_inferences(client: Client) {
     let params = CreateDatapointsFromInferenceRequestParams::InferenceQuery {
         query: Box::new(ListInferencesRequest {
             function_name: Some("write_haiku".to_string()),
-            variant_name: Some("better_prompt_haiku_3_5".to_string()),
+            variant_name: Some("better_prompt_haiku_4_5".to_string()),
             output_source: InferenceOutputSource::Inference,
             ..Default::default()
         }),

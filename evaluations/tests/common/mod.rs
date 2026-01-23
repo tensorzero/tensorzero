@@ -17,6 +17,7 @@ pub async fn get_tensorzero_client() -> Client {
         config_file: Some(get_e2e_config_path()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

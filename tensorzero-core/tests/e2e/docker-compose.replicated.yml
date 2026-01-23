@@ -149,7 +149,7 @@ services:
       test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s
 
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
@@ -209,5 +209,5 @@ services:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s # Give the script time to start

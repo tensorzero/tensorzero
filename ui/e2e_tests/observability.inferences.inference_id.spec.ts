@@ -381,10 +381,10 @@ test.describe("should be able to add demonstration feedback via Try with X flows
 
       // Wait for the dropdown menu to appear and select a variant
       // Look for variant options and click on one that's not the current variant
-      const variantOption = page.getByRole("menuitem").filter({
-        // NOTE(bret): Get exact match, in the case that the
-        // option is also a substring of another option
-        has: page.locator(`text="${option}"`),
+      // ButtonSelect uses cmdk CommandItem which has role="option"
+      const variantOption = page.getByRole("option", {
+        name: option,
+        exact: true,
       });
 
       await variantOption.waitFor({ state: "visible" });
@@ -455,8 +455,10 @@ test.describe("should navigate to inference from Try with X modal and verify tag
       await page.getByText(buttonText).click();
 
       // Wait for the dropdown menu to appear and select a variant
-      const variantOption = page.getByRole("menuitem").filter({
-        has: page.locator(`text="${option}"`),
+      // ButtonSelect uses cmdk CommandItem which has role="option"
+      const variantOption = page.getByRole("option", {
+        name: option,
+        exact: true,
       });
 
       await variantOption.waitFor({ state: "visible" });

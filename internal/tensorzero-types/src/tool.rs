@@ -107,8 +107,18 @@ impl InferenceResponseToolCall {
 #[serde(untagged)]
 #[export_schema]
 pub enum ToolCallWrapper {
-    ToolCall(ToolCall), // the format we store in the database
-    InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
+    // The format we store in the database
+    #[schemars(title = "InputMessageContentToolCall")]
+    ToolCall(ToolCall),
+    // The format we send on an inference response, with parsed name and arguments
+    #[schemars(title = "InputMessageContentInferenceResponseToolCall")]
+    InferenceResponseToolCall(InferenceResponseToolCall),
+}
+
+#[derive(JsonSchema)]
+pub(crate) struct ToolCallWrapperJsonSchema {
+    #[serde(flatten)]
+    _tool_call_wrapper: ToolCallWrapper,
 }
 
 impl ToolCallWrapper {

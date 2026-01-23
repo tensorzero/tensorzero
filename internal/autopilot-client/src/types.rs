@@ -253,6 +253,14 @@ pub enum ToolCallAuthorizationStatus {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
     Success(AutopilotToolResult),
+    /// The user rejected the tool call request
+    /// Note that this is currently never directly sent by the client - instead,
+    /// `ToolCallAuthorizationStatus::Rejected` is sent to the server.
+    /// The rejected tool will show in in the events list as `EventPayload::ToolResult`
+    /// with `ToolOutcome::Rejected`
+    Rejected {
+        reason: String,
+    },
     Failure {
         /// Structured error data from the tool.
         /// For autopilot tools, this is typically a serialized `AutopilotToolError`
