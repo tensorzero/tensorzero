@@ -7,9 +7,7 @@
 //! gateway mode doesn't support the action endpoint (it would require depending on
 //! durable-tools). The action endpoint is fully functional in HTTP mode.
 
-use durable_tools::action::{
-    ActionInput, ActionInputInfo, ActionResponse, RunEvaluationActionParams,
-};
+use durable_tools::action::{ActionInput, ActionInputInfo, ActionResponse, RunEvaluationParams};
 use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero::{
@@ -301,7 +299,7 @@ model = "eval_test_model_{id}"
 
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::RunEvaluation(Box::new(RunEvaluationActionParams {
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
             evaluation_name: "nonexistent_evaluation".to_string(),
             dataset_name: Some("some_dataset".to_string()),
             datapoint_ids: None,
@@ -382,7 +380,7 @@ json_mode = "on"
     // Neither dataset_name nor datapoint_ids provided
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::RunEvaluation(Box::new(RunEvaluationActionParams {
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
             evaluation_name: format!("test_eval_{id}"),
             dataset_name: None,
             datapoint_ids: None,
@@ -462,7 +460,7 @@ json_mode = "on"
     // Both dataset_name AND datapoint_ids provided - should fail validation
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::RunEvaluation(Box::new(RunEvaluationActionParams {
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
             evaluation_name: format!("test_eval_{id}"),
             dataset_name: Some("some_dataset".to_string()),
             datapoint_ids: Some(vec![Uuid::now_v7()]),
@@ -610,7 +608,7 @@ json_mode = "on"
     // Call the action endpoint with RunEvaluation using datapoint_ids
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::RunEvaluation(Box::new(RunEvaluationActionParams {
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
             evaluation_name: format!("action_test_eval_{id}"),
             dataset_name: None,
             datapoint_ids: Some(vec![datapoint_id_1, datapoint_id_2]),

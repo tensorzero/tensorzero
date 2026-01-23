@@ -8,13 +8,11 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
-use uuid::Uuid;
 
 use evaluations::{
     EvaluationVariant, RunEvaluationWithAppStateParams, run_evaluation_with_app_state,
     stats::{EvaluationStats, EvaluationUpdate},
 };
-use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::client_inference_params::ClientInferenceParams;
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::config::{Config, RuntimeOverlay};
@@ -25,6 +23,12 @@ use tensorzero_core::endpoints::inference::{InferenceOutput, InferenceResponse, 
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::AppStateData;
+
+// Re-export evaluation types from tensorzero_client (single source of truth)
+pub use crate::tensorzero_client::{
+    DatapointResult, EvaluatorStats, EvaluatorStatsResponse, RunEvaluationParams,
+    RunEvaluationResponse,
+};
 
 // ============================================================================
 // Types
@@ -38,93 +42,6 @@ pub struct ActionInputInfo {
     /// The action to perform (inference, feedback, or run_evaluation).
     #[serde(flatten)]
     pub input: ActionInput,
-}
-
-fn default_concurrency() -> usize {
-    10
-}
-
-/// Parameters for running an evaluation via the action endpoint.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RunEvaluationParams {
-    /// Name of the evaluation to run (must be defined in config).
-    pub evaluation_name: String,
-    /// Name of the dataset to run on.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dataset_name: Option<String>,
-    /// Specific datapoint IDs to evaluate.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub datapoint_ids: Option<Vec<Uuid>>,
-    /// Name of the variant to evaluate.
-    pub variant_name: String,
-    /// Number of concurrent inference requests.
-    #[serde(default = "default_concurrency")]
-    pub concurrency: usize,
-    /// Cache configuration for inference requests.
-    #[serde(default)]
-    pub inference_cache: CacheEnabledMode,
-    /// Maximum number of datapoints to evaluate.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_datapoints: Option<u32>,
-    /// Precision targets for adaptive stopping.
-    /// Maps evaluator names to target confidence interval half-widths.
-    #[serde(default)]
-    pub precision_targets: HashMap<String, f32>,
-    /// Include per-datapoint results in the response.
-    #[serde(default)]
-    pub include_datapoint_results: bool,
-}
-
-/// Statistics for a single evaluator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvaluatorStatsResponse {
-    /// Mean value of the evaluator.
-    pub mean: f32,
-    /// Standard error of the evaluator.
-    pub stderr: f32,
-    /// Number of samples.
-    pub count: usize,
-}
-
-/// Result for a single datapoint evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatapointResult {
-    /// ID of the datapoint that was evaluated.
-    pub datapoint_id: Uuid,
-    /// Whether the evaluation succeeded (inference + at least one evaluator ran).
-    pub success: bool,
-    /// Per-evaluator scores for this datapoint.
-    /// Only populated for successful evaluations.
-    #[serde(default)]
-    pub evaluations: HashMap<String, Option<f64>>,
-    /// Per-evaluator error messages for evaluators that failed on this datapoint.
-    /// A datapoint can have both successful evaluations and evaluator errors
-    /// if some evaluators succeeded while others failed.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub evaluator_errors: HashMap<String, String>,
-    /// Error message if the entire datapoint evaluation failed (e.g., inference error).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-/// Response from running an evaluation via the action endpoint.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunEvaluationResponse {
-    /// Unique identifier for this evaluation run.
-    pub evaluation_run_id: Uuid,
-    /// Number of datapoints evaluated.
-    pub num_datapoints: usize,
-    /// Number of successful evaluations.
-    pub num_successes: usize,
-    /// Number of errors.
-    pub num_errors: usize,
-    /// Per-evaluator statistics.
-    pub stats: HashMap<String, EvaluatorStatsResponse>,
-    /// Per-datapoint results (only populated if include_datapoint_results was true).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub datapoint_results: Option<Vec<DatapointResult>>,
 }
 
 /// The specific action type to execute.
@@ -145,10 +62,6 @@ pub enum ActionResponse {
     Feedback(FeedbackResponse),
     RunEvaluation(RunEvaluationResponse),
 }
-
-// Type aliases for backwards compatibility
-pub type RunEvaluationActionParams = RunEvaluationParams;
-pub type RunEvaluationActionResponse = RunEvaluationResponse;
 
 // ============================================================================
 // Config Loading
@@ -372,23 +285,8 @@ async fn collect_evaluation_results(
         }
     }
 
-    // Compute statistics
+    // Compute statistics (EvaluatorStats is now the same type as EvaluatorStatsResponse)
     let stats = evaluation_stats.compute_stats(evaluators);
-
-    // Convert to response format
-    let stats_response: HashMap<String, EvaluatorStatsResponse> = stats
-        .into_iter()
-        .map(|(name, s)| {
-            (
-                name,
-                EvaluatorStatsResponse {
-                    mean: s.mean,
-                    stderr: s.stderr,
-                    count: s.count,
-                },
-            )
-        })
-        .collect();
 
     // Build per-datapoint results if requested
     let datapoint_results = if include_datapoint_results {
@@ -447,7 +345,7 @@ async fn collect_evaluation_results(
         num_datapoints,
         num_successes: evaluation_stats.evaluation_infos.len(),
         num_errors: evaluation_stats.evaluation_errors.len(),
-        stats: stats_response,
+        stats,
         datapoint_results,
     })
 }
