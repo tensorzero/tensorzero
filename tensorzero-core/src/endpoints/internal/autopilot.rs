@@ -23,7 +23,7 @@ use autopilot_client::{
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// HTTP request body for creating an event.
@@ -264,14 +264,17 @@ pub async fn stream_events_handler(
             Ok(event) => match serde_json::to_string(&event) {
                 Ok(data) => Ok(SseEvent::default().event("event").data(data)),
                 Err(e) => {
-                    tracing::error!("Failed to serialize autopilot event: {}", e);
+                    tracing::error!(
+                        "Failed to serialize autopilot event: {}",
+                        DisplayOrDebugGateway::new(&e)
+                    );
                     Err(Error::new(ErrorDetails::Serialization {
                         message: e.to_string(),
                     }))
                 }
             },
             Err(e) => {
-                tracing::error!("Autopilot stream error: {}", e);
+                tracing::error!("Autopilot stream error: {}", DisplayOrDebugGateway::new(&e));
                 Err(Error::from(e))
             }
         },
