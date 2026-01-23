@@ -126,7 +126,13 @@ pub(crate) async fn evaluate_inference(
                         if let Some(value) = result.value() {
                             debug!(evaluator_name = %evaluator_name, value = ?value, "Evaluator produced value, sending feedback");
                             // If there is a valid result, send feedback to TensorZero
-                            let mut tags = HashMap::from([
+                            // Start with external tags, then apply internal tags last so they always win
+                            let mut tags: HashMap<String, String> = external_tags_for_feedback
+                                .iter()
+                                .map(|(k, v)| (k.clone(), v.clone()))
+                                .collect();
+                            tags.extend(result.tags());
+                            tags.extend([
                                 (
                                     "tensorzero::evaluation_run_id".to_string(),
                                     evaluation_run_id.to_string(),
@@ -150,12 +156,6 @@ pub(crate) async fn evaluate_inference(
                                     evaluator_inference_id.to_string(),
                                 );
                             }
-                            tags.extend(result.tags());
-                            tags.extend(
-                                external_tags_for_feedback
-                                    .iter()
-                                    .map(|(k, v)| (k.clone(), v.clone())),
-                            );
                             // Only send feedback when send_feedback is true
                             // Dynamic variants have send_feedback=false and skip feedback persistence
                             if send_feedback {
