@@ -4544,8 +4544,8 @@ There are no additional fields available for this type.
 
 The `[postgres]` section defines the configuration for PostgreSQL connectivity.
 
-PostgreSQL is required for certain TensorZero features including [Track-and-Stop experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
-PostgreSQL can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey) is recommended for high-throughput deployments.
+PostgreSQL is required for certain TensorZero features including [adaptive experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
+PostgreSQL can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey-redis) is recommended for high-throughput deployments.
 You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
 
 ### `connection_pool_size`

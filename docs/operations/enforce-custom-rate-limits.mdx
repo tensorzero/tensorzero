@@ -215,27 +215,40 @@ You can find a [complete runnable example](https://github.com/tensorzero/tensorz
 
 <Step title="Set up a rate limiting backend">
 
-Rate limiting requires either Valkey or Postgres as a backend. Valkey is recommended for high-throughput deployments because it performs better under high contention.
+Rate limiting requires either Valkey (Redis) or Postgres as a backend.
 
-**Option A: Valkey (recommended)**
+<Tip>
 
-Set the `TENSORZERO_VALKEY_URL` environment variable:
+We recommend Valkey over Postgres if you're handling 100+ QPS or have extreme latency requirements.
+TensorZero's rate limiting implementation can achieve sub-millisecond P99 latency at 10k+ QPS using Valkey.
 
-```bash
-export TENSORZERO_VALKEY_URL="redis://localhost:6379"
-```
+</Tip>
 
-See the [Deploy Valkey](/deployment/valkey) guide for detailed instructions.
+<Tabs>
 
-**Option B: Postgres**
+<Tab title="Valkey">
 
-If Valkey is not configured, TensorZero will use Postgres for rate limiting. See the [Deploy Postgres](/deployment/postgres) guide for instructions.
+Deploy Valkey and set the `TENSORZERO_VALKEY_URL` environment variable.
 
-<Note>
+See the [Deploy Valkey](/deployment/valkey-redis) guide for instructions.
+
+</Tab>
+
+<Tab title="Postgres">
+
+[Deploy Postgres](/deployment/postgres) and set the `TENSORZERO_VALKEY_URL` environment variable.
+
+See the [Deploy Postgres](/deployment/postgres) guide for instructions.
+
+</Tab>
+
+</Tabs>
+
+<Warning>
 
 If both `TENSORZERO_VALKEY_URL` and `TENSORZERO_POSTGRES_URL` are set, the gateway uses Valkey for rate limiting.
 
-</Note>
+</Warning>
 
 </Step>
 
