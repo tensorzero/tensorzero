@@ -148,7 +148,7 @@ impl ToolMetadata for RunEvaluationTool {
 impl SimpleTool for RunEvaluationTool {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        _side_info: <Self as ToolMetadata>::SideInfo,
+        side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
@@ -162,6 +162,7 @@ impl SimpleTool for RunEvaluationTool {
             max_datapoints: llm_params.max_datapoints,
             precision_targets: llm_params.precision_targets,
             include_datapoint_results: llm_params.include_datapoint_results,
+            tags: side_info.to_tags(),
         };
 
         ctx.client()

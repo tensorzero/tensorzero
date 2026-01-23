@@ -187,6 +187,8 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         variant: EvaluationVariant::Info(Box::new(dynamic_variant_config)),
         concurrency: params.concurrency,
         inference_cache: CacheEnabledMode::Off, // Disable caching for fair evaluation
+        tags: HashMap::new(),                   // No external tags for optimizer evaluations
+                                                // We may want to tag inferences made as part of GEPA later as well.
     };
 
     // Call run_evaluation_core_streaming

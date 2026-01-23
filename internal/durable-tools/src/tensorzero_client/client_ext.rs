@@ -663,6 +663,7 @@ impl TensorZeroClient for Client {
                     cache_mode: params.inference_cache,
                     max_datapoints: params.max_datapoints,
                     precision_targets: params.precision_targets,
+                    tags: params.tags,
                 };
 
                 // Run the evaluation using app state directly
