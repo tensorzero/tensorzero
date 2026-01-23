@@ -110,6 +110,25 @@ pub async fn run_evaluation(
     app_state: AppStateData,
     params: &RunEvaluationParams,
 ) -> Result<RunEvaluationResponse, String> {
+    // Validate concurrency
+    if params.concurrency == 0 {
+        return Err("Concurrency must be greater than 0".to_string());
+    }
+
+    // Validate max_datapoints if provided
+    if params.max_datapoints == Some(0) {
+        return Err("max_datapoints must be greater than 0".to_string());
+    }
+
+    // Validate precision_targets values
+    for (evaluator_name, target) in &params.precision_targets {
+        if !target.is_finite() || *target <= 0.0 {
+            return Err(format!(
+                "precision_target for `{evaluator_name}` must be a positive finite number, got {target}"
+            ));
+        }
+    }
+
     let evaluation_config = app_state
         .config
         .evaluations
