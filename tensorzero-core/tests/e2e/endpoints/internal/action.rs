@@ -373,7 +373,7 @@ optimize = "max"
 type = "chat_completion"
 model = "eval_test_model_{id}"
 active = true
-system_instructions = "Return true."
+system_instructions = {{ __tensorzero_remapped_path = "inline", __data = "Return true." }}
 json_mode = "on"
 "#
     );
@@ -457,7 +457,7 @@ optimize = "max"
 type = "chat_completion"
 model = "eval_test_model_{id}"
 active = true
-system_instructions = "Return true."
+system_instructions = {{ __tensorzero_remapped_path = "inline", __data = "Return true." }}
 json_mode = "on"
 "#
     );
@@ -544,7 +544,7 @@ optimize = "max"
 type = "chat_completion"
 model = "dummy::llm_judge::true"
 active = true
-system_instructions = "Return true."
+system_instructions = {{ __tensorzero_remapped_path = "inline", __data = "Return true." }}
 json_mode = "on"
 "#
     );
