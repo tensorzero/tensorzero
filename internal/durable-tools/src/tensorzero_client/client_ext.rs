@@ -285,7 +285,7 @@ impl TensorZeroClient for Client {
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
-    ) -> Result<InferenceResponse, TensorZeroClientError> {
+    ) -> Result<ActionResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let url = http
@@ -331,40 +331,13 @@ impl TensorZeroClient for Client {
                     input,
                 };
 
-                let result = crate::action::action(&gateway.handle.app_state, action_input)
+                crate::action::action(&gateway.handle.app_state, action_input)
                     .await
                     .map_err(|e| {
                         TensorZeroClientError::TensorZero(TensorZeroError::Other {
                             source: e.into(),
                         })
-                    })?;
-
-                match result {
-                    ActionResponse::Inference(response) => Ok(response),
-                    ActionResponse::Feedback(_) => {
-                        Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                            source: tensorzero_core::error::Error::new(
-                                tensorzero_core::error::ErrorDetails::InternalError {
-                                    message: "Unexpected feedback response from action endpoint"
-                                        .to_string(),
-                                },
-                            )
-                            .into(),
-                        }))
-                    }
-                    ActionResponse::RunEvaluation(_) => {
-                        Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                            source: tensorzero_core::error::Error::new(
-                                tensorzero_core::error::ErrorDetails::InternalError {
-                                    message:
-                                        "Unexpected run_evaluation response from action endpoint"
-                                            .to_string(),
-                                },
-                            )
-                            .into(),
-                        }))
-                    }
-                }
+                    })
             }
         }
     }

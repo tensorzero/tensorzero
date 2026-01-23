@@ -236,19 +236,19 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         params: ListSessionsParams,
     ) -> Result<ListSessionsResponse, TensorZeroClientError>;
 
-    /// Run inference with a historical config snapshot.
+    /// Execute an action with a historical config snapshot.
     ///
-    /// This uses the action endpoint to run inference with a specific config version,
-    /// enabling reproducibility by using the exact configuration that was active
-    /// at a previous point in time.
+    /// This uses the action endpoint to run inference, feedback, or evaluations
+    /// with a specific config version, enabling reproducibility by using the exact
+    /// configuration that was active at a previous point in time.
     ///
-    /// Returns the inference response on success. Streaming inference
-    /// is not supported and will return an error.
+    /// Returns the appropriate response type based on the action input.
+    /// Streaming inference is not supported and will return an error.
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
-    ) -> Result<InferenceResponse, TensorZeroClientError>;
+    ) -> Result<ActionResponse, TensorZeroClientError>;
 
     /// Get a config snapshot by hash, or the live config if no hash is provided.
     async fn get_config_snapshot(

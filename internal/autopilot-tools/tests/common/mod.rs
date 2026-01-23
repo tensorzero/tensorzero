@@ -67,7 +67,7 @@ mock! {
             &self,
             snapshot_hash: SnapshotHash,
             input: durable_tools::ActionInput,
-        ) -> Result<InferenceResponse, TensorZeroClientError>;
+        ) -> Result<durable_tools::ActionResponse, TensorZeroClientError>;
 
         async fn get_config_snapshot(
             &self,

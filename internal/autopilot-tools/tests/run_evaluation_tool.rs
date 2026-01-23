@@ -7,12 +7,13 @@ use std::sync::Arc;
 
 use durable::MIGRATOR;
 use durable_tools::{
-    CacheEnabledMode, DatapointResult, ErasedSimpleTool, RunEvaluationResponse, SimpleToolContext,
+    ActionInput, ActionResponse, CacheEnabledMode, DatapointResult, ErasedSimpleTool,
+    RunEvaluationResponse, SimpleToolContext,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use autopilot_client::AutopilotSideInfo;
+use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use autopilot_tools::tools::{RunEvaluationTool, RunEvaluationToolParams};
 use common::MockTensorZeroClient;
 
@@ -35,6 +36,76 @@ fn create_mock_run_evaluation_response() -> RunEvaluationResponse {
         stats,
         datapoint_results: None,
     }
+}
+
+/// Test that RunEvaluationTool calls the action endpoint with the correct snapshot hash.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
+    // Create mock response
+    let mock_response = create_mock_run_evaluation_response();
+
+    // Prepare test data
+    let session_id = Uuid::now_v7();
+    let tool_call_event_id = Uuid::now_v7();
+
+    let test_snapshot_hash = "12345678901234567890";
+
+    let llm_params = RunEvaluationToolParams {
+        evaluation_name: "test_evaluation".to_string(),
+        dataset_name: Some("test_dataset".to_string()),
+        datapoint_ids: None,
+        variant_name: "test_variant".to_string(),
+        concurrency: 5,
+        max_datapoints: Some(50),
+        precision_targets: HashMap::new(),
+        inference_cache: CacheEnabledMode::Off,
+        include_datapoint_results: false,
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id,
+        session_id,
+        config_snapshot_hash: test_snapshot_hash.to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    // Create mock client with expectations for action()
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_action()
+        .withf(move |snapshot_hash, input| {
+            let ActionInput::RunEvaluation(params) = input else {
+                return false;
+            };
+            snapshot_hash.to_string() == test_snapshot_hash
+                && params.evaluation_name == "test_evaluation"
+                && params.dataset_name == Some("test_dataset".to_string())
+                && params.datapoint_ids.is_none()
+                && params.variant_name == "test_variant"
+                && params.concurrency == 5
+                && params.max_datapoints == Some(50)
+                && params.precision_targets.is_empty()
+        })
+        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
+
+    // Create the tool and context
+    let tool = RunEvaluationTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    // Execute the tool
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("RunEvaluationTool execution should succeed");
+
+    // The result should be a JSON object
+    assert!(result.is_object(), "Result should be a JSON object");
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -69,8 +140,11 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     // Create mock client with expectations
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
-        .expect_run_evaluation()
-        .withf(move |params| {
+        .expect_action()
+        .withf(move |_snapshot_hash, input| {
+            let ActionInput::RunEvaluation(params) = input else {
+                return false;
+            };
             params.evaluation_name == "test_evaluation"
                 && params.dataset_name == Some("test_dataset".to_string())
                 && params.datapoint_ids.is_none()
@@ -79,7 +153,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
                 && params.max_datapoints == Some(50)
                 && params.precision_targets.is_empty()
         })
-        .returning(move |_| Ok(mock_response.clone()));
+        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;
@@ -140,8 +214,11 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     // Create mock client with expectations
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
-        .expect_run_evaluation()
-        .withf(move |params| {
+        .expect_action()
+        .withf(move |_snapshot_hash, input| {
+            let ActionInput::RunEvaluation(params) = input else {
+                return false;
+            };
             params.evaluation_name == "test_evaluation"
                 && params.dataset_name.is_none()
                 && params.datapoint_ids == Some(expected_datapoint_ids.clone())
@@ -149,7 +226,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
                 && params.concurrency == 10
                 && params.max_datapoints.is_none()
         })
-        .returning(move |_| Ok(mock_response.clone()));
+        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;
@@ -208,8 +285,11 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     // Create mock client with expectations that verify precision_targets and inference_cache
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
-        .expect_run_evaluation()
-        .withf(move |params| {
+        .expect_action()
+        .withf(move |_snapshot_hash, input| {
+            let ActionInput::RunEvaluation(params) = input else {
+                return false;
+            };
             params.evaluation_name == "test_evaluation"
                 && params.dataset_name == Some("test_dataset".to_string())
                 && params.variant_name == "test_variant"
@@ -220,7 +300,7 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
                 // Verify inference_cache is passed through correctly
                 && params.inference_cache == CacheEnabledMode::ReadOnly
         })
-        .returning(move |_| Ok(mock_response.clone()));
+        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;
@@ -269,7 +349,7 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
 
     // Create mock client that returns an error
     let mut mock_client = MockTensorZeroClient::new();
-    mock_client.expect_run_evaluation().returning(|_| {
+    mock_client.expect_action().returning(|_, _| {
         Err(durable_tools::TensorZeroClientError::Evaluation(
             "Evaluation 'nonexistent_evaluation' not found in config".to_string(),
         ))
@@ -397,15 +477,18 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     // Create mock client with expectations that verify include_datapoint_results is passed
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
-        .expect_run_evaluation()
-        .withf(move |params| {
+        .expect_action()
+        .withf(move |_snapshot_hash, input| {
+            let ActionInput::RunEvaluation(params) = input else {
+                return false;
+            };
             params.evaluation_name == "test_evaluation"
                 && params.dataset_name == Some("test_dataset".to_string())
                 && params.variant_name == "test_variant"
                 // Verify include_datapoint_results is passed through correctly
                 && params.include_datapoint_results
         })
-        .returning(move |_| Ok(mock_response.clone()));
+        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;

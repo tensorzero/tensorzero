@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use durable_tools::ActionInput;
+use durable_tools::{ActionInput, ActionResponse};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -184,6 +184,12 @@ impl SimpleTool for InferenceTool {
             .await
             .map_err(|e| AutopilotToolError::client_error("inference", e))?;
 
-        Ok(response)
+        match response {
+            ActionResponse::Inference(inference_response) => Ok(inference_response),
+            _ => Err(AutopilotToolError::validation(
+                "Unexpected response type from action endpoint",
+            )
+            .into()),
+        }
     }
 }

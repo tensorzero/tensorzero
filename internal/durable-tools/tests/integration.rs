@@ -52,7 +52,7 @@ fn mock_client_with_response(response: InferenceResponse) -> MockTensorZeroClien
     });
     mock.expect_action().returning(move |_, _| {
         let r = response_clone.clone();
-        Box::pin(async move { Ok(r) })
+        Box::pin(async move { Ok(durable_tools::ActionResponse::Inference(r)) })
     });
     mock
 }

@@ -5,13 +5,14 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{
-    CacheEnabledMode, NonControlToolError, RunEvaluationParams, RunEvaluationResponse, SimpleTool,
-    SimpleToolContext, ToolMetadata, ToolResult,
+    ActionInput, ActionResponse, CacheEnabledMode, NonControlToolError, RunEvaluationParams,
+    RunEvaluationResponse, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult,
 };
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
+use tensorzero_core::config::snapshot::SnapshotHash;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -148,7 +149,7 @@ impl ToolMetadata for RunEvaluationTool {
 impl SimpleTool for RunEvaluationTool {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        _side_info: <Self as ToolMetadata>::SideInfo,
+        side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
@@ -164,9 +165,26 @@ impl SimpleTool for RunEvaluationTool {
             include_datapoint_results: llm_params.include_datapoint_results,
         };
 
-        ctx.client()
-            .run_evaluation(params)
+        let snapshot_hash: SnapshotHash =
+            side_info
+                .config_snapshot_hash
+                .parse()
+                .map_err(|_: std::convert::Infallible| {
+                    AutopilotToolError::validation("Invalid snapshot hash")
+                })?;
+
+        let response = ctx
+            .client()
+            .action(snapshot_hash, ActionInput::RunEvaluation(Box::new(params)))
             .await
-            .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
+            .map_err(|e| AutopilotToolError::client_error("run_evaluation", e))?;
+
+        match response {
+            ActionResponse::RunEvaluation(eval_response) => Ok(eval_response),
+            _ => Err(AutopilotToolError::validation(
+                "Unexpected response type from action endpoint",
+            )
+            .into()),
+        }
     }
 }

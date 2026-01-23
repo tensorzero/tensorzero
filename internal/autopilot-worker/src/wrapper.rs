@@ -378,7 +378,7 @@ pub enum ToolFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use durable_tools::{ActionInput, CreateEventResponse, TensorZeroClientError};
+    use durable_tools::{ActionInput, ActionResponse, CreateEventResponse, TensorZeroClientError};
     use mockall::mock;
     use schemars::JsonSchema;
     use tensorzero::{
@@ -432,7 +432,7 @@ mod tests {
                 &self,
                 snapshot_hash: SnapshotHash,
                 params: ActionInput,
-            ) -> Result<InferenceResponse, TensorZeroClientError>;
+            ) -> Result<ActionResponse, TensorZeroClientError>;
 
             async fn get_config_snapshot(
                 &self,

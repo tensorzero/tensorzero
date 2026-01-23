@@ -179,38 +179,17 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
-    ) -> Result<InferenceResponse, TensorZeroClientError> {
+    ) -> Result<ActionResponse, TensorZeroClientError> {
         let action_input = ActionInputInfo {
             snapshot_hash,
             input,
         };
 
-        let result = crate::action::action(&self.app_state, action_input)
+        crate::action::action(&self.app_state, action_input)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            })?;
-
-        match result {
-            ActionResponse::Inference(response) => Ok(response),
-            ActionResponse::Feedback(_) => {
-                Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InternalError {
-                        message: "Unexpected feedback response from action endpoint".to_string(),
-                    })
-                    .into(),
-                }))
-            }
-            ActionResponse::RunEvaluation(_) => {
-                Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InternalError {
-                        message: "Unexpected run_evaluation response from action endpoint"
-                            .to_string(),
-                    })
-                    .into(),
-                }))
-            }
-        }
+            })
     }
 
     async fn get_config_snapshot(
