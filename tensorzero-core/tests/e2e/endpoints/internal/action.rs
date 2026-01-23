@@ -264,7 +264,11 @@ model = "action_test_model_{id}"
     }
 }
 
-tensorzero::make_gateway_test_functions!(test_action_streaming_rejected_impl);
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_streaming_rejected_impl_http_gateway() {
+    test_action_streaming_rejected_impl(make_http_gateway().await).await;
+}
 
 /// Test that the action endpoint returns an error when evaluation is not found in config.
 async fn test_action_run_evaluation_missing_evaluation_impl(client: Client) {
@@ -327,7 +331,11 @@ model = "eval_test_model_{id}"
     }
 }
 
-tensorzero::make_gateway_test_functions!(test_action_run_evaluation_missing_evaluation_impl);
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_run_evaluation_missing_evaluation_impl_http_gateway() {
+    test_action_run_evaluation_missing_evaluation_impl(make_http_gateway().await).await;
+}
 
 /// Test that the action endpoint returns an error when validation fails
 /// (neither dataset_name nor datapoint_ids provided).
@@ -408,7 +416,11 @@ json_mode = "on"
     }
 }
 
-tensorzero::make_gateway_test_functions!(test_action_run_evaluation_validation_error_impl);
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_run_evaluation_validation_error_impl_http_gateway() {
+    test_action_run_evaluation_validation_error_impl(make_http_gateway().await).await;
+}
 
 /// Test that the action endpoint returns an error when both dataset_name AND datapoint_ids are provided.
 async fn test_action_run_evaluation_both_dataset_and_ids_impl(client: Client) {
@@ -488,7 +500,11 @@ json_mode = "on"
     }
 }
 
-tensorzero::make_gateway_test_functions!(test_action_run_evaluation_both_dataset_and_ids_impl);
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_run_evaluation_both_dataset_and_ids_impl_http_gateway() {
+    test_action_run_evaluation_both_dataset_and_ids_impl(make_http_gateway().await).await;
+}
 
 /// Test that the action endpoint can successfully run an evaluation with a historical config.
 async fn test_action_run_evaluation_basic_impl(client: Client) {
@@ -682,4 +698,8 @@ json_mode = "on"
     }
 }
 
-tensorzero::make_gateway_test_functions!(test_action_run_evaluation_basic_impl);
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_run_evaluation_basic_impl_http_gateway() {
+    test_action_run_evaluation_basic_impl(make_http_gateway().await).await;
+}
