@@ -25,6 +25,7 @@ from tensorzero.generated_types import (
     ContentBlockChatOutputToolCall,
     DatapointChat,
     InputMessageContentToolCall,
+    InputMessageContentToolResult,
     StoredInferenceChat,
     StoredInputMessageContentToolCall,
     StoredInputMessageContentToolResult,
@@ -388,6 +389,33 @@ async def test_async_tool_call_roundtrip_complete_flow(
         assert datapoint_tool_call.name == "get_temperature", "Datapoint tool call name must be preserved"
         assert datapoint_tool_call.arguments == '{"location":"Brooklyn","units":"celsius"}', (
             "Datapoint tool call arguments must be preserved"
+        )
+
+        # Verify tool result in datapoint input
+        datapoint_tool_result = None
+        for msg in datapoint_input_messages:
+            if msg.role == "user":
+                for content in msg.content:
+                    if content.type == "tool_result":
+                        datapoint_tool_result = content
+                        break
+                if datapoint_tool_result:
+                    break
+
+        assert datapoint_tool_result is not None, "Datapoint should have tool result in input"
+        assert isinstance(datapoint_tool_result, InputMessageContentToolResult), (
+            "Datapoint tool result must be InputMessageContentToolResult instance"
+        )
+
+        # Verify tool result fields preserved in datapoint
+        assert hasattr(datapoint_tool_result, "id"), "Datapoint tool result must have 'id' field"
+        assert hasattr(datapoint_tool_result, "name"), "Datapoint tool result must have 'name' field"
+        assert hasattr(datapoint_tool_result, "result"), "Datapoint tool result must have 'result' field"
+
+        assert datapoint_tool_result.id == "0", "Datapoint tool result id must match tool call id"
+        assert datapoint_tool_result.name == "get_temperature", "Datapoint tool result name must match tool call name"
+        assert datapoint_tool_result.result == '{"temperature": 72, "conditions": "sunny"}', (
+            "Datapoint tool result must be preserved"
         )
 
         # ============================================================================
@@ -777,6 +805,33 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
         assert datapoint_tool_call.name == "get_temperature", "Datapoint tool call name must be preserved"
         assert datapoint_tool_call.arguments == '{"location":"Brooklyn","units":"celsius"}', (
             "Datapoint tool call arguments must be preserved"
+        )
+
+        # Verify tool result in datapoint input
+        datapoint_tool_result = None
+        for msg in datapoint_input_messages:
+            if msg.role == "user":
+                for content in msg.content:
+                    if content.type == "tool_result":
+                        datapoint_tool_result = content
+                        break
+                if datapoint_tool_result:
+                    break
+
+        assert datapoint_tool_result is not None, "Datapoint should have tool result in input"
+        assert isinstance(datapoint_tool_result, InputMessageContentToolResult), (
+            "Datapoint tool result must be InputMessageContentToolResult instance"
+        )
+
+        # Verify tool result fields preserved in datapoint
+        assert hasattr(datapoint_tool_result, "id"), "Datapoint tool result must have 'id' field"
+        assert hasattr(datapoint_tool_result, "name"), "Datapoint tool result must have 'name' field"
+        assert hasattr(datapoint_tool_result, "result"), "Datapoint tool result must have 'result' field"
+
+        assert datapoint_tool_result.id == "0", "Datapoint tool result id must match tool call id"
+        assert datapoint_tool_result.name == "get_temperature", "Datapoint tool result name must match tool call name"
+        assert datapoint_tool_result.result == '{"temperature": 72, "conditions": "sunny"}', (
+            "Datapoint tool result must be preserved"
         )
 
         # ============================================================================
