@@ -678,6 +678,9 @@ class StoragePath:
     path: str
 
 
+StoredInferenceOutputSource = str
+
+
 @dataclass(kw_only=True)
 class StoredInputMessageContentText:
     """
@@ -1092,7 +1095,7 @@ class GetInferencesRequest:
     Including this improves query performance since `function_name` is the first column
     in the ClickHouse primary key.
     """
-    output_source: InferenceOutputSource | None = "inference"
+    output_source: StoredInferenceOutputSource | None = "inference"
     """
     Source of the inference output.
     Determines whether to return the original inference output or demonstration feedback
@@ -2142,7 +2145,7 @@ class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
     Optional ordering criteria for the results.
     Supports multiple sort criteria (e.g., sort by timestamp then by metric).
     """
-    output_source: InferenceOutputSource | None = "inference"
+    output_source: StoredInferenceOutputSource | None = "inference"
     """
     Source of the inference output. Determines whether to return the original
     inference output or demonstration feedback (manually-curated output) if available.
@@ -2357,7 +2360,7 @@ class ListInferencesRequest:
     Optional ordering criteria for the results.
     Supports multiple sort criteria (e.g., sort by timestamp then by metric).
     """
-    output_source: InferenceOutputSource | None = "inference"
+    output_source: StoredInferenceOutputSource | None = "inference"
     """
     Source of the inference output. Determines whether to return the original
     inference output or demonstration feedback (manually-curated output) if available.
