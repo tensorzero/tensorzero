@@ -31,11 +31,11 @@ impl ToolMetadata for GoodSimpleTool {
     type Output = GoodSimpleOutput;
     type LlmParams = GoodSimpleParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("good_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Echoes back the input message. A SimpleTool for testing basic success cases.",
         )

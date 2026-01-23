@@ -17,9 +17,9 @@ use autopilot_client::AutopilotSideInfo;
 ///
 /// # Type Parameters
 ///
-/// The `Default` bound on tool types is required because:
-/// - `SimpleTool` registration requires `Default` for instantiation
-/// - Remote execution adapters (like `ClientToolTaskAdapter`) require `Default`
+/// The `Default` bound on tool types is required for the type-based registration
+/// helpers. If you need runtime-configured tools, use the instance registration
+/// helpers on `ToolExecutor` instead.
 ///
 /// The bounds on `SideInfo` are required for:
 /// - `TryFrom<AutopilotSideInfo>`: Converting caller params to tool-specific side info

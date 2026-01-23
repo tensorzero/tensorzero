@@ -25,15 +25,15 @@ impl ToolMetadata for GetConfigTool {
     type Output = GetConfigResponse;
     type LlmParams = GetConfigToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_config")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Get the live config snapshot or a historical snapshot by hash.")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Get the config snapshot. No parameters required.",
