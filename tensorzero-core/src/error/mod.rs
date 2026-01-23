@@ -880,11 +880,11 @@ impl ErrorDetails {
             ErrorDetails::PostgresConnectionInitialization { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
-            ErrorDetails::PostgresConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ValkeyConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::ValkeyQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
