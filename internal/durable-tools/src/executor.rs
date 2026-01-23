@@ -94,38 +94,6 @@ impl ToolExecutor {
         ToolExecutorBuilder::new()
     }
 
-    /// Register a `TaskTool`.
-    ///
-    /// This registers the tool with both the tool registry and the durable
-    /// client (so it can be executed by workers).
-    ///
-    /// # Errors
-    ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    ///
-    /// This uses `Default` to construct the tool. For runtime-configured tools,
-    /// use [`Self::register_task_tool_instance`].
-    pub async fn register_task_tool<T: TaskTool + Default>(&self) -> Result<&Self, ToolError> {
-        self.register_task_tool_instance(T::default()).await
-    }
-
-    /// Register a `SimpleTool`.
-    ///
-    /// `SimpleTools` don't need to be registered with the durable client
-    /// since they run inside `TaskTool` steps.
-    ///
-    /// # Errors
-    ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    ///
-    /// This uses `Default` to construct the tool. For runtime-configured tools,
-    /// use [`Self::register_simple_tool_instance`].
-    pub async fn register_simple_tool<T: SimpleTool + Default>(&self) -> Result<&Self, ToolError> {
-        self.register_simple_tool_instance(T::default()).await
-    }
-
     /// Register a `TaskTool` instance.
     ///
     /// This registers the tool with both the tool registry and the durable
@@ -169,40 +137,6 @@ impl ToolExecutor {
         Ok(self)
     }
 
-    /// Spawn a `TaskTool` execution.
-    ///
-    /// # Arguments
-    ///
-    /// * `llm_params` - The LLM-provided parameters
-    /// * `side_info` - Side information (hidden from LLM), use `()` if not needed
-    /// * `episode_id` - The episode ID for this execution
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    ///
-    /// This uses `Default` to determine the task name. For runtime-configured
-    /// tools, use [`Self::spawn_tool_by_name`] with the registered name.
-    pub async fn spawn_tool<T: TaskTool + Default>(
-        &self,
-        llm_params: T::LlmParams,
-        side_info: T::SideInfo,
-        episode_id: Uuid,
-        options: SpawnOptions,
-    ) -> anyhow::Result<SpawnResult> {
-        let tool = T::default();
-        let tool_name = tool.name();
-        let wrapped = TaskToolParams {
-            llm_params,
-            side_info,
-            episode_id,
-        };
-        self.durable
-            .spawn_by_name(tool_name.as_ref(), serde_json::to_value(wrapped)?, options)
-            .await
-            .map_err(Into::into)
-    }
-
     /// Spawn a tool by name with JSON parameters.
     ///
     /// This allows dynamic tool invocation without knowing the concrete type.
@@ -241,44 +175,6 @@ impl ToolExecutor {
                 tool_name,
                 serde_json::to_value(wrapped_params)?,
                 SpawnOptions::default(),
-            )
-            .await
-            .map_err(Into::into)
-    }
-
-    /// Spawn a `TaskTool` execution with custom spawn options using a custom executor.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    ///
-    /// This uses `Default` to determine the task name. For runtime-configured
-    /// tools, use [`Self::spawn_tool_by_name_with`] with the registered name.
-    pub async fn spawn_tool_with<'e, T, E>(
-        &self,
-        executor: E,
-        llm_params: T::LlmParams,
-        side_info: T::SideInfo,
-        episode_id: Uuid,
-        options: SpawnOptions,
-    ) -> anyhow::Result<SpawnResult>
-    where
-        T: TaskTool + Default,
-        E: Executor<'e, Database = Postgres>,
-    {
-        let tool = T::default();
-        let tool_name = tool.name();
-        let wrapped = TaskToolParams {
-            llm_params,
-            side_info,
-            episode_id,
-        };
-        self.durable
-            .spawn_by_name_with(
-                executor,
-                tool_name.as_ref(),
-                serde_json::to_value(wrapped)?,
-                options,
             )
             .await
             .map_err(Into::into)

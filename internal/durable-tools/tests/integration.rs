@@ -360,10 +360,13 @@ async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<(
         .expect("Failed to build executor");
 
     executor
-        .register_simple_tool::<EchoSimpleTool>()
+        .register_simple_tool_instance(EchoSimpleTool)
         .await
         .unwrap();
-    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
+    executor
+        .register_task_tool_instance(EchoTaskTool)
+        .await
+        .unwrap();
 
     let definitions = executor.tool_definitions().await.unwrap();
     assert_eq!(definitions.len(), 2);
@@ -401,21 +404,26 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("Failed to create queue");
 
-    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
+    executor
+        .register_task_tool_instance(EchoTaskTool)
+        .await
+        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
-        .spawn_tool::<EchoTaskTool>(
-            EchoParams {
-                message: "test message".to_string(),
-            },
-            (), // No side info
+        .spawn_tool_by_name(
+            "echo_task",
+            serde_json::json!({"message": "test message"}),
+            serde_json::json!(null),
             episode_id,
-            SpawnOptions::default(),
         )
         .await;
 
-    assert!(result.is_ok(), "spawn_tool failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "spawn_tool_by_name failed: {:?}",
+        result.err()
+    );
     let spawn_result = result.unwrap();
     assert!(!spawn_result.task_id.is_nil());
     Ok(())
@@ -441,7 +449,10 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
         .await
         .expect("Failed to create queue");
 
-    executor.register_task_tool::<EchoTaskTool>().await.unwrap();
+    executor
+        .register_task_tool_instance(EchoTaskTool)
+        .await
+        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -589,24 +600,22 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
 
     // Register both tools
     executor
-        .register_simple_tool::<KeyCapturingSimpleTool>()
+        .register_simple_tool_instance(KeyCapturingSimpleTool)
         .await
         .unwrap();
     executor
-        .register_task_tool::<MultiCallTaskTool>()
+        .register_task_tool_instance(MultiCallTaskTool)
         .await
         .unwrap();
 
     // Spawn the task
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
-        .spawn_tool::<MultiCallTaskTool>(
-            EchoParams {
-                message: "test".to_string(),
-            },
-            (),
+        .spawn_tool_by_name(
+            "multi_call_task",
+            serde_json::json!({"message": "test"}),
+            serde_json::json!(null),
             episode_id,
-            SpawnOptions::default(),
         )
         .await
         .expect("Failed to spawn task");
@@ -702,7 +711,7 @@ async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Resul
         .expect("Failed to build executor");
 
     executor
-        .register_task_tool::<InferenceTaskTool>()
+        .register_task_tool_instance(InferenceTaskTool)
         .await
         .unwrap();
 
@@ -744,25 +753,23 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
         .expect("Failed to create queue");
 
     executor
-        .register_task_tool::<InferenceTaskTool>()
+        .register_task_tool_instance(InferenceTaskTool)
         .await
         .unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
-        .spawn_tool::<InferenceTaskTool>(
-            InferencePromptParams {
-                prompt: "Generate something".to_string(),
-            },
-            (), // No side info
+        .spawn_tool_by_name(
+            "inference_task",
+            serde_json::json!({"prompt": "Generate something"}),
+            serde_json::json!(null),
             episode_id,
-            SpawnOptions::default(),
         )
         .await;
 
     assert!(
         result.is_ok(),
-        "spawn_tool for InferenceTaskTool failed: {:?}",
+        "spawn_tool_by_name for InferenceTaskTool failed: {:?}",
         result.err()
     );
     let spawn_result = result.unwrap();
