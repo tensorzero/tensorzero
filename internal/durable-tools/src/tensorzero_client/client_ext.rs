@@ -25,7 +25,6 @@ use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::feedback::internal::{
     LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
 };
-use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, ActionResponse};
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
@@ -33,6 +32,8 @@ use tensorzero_optimizers::endpoints::{
     LaunchOptimizationWorkflowParams, launch_optimization_workflow, poll_optimization,
 };
 use uuid::Uuid;
+
+use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
     CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,

@@ -378,10 +378,9 @@ pub enum ToolFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use durable_tools::{CreateEventResponse, TensorZeroClientError};
+    use durable_tools::{ActionInput, CreateEventResponse, TensorZeroClientError};
     use mockall::mock;
     use schemars::JsonSchema;
-    use tensorzero::ActionInput;
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,

@@ -29,12 +29,13 @@ use tensorzero_core::endpoints::datasets::v1::types::{
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
-use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, ActionResponse};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
+
+use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
     CreateEventGatewayRequest, CreateEventResponse, DatapointResult, EvaluatorStatsResponse,

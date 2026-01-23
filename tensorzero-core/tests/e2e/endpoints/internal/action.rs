@@ -7,11 +7,14 @@
 //! gateway mode doesn't support the action endpoint (it would require depending on
 //! durable-tools). The action endpoint is fully functional in HTTP mode.
 
+use durable_tools::action::{
+    ActionInput, ActionInputInfo, ActionResponse, RunEvaluationActionParams,
+};
 use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero::{
-    ActionInput, ActionInputInfo, ActionResponse, Client, ClientExt, ClientInferenceParams, Input,
-    InputMessage, InputMessageContent, Role, TensorZeroError,
+    CacheEnabledMode, Client, ClientInferenceParams, Input, InputMessage, InputMessageContent,
+    Role, TensorZeroError,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
@@ -26,6 +29,43 @@ use uuid::Uuid;
 // Helper to create HTTP gateway client for action tests
 async fn make_http_gateway() -> Client {
     tensorzero::test_helpers::make_http_gateway().await
+}
+
+/// Helper to call the action endpoint via HTTP.
+/// Since the action endpoint is internal, it's not exposed via the SDK.
+async fn call_action(
+    client: &Client,
+    params: ActionInputInfo,
+) -> Result<ActionResponse, TensorZeroError> {
+    use tensorzero::ClientMode;
+
+    match client.mode() {
+        ClientMode::HTTPGateway(http_client) => {
+            let url = http_client.base_url.join("internal/action").map_err(|e| {
+                TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(
+                        tensorzero_core::error::ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/action endpoint: {e}"
+                            ),
+                        },
+                    )
+                    .into(),
+                }
+            })?;
+            let builder = http_client.http_client.post(url).json(&params);
+            Ok(http_client.send_and_parse_http_response(builder).await?.0)
+        }
+        ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+            source: tensorzero_core::error::Error::new(
+                tensorzero_core::error::ErrorDetails::InternalError {
+                    message: "Action endpoint is not supported for embedded gateway mode"
+                        .to_string(),
+                },
+            )
+            .into(),
+        }),
+    }
 }
 
 /// Test that the action endpoint can execute inference using a historical config
@@ -86,7 +126,7 @@ Do a historical inference successfully!
     };
 
     // Call the action endpoint using the client
-    let response = client.action(params).await;
+    let response = call_action(&client, params).await;
 
     assert!(
         response.is_ok(),
@@ -134,7 +174,7 @@ async fn test_action_nonexistent_snapshot_hash_impl(client: Client) {
         })),
     };
 
-    let response = client.action(params).await;
+    let response = call_action(&client, params).await;
 
     // Should return an error (404 for HTTP, error for embedded)
     assert!(
@@ -209,7 +249,7 @@ model = "action_test_model_{id}"
         })),
     };
 
-    let response = client.action(params).await;
+    let response = call_action(&client, params).await;
 
     // Should return an error (400 Bad Request)
     assert!(response.is_err(), "Streaming requests should be rejected");
@@ -261,20 +301,20 @@ model = "eval_test_model_{id}"
 
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::RunEvaluation(Box::new(tensorzero::RunEvaluationActionParams {
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationActionParams {
             evaluation_name: "nonexistent_evaluation".to_string(),
             dataset_name: Some("some_dataset".to_string()),
             datapoint_ids: None,
             variant_name: "baseline".to_string(),
             concurrency: 1,
-            inference_cache: tensorzero::CacheEnabledMode::Off,
+            inference_cache: CacheEnabledMode::Off,
             max_datapoints: None,
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
         })),
     };
 
-    let response = client.action(params).await;
+    let response = call_action(&client, params).await;
 
     assert!(
         response.is_err(),
@@ -342,20 +382,20 @@ json_mode = "on"
     // Neither dataset_name nor datapoint_ids provided
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::RunEvaluation(Box::new(tensorzero::RunEvaluationActionParams {
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationActionParams {
             evaluation_name: format!("test_eval_{id}"),
             dataset_name: None,
             datapoint_ids: None,
             variant_name: "baseline".to_string(),
             concurrency: 1,
-            inference_cache: tensorzero::CacheEnabledMode::Off,
+            inference_cache: CacheEnabledMode::Off,
             max_datapoints: None,
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
         })),
     };
 
-    let response = client.action(params).await;
+    let response = call_action(&client, params).await;
 
     assert!(
         response.is_err(),
@@ -422,20 +462,20 @@ json_mode = "on"
     // Both dataset_name AND datapoint_ids provided - should fail validation
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::RunEvaluation(Box::new(tensorzero::RunEvaluationActionParams {
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationActionParams {
             evaluation_name: format!("test_eval_{id}"),
             dataset_name: Some("some_dataset".to_string()),
             datapoint_ids: Some(vec![Uuid::now_v7()]),
             variant_name: "baseline".to_string(),
             concurrency: 1,
-            inference_cache: tensorzero::CacheEnabledMode::Off,
+            inference_cache: CacheEnabledMode::Off,
             max_datapoints: None,
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
         })),
     };
 
-    let response = client.action(params).await;
+    let response = call_action(&client, params).await;
 
     assert!(
         response.is_err(),
@@ -570,20 +610,20 @@ json_mode = "on"
     // Call the action endpoint with RunEvaluation using datapoint_ids
     let params = ActionInputInfo {
         snapshot_hash,
-        input: ActionInput::RunEvaluation(Box::new(tensorzero::RunEvaluationActionParams {
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationActionParams {
             evaluation_name: format!("action_test_eval_{id}"),
             dataset_name: None,
             datapoint_ids: Some(vec![datapoint_id_1, datapoint_id_2]),
             variant_name: "baseline".to_string(),
             concurrency: 1,
-            inference_cache: tensorzero::CacheEnabledMode::Off,
+            inference_cache: CacheEnabledMode::Off,
             max_datapoints: None,
             precision_targets: HashMap::new(),
             include_datapoint_results: true,
         })),
     };
 
-    let response = client.action(params).await;
+    let response = call_action(&client, params).await;
 
     assert!(
         response.is_ok(),

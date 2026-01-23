@@ -6,12 +6,12 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
+use durable_tools::ActionInput;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{
-    ActionInput, ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse,
-    Input,
+    ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse, Input,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 

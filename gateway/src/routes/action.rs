@@ -2,8 +2,7 @@
 
 use axum::extract::State;
 use axum::{Json, debug_handler};
-use durable_tools::action::action;
-use tensorzero_core::endpoints::internal::action::{ActionInputInfo, ActionResponse};
+use durable_tools::action::{ActionInputInfo, ActionResponse, action};
 use tensorzero_core::error::Error;
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
 use tracing::instrument;

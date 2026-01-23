@@ -6251,6 +6251,7 @@ dependencies = [
  "dashmap 6.1.0",
  "derive_builder 0.20.2",
  "durable",
+ "durable-tools",
  "enum-map",
  "eventsource-stream",
  "futures",

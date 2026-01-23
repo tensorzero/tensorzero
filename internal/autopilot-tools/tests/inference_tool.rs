@@ -6,11 +6,12 @@ use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use durable::MIGRATOR;
+use durable_tools::ActionInput;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
 use tensorzero::{
-    ActionInput, GetInferencesRequest, GetInferencesResponse, InferenceOutputSource, Input,
-    InputMessage, InputMessageContent, ListInferencesRequest, Role,
+    GetInferencesRequest, GetInferencesResponse, InferenceOutputSource, Input, InputMessage,
+    InputMessageContent, ListInferencesRequest, Role,
 };
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
