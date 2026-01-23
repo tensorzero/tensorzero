@@ -7,12 +7,10 @@
 mod client_ext;
 mod embedded;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 pub use tensorzero::{
     Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, ClientInferenceParams,
     CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
@@ -45,8 +43,10 @@ pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayReque
 // Re-export action types from crate::action
 pub use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
-// Re-export EvaluatorStats from evaluations crate
-pub use evaluations::stats::EvaluatorStats;
+// Re-export evaluation types from crate::run_evaluation
+pub use crate::run_evaluation::{
+    DatapointResult, EvaluatorStats, RunEvaluationParams, RunEvaluationResponse,
+};
 
 #[cfg(any(test, feature = "test-support"))]
 use mockall::automock;
@@ -77,94 +77,6 @@ pub enum TensorZeroClientError {
     /// Evaluation error.
     #[error("Evaluation error: {0}")]
     Evaluation(String),
-}
-
-// Note: These evaluation types are specific to durable-tools and cannot be replaced with
-// the HTTP wire types from gateway/src/routes/evaluations.rs. The HTTP endpoint uses SSE
-// streaming with per-datapoint events, while these types provide an aggregated response
-// suitable for tool use cases. Additionally, RunEvaluationParams takes only evaluation_name
-// (looking up config internally), while the HTTP endpoint requires the caller to pass in
-// the resolved evaluation_config and function_config.
-
-fn default_concurrency() -> usize {
-    10
-}
-
-fn default_inference_cache() -> CacheEnabledMode {
-    CacheEnabledMode::On
-}
-
-/// Parameters for running an evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunEvaluationParams {
-    /// Name of the evaluation to run (must be defined in config).
-    pub evaluation_name: String,
-    /// Name of the dataset to run on.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dataset_name: Option<String>,
-    /// Specific datapoint IDs to evaluate.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub datapoint_ids: Option<Vec<Uuid>>,
-    /// Name of the variant to evaluate.
-    pub variant_name: String,
-    /// Number of concurrent inference requests.
-    #[serde(default = "default_concurrency")]
-    pub concurrency: usize,
-    /// Cache configuration for inference requests.
-    /// Defaults to On (caching enabled) to match the evaluations CLI behavior.
-    #[serde(default = "default_inference_cache")]
-    pub inference_cache: CacheEnabledMode,
-    /// Maximum number of datapoints to evaluate.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_datapoints: Option<u32>,
-    /// Precision targets for adaptive stopping.
-    /// Maps evaluator names to target confidence interval half-widths.
-    #[serde(default)]
-    pub precision_targets: HashMap<String, f32>,
-    /// Include per-datapoint results in the response.
-    #[serde(default)]
-    pub include_datapoint_results: bool,
-}
-
-/// Result for a single datapoint evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatapointResult {
-    /// ID of the datapoint that was evaluated.
-    pub datapoint_id: Uuid,
-    /// Whether the evaluation succeeded (inference + at least one evaluator ran).
-    pub success: bool,
-    /// Per-evaluator scores for this datapoint.
-    /// Only populated for successful evaluations.
-    #[serde(default)]
-    pub evaluations: HashMap<String, Option<f64>>,
-    /// Per-evaluator error messages for evaluators that failed on this datapoint.
-    /// A datapoint can have both successful evaluations and evaluator errors
-    /// if some evaluators succeeded while others failed.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub evaluator_errors: HashMap<String, String>,
-    /// Error message if the entire datapoint evaluation failed (e.g., inference error).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-/// Response from running an evaluation via the action endpoint.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunEvaluationResponse {
-    /// Unique identifier for this evaluation run.
-    pub evaluation_run_id: Uuid,
-    /// Number of datapoints evaluated.
-    pub num_datapoints: usize,
-    /// Number of successful evaluations.
-    pub num_successes: usize,
-    /// Number of errors.
-    pub num_errors: usize,
-    /// Per-evaluator statistics.
-    pub stats: HashMap<String, EvaluatorStats>,
-    /// Per-datapoint results (only populated if include_datapoint_results was true).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub datapoint_results: Option<Vec<DatapointResult>>,
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.

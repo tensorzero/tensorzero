@@ -168,6 +168,7 @@ mod context;
 mod error;
 mod executor;
 mod registry;
+pub mod run_evaluation;
 mod simple_tool;
 mod task_tool;
 pub mod tensorzero_client;
