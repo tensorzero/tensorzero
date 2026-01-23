@@ -8,13 +8,40 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use moka::sync::Cache;
-use serde_json::json;
+use serde_json::{Value, json};
 use tracing::{Instrument, field::Empty};
 
 use crate::{
     key::{TensorZeroApiKey, TensorZeroAuthError},
     postgres::{AuthResult, KeyInfo},
 };
+
+/// Builds an error response body in either TensorZero or OpenAI format.
+///
+/// When `openai_format` is true, returns `{"error": {"message": "..."}}`.
+/// When `openai_format` is false, returns `{"error": "..."}`.
+///
+/// If `error_json` is provided, includes structured error details.
+fn build_error_response_body(
+    message: &str,
+    openai_format: bool,
+    error_json: Option<Value>,
+) -> Value {
+    let mut body = if openai_format {
+        json!({"error": {"message": message}})
+    } else {
+        json!({"error": message})
+    };
+    if let Some(error_json) = error_json {
+        if openai_format {
+            body["error"]["error_json"] = error_json.clone(); // DEPRECATED (#5821 / 2026.4+)
+            body["error"]["tensorzero_error_json"] = error_json;
+        } else {
+            body["error_json"] = error_json;
+        }
+    }
+    body
+}
 
 #[derive(Clone)]
 pub struct TensorzeroAuthMiddlewareState(Arc<TensorzeroAuthMiddlewareStateInner>);
@@ -160,13 +187,10 @@ pub async fn tensorzero_auth_middleware(
                 auth_span.record("key.organization", &key_info.organization);
                 auth_span.record("key.workspace", &key_info.workspace);
             }
-            let message = e.to_string();
-            let mut body = json!({
-                "error": format!("TensorZero authentication error: {message}"),
-            });
-            if state.error_json {
-                body["error_json"] = json!(e.to_string());
-            }
+            let message = format!("TensorZero authentication error: {e}");
+            let is_openai_format = route.is_some_and(|r| r.starts_with("/openai/"));
+            let error_json = state.error_json.then(|| json!(e.to_string()));
+            let body = build_error_response_body(&message, is_openai_format, error_json);
             let mut response = (StatusCode::UNAUTHORIZED, Json(body)).into_response();
             // Attach the error to the response, so that we can set a nice message in our
             // `apply_otel_http_trace_layer` middleware

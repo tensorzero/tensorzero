@@ -9,10 +9,10 @@ use axum::extract::rejection::JsonRejection;
 use axum::extract::{FromRequest, Request};
 use axum::response::{IntoResponse, Response};
 use serde::de::DeserializeOwned;
-use serde_json::json;
 use tracing::instrument;
 
-use crate::error::{Error, ErrorDetails};
+use crate::error::Error;
+use crate::utils::gateway::deserialize_json_request;
 
 /// A wrapper around `Error` that implements `IntoResponse` with OpenAI-compatible error format.
 ///
@@ -36,12 +36,7 @@ impl fmt::Display for OpenAICompatibleError {
 
 impl IntoResponse for OpenAICompatibleError {
     fn into_response(self) -> Response {
-        let message = self.0.to_string();
-        let body = json!({
-            "error": {
-                "message": message,
-            },
-        });
+        let body = self.0.build_response_body(true);
         let mut response = (self.0.status_code(), Json(body)).into_response();
         response.extensions_mut().insert(self.0);
         response
@@ -65,29 +60,9 @@ where
 
     #[instrument(skip_all, level = "trace", name = "OpenAIStructuredJson::from_request")]
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        // Retrieve the request body as Bytes before deserializing it
-        let bytes = bytes::Bytes::from_request(req, state).await.map_err(|e| {
-            OpenAICompatibleError(Error::new(ErrorDetails::JsonRequest {
-                message: format!("{} ({})", e, e.status()),
-            }))
-        })?;
-
-        // Convert the entire body into `serde_json::Value`
-        let value = Json::<serde_json::Value>::from_bytes(&bytes)
-            .map_err(|e| {
-                OpenAICompatibleError(Error::new(ErrorDetails::JsonRequest {
-                    message: format!("{} ({})", e, e.status()),
-                }))
-            })?
-            .0;
-
-        // Now use `serde_path_to_error::deserialize` to attempt deserialization into `T`
-        let deserialized: T = serde_path_to_error::deserialize(&value).map_err(|e| {
-            OpenAICompatibleError(Error::new(ErrorDetails::JsonRequest {
-                message: e.to_string(),
-            }))
-        })?;
-
-        Ok(OpenAIStructuredJson(deserialized))
+        deserialize_json_request(req, state)
+            .await
+            .map(OpenAIStructuredJson)
+            .map_err(OpenAICompatibleError)
     }
 }

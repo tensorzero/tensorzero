@@ -469,10 +469,17 @@ async fn test_openai_compatible_route_bad_model_name() {
     assert_eq!(
         response_json,
         json!({
-            "error": "Invalid inference target: Invalid model name: Model name 'my_missing_model' not found in model table",
-            "error_json": {
-                "InvalidInferenceTarget": {
-                    "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
+            "error": {
+                "message": "Invalid inference target: Invalid model name: Model name 'my_missing_model' not found in model table",
+                "error_json": {
+                    "InvalidInferenceTarget": {
+                        "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
+                    }
+                },
+                "tensorzero_error_json": {
+                    "InvalidInferenceTarget": {
+                        "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
+                    }
                 }
             }
         })

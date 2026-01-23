@@ -168,6 +168,32 @@ impl Error {
     pub fn is_retryable(&self) -> bool {
         self.0.is_retryable()
     }
+
+    /// Builds the JSON response body for this error.
+    ///
+    /// When `openai_format` is true, returns `{"error": {"message": "..."}}` (OpenAI-compatible).
+    /// When `openai_format` is false, returns `{"error": "..."}` (TensorZero default).
+    ///
+    /// If `unstable_error_json` is enabled, includes structured error details as `error_json` and `tensorzero_error_json`.
+    pub fn build_response_body(&self, openai_format: bool) -> Value {
+        let message = self.to_string();
+        let mut body = if openai_format {
+            json!({"error": {"message": message}})
+        } else {
+            json!({"error": message})
+        };
+        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
+            let error_json =
+                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
+            if openai_format {
+                body["error"]["error_json"] = error_json.clone(); // DEPRECATED (#5821 / 2026.4+)
+                body["error"]["tensorzero_error_json"] = error_json;
+            } else {
+                body["error_json"] = error_json;
+            }
+        }
+        body
+    }
 }
 
 // Expect for derive Serialize
@@ -1680,14 +1706,7 @@ impl std::fmt::Display for ErrorDetails {
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        let message = self.to_string();
-        let mut body = json!({
-            "error": message,
-        });
-        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
-            body["error_json"] =
-                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
-        }
+        let body = self.build_response_body(false);
         let mut response = (self.status_code(), Json(body)).into_response();
         // Attach the error to the response, so that we can set a nice message in our
         // `apply_otel_http_trace_layer` middleware
