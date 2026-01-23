@@ -12,7 +12,7 @@ patch_openai_client(
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-4o-mini",
-    # Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929",
+    # Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5",
     messages=[
         {
             "role": "user",

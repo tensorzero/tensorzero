@@ -36,19 +36,13 @@ const LARGE_SYSTEM_PROMPT: &str = include_str!("large_system_prompt.txt");
 /// without caching support) will still run the test but without cache control markers.
 fn cache_control_extra_body() -> Vec<Value> {
     vec![
-        // Anthropic API (claude-3-haiku used in simple_inference)
+        // Anthropic API
         json!({
-            "model_name": "claude-3-haiku-20240307-anthropic",
+            "model_name": "claude-haiku-4-5-anthropic",
             "pointer": "/system/0/cache_control",
             "value": {"type": "ephemeral"}
         }),
-        // AWS Bedrock (claude-3-haiku)
-        json!({
-            "model_name": "claude-3-haiku-20240307-aws-bedrock",
-            "pointer": "/system/-",
-            "value": {"cachePoint": {"type": "default"}}
-        }),
-        // AWS Bedrock (claude-haiku-4-5, supports caching)
+        // AWS Bedrock (claude-haiku-4-5)
         json!({
             "model_name": "claude-haiku-4-5-aws-bedrock",
             "pointer": "/system/-",
@@ -66,9 +60,9 @@ fn cache_control_extra_body() -> Vec<Value> {
             "pointer": "/system/-",
             "value": {"cachePoint": {"type": "default"}}
         }),
-        // GCP Vertex Anthropic (claude-3-haiku)
+        // GCP Vertex Anthropic (claude-haiku-4-5)
         json!({
-            "model_name": "claude-3-haiku-20240307-gcp-vertex",
+            "model_name": "claude-haiku-4-5-gcp-vertex",
             "pointer": "/system/0/cache_control",
             "value": {"type": "ephemeral"}
         }),

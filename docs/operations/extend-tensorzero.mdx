@@ -59,7 +59,7 @@ type = "chat"
 
 [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
 type = "chat_completion"
-model = "anthropic::claude-sonnet-4-5-20250929"
+model = "anthropic::claude-sonnet-4-5"
 max_tokens = 2048
 extra_body = [
     { pointer = "/tools", value = [{ type = "bash_20250124", name = "bash" }] },

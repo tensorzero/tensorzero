@@ -12,6 +12,7 @@ import {
 } from "~/utils/clickhouse/common";
 import { logger } from "~/utils/logger";
 import type {
+  AutopilotStatusResponse,
   CacheEnabledMode,
   CloneDatapointsResponse,
   CountFeedbackByTargetIdResponse,
@@ -595,6 +596,24 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as StatusResponse;
+  }
+
+  /**
+   * Gets the autopilot configuration status.
+   * Returns whether autopilot is configured (i.e., whether TENSORZERO_AUTOPILOT_API_KEY is set).
+   * This endpoint does not require authentication.
+   * @returns A promise that resolves with the autopilot status
+   * @throws Error if the request fails
+   */
+  async getAutopilotStatus(): Promise<AutopilotStatusResponse> {
+    const response = await this.fetch("/internal/autopilot/status", {
+      method: "GET",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as AutopilotStatusResponse;
   }
 
   /**

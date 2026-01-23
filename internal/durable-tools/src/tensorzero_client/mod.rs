@@ -417,17 +417,20 @@ pub fn http_gateway_client(url: Url) -> Result<Arc<dyn TensorZeroClient>, Client
 ///     Some("tensorzero.toml".into()),
 ///     Some("http://localhost:8123".into()),
 ///     None,
+///     None,
 /// ).await?;
 /// ```
 pub async fn embedded_gateway_client(
     config_file: Option<PathBuf>,
     clickhouse_url: Option<String>,
     postgres_config: Option<String>,
+    valkey_url: Option<String>,
 ) -> Result<Arc<dyn TensorZeroClient>, ClientBuilderError> {
     let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file,
         clickhouse_url,
         postgres_config: postgres_config.map(PostgresConfig::Url),
+        valkey_url,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: false,

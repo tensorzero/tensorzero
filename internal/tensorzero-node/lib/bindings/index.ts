@@ -11,6 +11,8 @@ export * from "./ApproveAllToolCallsResponse";
 export * from "./Arguments";
 export * from "./AutopilotSideInfo";
 export * from "./AutopilotStatus";
+export * from "./AutopilotStatusResponse";
+export * from "./AutopilotToolCall";
 export * from "./AutopilotToolResult";
 export * from "./AzureProvider";
 export * from "./Base64File";

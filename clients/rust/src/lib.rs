@@ -612,17 +612,13 @@ impl ClientExt for Client {
                 let builder = client.http_client.post(url).json(&params);
                 Ok(client.send_and_parse_http_response(builder).await?.0)
             }
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(Box::pin(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::internal::action::action(
-                        &gateway.handle.app_state,
-                        params,
-                    )
-                    .await
-                    .map_err(err_to_http)
-                }))
-                .await?)
-            }
+            ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message: "Action endpoint is not supported for embedded gateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
         }
     }
 
