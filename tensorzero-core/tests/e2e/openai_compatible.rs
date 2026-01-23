@@ -11,14 +11,12 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
-use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler;
-use tensorzero_core::{
-    db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-        select_model_inference_clickhouse,
-    },
-    utils::gateway::StructuredJson,
+use tensorzero_core::db::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+    select_model_inference_clickhouse,
 };
+use tensorzero_core::endpoints::openai_compatible::OpenAIStructuredJson;
+use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_route_new_format() {
@@ -36,7 +34,7 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
     let response = chat_completions_handler(
         State(state),
         None,
-        StructuredJson(
+        OpenAIStructuredJson(
             serde_json::from_value(serde_json::json!({
                 "model": model,
                 "messages": [
@@ -883,7 +881,7 @@ async fn test_openai_compatible_warn_unknown_fields() {
     chat_completions_handler(
         State(state),
         None,
-        StructuredJson(
+        OpenAIStructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
                 "model": "tensorzero::model_name::dummy::good",
@@ -907,7 +905,7 @@ async fn test_openai_compatible_deny_unknown_fields() {
     let err = chat_completions_handler(
         State(state),
         None,
-        StructuredJson(
+        OpenAIStructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
                 "model": "tensorzero::model_name::dummy::good",
@@ -1061,7 +1059,7 @@ async fn test_openai_compatible_file_with_custom_filename() {
     let response = chat_completions_handler(
         State(state),
         None,
-        StructuredJson(
+        OpenAIStructuredJson(
             serde_json::from_value(serde_json::json!({
                 "model": "tensorzero::function_name::basic_test_no_system_schema",
                 "messages": [

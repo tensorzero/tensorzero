@@ -1682,9 +1682,7 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let message = self.to_string();
         let mut body = json!({
-            "error": {
-                "message": message,
-            },
+            "error": message,
         });
         if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
             body["error_json"] =
