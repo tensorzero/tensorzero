@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;

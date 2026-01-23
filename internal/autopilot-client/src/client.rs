@@ -17,8 +17,9 @@ use uuid::Uuid;
 
 use crate::StreamUpdate;
 use crate::error::AutopilotError;
+use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
-    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotSideInfo, CreateEventRequest,
+    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
     ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
     StreamEventsParams, ToolCallAuthorizationStatus,
@@ -57,7 +58,7 @@ pub struct AutopilotClientBuilder {
     spawn_queue_name: String,
     tool_call_cache_capacity: u64,
     tool_call_cache_ttl: Duration,
-    available_tools: HashSet<String>,
+    available_tools: Option<HashSet<String>>,
 }
 
 impl Default for AutopilotClientBuilder {
@@ -72,7 +73,7 @@ impl Default for AutopilotClientBuilder {
             spawn_queue_name: DEFAULT_SPAWN_QUEUE_NAME.to_string(),
             tool_call_cache_capacity: DEFAULT_TOOL_CALL_CACHE_CAPACITY,
             tool_call_cache_ttl: DEFAULT_TOOL_CALL_CACHE_TTL,
-            available_tools: HashSet::new(),
+            available_tools: None,
         }
     }
 }
@@ -145,10 +146,10 @@ impl AutopilotClientBuilder {
 
     /// Sets the set of available tool names for filtering unknown tool calls.
     ///
-    /// When tool calls are received for tools not in this set, they will be
-    /// automatically rejected with a `NotAvailable` status.
+    /// This is a required field. When tool calls are received for tools not in
+    /// this set, they will be automatically rejected with a `NotAvailable` status.
     pub fn available_tools(mut self, tools: HashSet<String>) -> Self {
-        self.available_tools = tools;
+        self.available_tools = Some(tools);
         self
     }
 
@@ -158,12 +159,16 @@ impl AutopilotClientBuilder {
     ///
     /// Returns an error if:
     /// - The API key is not set
+    /// - The available tools are not set
     /// - The HTTP client cannot be built
     /// - Durable spawn configuration is missing or invalid
     pub async fn build(self) -> Result<AutopilotClient, AutopilotError> {
         let api_key = self
             .api_key
             .ok_or(AutopilotError::MissingConfig("api_key"))?;
+        let available_tools = self
+            .available_tools
+            .ok_or(AutopilotError::MissingConfig("available_tools"))?;
 
         let base_url = match self.base_url {
             Some(url) => url,
@@ -211,7 +216,7 @@ impl AutopilotClientBuilder {
             api_key,
             spawn_client,
             tool_call_cache,
-            available_tools: Arc::new(self.available_tools),
+            available_tools: Arc::new(available_tools),
         })
     }
 }
@@ -265,53 +270,7 @@ impl AutopilotClient {
 
     /// Check if a tool call is for an unknown tool.
     fn is_unknown_tool(&self, tool_call: &EventPayloadToolCall) -> bool {
-        !self.available_tools.is_empty() && !self.available_tools.contains(&tool_call.name)
-    }
-
-    /// Spawn a durable task to auto-reject an unknown tool call.
-    ///
-    /// This enqueues a task that will send a `NotAvailable` authorization event
-    /// to the autopilot API so the session can continue without hanging on an
-    /// unknown tool.
-    ///
-    /// Since `spawn_tool_by_name` only enqueues to the database (doesn't execute
-    /// the tool synchronously), this method is fast and safe to call inline.
-    async fn spawn_auto_reject(&self, tool_call: &EventPayloadToolCall) {
-        // Build the side_info for the auto-reject tool
-        let side_info = AutopilotSideInfo {
-            session_id: tool_call.side_info.session_id,
-            tool_call_event_id: tool_call.side_info.tool_call_event_id,
-            config_snapshot_hash: tool_call.side_info.config_snapshot_hash.clone(),
-            optimization: tool_call.side_info.optimization.clone(),
-        };
-
-        let episode_id = Uuid::now_v7();
-        if let Err(e) = self
-            .spawn_client
-            .spawn_tool_by_name(
-                "__auto_reject_tool_call__",
-                serde_json::json!({}),
-                serde_json::to_value(&side_info).unwrap_or_default(),
-                episode_id,
-                SpawnOptions::default(),
-            )
-            .await
-        {
-            tracing::error!(
-                tool_name = %tool_call.name,
-                session_id = %side_info.session_id,
-                tool_call_event_id = %side_info.tool_call_event_id,
-                error = %e,
-                "Failed to spawn auto-reject for unknown tool"
-            );
-        } else {
-            tracing::info!(
-                tool_name = %tool_call.name,
-                session_id = %side_info.session_id,
-                tool_call_event_id = %side_info.tool_call_event_id,
-                "Auto-rejecting unknown tool call"
-            );
-        }
+        !self.available_tools.contains(&tool_call.name)
     }
 
     /// Spawns a durable task to execute an approved tool call.
@@ -455,7 +414,7 @@ impl AutopilotClient {
         for event in body.pending_tool_calls {
             if let EventPayload::ToolCall(tool_call) = &event.payload {
                 if self.is_unknown_tool(tool_call) {
-                    self.spawn_auto_reject(tool_call).await;
+                    reject_missing_tool(&self.spawn_client, tool_call).await?;
                 } else {
                     known_pending_tool_calls.push(event);
                 }
@@ -465,20 +424,7 @@ impl AutopilotClient {
         }
         body.pending_tool_calls = known_pending_tool_calls;
 
-        // Filter out NotAvailable authorization events from both events lists
-        body.events
-            .retain(|event| !Self::is_not_available_auth(event));
-
         Ok(body)
-    }
-
-    /// Check if an event is a ToolCallAuthorization with NotAvailable status.
-    fn is_not_available_auth(event: &Event) -> bool {
-        matches!(
-            &event.payload,
-            EventPayload::ToolCallAuthorization(auth)
-                if matches!(auth.status, ToolCallAuthorizationStatus::NotAvailable)
-        )
     }
 
     /// Gets a single event by ID.
@@ -690,63 +636,16 @@ impl AutopilotClient {
                                         cache.insert(update.event.id, tool_call.clone());
 
                                         // Check if this is an unknown tool
-                                        if !available_tools.is_empty()
-                                            && !available_tools.contains(&tool_call.name)
-                                        {
+                                        if !available_tools.contains(&tool_call.name) {
                                             // Spawn auto-reject task and filter out this event
-                                            let side_info = AutopilotSideInfo {
-                                                session_id: tool_call.side_info.session_id,
-                                                tool_call_event_id: tool_call
-                                                    .side_info
-                                                    .tool_call_event_id,
-                                                config_snapshot_hash: tool_call
-                                                    .side_info
-                                                    .config_snapshot_hash
-                                                    .clone(),
-                                                optimization: tool_call
-                                                    .side_info
-                                                    .optimization
-                                                    .clone(),
-                                            };
-                                            let episode_id = Uuid::now_v7();
-                                            if let Err(e) = spawn_client
-                                                .spawn_tool_by_name(
-                                                    "__auto_reject_tool_call__",
-                                                    serde_json::json!({}),
-                                                    serde_json::to_value(&side_info)
-                                                        .unwrap_or_default(),
-                                                    episode_id,
-                                                    SpawnOptions::default(),
-                                                )
-                                                .await
+                                            if let Err(e) =
+                                                reject_missing_tool(&spawn_client, tool_call).await
                                             {
-                                                tracing::error!(
-                                                    tool_name = %tool_call.name,
-                                                    session_id = %side_info.session_id,
-                                                    tool_call_event_id = %side_info.tool_call_event_id,
-                                                    error = %e,
-                                                    "Failed to spawn auto-reject for unknown tool in stream"
-                                                );
-                                            } else {
-                                                tracing::info!(
-                                                    tool_name = %tool_call.name,
-                                                    session_id = %side_info.session_id,
-                                                    tool_call_event_id = %side_info.tool_call_event_id,
-                                                    "Auto-rejecting unknown tool call from stream"
-                                                );
+                                                return Some(Err(e));
                                             }
                                             // Filter out this event
                                             return None;
                                         }
-                                    }
-
-                                    // Filter out NotAvailable authorization events
-                                    if matches!(
-                                        &update.event.payload,
-                                        EventPayload::ToolCallAuthorization(auth)
-                                            if matches!(auth.status, ToolCallAuthorizationStatus::NotAvailable)
-                                    ) {
-                                        return None;
                                     }
 
                                     Some(Ok(update))
@@ -824,97 +723,6 @@ impl AutopilotClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{
-        AutopilotSideInfo, EventPayload, EventPayloadToolCall, EventPayloadToolCallAuthorization,
-        OptimizationWorkflowSideInfo, ToolCallAuthorizationStatus, ToolCallDecisionSource,
-    };
-    use chrono::Utc;
-
-    fn make_tool_call_event(tool_name: &str) -> Event {
-        Event {
-            id: Uuid::now_v7(),
-            session_id: Uuid::now_v7(),
-            created_at: Utc::now(),
-            payload: EventPayload::ToolCall(EventPayloadToolCall {
-                name: tool_name.to_string(),
-                arguments: serde_json::json!({}),
-                side_info: AutopilotSideInfo {
-                    session_id: Uuid::now_v7(),
-                    tool_call_event_id: Uuid::now_v7(),
-                    config_snapshot_hash: "abc123".to_string(),
-                    optimization: OptimizationWorkflowSideInfo::default(),
-                },
-            }),
-        }
-    }
-
-    fn make_authorization_event(status: ToolCallAuthorizationStatus) -> Event {
-        Event {
-            id: Uuid::now_v7(),
-            session_id: Uuid::now_v7(),
-            created_at: Utc::now(),
-            payload: EventPayload::ToolCallAuthorization(EventPayloadToolCallAuthorization {
-                source: ToolCallDecisionSource::Automatic,
-                tool_call_event_id: Uuid::now_v7(),
-                status,
-            }),
-        }
-    }
-
-    #[test]
-    fn test_is_not_available_auth_returns_true_for_not_available() {
-        let event = make_authorization_event(ToolCallAuthorizationStatus::NotAvailable);
-        assert!(
-            AutopilotClient::is_not_available_auth(&event),
-            "Should return true for NotAvailable authorization"
-        );
-    }
-
-    #[test]
-    fn test_is_not_available_auth_returns_false_for_approved() {
-        let event = make_authorization_event(ToolCallAuthorizationStatus::Approved);
-        assert!(
-            !AutopilotClient::is_not_available_auth(&event),
-            "Should return false for Approved authorization"
-        );
-    }
-
-    #[test]
-    fn test_is_not_available_auth_returns_false_for_rejected() {
-        let event = make_authorization_event(ToolCallAuthorizationStatus::Rejected {
-            reason: "test".to_string(),
-        });
-        assert!(
-            !AutopilotClient::is_not_available_auth(&event),
-            "Should return false for Rejected authorization"
-        );
-    }
-
-    #[test]
-    fn test_is_not_available_auth_returns_false_for_tool_call() {
-        let event = make_tool_call_event("inference");
-        assert!(
-            !AutopilotClient::is_not_available_auth(&event),
-            "Should return false for ToolCall event"
-        );
-    }
-
-    #[test]
-    fn test_is_unknown_tool_with_empty_available_tools() {
-        // When available_tools is empty, all tools should be considered known
-        // (no filtering behavior)
-        let available_tools: Arc<HashSet<String>> = Arc::new(HashSet::new());
-
-        let tool_name = "unknown_tool".to_string();
-
-        // With empty available_tools, is_unknown_tool logic should return false
-        let is_unknown = !available_tools.is_empty() && !available_tools.contains(&tool_name);
-        assert!(
-            !is_unknown,
-            "With empty available_tools, all tools should be considered known"
-        );
-    }
-
     #[test]
     fn test_is_unknown_tool_with_known_tool() {
         let mut tools = HashSet::new();
@@ -924,7 +732,7 @@ mod tests {
 
         let tool_name = "inference".to_string();
 
-        let is_unknown = !available_tools.is_empty() && !available_tools.contains(&tool_name);
+        let is_unknown = !available_tools.contains(&tool_name);
         assert!(!is_unknown, "Known tool should not be marked as unknown");
     }
 
@@ -937,7 +745,7 @@ mod tests {
 
         let tool_name = "fake_nonexistent_tool".to_string();
 
-        let is_unknown = !available_tools.is_empty() && !available_tools.contains(&tool_name);
+        let is_unknown = !available_tools.contains(&tool_name);
         assert!(is_unknown, "Unknown tool should be marked as unknown");
     }
 
@@ -949,5 +757,23 @@ mod tests {
             .expect("DEFAULT_BASE_URL should be a valid URL");
         assert_eq!(url.scheme(), "https", "Should use HTTPS");
         assert!(url.host_str().is_some(), "Should have a host");
+    }
+
+    #[test]
+    fn test_build_fails_without_available_tools() {
+        let result = futures::executor::block_on(
+            AutopilotClient::builder()
+                .api_key("test_key")
+                .spawn_database_url("postgres://localhost/test")
+                .build(),
+        );
+
+        assert!(
+            matches!(
+                result,
+                Err(AutopilotError::MissingConfig("available_tools"))
+            ),
+            "Building without available_tools should fail with MissingConfig error"
+        );
     }
 }
