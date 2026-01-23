@@ -430,6 +430,6 @@ impl TensorZeroClient for EmbeddedClient {
     ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
         crate::run_evaluation::run_evaluation(self.app_state.clone(), &params)
             .await
-            .map_err(TensorZeroClientError::Evaluation)
+            .map_err(|e| TensorZeroClientError::Evaluation(e.to_string()))
     }
 }

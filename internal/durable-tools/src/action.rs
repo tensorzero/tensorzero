@@ -18,7 +18,7 @@ use tensorzero_core::endpoints::inference::{InferenceOutput, InferenceResponse, 
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::utils::gateway::AppStateData;
 
-use crate::run_evaluation::run_evaluation;
+use crate::run_evaluation::{RunEvaluationError, run_evaluation};
 
 // Re-export evaluation types from run_evaluation (single source of truth)
 pub use crate::run_evaluation::{
@@ -173,7 +173,14 @@ pub async fn action(
             // Run the evaluation using the shared helper
             let response = run_evaluation(snapshot_app_state, &eval_params)
                 .await
-                .map_err(|e| Error::new(ErrorDetails::EvaluationRun { message: e }))?;
+                .map_err(|e| match e {
+                    RunEvaluationError::Validation(message) => {
+                        Error::new(ErrorDetails::InvalidRequest { message })
+                    }
+                    RunEvaluationError::Runtime(message) => {
+                        Error::new(ErrorDetails::EvaluationRun { message })
+                    }
+                })?;
 
             Ok(ActionResponse::RunEvaluation(response))
         }

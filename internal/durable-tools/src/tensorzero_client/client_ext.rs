@@ -594,7 +594,7 @@ impl TensorZeroClient for Client {
                 timeout: _,
             } => crate::run_evaluation::run_evaluation(gateway.handle.app_state.clone(), &params)
                 .await
-                .map_err(TensorZeroClientError::Evaluation),
+                .map_err(|e| TensorZeroClientError::Evaluation(e.to_string())),
         }
     }
 }

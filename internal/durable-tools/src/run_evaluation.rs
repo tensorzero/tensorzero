@@ -22,6 +22,30 @@ use tensorzero_core::utils::gateway::AppStateData;
 pub use evaluations::stats::EvaluatorStats;
 
 // ============================================================================
+// Errors
+// ============================================================================
+
+/// Error type for evaluation operations.
+#[derive(Debug, Clone)]
+pub enum RunEvaluationError {
+    /// Validation error (invalid parameters, missing config). Maps to HTTP 400.
+    Validation(String),
+    /// Runtime error (execution failures). Maps to HTTP 500.
+    Runtime(String),
+}
+
+impl std::fmt::Display for RunEvaluationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RunEvaluationError::Validation(msg) => write!(f, "{msg}"),
+            RunEvaluationError::Runtime(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+impl std::error::Error for RunEvaluationError {}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -109,24 +133,52 @@ pub struct RunEvaluationResponse {
 pub async fn run_evaluation(
     app_state: AppStateData,
     params: &RunEvaluationParams,
-) -> Result<RunEvaluationResponse, String> {
+) -> Result<RunEvaluationResponse, RunEvaluationError> {
     // Validate concurrency
     if params.concurrency == 0 {
-        return Err("Concurrency must be greater than 0".to_string());
+        return Err(RunEvaluationError::Validation(
+            "Concurrency must be greater than 0".to_string(),
+        ));
     }
 
     // Validate max_datapoints if provided
     if params.max_datapoints == Some(0) {
-        return Err("max_datapoints must be greater than 0".to_string());
+        return Err(RunEvaluationError::Validation(
+            "max_datapoints must be greater than 0".to_string(),
+        ));
     }
 
     // Validate precision_targets values
     for (evaluator_name, target) in &params.precision_targets {
         if !target.is_finite() || *target <= 0.0 {
-            return Err(format!(
+            return Err(RunEvaluationError::Validation(format!(
                 "precision_target for `{evaluator_name}` must be a positive finite number, got {target}"
-            ));
+            )));
         }
+    }
+
+    // Validate exactly one of dataset_name or datapoint_ids is provided
+    let has_dataset = params.dataset_name.is_some();
+    let has_datapoints = params
+        .datapoint_ids
+        .as_ref()
+        .is_some_and(|ids| !ids.is_empty());
+    if has_dataset && has_datapoints {
+        return Err(RunEvaluationError::Validation(
+            "Cannot provide both dataset_name and datapoint_ids".to_string(),
+        ));
+    }
+    if !has_dataset && !has_datapoints {
+        return Err(RunEvaluationError::Validation(
+            "Must provide either dataset_name or datapoint_ids".to_string(),
+        ));
+    }
+
+    // Validate max_datapoints cannot be used with datapoint_ids
+    if has_datapoints && params.max_datapoints.is_some() {
+        return Err(RunEvaluationError::Validation(
+            "Cannot use max_datapoints with datapoint_ids".to_string(),
+        ));
     }
 
     let evaluation_config = app_state
@@ -134,10 +186,10 @@ pub async fn run_evaluation(
         .evaluations
         .get(&params.evaluation_name)
         .ok_or_else(|| {
-            format!(
+            RunEvaluationError::Validation(format!(
                 "Evaluation `{}` not found in config",
                 params.evaluation_name
-            )
+            ))
         })?
         .clone();
 
@@ -148,10 +200,10 @@ pub async fn run_evaluation(
         .get(&inference_config.function_name)
         .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
         .ok_or_else(|| {
-            format!(
+            RunEvaluationError::Validation(format!(
                 "Function `{}` not found in config",
                 inference_config.function_name
-            )
+            ))
         })?;
 
     let run_params = RunEvaluationWithAppStateParams {
@@ -169,7 +221,7 @@ pub async fn run_evaluation(
 
     let result = run_evaluation_with_app_state(app_state, run_params)
         .await
-        .map_err(|e| format!("Evaluation failed: {e}"))?;
+        .map_err(|e| RunEvaluationError::Runtime(format!("Evaluation failed: {e}")))?;
 
     collect_results(result, params.include_datapoint_results).await
 }
@@ -178,7 +230,7 @@ pub async fn run_evaluation(
 async fn collect_results(
     result: evaluations::EvaluationStreamResult,
     include_datapoint_results: bool,
-) -> Result<RunEvaluationResponse, String> {
+) -> Result<RunEvaluationResponse, RunEvaluationError> {
     let evaluation_run_id = result.run_info.evaluation_run_id;
     let num_datapoints = result.run_info.num_datapoints;
 
@@ -206,9 +258,9 @@ async fn collect_results(
 
     // Wait for ClickHouse writes to complete
     if let Some(handle) = result.batcher_join_handle {
-        handle
-            .await
-            .map_err(|e| format!("ClickHouse batch writer failed: {e}"))?;
+        handle.await.map_err(|e| {
+            RunEvaluationError::Runtime(format!("ClickHouse batch writer failed: {e}"))
+        })?;
     }
 
     Ok(RunEvaluationResponse {
