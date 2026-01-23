@@ -68,6 +68,7 @@ async def test_async_text_content_roundtrip_complete_flow(
     assert isinstance(result, ChatInferenceResponse), "Result must be ChatInferenceResponse instance"
     assert result.content is not None, "Result content must not be None"
     assert len(result.content) >= 1, "Result should have at least 1 content block"
+    assert result.inference_id is not None, "Result must have inference_id"
 
     # ============================================================================
     # Step 2: Verify response Text fields (types.py Text)
@@ -105,6 +106,7 @@ async def test_async_text_content_roundtrip_complete_flow(
 
     stored_inference = get_response.inferences[0]
     assert isinstance(stored_inference, StoredInferenceChat), "Must be StoredInferenceChat instance"
+    assert stored_inference.output is not None, "Stored inference output must not be None"
     assert str(stored_inference.inference_id) == inference_id, "Retrieved inference ID must match original"
 
     # ============================================================================
@@ -165,10 +167,10 @@ async def test_async_text_content_roundtrip_complete_flow(
         stream=False,
     )
 
+    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse instance"
     assert follow_up_result.inference_id is not None, (
         "Follow-up inference must succeed when reusing serialized text data"
     )
-    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse instance"
 
     # ============================================================================
     # Step 8: Verify follow-up stored data
@@ -357,6 +359,8 @@ def test_sync_text_content_roundtrip_complete_flow(sync_client: TensorZeroGatewa
     )
 
     assert isinstance(result, ChatInferenceResponse)
+    assert result.content is not None, "Result content must not be None"
+    assert result.inference_id is not None, "Result must have inference_id"
 
     # Find text in response
     text_response = None
@@ -382,6 +386,8 @@ def test_sync_text_content_roundtrip_complete_flow(sync_client: TensorZeroGatewa
     )
 
     stored_inference = get_response.inferences[0]
+    assert isinstance(stored_inference, StoredInferenceChat), "Must be StoredInferenceChat instance"
+    assert stored_inference.output is not None, "Stored inference output must not be None"
 
     # Find text in stored output
     stored_text = None
@@ -412,6 +418,9 @@ def test_sync_text_content_roundtrip_complete_flow(sync_client: TensorZeroGatewa
         },
         stream=False,
     )
+
+    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse"
+    assert follow_up_result.inference_id is not None, "Follow-up must have inference_id"
 
     follow_up_id = str(follow_up_result.inference_id)
     follow_up_stored = sync_client.get_inferences(
@@ -515,6 +524,7 @@ def test_sync_text_content_roundtrip_complete_flow(sync_client: TensorZeroGatewa
         assert isinstance(datapoint_raw_text, InputMessageContentRawText)
 
         # Verify ContentBlockChatOutputText in output
+        assert datapoint.output is not None, "Datapoint output must not be None"
         output_text = None
         for content in datapoint.output:
             if content.type == "text":

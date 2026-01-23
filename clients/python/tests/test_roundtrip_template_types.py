@@ -20,6 +20,7 @@ import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
     CreateDatapointsFromInferenceRequestParamsInferenceIds,
+    JsonInferenceResponse,
     TensorZeroGateway,
 )
 from tensorzero.generated_types import (
@@ -69,6 +70,7 @@ async def test_async_template_content_roundtrip_complete_flow(
     )
 
     # For JSON functions, we just need the inference_id
+    assert isinstance(result, JsonInferenceResponse), "Result must be JsonInferenceResponse instance"
     assert result.inference_id is not None, "Inference must return ID"
     inference_id = str(result.inference_id)
 
@@ -161,6 +163,7 @@ async def test_async_template_content_roundtrip_complete_flow(
         stream=False,
     )
 
+    assert isinstance(follow_up_result, JsonInferenceResponse), "Follow-up must return JsonInferenceResponse"
     assert follow_up_result.inference_id is not None, "Follow-up inference must succeed when using template"
 
     # ============================================================================
@@ -294,6 +297,9 @@ def test_sync_template_content_roundtrip_complete_flow(sync_client: TensorZeroGa
         stream=False,
     )
 
+    assert isinstance(result, JsonInferenceResponse), "Result must be JsonInferenceResponse"
+    assert result.inference_id is not None, "Result must have inference_id"
+
     inference_id = str(result.inference_id)
 
     # ============================================================================
@@ -356,6 +362,9 @@ def test_sync_template_content_roundtrip_complete_flow(sync_client: TensorZeroGa
         },
         stream=False,
     )
+
+    assert isinstance(follow_up_result, JsonInferenceResponse), "Follow-up must return JsonInferenceResponse"
+    assert follow_up_result.inference_id is not None, "Follow-up must have inference_id"
 
     follow_up_id = str(follow_up_result.inference_id)
 

@@ -70,6 +70,7 @@ async def test_async_thought_content_roundtrip_complete_flow(
     # Basic result assertions
     assert isinstance(result, ChatInferenceResponse), "Result must be ChatInferenceResponse instance"
     assert result.content is not None, "Result content must not be None"
+    assert result.inference_id is not None, "Result must have inference_id"
     assert len(result.content) >= 1, "Result should have at least 1 content block"
 
     # ============================================================================
@@ -108,6 +109,7 @@ async def test_async_thought_content_roundtrip_complete_flow(
 
     stored_inference = get_response.inferences[0]
     assert isinstance(stored_inference, StoredInferenceChat), "Must be StoredInferenceChat instance"
+    assert stored_inference.output is not None, "Stored inference output must not be None"
     assert str(stored_inference.inference_id) == inference_id, "Retrieved inference ID must match original"
 
     # ============================================================================
@@ -167,10 +169,10 @@ async def test_async_thought_content_roundtrip_complete_flow(
         stream=False,
     )
 
+    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse instance"
     assert follow_up_result.inference_id is not None, (
         "Follow-up inference must succeed when reusing serialized thought data"
     )
-    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse instance"
 
     # ============================================================================
     # Step 7: Verify follow-up stored data
@@ -329,6 +331,8 @@ def test_sync_thought_content_roundtrip_complete_flow(sync_client: TensorZeroGat
     )
 
     assert isinstance(result, ChatInferenceResponse)
+    assert result.content is not None, "Result content must not be None"
+    assert result.inference_id is not None, "Result must have inference_id"
 
     # Find thought in response
     thought_response = None
@@ -354,6 +358,8 @@ def test_sync_thought_content_roundtrip_complete_flow(sync_client: TensorZeroGat
     )
 
     stored_inference = get_response.inferences[0]
+    assert isinstance(stored_inference, StoredInferenceChat), "Must be StoredInferenceChat"
+    assert stored_inference.output is not None, "Stored inference output must not be None"
 
     # Find thought in stored output
     stored_thought = None
@@ -384,6 +390,9 @@ def test_sync_thought_content_roundtrip_complete_flow(sync_client: TensorZeroGat
         },
         stream=False,
     )
+
+    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse"
+    assert follow_up_result.inference_id is not None, "Follow-up must have inference_id"
 
     follow_up_id = str(follow_up_result.inference_id)
     follow_up_stored = sync_client.get_inferences(
@@ -461,6 +470,7 @@ def test_sync_thought_content_roundtrip_complete_flow(sync_client: TensorZeroGat
             assert datapoint_thought.text == original_thought_text
 
         # Verify ContentBlockChatOutputThought in output
+        assert datapoint.output is not None, "Datapoint output must not be None"
         output_thought = None
         for content in datapoint.output:
             if content.type == "thought":

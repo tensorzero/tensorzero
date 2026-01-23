@@ -67,6 +67,7 @@ async def test_async_tool_call_roundtrip_complete_flow(
     # Basic result assertions
     assert isinstance(result, ChatInferenceResponse), "Result must be ChatInferenceResponse instance"
     assert result.content is not None, "Result content must not be None"
+    assert result.inference_id is not None, "Result must have inference_id"
     assert len(result.content) == 1, "Result should have exactly 1 content block"
     assert result.content[0].type == "tool_call", "Content block must have type='tool_call'"
     assert isinstance(result.content[0], ToolCall), "Content block must be ToolCall instance"
@@ -127,6 +128,7 @@ async def test_async_tool_call_roundtrip_complete_flow(
 
     stored_inference = get_response.inferences[0]
     assert isinstance(stored_inference, StoredInferenceChat), "Must be StoredInferenceChat instance"
+    assert stored_inference.output is not None, "Stored inference output must not be None"
     assert str(stored_inference.inference_id) == inference_id, "Retrieved inference ID must match original"
 
     # ============================================================================
@@ -239,10 +241,10 @@ async def test_async_tool_call_roundtrip_complete_flow(
     )
 
     # The critical assertion: the inference succeeded
+    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse instance"
     assert follow_up_result.inference_id is not None, (
         "Follow-up inference must succeed when reusing serialized tool call data"
     )
-    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse instance"
 
     # Verify the inference ran (not just that it didn't crash)
     assert follow_up_result.content is not None, "Follow-up must have content"
@@ -488,6 +490,7 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
     # Basic result assertions
     assert isinstance(result, ChatInferenceResponse), "Result must be ChatInferenceResponse instance"
     assert result.content is not None, "Result content must not be None"
+    assert result.inference_id is not None, "Result must have inference_id"
     assert len(result.content) == 1, "Result should have exactly 1 content block"
     assert result.content[0].type == "tool_call", "Content block must have type='tool_call'"
     assert isinstance(result.content[0], ToolCall), "Content block must be ToolCall instance"
@@ -548,6 +551,7 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
 
     stored_inference = get_response.inferences[0]
     assert isinstance(stored_inference, StoredInferenceChat), "Must be StoredInferenceChat instance"
+    assert stored_inference.output is not None, "Stored inference output must not be None"
     assert str(stored_inference.inference_id) == inference_id, "Retrieved inference ID must match original"
 
     # ============================================================================
@@ -660,10 +664,10 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
     )
 
     # The critical assertion: the inference succeeded
+    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse instance"
     assert follow_up_result.inference_id is not None, (
         "Follow-up inference must succeed when reusing serialized tool call data"
     )
-    assert isinstance(follow_up_result, ChatInferenceResponse), "Follow-up must return ChatInferenceResponse instance"
 
     # Verify the inference ran (not just that it didn't crash)
     assert follow_up_result.content is not None, "Follow-up must have content"
