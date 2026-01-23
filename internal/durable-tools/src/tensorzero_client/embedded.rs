@@ -38,9 +38,9 @@ use uuid::Uuid;
 use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, DatapointResult, EvaluatorStatsResponse,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
-    RunEvaluationParams, RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, DatapointResult, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, RunEvaluationParams,
+    RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -524,24 +524,9 @@ impl TensorZeroClient for EmbeddedClient {
             }
         }
 
-        // Compute statistics
+        // Compute statistics (EvaluatorStats is the same type as EvaluatorStatsResponse)
         let EvaluationConfig::Inference(inference_config) = &*result.evaluation_config;
         let stats = evaluation_stats.compute_stats(&inference_config.evaluators);
-
-        // Convert to response format
-        let stats_response: HashMap<String, EvaluatorStatsResponse> = stats
-            .into_iter()
-            .map(|(name, s)| {
-                (
-                    name,
-                    EvaluatorStatsResponse {
-                        mean: s.mean,
-                        stderr: s.stderr,
-                        count: s.count,
-                    },
-                )
-            })
-            .collect();
 
         // Build per-datapoint results if requested
         let datapoint_results = if params.include_datapoint_results {
@@ -588,12 +573,21 @@ impl TensorZeroClient for EmbeddedClient {
             None
         };
 
+        // Wait for ClickHouse batch writer to complete
+        if let Some(handle) = result.batcher_join_handle {
+            handle.await.map_err(|e| {
+                TensorZeroClientError::Evaluation(format!(
+                    "Error waiting for ClickHouse batch writer: {e}"
+                ))
+            })?;
+        }
+
         Ok(RunEvaluationResponse {
             evaluation_run_id,
             num_datapoints,
             num_successes: evaluation_stats.evaluation_infos.len(),
             num_errors: evaluation_stats.evaluation_errors.len(),
-            stats: stats_response,
+            stats,
             datapoint_results,
         })
     }
