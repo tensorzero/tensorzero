@@ -188,6 +188,31 @@ pub async fn action(
                 }));
             }
 
+            // Validate: max_datapoints cannot be used with datapoint_ids
+            if has_datapoints && eval_params.max_datapoints.is_some() {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cannot use max_datapoints with datapoint_ids".to_string(),
+                }));
+            }
+
+            // Validate: max_datapoints must be greater than 0 if provided
+            if eval_params.max_datapoints == Some(0) {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "max_datapoints must be greater than 0".to_string(),
+                }));
+            }
+
+            // Validate: precision_targets values must be positive and finite
+            for (evaluator_name, target) in &eval_params.precision_targets {
+                if !target.is_finite() || *target <= 0.0 {
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "precision_target for `{evaluator_name}` must be a positive finite number, got {target}"
+                        ),
+                    }));
+                }
+            }
+
             // Look up evaluation config from snapshot
             let evaluation_config = config
                 .evaluations
