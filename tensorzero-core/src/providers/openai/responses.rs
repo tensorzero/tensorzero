@@ -1377,6 +1377,11 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 } else if item_type == "message" {
                     // Skip message items - these are handled by other events
                     return Ok(None);
+                } else if item_type == "reasoning" {
+                    // Skip reasoning items in .added event - we'll handle them in .done event
+                    // The encrypted_content in .added may be incomplete/different from .done
+                    // and emitting from both causes duplicate signatures
+                    return Ok(None);
                 } else {
                     // Unknown item type - return as unknown chunk
                     return Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1537,10 +1542,44 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             }))
         }
 
+        // Output item done - extract encrypted_content for reasoning items
+        // The encrypted_content is typically only populated in the .done event, not .added
+        OpenAIResponsesStreamEvent::ResponseOutputItemDone { item, output_index } => {
+            if let Some(item_type) = item.get("type").and_then(|t| t.as_str())
+                && item_type == "reasoning"
+            {
+                // Extract encrypted_content (the thought signature) from the completed reasoning item
+                let encrypted_content = item
+                    .get("encrypted_content")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                // Only emit a signature chunk if encrypted_content is present
+                if let Some(signature) = encrypted_content {
+                    return Ok(Some(ProviderInferenceResponseChunk::new(
+                        vec![ContentBlockChunk::Thought(ThoughtChunk {
+                            id: output_index.to_string(),
+                            text: None,
+                            signature: Some(signature),
+                            summary_id: None,
+                            summary_text: None,
+                            provider_type: Some(PROVIDER_TYPE.to_string()),
+                            extra_data: None,
+                        })],
+                        None,
+                        raw_message,
+                        message_latency,
+                        None,
+                    )));
+                }
+            }
+            // For non-reasoning items or reasoning without encrypted_content, skip
+            Ok(None)
+        }
+
         // Lifecycle and other events we don't need to process
         OpenAIResponsesStreamEvent::ResponseCreated { .. }
         | OpenAIResponsesStreamEvent::ResponseInProgress { .. }
-        | OpenAIResponsesStreamEvent::ResponseOutputItemDone { .. }
         | OpenAIResponsesStreamEvent::ResponseContentPartAdded { .. }
         | OpenAIResponsesStreamEvent::ResponseContentPartDone { .. }
         | OpenAIResponsesStreamEvent::ResponseOutputTextDone { .. }
@@ -1930,6 +1969,197 @@ mod tests {
         // And should have captured tool ID and name in state
         assert_eq!(tool_id, Some("fc_abc123".to_string()));
         assert_eq!(tool_name, Some("get_weather".to_string()));
+    }
+
+    #[test]
+    fn test_output_item_added_reasoning_skipped() {
+        // Reasoning items in .added event are skipped - we handle them in .done event only
+        // to avoid emitting duplicate signatures
+        let item_json = serde_json::json!({
+            "type": "reasoning",
+            "id": "rs_abc123",
+            "encrypted_content": "encrypted_thought_signature_data",
+            "summary": []
+        });
+
+        let event = OpenAIResponsesStreamEvent::ResponseOutputItemAdded {
+            item: item_json,
+            output_index: 0,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+            false,
+            "test_model",
+            "test_provider",
+            "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+
+        // Should return None - reasoning handled in .done event only
+        assert!(
+            result.is_none(),
+            "Expected None - reasoning items in .added event should be skipped"
+        );
+
+        // Should not have affected tool state
+        assert_eq!(tool_id, None, "Expected tool_id to remain None");
+        assert_eq!(tool_name, None, "Expected tool_name to remain None");
+    }
+
+    #[test]
+    fn test_output_item_done_reasoning_conversion() {
+        // Test that ResponseOutputItemDone with reasoning type extracts encrypted_content
+        let item_json = serde_json::json!({
+            "type": "reasoning",
+            "id": "rs_done_123",
+            "encrypted_content": "encrypted_signature_from_done_event",
+            "summary": [{"type": "summary_text", "text": "Some reasoning summary"}]
+        });
+
+        let event = OpenAIResponsesStreamEvent::ResponseOutputItemDone {
+            item: item_json,
+            output_index: 1,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+            false,
+            "test_model",
+            "test_provider",
+            "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Should emit a ThoughtChunk with the signature
+        assert_eq!(
+            result.content.len(),
+            1,
+            "Expected exactly one content block"
+        );
+        match &result.content[0] {
+            ContentBlockChunk::Thought(thought_chunk) => {
+                assert_eq!(thought_chunk.id, "1", "Expected output_index as id");
+                assert_eq!(
+                    thought_chunk.signature,
+                    Some("encrypted_signature_from_done_event".to_string()),
+                    "Expected encrypted_content as signature"
+                );
+                assert_eq!(thought_chunk.text, None, "Expected text to be None");
+                assert_eq!(
+                    thought_chunk.summary_id, None,
+                    "Expected summary_id to be None"
+                );
+                assert_eq!(
+                    thought_chunk.summary_text, None,
+                    "Expected summary_text to be None"
+                );
+                assert_eq!(
+                    thought_chunk.provider_type,
+                    Some(PROVIDER_TYPE.to_string()),
+                    "Expected provider_type to be set"
+                );
+            }
+            _ => panic!("Expected Thought chunk, got {:?}", result.content[0]),
+        }
+    }
+
+    #[test]
+    fn test_output_item_done_reasoning_without_encrypted_content() {
+        // Test that ResponseOutputItemDone with reasoning but no encrypted_content returns None
+        let item_json = serde_json::json!({
+            "type": "reasoning",
+            "id": "rs_done_456",
+            "summary": [{"type": "summary_text", "text": "Summary only"}]
+        });
+
+        let event = OpenAIResponsesStreamEvent::ResponseOutputItemDone {
+            item: item_json,
+            output_index: 0,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+            false,
+            "test_model",
+            "test_provider",
+            "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+
+        // Should return None when encrypted_content is missing
+        assert!(
+            result.is_none(),
+            "Expected None when reasoning.done has no encrypted_content"
+        );
+    }
+
+    #[test]
+    fn test_output_item_done_non_reasoning_returns_none() {
+        // Test that ResponseOutputItemDone with non-reasoning type returns None
+        let item_json = serde_json::json!({
+            "type": "function_call",
+            "id": "fc_done_789",
+            "name": "some_function",
+            "arguments": "{}"
+        });
+
+        let event = OpenAIResponsesStreamEvent::ResponseOutputItemDone {
+            item: item_json,
+            output_index: 0,
+        };
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            "raw_json".to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+            false,
+            "test_model",
+            "test_provider",
+            "",
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+
+        // Should return None for non-reasoning items
+        assert!(
+            result.is_none(),
+            "Expected None for non-reasoning item.done event"
+        );
     }
 
     #[test]
