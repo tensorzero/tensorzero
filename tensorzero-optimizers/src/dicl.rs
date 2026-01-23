@@ -357,7 +357,7 @@ async fn process_embedding_batch(
     let postgres_connection_info = PostgresConnectionInfo::Disabled;
     let rate_limiting_manager = Arc::new(RateLimitingManager::new(
         rate_limiting_config.clone(),
-        postgres_connection_info.clone(),
+        Arc::new(postgres_connection_info.clone()),
     ));
     let clients = InferenceClients {
         http_client: client.clone(),

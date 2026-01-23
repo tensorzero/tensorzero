@@ -18,6 +18,7 @@ use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
 use tensorzero_core::feature_flags;
@@ -341,6 +342,11 @@ async fn run() -> Result<(), ExitCode> {
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");
 
+    // Print whether valkey is enabled
+    let valkey_enabled_pretty =
+        get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info);
+    tracing::info!("├ Valkey: {valkey_enabled_pretty}");
+
     if let Some(gateway_url) = config
         .gateway
         .relay
@@ -457,6 +463,13 @@ fn get_postgres_status_string(postgres: &PostgresConnectionInfo) -> String {
         #[cfg(test)]
         #[expect(unreachable_patterns)]
         _ => "test".to_string(),
+    }
+}
+
+fn get_valkey_status_string(valkey: &ValkeyConnectionInfo) -> String {
+    match valkey {
+        ValkeyConnectionInfo::Disabled => "disabled".to_string(),
+        ValkeyConnectionInfo::Enabled { .. } => "enabled".to_string(),
     }
 }
 

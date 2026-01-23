@@ -258,4 +258,9 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/autopilot/v1/sessions/{session_id}/actions/approve_all",
             post(endpoints::internal::autopilot::approve_all_tool_calls_handler),
         )
+        // Other Autopilot endpoints
+        .route(
+            "/internal/autopilot/status",
+            get(endpoints::internal::autopilot::autopilot_status_handler),
+        )
 }
