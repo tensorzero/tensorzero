@@ -271,6 +271,52 @@ async fn test_auth_error_openai_format() {
     );
 }
 
+/// Test that auth errors on OpenAI endpoints use OpenAI format with a base path
+#[tokio::test]
+async fn test_auth_error_openai_format_with_base_path() {
+    let child_data = start_gateway_on_random_port(
+        r#"
+    base_path = "/my/prefix"
+
+    [gateway.auth]
+    enabled = true
+    "#,
+        None,
+    )
+    .await;
+
+    let response = reqwest::Client::new()
+        .post(format!(
+            "http://{}/my/prefix/openai/v1/chat/completions",
+            child_data.addr
+        ))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "Auth errors should return 401 for OpenAI endpoints with a base path"
+    );
+    let text = response.text().await.unwrap();
+    let json: Value = serde_json::from_str(&text).expect("Response should be valid JSON");
+
+    assert!(
+        json.get("error").is_some(),
+        "Response should have an `error` field"
+    );
+    let error_obj = json.get("error").unwrap();
+    assert!(
+        error_obj.is_object(),
+        "The `error` field should be an object for OpenAI format with a base path"
+    );
+    assert!(
+        error_obj.get("message").and_then(Value::as_str).is_some(),
+        "The `error` object should have a string `message` field"
+    );
+}
+
 /// Test that auth errors on TensorZero endpoints include `error_json` when enabled
 #[tokio::test]
 async fn test_auth_error_tensorzero_format_with_error_json() {

@@ -43,6 +43,17 @@ fn build_error_response_body(
     body
 }
 
+fn is_openai_compatible_route(route: &str) -> bool {
+    let mut previous_segment = None;
+    for segment in route.split('/').filter(|segment| !segment.is_empty()) {
+        if matches!(previous_segment, Some("openai")) && segment == "v1" {
+            return true;
+        }
+        previous_segment = Some(segment);
+    }
+    false
+}
+
 #[derive(Clone)]
 pub struct TensorzeroAuthMiddlewareState(Arc<TensorzeroAuthMiddlewareStateInner>);
 
@@ -188,7 +199,9 @@ pub async fn tensorzero_auth_middleware(
                 auth_span.record("key.workspace", &key_info.workspace);
             }
             let message = format!("TensorZero authentication error: {e}");
-            let is_openai_format = route.is_some_and(|r| r.starts_with("/openai/"));
+            let is_openai_format = route
+                .map(is_openai_compatible_route)
+                .unwrap_or_else(|| is_openai_compatible_route(request.uri().path()));
             let error_json = state.error_json.then(|| json!(e.to_string()));
             let body = build_error_response_body(&message, is_openai_format, error_json);
             let mut response = (StatusCode::UNAUTHORIZED, Json(body)).into_response();
