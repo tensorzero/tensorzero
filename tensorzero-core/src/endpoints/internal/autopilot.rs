@@ -17,8 +17,9 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use autopilot_client::{
-    AutopilotClient, CreateEventRequest, CreateEventResponse, EventPayload, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, StreamEventsParams, StreamUpdate,
+    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
+    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, StreamEventsParams, StreamUpdate,
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -29,14 +30,39 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 ///
 /// This is the request type used by the HTTP handler. The `deployment_id` is
 /// injected from the gateway's app state, so it's not included in this request.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CreateEventGatewayRequest {
     pub payload: EventPayload,
     /// Used for idempotency when adding events to an existing session.
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default)]
     pub previous_user_message_event_id: Option<Uuid>,
+}
+
+/// HTTP request body for approving all pending tool calls.
+///
+/// This is the request type used by the HTTP handler. The `deployment_id` and
+/// `tensorzero_version` are injected from the gateway's app state.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct ApproveAllToolCallsGatewayRequest {
+    /// Only approve tool calls with event IDs <= this value.
+    /// Prevents race condition where new tool calls arrive after client fetched the list.
+    pub last_tool_call_event_id: Uuid,
+}
+
+/// Response for the autopilot status endpoint.
+///
+/// Indicates whether the autopilot client is configured (i.e., whether
+/// `TENSORZERO_AUTOPILOT_API_KEY` is set).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutopilotStatusResponse {
+    pub enabled: bool,
 }
 
 // =============================================================================
@@ -90,6 +116,20 @@ pub async fn create_event(
 ) -> Result<CreateEventResponse, Error> {
     autopilot_client
         .create_event(session_id, request)
+        .await
+        .map_err(Error::from)
+}
+
+/// Approve all pending tool calls for a session via the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn approve_all_tool_calls(
+    autopilot_client: &AutopilotClient,
+    session_id: Uuid,
+    request: ApproveAllToolCallsRequest,
+) -> Result<ApproveAllToolCallsResponse, Error> {
+    autopilot_client
+        .approve_all_tool_calls(session_id, request)
         .await
         .map_err(Error::from)
 }
@@ -165,6 +205,45 @@ pub async fn create_event_handler(
     Ok(Json(response))
 }
 
+/// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/approve_all`
+///
+/// Approves all pending tool calls for a session via the Autopilot API.
+/// The deployment_id and tensorzero_version are injected from the gateway's app state.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "autopilot.approve_all_tool_calls", skip_all, fields(session_id = %session_id))]
+pub async fn approve_all_tool_calls_handler(
+    State(app_state): AppState,
+    Path(session_id): Path<Uuid>,
+    StructuredJson(http_request): StructuredJson<ApproveAllToolCallsGatewayRequest>,
+) -> Result<Json<ApproveAllToolCallsResponse>, Error> {
+    let client = get_autopilot_client(&app_state)?;
+
+    let deployment_id = app_state
+        .deployment_id
+        .clone()
+        .ok_or_else(|| Error::new(ErrorDetails::AutopilotUnavailable))?;
+
+    let request = ApproveAllToolCallsRequest {
+        deployment_id,
+        tensorzero_version: TENSORZERO_VERSION.to_string(),
+        last_tool_call_event_id: http_request.last_tool_call_event_id,
+    };
+
+    let response = approve_all_tool_calls(&client, session_id, request).await?;
+    Ok(Json(response))
+}
+
+/// Handler for `GET /internal/autopilot/status`
+///
+/// Returns whether autopilot is configured (i.e., whether `TENSORZERO_AUTOPILOT_API_KEY` is set).
+/// This endpoint does not require authentication and does not make any external calls.
+#[instrument(name = "autopilot.status", skip_all)]
+pub async fn autopilot_status_handler(State(app_state): AppState) -> Json<AutopilotStatusResponse> {
+    Json(AutopilotStatusResponse {
+        enabled: app_state.autopilot_client.is_some(),
+    })
+}
+
 /// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events/stream`
 ///
 /// Streams events for a session via SSE from the Autopilot API.
@@ -207,6 +286,7 @@ mod tests {
     use crate::config::Config;
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::db::postgres::PostgresConnectionInfo;
+    use crate::db::valkey::ValkeyConnectionInfo;
     use crate::http::TensorzeroHttpClient;
     use tokio_util::task::TaskTracker;
 
@@ -221,8 +301,10 @@ mod tests {
             http_client,
             clickhouse_connection_info,
             postgres_connection_info,
+            ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
         )
+        .unwrap()
     }
 
     #[test]
@@ -230,5 +312,15 @@ mod tests {
         let app_state = make_test_app_state_without_autopilot();
         let error = get_autopilot_client(&app_state).unwrap_err();
         assert_eq!(error.to_string(), "Autopilot credentials unavailable");
+    }
+
+    #[tokio::test]
+    async fn test_autopilot_status_handler_returns_false_when_not_configured() {
+        let app_state = make_test_app_state_without_autopilot();
+        let response = autopilot_status_handler(State(app_state)).await;
+        assert!(
+            !response.enabled,
+            "Expected enabled to be false when autopilot is not configured"
+        );
     }
 }

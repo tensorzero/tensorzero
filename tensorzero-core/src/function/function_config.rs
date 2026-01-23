@@ -42,8 +42,9 @@ use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
@@ -260,8 +261,9 @@ impl VariantsConfigPyClass {
     }
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -287,8 +289,9 @@ pub struct FunctionConfigChat {
     pub all_explicit_templates_names: HashSet<String>,
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -2528,12 +2531,14 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::Thought(Thought {
                 text: Some("still thinking".to_string()),
                 signature: Some("sig".to_string()),
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =
@@ -2549,6 +2554,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::Text(Text {
                 text: "Some text".to_string(),
@@ -2558,6 +2564,7 @@ mod tests {
                 signature: Some("sig2".to_string()),
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::ToolCall(ToolCall {
                 id: "id2".to_string(),
@@ -2613,6 +2620,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =

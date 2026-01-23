@@ -3,9 +3,8 @@ use async_trait::async_trait;
 #[cfg(test)]
 use mockall::automock;
 
-use crate::error::Error;
-use crate::rate_limiting::ActiveRateLimitKey;
-use sqlx::postgres::types::PgInterval;
+use crate::error::{Error, ErrorDetails};
+use crate::rate_limiting::{ActiveRateLimitKey, RateLimitInterval};
 
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -27,7 +26,7 @@ pub trait RateLimitQueries: Send + Sync {
         key: &str,
         capacity: u64,
         refill_amount: u64,
-        refill_interval: PgInterval,
+        refill_interval: RateLimitInterval,
     ) -> Result<u64, Error>;
 }
 
@@ -37,7 +36,7 @@ pub struct ConsumeTicketsRequest {
     pub requested: u64,
     pub capacity: u64,
     pub refill_amount: u64,
-    pub refill_interval: PgInterval,
+    pub refill_interval: RateLimitInterval,
 }
 
 #[derive(Debug)]
@@ -53,10 +52,55 @@ pub struct ReturnTicketsRequest {
     pub returned: u64,
     pub capacity: u64,
     pub refill_amount: u64,
-    pub refill_interval: PgInterval,
+    pub refill_interval: RateLimitInterval,
 }
 
 pub struct ReturnTicketsReceipt {
     pub key: ActiveRateLimitKey,
     pub balance: u64,
+}
+
+/// Disabled implementation of RateLimitQueries (returns errors for all operations).
+/// This is used when rate limiting is disabled to catch any errors.
+pub struct DisabledRateLimitQueries;
+
+#[async_trait]
+impl RateLimitQueries for DisabledRateLimitQueries {
+    async fn consume_tickets(
+        &self,
+        requests: &[ConsumeTicketsRequest],
+    ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
+        if requests.is_empty() {
+            return Ok(vec![]);
+        }
+
+        Err(Error::new(ErrorDetails::Config {
+            message: "Rate limiting should be disabled but `consume_tickets` is called".to_string(),
+        }))
+    }
+
+    async fn return_tickets(
+        &self,
+        requests: Vec<ReturnTicketsRequest>,
+    ) -> Result<Vec<ReturnTicketsReceipt>, Error> {
+        if requests.is_empty() {
+            return Ok(vec![]);
+        }
+
+        Err(Error::new(ErrorDetails::Config {
+            message: "Rate limiting should be disabled but `return_tickets` is called".to_string(),
+        }))
+    }
+
+    async fn get_balance(
+        &self,
+        _key: &str,
+        _capacity: u64,
+        _refill_amount: u64,
+        _refill_interval: RateLimitInterval,
+    ) -> Result<u64, Error> {
+        Err(Error::new(ErrorDetails::Config {
+            message: "Rate limiting should be disabled but `get_balance` is called".to_string(),
+        }))
+    }
 }

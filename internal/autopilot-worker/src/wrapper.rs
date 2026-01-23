@@ -7,13 +7,14 @@ use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use autopilot_tools::AutopilotToolError;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, NonControlToolError, SimpleTool, SimpleToolContext,
-    TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
-    ToolResult as DurableToolResult, ToolResultExt,
+    CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, NonControlToolError,
+    SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient, ToolAppState, ToolContext,
+    ToolError, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -148,10 +149,10 @@ async fn publish_result(
         .create_autopilot_event(
             params.session_id,
             CreateEventGatewayRequest {
-                payload: EventPayload::ToolResult {
+                payload: EventPayload::ToolResult(EventPayloadToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
-                },
+                }),
                 previous_user_message_event_id: None,
             },
         )
@@ -364,8 +365,9 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 }
 
 /// This is the type that we write in ToolOutcome::Failure for tool errors.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "kind")]
 pub enum ToolFailure {
     Control { message: String },
     Serialization { message: String },
@@ -383,8 +385,8 @@ mod tests {
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-        GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
-        ListDatapointsRequest, ListDatapointsResponse, ListInferencesRequest,
+        GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
+        InferenceResponse, ListDatapointsRequest, ListDatapointsResponse, ListInferencesRequest,
         UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
@@ -483,6 +485,12 @@ mod tests {
             async fn list_inferences(
                 &self,
                 request: ListInferencesRequest,
+            ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+            /// Get specific inferences by their IDs.
+            async fn get_inferences(
+                &self,
+                request: GetInferencesRequest,
             ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
             async fn launch_optimization_workflow(
@@ -619,10 +627,10 @@ mod tests {
                 *sid == expected_session_id
                     && matches!(
                         &request.payload,
-                        EventPayload::ToolResult {
+                        EventPayload::ToolResult(EventPayloadToolResult {
                             tool_call_event_id: tceid,
                             outcome: ToolOutcome::Success(_),
-                        } if *tceid == expected_tool_call_event_id
+                        }) if *tceid == expected_tool_call_event_id
                     )
             })
             .returning(|sid, _| {
@@ -659,10 +667,10 @@ mod tests {
             .withf(move |_sid, request| {
                 matches!(
                     &request.payload,
-                    EventPayload::ToolResult {
+                    EventPayload::ToolResult(EventPayloadToolResult {
                         tool_call_event_id: tceid,
                         outcome: ToolOutcome::Failure { error },
-                    } if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
+                    }) if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
                 )
             })
             .returning(|sid, _| {

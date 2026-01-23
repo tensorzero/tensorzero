@@ -1,9 +1,9 @@
+use sqlx::postgres::types::PgInterval;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::Extension;
 use serde::{Deserialize, Serialize, Serializer};
-use sqlx::postgres::types::PgInterval;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -24,22 +24,35 @@ pub use rate_limiting_manager::RateLimitingManager;
  *       a) use the ScopeInfo to determine which rate limit scopes apply
  *       b) estimate (conservatively) the resource consumption of the request
  *       c) consume tickets from the rate limit scopes
- *       d) actually attempt to consume the tickets from Postgres
+ *       d) actually attempt to consume the tickets from the database (Postgres or Valkey)
  *       e) check success, throw an error on failure, and return a TicketBorrow
  *   3. The caller calls `TicketBorrow::return_tickets` with the actual usage observed.
  *      This will figure out post-facto bookkeeping for over- or under-consumption.
- *   Important Note: the Postgres database has a string column `key`
- *      that is used to identify a particular active rate limit.
+ *   Important Note: the database identifies an active rate limit based on a string `key`.
  *      If two distinct rate limits have the same key, they will be treated as the same rate limit and will trample.
  *      If the key changes, the rate limit will be treated as a new rate limit.
  *      For these reasons, developers should be careful not to change the key serialization and be similarly careful
  *      to not add keys which could trample one another.
  */
 
+/// Specifies which backend to use for rate limiting.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RateLimitingBackend {
+    /// Automatically select: Valkey if available, otherwise Postgres
+    #[default]
+    Auto,
+    /// Force Postgres backend
+    Postgres,
+    /// Force Valkey backend
+    Valkey,
+}
+
 #[derive(Debug, Clone)]
 pub struct RateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     pub(crate) enabled: bool,
+    pub(crate) backend: RateLimitingBackend,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -48,6 +61,8 @@ pub struct UninitializedRateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) backend: RateLimitingBackend,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -65,6 +80,7 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
         Ok(Self {
             rules: config.rules,
             enabled: config.enabled,
+            backend: config.backend,
         })
     }
 }
@@ -72,10 +88,15 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
 impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
     fn from(config: &RateLimitingConfig) -> Self {
         // Destructure to ensure all fields are handled (compile error if field added/removed)
-        let RateLimitingConfig { rules, enabled } = config;
+        let RateLimitingConfig {
+            rules,
+            enabled,
+            backend,
+        } = config;
         Self {
             rules: rules.clone(),
             enabled: *enabled,
+            backend: *backend,
         }
     }
 }
@@ -89,6 +110,7 @@ impl Default for UninitializedRateLimitingConfig {
         Self {
             rules: Vec::new(),
             enabled: true,
+            backend: RateLimitingBackend::default(),
         }
     }
 }
@@ -98,6 +120,7 @@ impl Default for RateLimitingConfig {
         Self {
             rules: Vec::new(),
             enabled: true,
+            backend: RateLimitingBackend::default(),
         }
     }
 }
@@ -234,7 +257,7 @@ pub struct FailedRateLimit {
     pub scope_key: Vec<RateLimitingScopeKey>,
 }
 
-/// Since Postgres will tell us all borrows failed if any failed, we figure out which rate limits
+/// Since the database will tell us all borrows failed if any failed, we figure out which rate limits
 /// actually blocked the request and return an informative error.
 fn get_failed_rate_limits_err(
     requests: Vec<ConsumeTicketsRequest>,
@@ -304,7 +327,7 @@ impl ActiveRateLimit {
             key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_pg_interval(),
+            refill_interval: self.limit.interval,
             requested,
         })
     }
@@ -315,7 +338,7 @@ impl ActiveRateLimit {
             key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_pg_interval(),
+            refill_interval: self.limit.interval,
             returned,
         })
     }
@@ -353,8 +376,9 @@ impl ActiveRateLimit {
     }
 }
 
-#[derive(Debug, Serialize, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
     pub scope: RateLimitingConfigScopes,
@@ -385,8 +409,9 @@ impl RateLimitingConfigRule {
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimit {
     pub resource: RateLimitResource,
     pub interval: RateLimitInterval,
@@ -396,8 +421,8 @@ pub struct RateLimit {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitResource {
     ModelInference,
     Token,
@@ -442,10 +467,10 @@ impl EstimatedRateLimitResourceUsage {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitInterval {
     Second,
     Minute,
@@ -490,10 +515,28 @@ impl RateLimitInterval {
             },
         }
     }
+
+    /// Convert a `RateLimitInterval` to microseconds for Valkey Lua scripts.
+    ///
+    /// Note: in this implementation we define `Month` as exactly 30 days
+    /// (2,592,000,000,000 microseconds), not a calendar-aware month.
+    ///
+    /// TODO(shuyangli): change Postgres to match.
+    pub fn to_microseconds(&self) -> u64 {
+        match *self {
+            RateLimitInterval::Second => 1_000_000,
+            RateLimitInterval::Minute => 60_000_000,
+            RateLimitInterval::Hour => 3_600_000_000,
+            RateLimitInterval::Day => 86_400_000_000,
+            RateLimitInterval::Week => 604_800_000_000,
+            RateLimitInterval::Month => 2_592_000_000_000,
+        }
+    }
 }
 
-#[derive(Debug, Serialize, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, PartialEq, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
     Always,
@@ -501,8 +544,9 @@ pub enum RateLimitingConfigPriority {
 
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
-#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
 
 impl RateLimitingConfigScopes {
@@ -541,8 +585,8 @@ trait Scope {
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitingConfigScope {
     Tag(TagRateLimitingConfigScope),
     ApiKeyPublicId(ApiKeyPublicIdConfigScope),
@@ -561,8 +605,9 @@ impl Scope for RateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TagRateLimitingConfigScope {
     tag_key: String,
     tag_value: TagValueScope,
@@ -604,8 +649,9 @@ impl TagRateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ApiKeyPublicIdConfigScope {
     api_key_public_id: ApiKeyPublicIdValueScope,
 }
@@ -636,8 +682,9 @@ impl ApiKeyPublicIdConfigScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TagValueScope {
     Concrete(String),
     Each,
@@ -657,8 +704,9 @@ impl Serialize for TagValueScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum ApiKeyPublicIdValueScope {
     Concrete(String),
     Each,
@@ -1361,12 +1409,14 @@ mod tests {
         let config_enabled = RateLimitingConfig {
             rules: vec![],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         assert!(config_enabled.enabled());
 
         let config_disabled = RateLimitingConfig {
             rules: vec![],
             enabled: false,
+            backend: RateLimitingBackend::default(),
         };
         assert!(!config_disabled.enabled());
 
@@ -1431,6 +1481,7 @@ mod tests {
         let uninitialized = UninitializedRateLimitingConfig {
             rules: vec![rule_priority_5, rule_always],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let err_message = RateLimitingConfig::try_from(uninitialized)
             .unwrap_err()
@@ -1489,6 +1540,7 @@ mod tests {
         let config_numeric_priorities = RateLimitingConfig {
             rules: vec![rule_priority_3, rule_priority_7],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
 
         let active_limits = config_numeric_priorities.get_active_limits(&scope_info);
@@ -1515,6 +1567,7 @@ mod tests {
         let config_multiple_limits = RateLimitingConfig {
             rules: vec![rule_multiple_limits],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
 
         let active_limits = config_multiple_limits.get_active_limits(&scope_info);
@@ -1676,14 +1729,7 @@ mod tests {
         assert_eq!(consume_request.requested, 50); // tokens usage
         assert_eq!(consume_request.capacity, 100);
         assert_eq!(consume_request.refill_amount, 10);
-        assert_eq!(
-            consume_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000
-            }
-        );
+        assert_eq!(consume_request.refill_interval, RateLimitInterval::Minute);
 
         // Test return tickets request for ModelInference resource
         let inference_limit = Arc::new(RateLimit {
@@ -1706,14 +1752,7 @@ mod tests {
         assert_eq!(return_request.returned, 3);
         assert_eq!(return_request.capacity, 20);
         assert_eq!(return_request.refill_amount, 5);
-        assert_eq!(
-            return_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000
-            }
-        );
+        assert_eq!(return_request.refill_interval, RateLimitInterval::Hour);
 
         // Test consume tickets request for ModelInference resource
         let inference_consume_request = inference_active_limit
@@ -1724,11 +1763,7 @@ mod tests {
         assert_eq!(inference_consume_request.refill_amount, 5);
         assert_eq!(
             inference_consume_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000
-            }
+            RateLimitInterval::Hour
         );
 
         // Test resource usage mapping works correctly
@@ -1769,6 +1804,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let resources = config_with_token.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -1788,6 +1824,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let resources = config_model_only.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -1802,6 +1839,7 @@ mod tests {
                 scope: RateLimitingConfigScopes(vec![]),
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
+            backend: RateLimitingBackend::default(),
         };
         assert!(
             config_disabled
@@ -1844,11 +1882,7 @@ mod tests {
             key: key.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000,
-            },
+            refill_interval: RateLimitInterval::Minute,
             requested: 50,
         };
 
@@ -1887,11 +1921,7 @@ mod tests {
             key: key2.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000,
-            },
+            refill_interval: RateLimitInterval::Minute,
             requested: 50,
         };
 
@@ -2012,33 +2042,21 @@ mod tests {
                 key: key_tokens.clone(),
                 capacity: 100,
                 refill_amount: 10,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 60_000_000,
-                },
+                refill_interval: RateLimitInterval::Minute,
                 requested: 80, // More than available (30)
             },
             ConsumeTicketsRequest {
                 key: key_inferences.clone(),
                 capacity: 50,
                 refill_amount: 5,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 60_000_000,
-                },
+                refill_interval: RateLimitInterval::Minute,
                 requested: 10, // Less than available (20)
             },
             ConsumeTicketsRequest {
                 key: key_tokens_user2.clone(),
                 capacity: 1000,
                 refill_amount: 100,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 3_600_000_000,
-                },
+                refill_interval: RateLimitInterval::Hour,
                 requested: 80, // Less than available (500)
             },
         ];

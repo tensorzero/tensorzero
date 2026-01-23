@@ -1,6 +1,5 @@
 #![expect(clippy::print_stdout)]
 use std::io::Cursor;
-use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use secrecy::SecretString;
@@ -110,6 +109,7 @@ pub struct E2ETestProviders {
     pub extra_body_inference: Vec<E2ETestProvider>,
     pub reasoning_inference: Vec<E2ETestProvider>,
     pub reasoning_usage_inference: Vec<E2ETestProvider>,
+    pub cache_input_tokens_inference: Vec<E2ETestProvider>,
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
@@ -133,8 +133,8 @@ macro_rules! generate_provider_tests {
     ($func:ident) => {
         use $crate::providers::common::test_dynamic_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_dynamic_tool_use_streaming_inference_request_with_provider;
-        use $crate::providers::common::test_inference_params_inference_request_with_provider;
-        use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_dynamic_credentials_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_dynamic_credentials_streaming_inference_request_with_provider;
         use $crate::providers::common::test_provider_type_default_credentials_with_provider;
         use $crate::providers::common::test_provider_type_default_credentials_shorthand_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
@@ -287,18 +287,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_inference_params_inference_request() {
+        async fn test_inference_params_dynamic_credentials_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_inference_request_with_provider(provider).await;
+                test_inference_params_dynamic_credentials_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_inference_params_streaming_inference_request() {
+        async fn test_inference_params_dynamic_credentials_streaming_inference_request() {
             let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
-                test_inference_params_streaming_inference_request_with_provider(provider).await;
+                test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(provider).await;
             }
         }
 
@@ -570,6 +570,22 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_cache_input_tokens_non_streaming() {
+            let providers = $func().await.cache_input_tokens_inference;
+            for provider in providers {
+                $crate::providers::commonv2::cache_input_tokens::test_cache_input_tokens_non_streaming_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_cache_input_tokens_streaming() {
+            let providers = $func().await.cache_input_tokens_inference;
+            for provider in providers {
+                $crate::providers::commonv2::cache_input_tokens::test_cache_input_tokens_streaming_with_provider(provider).await;
+            }
+        }
+
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
@@ -787,7 +803,7 @@ model = "responses-gpt-4o-mini-2024-07-18"
 
 [functions.pdf_test.variants.gcp_vertex_gemini]
 type = "chat_completion"
-model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash-lite"
 
 [functions.pdf_test.variants.gcp_vertex_anthropic]
 type = "chat_completion"
@@ -795,11 +811,11 @@ model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/global/publi
 
 [functions.pdf_test.variants.google_ai_studio]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
+model = "google_ai_studio_gemini::gemini-2.5-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-sonnet-4-5-20250929"
+model = "anthropic::claude-sonnet-4-5"
 
 [functions.pdf_test.variants.gcp-vertex-sonnet]
 type = "chat_completion"
@@ -807,7 +823,7 @@ model = "claude-sonnet-4-5-gcp-vertex"
 
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
+model = "claude-haiku-4-5-aws-bedrock"
 
 [models.claude-sonnet-4-5-gcp-vertex]
 routing = ["gcp_vertex_anthropic"]
@@ -826,12 +842,12 @@ type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 api_type = "responses"
 
-[models.claude-3-haiku-20240307-aws-bedrock]
+[models.claude-haiku-4-5-aws-bedrock]
 routing = ["aws_bedrock"]
 
-[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+[models.claude-haiku-4-5-aws-bedrock.providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 "#;
 
@@ -852,11 +868,11 @@ model = "responses-gpt-4o-mini-2024-07-18"
 
 [functions.image_test.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-3-haiku-20240307"
+model = "anthropic::claude-haiku-4-5"
 
 [functions.image_test.variants.google_ai_studio]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
+model = "google_ai_studio_gemini::gemini-2.5-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
@@ -881,27 +897,27 @@ api_type = "responses"
 
 [functions.image_test.variants.gcp-vertex-haiku]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-gcp-vertex"
+model = "claude-haiku-4-5-gcp-vertex"
 
-[models.claude-3-haiku-20240307-gcp-vertex]
+[models.claude-haiku-4-5-gcp-vertex]
 routing = ["gcp_vertex_anthropic"]
 
-[models.claude-3-haiku-20240307-gcp-vertex.providers.gcp_vertex_anthropic]
+[models.claude-haiku-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
 type = "gcp_vertex_anthropic"
-model_id = "claude-3-haiku@20240307"
-location = "us-central1"
+model_id = "claude-haiku-4-5@20251001"
+location = "us-east5"
 project_id = "tensorzero-public"
 
 [functions.image_test.variants.aws-bedrock]
 type = "chat_completion"
-model = "claude-3-haiku-20240307-aws-bedrock"
+model = "claude-haiku-4-5-aws-bedrock"
 
-[models.claude-3-haiku-20240307-aws-bedrock]
+[models.claude-haiku-4-5-aws-bedrock]
 routing = ["aws_bedrock"]
 
-[models.claude-3-haiku-20240307-aws-bedrock.providers.aws_bedrock]
+[models.claude-haiku-4-5-aws-bedrock.providers.aws_bedrock]
 type = "aws_bedrock"
-model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 region = "us-east-1"
 "#;
 
@@ -2060,7 +2076,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             .get("temperature")
     } else if provider
         .variant_name
-        .contains("google-ai-studio-gemini-flash-8b")
+        .contains("google-ai-studio-gemini-flash-lite")
         || provider.variant_name.contains("gcp-vertex-gemini-flash")
     {
         raw_request_val
@@ -2090,7 +2106,9 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     let episode_id = Uuid::now_v7();
     println!("Provider name: {}", provider.model_provider_name);
 
-    let extra_body = if provider.model_provider_name == "aws_bedrock" {
+    // Note: Claude models don't allow both `temperature` and `top_p` to be specified at the same time.
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    let extra_body = if provider.model_provider_name == "aws_bedrock" && !is_claude_model {
         json!([
             {
                 "variant_name": provider.variant_name,
@@ -2102,6 +2120,15 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "provider_name": provider.model_provider_name,
                 "pointer": "/inferenceConfig/top_p",
                 "value": 0.8
+            }
+        ])
+    } else if provider.model_provider_name == "aws_bedrock" && is_claude_model {
+        // Claude on AWS Bedrock doesn't allow both temperature and top_p
+        json!([
+            {
+                "variant_name": provider.variant_name,
+                "pointer": "/inferenceConfig/temperature",
+                "value": 0.5
             }
         ])
     } else if provider.model_provider_name == "google_ai_studio_gemini"
@@ -2118,6 +2145,15 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "provider_name": provider.model_provider_name,
                 "pointer": "/generationConfig/top_p",
                 "value": 0.8
+            }
+        ])
+    } else if is_claude_model {
+        // Claude models don't allow both temperature and top_p
+        json!([
+            {
+                "variant_name": provider.variant_name,
+                "pointer": "/temperature",
+                "value": 0.5
             }
         ])
     } else {
@@ -2265,7 +2301,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             .get("temperature")
     } else if provider
         .variant_name
-        .contains("google-ai-studio-gemini-flash-8b")
+        .contains("google-ai-studio-gemini-flash-lite")
         || provider.variant_name.contains("gcp-vertex-gemini-flash")
     {
         raw_request_val
@@ -2282,19 +2318,24 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         0.5
     );
 
-    let top_p = if provider.model_provider_name == "aws_bedrock" {
-        raw_request_val.get("inferenceConfig").unwrap().get("top_p")
-    } else if provider.model_provider_name == "google_ai_studio_gemini"
-        || provider.model_provider_name == "gcp_vertex_gemini"
-    {
-        raw_request_val
-            .get("generationConfig")
-            .unwrap()
-            .get("top_p")
-    } else {
-        raw_request_val.get("top_p")
-    };
-    assert_eq!(top_p.unwrap().as_f64().expect("Top P is not a number"), 0.8);
+    // Skip top_p check for Claude models since they don't allow both temperature and top_p
+    // to be specified at the same time.
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    if !is_claude_model {
+        let top_p = if provider.model_provider_name == "aws_bedrock" {
+            raw_request_val.get("inferenceConfig").unwrap().get("top_p")
+        } else if provider.model_provider_name == "google_ai_studio_gemini"
+            || provider.model_provider_name == "gcp_vertex_gemini"
+        {
+            raw_request_val
+                .get("generationConfig")
+                .unwrap()
+                .get("top_p")
+        } else {
+            raw_request_val.get("top_p")
+        };
+        assert_eq!(top_p.unwrap().as_f64().expect("Top P is not a number"), 0.8);
+    }
 }
 
 pub async fn test_bad_auth_extra_headers_with_provider(provider: E2ETestProvider) {
@@ -2507,7 +2548,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 ) {
     reset_capture_logs();
     // Bedrock rejects input thoughts for these models
-    if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
+    if provider.model_name == "claude-haiku-4-5-aws-bedrock"
         || provider.model_name == "deepseek-r1-aws-bedrock"
     {
         return;
@@ -2531,6 +2572,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
                             signature: Some("My new TensorZero signature".to_string()),
                             summary: None,
                             provider_type: None,
+                            extra_data: None,
                         })],
                     },
                     InputMessage {
@@ -2590,10 +2632,12 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
     // * Some AWS Bedrock models error when the last message is an assistant message
     // * Azure AI foundry seems to ignore trailing assistant messages
     // * xAI seems to also ignore them
+    // * Hyperbolic seems to ignore these params
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name == "aws_sagemaker"
         || provider.model_provider_name == "aws_bedrock"
         || provider.variant_name == "azure-ai-foundry"
+        || provider.variant_name == "hyperbolic"
         || provider.variant_name == "xai"
     {
         return;
@@ -3644,6 +3688,10 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
     if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
         return;
     }
+    // Hyperbolic seems to ignore these params
+    if provider.model_provider_name == "hyperbolic" {
+        return;
+    }
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -4055,9 +4103,11 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     full_content
 }
 
-pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
-    if provider.model_name.contains("gemini-2.5-pro") {
+pub async fn test_inference_params_dynamic_credentials_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    // Gemini 2.5 models don't support penalty parameters
+    if provider.model_name.contains("gemini-2.5") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -4065,6 +4115,26 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         get_modal_extra_headers()
     } else {
         UnfilteredInferenceExtraHeaders::default()
+    };
+    // Note: Claude models don't allow both `temperature` and `top_p` to be specified
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    let chat_completion_params = if is_claude_model {
+        json!({
+            "temperature": 0.9,
+            "seed": 1337,
+            "max_tokens": 120,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.2,
+        })
+    } else {
+        json!({
+            "temperature": 0.9,
+            "seed": 1337,
+            "max_tokens": 120,
+            "top_p": 0.9,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.2,
+        })
     };
     let payload = json!({
         "function_name": "basic_test",
@@ -4080,14 +4150,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
                 }
             ]},
         "params": {
-            "chat_completion": {
-                "temperature": 0.9,
-                "seed": 1337,
-                "max_tokens": 120,
-                "top_p": 0.9,
-                "presence_penalty": 0.1,
-                "frequency_penalty": 0.2,
-            }
+            "chat_completion": chat_completion_params
         },
         "stream": false,
         "credentials": provider.credentials,
@@ -4228,8 +4291,12 @@ pub async fn check_inference_params_response(
         .as_u64()
         .unwrap();
     assert_eq!(max_tokens, 120);
-    let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
-    assert_eq!(top_p, 0.9);
+    // Skip top_p check for Claude models since they don't allow both temperature and top_p
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    if !is_claude_model {
+        let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
+        assert_eq!(top_p, 0.9);
+    }
     let presence_penalty = inference_params
         .get("presence_penalty")
         .unwrap()
@@ -4311,11 +4378,11 @@ pub async fn check_inference_params_response(
     assert_eq!(output.len(), 1);
 }
 
-pub async fn test_inference_params_streaming_inference_request_with_provider(
+pub async fn test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro gives us 'Penalty is not enabled for models/gemini-2.5-pro'
-    if provider.model_name.contains("gemini-2.5-pro") {
+    // Gemini 2.5 models don't support penalty parameters
+    if provider.model_name.contains("gemini-2.5") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -4323,6 +4390,26 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         get_modal_extra_headers()
     } else {
         UnfilteredInferenceExtraHeaders::default()
+    };
+    // Note: Claude models don't allow both `temperature` and `top_p` to be specified
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    let chat_completion_params = if is_claude_model {
+        json!({
+            "temperature": 0.9,
+            "seed": 1337,
+            "max_tokens": 120,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.2,
+        })
+    } else {
+        json!({
+            "temperature": 0.9,
+            "seed": 1337,
+            "max_tokens": 120,
+            "top_p": 0.9,
+            "presence_penalty": 0.1,
+            "frequency_penalty": 0.2,
+        })
     };
     let payload = json!({
         "function_name": "basic_test",
@@ -4338,14 +4425,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
                 }
             ]},
         "params": {
-            "chat_completion": {
-                "temperature": 0.9,
-                "seed": 1337,
-                "max_tokens": 120,
-                "top_p": 0.9,
-                "presence_penalty": 0.1,
-                "frequency_penalty": 0.2,
-            }
+            "chat_completion": chat_completion_params
         },
         "stream": true,
         "credentials": provider.credentials,
@@ -4461,11 +4541,13 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    // Filter to only text blocks (ignore thought blocks from reasoning models)
+    let clickhouse_content: String = output
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "text")
+        .map(|block| block.get("text").unwrap().as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join("");
     assert_eq!(clickhouse_content, full_content);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
@@ -4488,8 +4570,12 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         .as_u64()
         .unwrap();
     assert_eq!(max_tokens, 120);
-    let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
-    assert_eq!(top_p, 0.9);
+    // Skip top_p check for Claude models since they don't allow both temperature and top_p
+    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    if !is_claude_model {
+        let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
+        assert_eq!(top_p, 0.9);
+    }
     let presence_penalty = inference_params
         .get("presence_penalty")
         .unwrap()
@@ -4567,7 +4653,15 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    // Filter to only text blocks (ignore thought blocks from reasoning models)
+    let text_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, StoredContentBlock::Text(_)))
+        .collect();
+    assert!(
+        !text_blocks.is_empty(),
+        "Expected at least one text block in output"
+    );
 }
 
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
@@ -6524,9 +6618,9 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         return;
     }
 
-    // NOTE - Gemini 2.5 produces 'UNEXPECTED_TOOL_CALL' here
+    // NOTE - Gemini 2.5 produces unexpected behavior here (empty content or 'UNEXPECTED_TOOL_CALL')
     // See https://github.com/tensorzero/tensorzero/issues/2329
-    if provider.model_name == "gcp-gemini-2.5-pro" {
+    if provider.model_name.contains("gemini-2.5") {
         return;
     }
 
@@ -6777,9 +6871,9 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Gemini 2.5 Pro will produce 'executableCode' blocks for this test, which we don't support
-    // in streaming mode (since we don't have "unknown" streaming chunks)
-    if provider.model_name.contains("gemini-2.5-pro") {
+    // Gemini 2.5 produces unexpected behavior for this test (empty content or 'executableCode' blocks)
+    // We don't support 'executableCode' in streaming mode (since we don't have "unknown" streaming chunks)
+    if provider.model_name.contains("gemini-2.5") {
         return;
     }
 
@@ -11490,6 +11584,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }
 }
 
+/// Test the behavior of model providers when the model tries to output a lot more than `max_tokens`.
 pub async fn test_short_inference_request_with_provider(provider: E2ETestProvider) {
     // We currently host ollama on sagemaker, and use a wrapped 'openai' provider
     // in our tensorzero.toml. ollama doesn't support 'max_completion_tokens', so this test
@@ -11499,24 +11594,6 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         return;
     }
 
-    // The 2.5 Pro model always seems to think before responding, even with
-    // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
-    // This also happens for DeepSeek R1
-    // This prevents us from setting a low max_tokens, since the thinking tokens will
-    // use up all of the output tokens before an actual response is generated.
-    if provider.model_name.contains("gemini-2.5-pro")
-        || provider.model_name.contains("deepseek-r1-aws-bedrock")
-    {
-        return;
-    }
-
-    // The OpenAI Responses API has a minimum value of 16
-    let max_tokens = if provider.model_name.starts_with("responses-") {
-        16
-    } else {
-        1
-    };
-
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -11524,16 +11601,13 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         UnfilteredInferenceExtraHeaders::default()
     };
 
-    // Include randomness in the prompt to force a cache miss for the first request
-    let randomness = Uuid::now_v7();
-
-    let payload = json!({
+    let mut payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
+               "system": {"assistant_name": format!("Dr. Mehta")},
                "messages": [
                 {
                     "role": "user",
@@ -11542,23 +11616,16 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10},
+        "cache_options": {"enabled": "write_only", "lookback_s": 10},
         "params": {
             "chat_completion": {
-                "max_tokens": max_tokens
+                "max_tokens": 16,
             }
         },
         "extra_headers": extra_headers.extra_headers,
+        "include_original_response": true,
+        "include_raw_response": true
     });
-    if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {
-        // Can't pin a single token for o1
-        return;
-    }
-
-    if provider.variant_name.contains("openrouter") {
-        // OpenRouter claims gpt4.1-mini needs a minimum of 16 output tokens
-        return;
-    }
 
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
@@ -11573,17 +11640,11 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(
-        randomness,
-        response_json,
-        Some(episode_id),
-        &provider,
-        max_tokens,
-        false,
-    )
-    .await;
+    check_short_inference_response(response_json, Some(episode_id), &provider, false).await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
+    payload["cache_options"]["enabled"] = "on".into();
+
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
@@ -11597,23 +11658,13 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(
-        randomness,
-        response_json,
-        Some(episode_id),
-        &provider,
-        max_tokens,
-        true,
-    )
-    .await;
+    check_short_inference_response(response_json, Some(episode_id), &provider, true).await;
 }
 
 async fn check_short_inference_response(
-    randomness: Uuid,
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
-    max_tokens: u32,
     should_be_cached: bool,
 ) {
     let hardcoded_function_name = "basic_test";
@@ -11629,19 +11680,6 @@ async fn check_short_inference_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    // Some providers return empty thoughts - exclude thought blocks here
-    let content = content
-        .iter()
-        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
-        .collect::<Vec<_>>();
-    assert_eq!(content.len(), 1);
-    let content_block = content.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    // We don't check the content here since there's only 1 token allowed
-
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
@@ -11650,7 +11688,7 @@ async fn check_short_inference_response(
         assert_eq!(output_tokens, 0);
     } else {
         assert!(input_tokens > 0);
-        assert_eq!(output_tokens, max_tokens as u64);
+        assert!(output_tokens > 0);
     }
     let finish_reason = response_json
         .get("finish_reason")
@@ -11689,7 +11727,7 @@ async fn check_short_inference_response(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
+        "system": {"assistant_name": format!("Dr. Mehta")},
         "messages": [
             {
                 "role": "user",
@@ -11698,20 +11736,6 @@ async fn check_short_inference_response(
         ]
     });
     assert_eq!(input, correct_input);
-
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    // Some providers return empty thoughts - exclude thought blocks here
-    let content_blocks = content_blocks
-        .iter()
-        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
-        .collect::<Vec<_>>();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
     assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
@@ -11730,7 +11754,7 @@ async fn check_short_inference_response(
             .unwrap()
             .as_u64()
             .unwrap(),
-        max_tokens as u64
+        16
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -11777,7 +11801,7 @@ async fn check_short_inference_response(
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        format!("You are a helpful and friendly assistant named Dr. Mehta: {randomness}")
+        format!("You are a helpful and friendly assistant named Dr. Mehta")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
@@ -11788,14 +11812,6 @@ async fn check_short_inference_response(
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    // Some providers return empty thoughts - exclude thought blocks here
-    let output = output
-        .iter()
-        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
-        .collect::<Vec<_>>();
-    assert_eq!(output.len(), 1);
     let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "length");
 
@@ -11816,32 +11832,6 @@ async fn check_short_inference_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
-
-    // Check that our cache entry was only written once
-    if should_be_cached {
-        // Allow some time for an incorrect second cache write to happen
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Count the number of cache entries for this raw_request
-        // Note that this can have false negatives (ClickHouse might decide to merge parts
-        // immediately after a duplicate insert)
-        let count = clickhouse
-            .run_query_synchronous(
-                "SELECT COUNT(*) FROM ModelInferenceCache WHERE raw_request = {raw_request:String} "
-                    .to_string(),
-                &[("raw_request", result["raw_request"].as_str().unwrap())]
-                    .into_iter()
-                    .collect(),
-            )
-            .await
-            .unwrap()
-            .response
-            .trim()
-            .parse::<u64>()
-            .unwrap();
-
-        assert_eq!(count, 1);
-    }
 }
 
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(

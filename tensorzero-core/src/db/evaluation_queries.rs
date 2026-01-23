@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 
 use chrono::{DateTime, Utc};
 #[cfg(test)]
@@ -56,8 +57,9 @@ pub struct EvaluationStatisticsRow {
 /// This is used to determine if a human has already provided feedback for a
 /// (metric_name, datapoint_id, output) combination, allowing the evaluation
 /// system to use human feedback instead of running automated evaluators.
-#[derive(Debug, Clone, Deserialize, serde::Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceEvaluationHumanFeedbackRow {
     /// The human-provided evaluation value (JSON).
     #[serde(deserialize_with = "deserialize_json_string")]
@@ -90,8 +92,9 @@ pub(crate) struct RawEvaluationResultRow {
 }
 
 /// Evaluation result for a chat function.
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ChatEvaluationResultRow {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -130,8 +133,9 @@ pub struct ChatEvaluationResultRow {
 }
 
 /// Evaluation result for a JSON function.
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct JsonEvaluationResultRow {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -170,9 +174,11 @@ pub struct JsonEvaluationResultRow {
 }
 
 /// Evaluation result row that can represent either chat or JSON function output.
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EvaluationResultRow {
     Chat(ChatEvaluationResultRow),
     Json(JsonEvaluationResultRow),

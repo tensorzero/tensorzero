@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use futures::future::try_join_all;
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
@@ -32,7 +31,6 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
-#[async_trait]
 impl Optimizer for DiclOptimizationConfig {
     type Handle = DiclOptimizationJobHandle;
 
@@ -183,7 +181,6 @@ impl Optimizer for DiclOptimizationConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,
@@ -360,7 +357,7 @@ async fn process_embedding_batch(
     let postgres_connection_info = PostgresConnectionInfo::Disabled;
     let rate_limiting_manager = Arc::new(RateLimitingManager::new(
         rate_limiting_config.clone(),
-        postgres_connection_info.clone(),
+        Arc::new(postgres_connection_info.clone()),
     ));
     let clients = InferenceClients {
         http_client: client.clone(),

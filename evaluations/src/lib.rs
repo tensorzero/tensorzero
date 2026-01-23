@@ -122,6 +122,7 @@ pub async fn run_evaluation(
         );
     }
 
+    // TODO(#5754): Extract environment variable reading to a centralized location
     info!("Initializing evaluation environment");
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
@@ -131,6 +132,12 @@ pub async fn run_evaluation(
         debug!(postgres_url = %postgres_url, "PostgreSQL URL resolved");
     } else {
         debug!("PostgreSQL URL not provided");
+    }
+    let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
+    if let Some(valkey_url) = valkey_url.as_ref() {
+        debug!(valkey_url = %valkey_url, "Valkey URL resolved");
+    } else {
+        debug!("Valkey URL not provided");
     }
 
     // We do not validate credentials here since we just want the evaluator config
@@ -173,6 +180,7 @@ pub async fn run_evaluation(
             config_file: Some(args.config_file),
             postgres_config: postgres_url.map(PostgresConfig::Url),
             clickhouse_url: Some(clickhouse_url.clone()),
+            valkey_url,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,

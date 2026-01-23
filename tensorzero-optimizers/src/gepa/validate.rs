@@ -247,6 +247,7 @@ fn validate_stored_output(stored_output: Option<&StoredOutput>) -> Result<(), St
                         signature,
                         summary,
                         provider_type: _,
+                        extra_data: _,
                     } = thought;
                     if text.is_none() && signature.is_none() && summary.is_none() {
                         return Err(format!(
@@ -310,6 +311,7 @@ fn validate_stored_input_messages(
                         signature,
                         summary,
                         provider_type: _,
+                        extra_data: _,
                     } = thought;
                     if text.is_none() && signature.is_none() && summary.is_none() {
                         return Err(format!(
@@ -840,7 +842,7 @@ mod tests {
         );
         variants.insert(
             "chat_v2".to_string(),
-            create_variant_info("anthropic::claude-3-5-sonnet-20241022", Some("Prompt 2")),
+            create_variant_info("anthropic::claude-sonnet-4-5", Some("Prompt 2")),
         );
         variants.insert(
             "chat_v3".to_string(),
@@ -965,6 +967,7 @@ mod tests {
                 summary: None,
                 provider_type: None,
                 signature: None,
+                extra_data: None,
             },
         )]));
 
@@ -988,6 +991,7 @@ mod tests {
                 summary: None,
                 provider_type: None,
                 signature: Some("encrypted_thinking_signature".to_string()),
+                extra_data: None,
             },
         )]));
 
@@ -1091,6 +1095,7 @@ mod tests {
                 summary: None,
                 provider_type: None,
                 signature: None,
+                extra_data: None,
             })],
         }];
 
@@ -1115,6 +1120,7 @@ mod tests {
                 summary: None,
                 provider_type: None,
                 signature: Some("encrypted_thinking_signature".to_string()),
+                extra_data: None,
             })],
         }];
 
@@ -1309,7 +1315,7 @@ mod tests {
     fn create_test_variants(count: usize) -> HashMap<String, Arc<VariantInfo>> {
         let models = [
             "openai::gpt-4",
-            "anthropic::claude-3-5-sonnet-20241022",
+            "anthropic::claude-sonnet-4-5",
             "openai::gpt-3.5-turbo",
         ];
         (0..count)
@@ -1411,7 +1417,7 @@ mod tests {
     fn test_extract_from_variant_info_preserves_all_fields() {
         // Create a config with many fields set
         let mut uninitialized =
-            create_uninitialized_chat_config("anthropic::claude-3-5-sonnet-20241022", Some("Test"));
+            create_uninitialized_chat_config("anthropic::claude-sonnet-4-5", Some("Test"));
         uninitialized.weight = Some(2.5);
         uninitialized.temperature = Some(0.9);
         uninitialized.top_p = Some(0.95);

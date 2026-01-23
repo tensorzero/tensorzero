@@ -17,8 +17,9 @@ pub struct GetVariantSamplingProbabilitiesParams {
 }
 
 /// Response containing variant sampling probabilities
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetVariantSamplingProbabilitiesResponse {
     /// Map of variant names to their sampling probabilities (0.0 to 1.0)
     /// Probabilities sum to 1.0
@@ -128,7 +129,7 @@ mod tests {
 
             [functions.test_function.variants.variant_b]
             type = "chat_completion"
-            model = "anthropic::claude-3-5-sonnet-20241022"
+            model = "anthropic::claude-sonnet-4-5"
         "#;
 
         let mut temp_file = NamedTempFile::new().unwrap();

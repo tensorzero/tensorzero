@@ -26,8 +26,9 @@ pub struct GetEvaluationRunInfosForDatapointParams {
 }
 
 /// Information about a single evaluation run (returned by get_evaluation_run_infos).
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EvaluationRunInfoById {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
@@ -35,8 +36,9 @@ pub struct EvaluationRunInfoById {
 }
 
 /// Response containing evaluation run infos.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetEvaluationRunInfosResponse {
     pub run_infos: Vec<EvaluationRunInfoById>,
 }

@@ -26,7 +26,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2026.1.2"
+version = "2026.1.3"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -58,7 +58,7 @@ anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.30"
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
 minijinja = { version = "2.14.0", features = [
     "loader",
@@ -69,8 +69,8 @@ minijinja = { version = "2.14.0", features = [
     "unstable_machinery",
 ] }
 url = { version = "2.5.8", features = ["serde"] }
-google-cloud-auth = "1.3.0"
-object_store = { version = "0.13.0", features = ["serde", "aws", "gcp"] }
+google-cloud-auth = "1.4.0"
+object_store = { version = "0.13.1", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
 ts-rs = { version = "11.1.0", features = [
     "serde-compat",
@@ -81,7 +81,7 @@ ts-rs = { version = "11.1.0", features = [
     "no-serde-warnings",
 ] }
 pin-project = "1.1.10"
-chrono = { version = "0.4.41", features = ["serde"] }
+chrono = { version = "0.4.43", features = ["serde"] }
 git2 = { version = "0.20.3", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
     "tracing_level_info",
@@ -111,6 +111,8 @@ durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
+redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager"] }
+redis-test = { version = "1.0.1", features = ["aio"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

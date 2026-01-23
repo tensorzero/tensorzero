@@ -7,13 +7,19 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+test-support = ["dep:mockall"]
+
 [dependencies]
+mockall = { version = "0.14", optional = true }
 durable-tools-spawn.workspace = true
 durable.workspace = true
 tokio.workspace = true
 async-trait = "0.1"
 serde.workspace = true
 serde_json.workspace = true
+serde_path_to_error.workspace = true
+tensorzero-derive = { path = "../tensorzero-derive" }
 schemars.workspace = true
 sqlx.workspace = true
 thiserror = "2"
@@ -28,6 +34,8 @@ secrecy.workspace = true
 tensorzero-core.workspace = true
 evaluations = { path = "../../evaluations" }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+indexmap = "2.13.0"
 
 [dev-dependencies]
 mockall = "0.14"
+durable-tools = { path = ".", features = ["test-support"] }

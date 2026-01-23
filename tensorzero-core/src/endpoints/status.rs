@@ -11,8 +11,9 @@ use serde_json::{Value, json};
 
 pub const TENSORZERO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StatusResponse {
     pub status: String,
     pub version: String,
@@ -29,24 +30,27 @@ pub async fn status_handler(State(app_state): AppState) -> Json<StatusResponse> 
     })
 }
 
-/// A handler for a health check that includes availability of related services (for now, ClickHouse)
+/// A handler for a health check that includes availability of related services
 pub async fn health_handler(
     State(AppStateData {
         clickhouse_connection_info,
         postgres_connection_info,
+        valkey_connection_info,
         ..
     }): AppState,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let (clickhouse_result, postgres_result) = join!(
+    let (clickhouse_result, postgres_result, valkey_result) = join!(
         clickhouse_connection_info.health(),
         postgres_connection_info.health(),
+        valkey_connection_info.health(),
     );
 
-    if clickhouse_result.is_ok() && postgres_result.is_ok() {
+    if clickhouse_result.is_ok() && postgres_result.is_ok() && valkey_result.is_ok() {
         return Ok(Json(json!({
             "gateway": "ok",
             "clickhouse": "ok",
             "postgres": "ok",
+            "valkey": "ok",
         })));
     }
 
@@ -56,6 +60,7 @@ pub async fn health_handler(
             "gateway": "ok",
             "clickhouse": if clickhouse_result.is_ok() { "ok" } else { "error" },
             "postgres": if postgres_result.is_ok() { "ok" } else { "error" },
+            "valkey": if valkey_result.is_ok() { "ok" } else { "error" },
         })),
     ))
 }
@@ -84,11 +89,12 @@ mod tests {
             },
         );
         let response = health_handler(State(gateway_handle.app_state.clone())).await;
-        assert!(response.is_ok());
+        assert!(response.is_ok(), "health check should pass");
         let response_value = response.unwrap();
         assert_eq!(response_value.get("gateway").unwrap(), "ok");
         assert_eq!(response_value.get("clickhouse").unwrap(), "ok");
         assert_eq!(response_value.get("postgres").unwrap(), "ok");
+        assert_eq!(response_value.get("valkey").unwrap(), "ok");
     }
 
     #[tokio::test]

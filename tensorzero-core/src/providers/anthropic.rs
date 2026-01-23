@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use url::Url;
 
@@ -121,8 +122,9 @@ fn get_messages_url(base_url: &Url) -> Result<Url, Error> {
     })
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AnthropicProvider {
     model_name: String,
     api_base: Option<Url>,
@@ -273,7 +275,10 @@ impl InferenceProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
-        if self.beta_structured_outputs {
+        // Add beta header for json_mode=strict (for output_format) OR beta_structured_outputs (for strict tools)
+        if matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict)
+            || self.beta_structured_outputs
+        {
             builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
         }
 
@@ -324,7 +329,6 @@ impl InferenceProvider for AnthropicProvider {
                 raw_response,
                 model_name: tensorzero_model_name,
                 provider_name: &model_provider.name,
-                beta_structured_outputs: self.beta_structured_outputs,
                 model_inference_id,
             };
             Ok(response_with_latency.try_into()?)
@@ -376,7 +380,10 @@ impl InferenceProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
-        if self.beta_structured_outputs {
+        // Add beta header for json_mode=strict (for output_format) OR beta_structured_outputs (for strict tools)
+        if matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict)
+            || self.beta_structured_outputs
+        {
             builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
         }
 
@@ -401,7 +408,7 @@ impl InferenceProvider for AnthropicProvider {
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
-        if needs_json_prefill(request, self.beta_structured_outputs) {
+        if needs_json_prefill(request) {
             prefill_json_chunk_response(chunk);
         }
         Ok((stream, raw_request))
@@ -849,14 +856,12 @@ pub(super) struct AnthropicMessagesConfig {
     pub(super) fetch_and_encode_input_files_before_inference: bool,
 }
 
-fn needs_json_prefill(request: &ModelInferenceRequest<'_>, beta_structured_outputs: bool) -> bool {
-    matches!(
-        request.json_mode,
-        ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-    ) && matches!(request.function_type, FunctionType::Json)
-        // Anthropic rejects prefill when 'output_format' is specified
-        && !(beta_structured_outputs
-            && matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict))
+/// Returns true if we should use JSON prefill for this request.
+/// Prefill is only used for json_mode=on. For json_mode=strict, we use
+/// the beta structured outputs feature with output_format instead.
+fn needs_json_prefill(request: &ModelInferenceRequest<'_>) -> bool {
+    matches!(request.json_mode, ModelInferenceRequestJsonMode::On)
+        && matches!(request.function_type, FunctionType::Json)
 }
 
 impl<'a> AnthropicRequestBody<'a> {
@@ -886,7 +891,7 @@ impl<'a> AnthropicRequestBody<'a> {
                 AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
             }))
             .await?;
-        let messages = if needs_json_prefill(request, beta_structured_outputs) {
+        let messages = if needs_json_prefill(request) {
             prefill_json_message(messages)
         } else {
             messages
@@ -929,19 +934,16 @@ impl<'a> AnthropicRequestBody<'a> {
             service_tier: None, // handled below
             tool_choice,
             tools,
-            output_format: if beta_structured_outputs {
-                match request.json_mode {
-                    ModelInferenceRequestJsonMode::Strict => {
-                        request
-                            .output_schema
-                            .map(|schema| AnthropicOutputFormat::JsonSchema {
-                                schema: schema.clone(),
-                            })
-                    }
-                    ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
+            // Always use output_format for json_mode=strict (not gated by beta_structured_outputs)
+            output_format: match request.json_mode {
+                ModelInferenceRequestJsonMode::Strict => {
+                    request
+                        .output_schema
+                        .map(|schema| AnthropicOutputFormat::JsonSchema {
+                            schema: schema.clone(),
+                        })
                 }
-            } else {
-                None
+                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
             },
             stop_sequences: request.borrow_stop_sequences(),
         };
@@ -1094,8 +1096,9 @@ pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseC
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlock {
     Text {
         text: String,
@@ -1146,6 +1149,7 @@ fn convert_to_output(
             signature: Some(signature),
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         })),
         FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
@@ -1153,6 +1157,7 @@ fn convert_to_output(
                 signature: Some(data),
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }))
         }
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown(Unknown {
@@ -1169,12 +1174,33 @@ pub struct AnthropicUsage {
     input_tokens: Option<u32>,
     #[serde(default)]
     output_tokens: Option<u32>,
+    /// Number of input tokens used to create a new cache entry
+    #[serde(default)]
+    cache_creation_input_tokens: Option<u32>,
+    /// Number of input tokens read from cache
+    #[serde(default)]
+    cache_read_input_tokens: Option<u32>,
 }
 
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
+        // Anthropic reports cache tokens separately from input_tokens.
+        // We need to add them back to get the total input token count.
+        let total_input_tokens = match (
+            value.input_tokens,
+            value.cache_creation_input_tokens,
+            value.cache_read_input_tokens,
+        ) {
+            (None, None, None) => None,
+            _ => Some(
+                value.input_tokens.unwrap_or(0)
+                    + value.cache_creation_input_tokens.unwrap_or(0)
+                    + value.cache_read_input_tokens.unwrap_or(0),
+            ),
+        };
+
         Usage {
-            input_tokens: value.input_tokens,
+            input_tokens: total_input_tokens,
             output_tokens: value.output_tokens,
         }
     }
@@ -1228,7 +1254,6 @@ struct AnthropicResponseWithMetadata<'a> {
     input_messages: Vec<RequestMessage>,
     model_name: &'a str,
     provider_name: &'a str,
-    beta_structured_outputs: bool,
     model_inference_id: Uuid,
 }
 
@@ -1244,7 +1269,6 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             input_messages,
             model_name,
             provider_name,
-            beta_structured_outputs,
             model_inference_id,
         } = value;
         let output: Vec<ContentBlockOutput> = response
@@ -1252,7 +1276,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             .into_iter()
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
-        let content = if needs_json_prefill(generic_request, beta_structured_outputs) {
+        let content = if needs_json_prefill(generic_request) {
             prefill_json_response(output)?
         } else {
             output
@@ -1320,8 +1344,9 @@ pub(super) fn handle_anthropic_error(
     }
 }
 
-#[derive(Deserialize, Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlockDelta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
@@ -1432,6 +1457,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1448,6 +1474,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1501,6 +1528,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(provider_type.to_string()),
+                    extra_data: None,
                 })],
                 None,
                 raw_message,
@@ -1516,6 +1544,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -2394,23 +2423,45 @@ mod tests {
         let anthropic_usage = AnthropicUsage {
             input_tokens: Some(100),
             output_tokens: Some(50),
+            ..Default::default()
         };
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, Some(100));
-        assert_eq!(usage.output_tokens, Some(50));
+        assert_eq!(usage.input_tokens, Some(100), "input_tokens should match");
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
 
         // Test with None values
         let anthropic_usage = AnthropicUsage {
             input_tokens: None,
             output_tokens: Some(100),
+            ..Default::default()
         };
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, None);
-        assert_eq!(usage.output_tokens, Some(100));
+        assert_eq!(
+            usage.input_tokens, None,
+            "input_tokens should be None when not provided"
+        );
+        assert_eq!(usage.output_tokens, Some(100), "output_tokens should match");
+
+        // Test with cache tokens
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: Some(10),
+            output_tokens: Some(50),
+            cache_creation_input_tokens: Some(100),
+            cache_read_input_tokens: Some(200),
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(
+            usage.input_tokens,
+            Some(310),
+            "input_tokens should include cache tokens (10 + 100 + 200)"
+        );
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
     }
 
     #[test]
@@ -2429,6 +2480,7 @@ mod tests {
             usage: AnthropicUsage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2479,7 +2531,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
 
@@ -2513,6 +2564,7 @@ mod tests {
             usage: AnthropicUsage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2537,7 +2589,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
 
@@ -2584,6 +2635,7 @@ mod tests {
             usage: AnthropicUsage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2608,7 +2660,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -2968,6 +3019,7 @@ mod tests {
             AnthropicUsage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                ..Default::default()
             },
             "both fields should be Some when present"
         );
@@ -2982,6 +3034,7 @@ mod tests {
             AnthropicUsage {
                 input_tokens: Some(50),
                 output_tokens: None,
+                ..Default::default()
             },
             "output_tokens should be None when missing"
         );
@@ -2996,6 +3049,7 @@ mod tests {
             AnthropicUsage {
                 input_tokens: None,
                 output_tokens: Some(100),
+                ..Default::default()
             },
             "input_tokens should be None when missing"
         );
@@ -3008,6 +3062,7 @@ mod tests {
             AnthropicUsage {
                 input_tokens: None,
                 output_tokens: None,
+                ..Default::default()
             },
             "both fields should be None for empty object"
         );

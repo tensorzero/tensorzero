@@ -22,7 +22,7 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
         UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::GCPVertexGeminiSFT(
                 UninitializedGCPVertexGeminiSFTConfig {
-                    model: "gemini-2.0-flash-lite-001".to_string(),
+                    model: "gemini-2.5-flash-lite".to_string(),
                     learning_rate_multiplier: None,
                     adapter_size: None,
                     n_epochs: Some(1),

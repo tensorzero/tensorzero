@@ -292,6 +292,7 @@ async fn get_providers() -> E2ETestProviders {
         // reasoning_inference: reasoning_providers,
         reasoning_inference: vec![],
         reasoning_usage_inference: reasoning_usage_providers,
+        cache_input_tokens_inference: standard_providers.clone(),
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
@@ -1293,7 +1294,7 @@ async fn test_embedding_request() {
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
-            PostgresConnectionInfo::Disabled,
+            Arc::new(PostgresConnectionInfo::Disabled),
         )),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
@@ -1444,7 +1445,7 @@ async fn test_embedding_sanity_check() {
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
-            PostgresConnectionInfo::Disabled,
+            Arc::new(PostgresConnectionInfo::Disabled),
         )),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),

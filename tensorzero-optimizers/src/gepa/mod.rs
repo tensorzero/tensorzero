@@ -1,6 +1,5 @@
 //! GEPA optimizer implementation
 
-use async_trait::async_trait;
 use futures::future::join_all;
 use rand::{SeedableRng, rngs::StdRng, seq::IteratorRandom};
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -9,7 +8,10 @@ use uuid::Uuid;
 use tensorzero_core::{
     client::{ClientBuilder, ClientBuilderMode},
     config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
-    db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
+    db::{
+        clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo,
+        valkey::ValkeyConnectionInfo,
+    },
     endpoints::{datasets::v1::delete_dataset, inference::InferenceCredentials},
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
@@ -46,7 +48,6 @@ pub struct GEPAVariant {
     pub config: UninitializedChatCompletionConfig,
 }
 
-#[async_trait]
 impl Optimizer for GEPAConfig {
     type Handle = GEPAJobHandle;
 
@@ -86,6 +87,7 @@ impl Optimizer for GEPAConfig {
             config: config.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
+            valkey_connection_info: ValkeyConnectionInfo::Disabled,
             http_client: client.clone(),
             timeout: Some(Duration::from_secs(self.timeout)),
         })
@@ -578,7 +580,6 @@ impl Optimizer for GEPAConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for GEPAJobHandle {
     async fn poll(
         &self,

@@ -11,8 +11,8 @@ use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
-    ListDatapointsRequest, ListDatapointsResponse, ListInferencesRequest, Role,
+    GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
+    InferenceResponse, ListDatapointsRequest, ListDatapointsResponse, ListInferencesRequest, Role,
     StoredChatInference, StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
     WriteConfigRequest, WriteConfigResponse,
 };
@@ -118,6 +118,11 @@ mock! {
         async fn list_inferences(
             &self,
             request: ListInferencesRequest,
+        ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+        async fn get_inferences(
+            &self,
+            request: GetInferencesRequest,
         ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
         async fn launch_optimization_workflow(

@@ -520,6 +520,17 @@ class InputMessageContentTemplate:
 
 
 @dataclass(kw_only=True)
+class InputMessageContentInferenceResponseToolCall(InferenceResponseToolCall):
+    """
+    `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+    Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+    but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
+    """
+
+    type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
 class InputMessageContentToolResult:
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
@@ -1119,7 +1130,13 @@ class InferenceParams:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentToolCall:
+class InputMessageContentToolCall(ToolCall):
+    """
+    `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+    Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+    but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
+    """
+
     type: Literal["tool_call"] = "tool_call"
 
 
@@ -1257,6 +1274,12 @@ class Thought:
     Struct that represents a model's reasoning
     """
 
+    extra_data: Any | None = None
+    """
+    Provider-specific opaque data for multi-turn reasoning support.
+    For example, OpenRouter stores encrypted reasoning blocks with `{"format": "...", "encrypted": true}` structure.
+    Note: Not exposed to Python because `Value` doesn't implement `IntoPyObject`.
+    """
     provider_type: str | None = None
     """
     When set, this `Thought` block will only be used for providers
@@ -1265,8 +1288,8 @@ class Thought:
     """
     signature: str | None = None
     """
-    An optional signature - currently, this is only used with Anthropic,
-    and is ignored by other providers.
+    An optional signature - used with Anthropic and OpenRouter for multi-turn
+    reasoning conversations. Other providers will ignore this field.
     """
     summary: list[ThoughtSummaryBlock] | None = None
     text: str | None = None
@@ -1333,6 +1356,7 @@ InputMessageContent = (
     InputMessageContentText
     | InputMessageContentTemplate
     | InputMessageContentToolCall
+    | InputMessageContentInferenceResponseToolCall
     | InputMessageContentToolResult
     | InputMessageContentRawText
     | InputMessageContentThought

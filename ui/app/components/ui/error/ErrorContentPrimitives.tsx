@@ -1,5 +1,6 @@
 import * as React from "react";
-import { type LucideIcon } from "lucide-react";
+import { useAsyncError, isRouteErrorResponse } from "react-router";
+import { AlertCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
@@ -115,7 +116,15 @@ export function PageErrorContainer({
   );
 }
 
-interface PageErrorStackProps {
+export function TableErrorContainer({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <div className="flex justify-center py-16">{children}</div>;
+}
+
+interface ErrorNoticeProps {
   icon: LucideIcon;
   title: string;
   description: string;
@@ -123,12 +132,12 @@ interface PageErrorStackProps {
   muted?: boolean;
 }
 
-export function PageErrorStack({
+export function ErrorNotice({
   icon: Icon,
   title,
   description,
   muted = false,
-}: PageErrorStackProps) {
+}: ErrorNoticeProps) {
   return (
     <div className="flex w-[26rem] max-w-full flex-col items-center px-8 py-10 text-center">
       <Icon
@@ -142,5 +151,95 @@ export function PageErrorStack({
         {description}
       </p>
     </div>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside PageErrorContainer.
+ * Use for full-page error states.
+ */
+export function PageErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <PageErrorContainer>
+      <ErrorNotice {...props} />
+    </PageErrorContainer>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside TableErrorContainer.
+ * Use for inline table error states (inside TableCell).
+ */
+export function TableErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <TableErrorContainer>
+      <ErrorNotice {...props} />
+    </TableErrorContainer>
+  );
+}
+
+export function SectionErrorContainer({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-border flex justify-center rounded-md border py-12">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside SectionErrorContainer.
+ * Use for section-level error states (BasicInfo, Input, Output, etc.).
+ */
+export function SectionErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <SectionErrorContainer>
+      <ErrorNotice {...props} />
+    </SectionErrorContainer>
+  );
+}
+
+interface SectionAsyncErrorStateProps {
+  defaultMessage?: string;
+}
+
+/**
+ * Error state for sections using React Router's <Await> component.
+ * Must be rendered inside an <Await errorElement={...}> to access the async error.
+ * @throws Error if used outside of an <Await errorElement={...}> context
+ */
+export function SectionAsyncErrorState({
+  defaultMessage = "Failed to load data",
+}: SectionAsyncErrorStateProps) {
+  const error = useAsyncError();
+
+  if (error === undefined) {
+    throw new Error(
+      "SectionAsyncErrorState must be used inside an <Await errorElement={...}>",
+    );
+  }
+
+  let message: string;
+  if (isRouteErrorResponse(error)) {
+    if (typeof error.data === "string") {
+      message = error.data;
+    } else {
+      message = `${error.status} ${error.statusText}`;
+    }
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = defaultMessage;
+  }
+
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading data"
+      description={message}
+    />
   );
 }

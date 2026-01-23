@@ -11,8 +11,9 @@ fn default_deploy_after_training() -> bool {
 /// Initialized Fireworks SFT Config (per-job settings only).
 /// Provider-level settings (account_id, credentials) come from
 /// `provider_types.fireworks.sft` in the gateway config.
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct FireworksSFTConfig {
     pub model: String,
     pub early_stop: Option<bool>,
@@ -37,8 +38,9 @@ pub struct FireworksSFTConfig {
 /// Uninitialized Fireworks SFT Config (per-job settings only).
 /// Provider-level settings (account_id, credentials) come from
 /// `provider_types.fireworks.sft` in the gateway config.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {
     pub model: String,
@@ -189,8 +191,9 @@ impl UninitializedFireworksSFTConfig {
 
 /// Minimal job handle for Fireworks SFT.
 /// All configuration needed for polling comes from provider_types at poll time.
-#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct FireworksSFTJobHandle {
     pub job_url: Url,

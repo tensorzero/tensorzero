@@ -582,13 +582,8 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 }
 
 pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
-    // TODO (#5680): we disabled AWS/Anthropic/GCP Vertex Anthropic tests on JSON functions + reasoning because the prefill breaks
-    if provider.variant_name == "aws-bedrock-thinking"
-        || provider.variant_name == "anthropic-haiku-4-5-thinking"
-        || provider.variant_name == "gcp-vertex-anthropic-thinking"
-    {
-        return;
-    }
+    // Direct Anthropic uses output_format for json_mode=strict
+    // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
 
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
@@ -814,13 +809,8 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         return;
     }
 
-    // TODO (#5680): we disabled AWS/Anthropic/GCP Vertex Anthropic tests on JSON functions + reasoning because the prefill breaks
-    if provider.variant_name == "aws-bedrock-thinking"
-        || provider.variant_name == "anthropic-haiku-4-5-thinking"
-        || provider.variant_name == "gcp-vertex-anthropic-thinking"
-    {
-        return;
-    }
+    // Direct Anthropic uses output_format for json_mode=strict
+    // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
 
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {

@@ -20,8 +20,9 @@ pub struct GetHumanFeedbackRequest {
 }
 
 /// Response for the check human feedback endpoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct GetHumanFeedbackResponse {
     /// The human feedback result, if it exists.
     #[serde(skip_serializing_if = "Option::is_none")]

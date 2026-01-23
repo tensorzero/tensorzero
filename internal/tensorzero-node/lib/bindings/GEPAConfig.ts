@@ -39,11 +39,11 @@ export type GEPAConfig = {
    */
   max_concurrency: number;
   /**
-   * Model for analysis (e.g., "anthropic::claude-sonnet-4-5-20250929")
+   * Model for analysis (e.g., "anthropic::claude-sonnet-4-5")
    */
   analysis_model: string;
   /**
-   * Model for mutation (e.g., "anthropic::claude-sonnet-4-5-20250929")
+   * Model for mutation (e.g., "anthropic::claude-sonnet-4-5")
    */
   mutation_model: string;
   /**
