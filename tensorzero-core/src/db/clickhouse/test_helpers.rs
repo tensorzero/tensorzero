@@ -4,21 +4,40 @@
     clippy::print_stdout,
     clippy::unwrap_used
 )]
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
 use crate::config::BatchWritesConfig;
 use crate::db::stored_datapoint::StoredChatInferenceDatapoint;
 use crate::endpoints::datasets::JsonInferenceDatapoint;
-use crate::endpoints::workflow_evaluation_run::{
-    WorkflowEvaluationRunEpisodeRow, WorkflowEvaluationRunRow,
-};
 
 use super::ClickHouseConnectionInfo;
+
+/// Database row type for workflow evaluation run (used in test helpers).
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkflowEvaluationRunRow {
+    pub run_id: Uuid,
+    pub variant_pins: HashMap<String, String>,
+    pub tags: HashMap<String, String>,
+    pub project_name: Option<String>,
+    pub run_display_name: Option<String>,
+}
+
+/// Database row type for workflow evaluation run episode (used in test helpers).
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkflowEvaluationRunEpisodeRow {
+    pub run_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_pins: HashMap<String, String>,
+    pub task_name: Option<String>,
+    pub tags: HashMap<String, String>,
+}
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
 #[cfg(feature = "e2e_tests")]
 use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
 use serde_json::Value;
-#[cfg(feature = "e2e_tests")]
-use std::collections::HashMap;
 use std::sync::LazyLock;
 use uuid::Uuid;
 
