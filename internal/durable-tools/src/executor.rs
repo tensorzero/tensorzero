@@ -43,19 +43,29 @@ use durable_tools_spawn::TaskToolParams;
 ///     .build()
 ///     .await?;
 ///
-/// // Register tools
-/// executor.register_task_tool::<ResearchTool>().await;
-/// executor.register_simple_tool::<SearchTool>().await;
+/// // Register tools (pass instances)
+/// executor.register_task_tool_instance(ResearchTool).await?;
+/// executor.register_simple_tool_instance(SearchTool).await?;
 ///
-/// // Spawn a tool execution (without side info)
+/// // Spawn a tool execution by name
 /// let episode_id = Uuid::now_v7();
-/// executor.spawn_tool::<ResearchTool>(params, (), episode_id).await?;
+/// executor.spawn_tool_by_name(
+///     "research",
+///     serde_json::json!({"topic": "rust"}),
+///     serde_json::json!(null),  // No side info
+///     episode_id,
+/// ).await?;
 ///
 /// // Spawn with side info
-/// executor.spawn_tool::<GitHubTool>(params, credentials, episode_id).await?;
+/// executor.spawn_tool_by_name(
+///     "github",
+///     serde_json::to_value(params)?,
+///     serde_json::to_value(credentials)?,
+///     episode_id,
+/// ).await?;
 ///
 /// // Start a worker
-/// let worker = executor.start_worker(WorkerOptions::default()).await;
+/// let worker = executor.start_worker(WorkerOptions::default()).await?;
 /// ```
 pub struct ToolExecutor {
     /// The durable client for task management.
