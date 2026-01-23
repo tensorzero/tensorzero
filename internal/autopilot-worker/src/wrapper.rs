@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use autopilot_tools::AutopilotToolError;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, NonControlToolError, SimpleTool, SimpleToolContext,
-    TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
-    ToolResult as DurableToolResult, ToolResultExt,
+    CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, NonControlToolError,
+    SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient, ToolAppState, ToolContext,
+    ToolError, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -149,10 +149,10 @@ async fn publish_result(
         .create_autopilot_event(
             params.session_id,
             CreateEventGatewayRequest {
-                payload: EventPayload::ToolResult {
+                payload: EventPayload::ToolResult(EventPayloadToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
-                },
+                }),
                 previous_user_message_event_id: None,
             },
         )
@@ -627,10 +627,10 @@ mod tests {
                 *sid == expected_session_id
                     && matches!(
                         &request.payload,
-                        EventPayload::ToolResult {
+                        EventPayload::ToolResult(EventPayloadToolResult {
                             tool_call_event_id: tceid,
                             outcome: ToolOutcome::Success(_),
-                        } if *tceid == expected_tool_call_event_id
+                        }) if *tceid == expected_tool_call_event_id
                     )
             })
             .returning(|sid, _| {
@@ -667,10 +667,10 @@ mod tests {
             .withf(move |_sid, request| {
                 matches!(
                     &request.payload,
-                    EventPayload::ToolResult {
+                    EventPayload::ToolResult(EventPayloadToolResult {
                         tool_call_event_id: tceid,
                         outcome: ToolOutcome::Failure { error },
-                    } if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
+                    }) if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
                 )
             })
             .returning(|sid, _| {
