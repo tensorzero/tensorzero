@@ -202,6 +202,8 @@ function renderEventTitle(event: Event) {
           return <>Tool Call Authorization &middot; Approved</>;
         case "rejected":
           return <>Tool Call Authorization &middot; Rejected</>;
+        case "not_available":
+          return <>Tool Call Authorization &middot; Not Available</>;
         default:
           // This branch should never be reached but we need it to keep ESLint happy...
           {

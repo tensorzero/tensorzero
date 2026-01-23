@@ -550,10 +550,14 @@ async fn setup_autopilot_client(
             let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
                 .unwrap_or_else(|_| "autopilot".to_string());
 
-            let mut builder = AutopilotClient::builder().api_key(api_key);
-            builder = builder
+            // Collect available tool names for filtering unknown tool calls
+            let available_tools = autopilot_client::collect_tool_names();
+
+            let mut builder = AutopilotClient::builder()
+                .api_key(api_key)
                 .spawn_pool(pool.clone())
-                .spawn_queue_name(queue_name);
+                .spawn_queue_name(queue_name)
+                .available_tools(available_tools);
 
             // Allow custom base URL for testing
             if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {

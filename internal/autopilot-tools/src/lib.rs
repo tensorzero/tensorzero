@@ -40,6 +40,10 @@
 //! - `ErrorSimpleTool` - Always returns an error
 //! - `SlowSimpleTool` - Sleeps for configurable duration
 
+use std::collections::HashSet;
+
+use durable_tools::ToolMetadata;
+
 pub mod error;
 pub mod tools;
 mod visitor;
@@ -47,6 +51,48 @@ mod visitor;
 pub use error::{AutopilotToolError, AutopilotToolResult};
 
 pub use visitor::ToolVisitor;
+
+/// Collect all available tool names synchronously.
+///
+/// This is used by `AutopilotClient` to know which tools are available
+/// for filtering unknown tool calls.
+pub fn collect_tool_names() -> HashSet<String> {
+    let mut names = HashSet::new();
+
+    // Production tools
+    names.insert(tools::InferenceTool::name().to_string());
+    names.insert(tools::FeedbackTool::name().to_string());
+    names.insert(tools::CreateDatapointsTool::name().to_string());
+    names.insert(tools::CreateDatapointsFromInferencesTool::name().to_string());
+    names.insert(tools::ListDatapointsTool::name().to_string());
+    names.insert(tools::GetDatapointsTool::name().to_string());
+    names.insert(tools::UpdateDatapointsTool::name().to_string());
+    names.insert(tools::DeleteDatapointsTool::name().to_string());
+    names.insert(tools::LaunchOptimizationWorkflowTool::name().to_string());
+    names.insert(tools::GetLatestFeedbackByMetricTool::name().to_string());
+    names.insert(tools::GetFeedbackByVariantTool::name().to_string());
+    names.insert(tools::RunEvaluationTool::name().to_string());
+    names.insert(tools::GetConfigTool::name().to_string());
+    names.insert(tools::WriteConfigTool::name().to_string());
+    names.insert(tools::ListInferencesTool::name().to_string());
+    names.insert(tools::GetInferencesTool::name().to_string());
+    names.insert(tools::AutoRejectToolCallTool::name().to_string());
+
+    // Test tools (e2e_tests feature)
+    #[cfg(feature = "e2e_tests")]
+    {
+        names.insert(tools::EchoTool::name().to_string());
+        names.insert(tools::SlowTool::name().to_string());
+        names.insert(tools::FailingTool::name().to_string());
+        names.insert(tools::FlakyTool::name().to_string());
+        names.insert(tools::PanicTool::name().to_string());
+        names.insert(tools::GoodSimpleTool::name().to_string());
+        names.insert(tools::ErrorSimpleTool::name().to_string());
+        names.insert(tools::SlowSimpleTool::name().to_string());
+    }
+
+    names
+}
 
 /// Iterate over all tools with a visitor.
 ///
@@ -165,6 +211,11 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .await?;
     visitor
         .visit_simple_tool::<tools::GetInferencesTool>()
+        .await?;
+
+    // Internal tools
+    visitor
+        .visit_simple_tool::<tools::AutoRejectToolCallTool>()
         .await?;
 
     // Test tools (e2e_tests feature)

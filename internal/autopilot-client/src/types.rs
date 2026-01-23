@@ -268,6 +268,7 @@ pub struct AutopilotToolResult {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
     Ui,
+    Automatic,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -284,6 +285,7 @@ pub struct EventPayloadToolCallAuthorization {
 pub enum ToolCallAuthorizationStatus {
     Approved,
     Rejected { reason: String },
+    NotAvailable,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
