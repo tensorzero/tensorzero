@@ -1477,3 +1477,60 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
         "processing_time_ms should be present for a completed inference"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_inferences_rejects_output_source_none() {
+    let http_client = Client::new();
+
+    let request = json!({
+        "ids": ["00000000-0000-0000-0000-000000000000"],
+        "output_source": "none"
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/v1/inferences/get_inferences"))
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected 400 Bad Request for output_source: none"
+    );
+    let error: serde_json::Value = response.json().await.unwrap();
+    let error_message = error["error"].as_str().unwrap().to_lowercase();
+    assert!(
+        error_message.contains("none"),
+        "Error message should mention 'none': {error_message}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inferences_rejects_output_source_none() {
+    let http_client = Client::new();
+
+    let request = json!({
+        "output_source": "none"
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected 400 Bad Request for output_source: none"
+    );
+    let error: serde_json::Value = response.json().await.unwrap();
+    let error_message = error["error"].as_str().unwrap().to_lowercase();
+    assert!(
+        error_message.contains("none"),
+        "Error message should mention 'none': {error_message}"
+    );
+}
