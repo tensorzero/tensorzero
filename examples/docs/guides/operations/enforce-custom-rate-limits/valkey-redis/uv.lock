@@ -452,7 +452,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tensorzero-examples-docs-guides-operations-enforce-rate-limits"
+name = "tensorzero-examples-docs-guides-operations-enforce-rate-limits-valkey-redis"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

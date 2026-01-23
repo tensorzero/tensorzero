@@ -159,7 +159,7 @@ jiter==0.12.0 \
 openai==2.15.0 \
     --hash=sha256:42eb8cbb407d84770633f31bf727d4ffb4138711c670565a41663d9439174fba \
     --hash=sha256:6ae23b932cd7230f7244e52954daa6602716d6b9bf235401a107af731baea6c3
-    # via tensorzero-examples-docs-guides-operations-enforce-rate-limits
+    # via tensorzero-examples-docs-guides-operations-enforce-rate-limits-valkey-redis
 pydantic==2.12.5 \
     --hash=sha256:4d351024c75c0f085a9febbb665ce8c0c6ec5d30e903bdb6394b7ede26aebb49 \
     --hash=sha256:e561593fccf61e8a20fc46dfc2dfe075b8be7d0188df33f221ad1f0139180f9d
@@ -299,7 +299,7 @@ tensorzero==2025.11.3 ; python_full_version < '3.10' \
     --hash=sha256:b37c708a9ad64052a01180e59c7e47bd1cd66626941e22f030ee60afe6daa443 \
     --hash=sha256:ccbcb45949593cfdb7e7653a9b6366beb077f0cd34e04e0297003eae669a66d4 \
     --hash=sha256:f95556807fa0b3bdc122d0242ffdef96281e0ce0f872f67844e919fc9519cdef
-    # via tensorzero-examples-docs-guides-operations-enforce-rate-limits
+    # via tensorzero-examples-docs-guides-operations-enforce-rate-limits-valkey-redis
 tensorzero==2026.1.2 ; python_full_version >= '3.10' \
     --hash=sha256:247baebda2cff4c05ed6911c118a6cb076bc3b5a959ce9d46cd8455b77ddaf45 \
     --hash=sha256:2a71ac51870ea90a40c4c28fb19098d8cde8f9b7ec18048cac77d2ea7b4d9681 \
@@ -308,7 +308,7 @@ tensorzero==2026.1.2 ; python_full_version >= '3.10' \
     --hash=sha256:7217240580304a8cbfffa153b92a993af98ad8ab9765a0cf970043700190b735 \
     --hash=sha256:7af896a6c8e7dd789913c4977be586b808aa768cf5adb2bb2ff6b4651dfd4311 \
     --hash=sha256:818b010d71dc6bb9b60158fb081dd475e5ce7257d975809288f9f571c6daa219
-    # via tensorzero-examples-docs-guides-operations-enforce-rate-limits
+    # via tensorzero-examples-docs-guides-operations-enforce-rate-limits-valkey-redis
 tqdm==4.67.1 \
     --hash=sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2 \
     --hash=sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2
