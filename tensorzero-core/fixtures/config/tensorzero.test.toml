@@ -21,12 +21,12 @@ type = "azure"
 deployment_id = "gpt-4.1-mini"
 endpoint = "https://your-endpoint.openai.azure.com"
 
-[models.claude-3-haiku-20240307]
+[models.claude-haiku-4-5]
 routing = ["anthropic"]
 
-[models.claude-3-haiku-20240307.providers.anthropic]
+[models.claude-haiku-4-5.providers.anthropic]
 type = "anthropic"
-model_name = "claude-3-haiku-20240307"
+model_name = "claude-haiku-4-5"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                              EMBEDDING MODELS                              │
@@ -189,7 +189,7 @@ optimize = "min"
 [evaluations.evaluation1.evaluators.llm_judge_bool.variants.anthropic_promptA]
 type = "chat_completion"
 active = true
-model = "anthropic::claude-3.5-sonnet"
+model = "anthropic::claude-sonnet-4-5"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
 json_mode = "tool"
 
@@ -203,5 +203,5 @@ include = { reference_output = true }
 type = "chat_completion"
 active = true
 json_mode = "tool"
-model = "anthropic::claude-3.5-sonnet"
+model = "anthropic::claude-sonnet-4-5"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_float/system_instructions.txt"

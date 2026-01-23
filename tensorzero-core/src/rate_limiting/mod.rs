@@ -353,8 +353,9 @@ impl ActiveRateLimit {
     }
 }
 
-#[derive(Debug, Serialize, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
     pub scope: RateLimitingConfigScopes,
@@ -385,8 +386,9 @@ impl RateLimitingConfigRule {
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimit {
     pub resource: RateLimitResource,
     pub interval: RateLimitInterval,
@@ -396,8 +398,8 @@ pub struct RateLimit {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitResource {
     ModelInference,
     Token,
@@ -444,8 +446,8 @@ impl EstimatedRateLimitResourceUsage {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitInterval {
     Second,
     Minute,
@@ -490,10 +492,28 @@ impl RateLimitInterval {
             },
         }
     }
+
+    /// Convert a `RateLimitInterval` to microseconds for Valkey Lua scripts.
+    ///
+    /// Note: in this implementation we define `Month` as exactly 30 days
+    /// (2,592,000,000,000 microseconds), not a calendar-aware month.
+    ///
+    /// TODO(shuyangli): change Postgres to match.
+    pub fn to_microseconds(&self) -> u64 {
+        match *self {
+            RateLimitInterval::Second => 1_000_000,
+            RateLimitInterval::Minute => 60_000_000,
+            RateLimitInterval::Hour => 3_600_000_000,
+            RateLimitInterval::Day => 86_400_000_000,
+            RateLimitInterval::Week => 604_800_000_000,
+            RateLimitInterval::Month => 2_592_000_000_000,
+        }
+    }
 }
 
-#[derive(Debug, Serialize, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, PartialEq, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
     Always,
@@ -501,8 +521,9 @@ pub enum RateLimitingConfigPriority {
 
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
-#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
 
 impl RateLimitingConfigScopes {
@@ -541,8 +562,8 @@ trait Scope {
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitingConfigScope {
     Tag(TagRateLimitingConfigScope),
     ApiKeyPublicId(ApiKeyPublicIdConfigScope),
@@ -561,8 +582,9 @@ impl Scope for RateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TagRateLimitingConfigScope {
     tag_key: String,
     tag_value: TagValueScope,
@@ -604,8 +626,9 @@ impl TagRateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ApiKeyPublicIdConfigScope {
     api_key_public_id: ApiKeyPublicIdValueScope,
 }
@@ -636,8 +659,9 @@ impl ApiKeyPublicIdConfigScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TagValueScope {
     Concrete(String),
     Each,
@@ -657,8 +681,9 @@ impl Serialize for TagValueScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum ApiKeyPublicIdValueScope {
     Concrete(String),
     Each,

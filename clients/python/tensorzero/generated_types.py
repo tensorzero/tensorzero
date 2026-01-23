@@ -520,6 +520,17 @@ class InputMessageContentTemplate:
 
 
 @dataclass(kw_only=True)
+class InputMessageContentInferenceResponseToolCall(InferenceResponseToolCall):
+    """
+    `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+    Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+    but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
+    """
+
+    type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
 class InputMessageContentToolResult:
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
@@ -1119,7 +1130,13 @@ class InferenceParams:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentToolCall:
+class InputMessageContentToolCall(ToolCall):
+    """
+    `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+    Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+    but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
+    """
+
     type: Literal["tool_call"] = "tool_call"
 
 
@@ -1339,6 +1356,7 @@ InputMessageContent = (
     InputMessageContentText
     | InputMessageContentTemplate
     | InputMessageContentToolCall
+    | InputMessageContentInferenceResponseToolCall
     | InputMessageContentToolResult
     | InputMessageContentRawText
     | InputMessageContentThought

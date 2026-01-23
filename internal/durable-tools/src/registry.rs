@@ -1,8 +1,8 @@
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use schemars::Schema;
 use serde_json::Value as JsonValue;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
@@ -186,19 +186,22 @@ impl<T: SimpleTool> ErasedSimpleTool for T {
 /// - Looking up tool metadata
 /// - Generating LLM function definitions
 /// - Dynamically invoking tools by name
+/// We use an IndexMap to get consistent iteration order across runs,
+/// which is important for LLM request/prompt caching
+/// (the tools get passed to the LLM input)
 pub struct ToolRegistry {
     /// All tools (for metadata queries).
-    tools: HashMap<String, Arc<dyn ErasedTool>>,
+    tools: IndexMap<String, Arc<dyn ErasedTool>>,
     /// `SimpleTools` specifically (for step execution).
-    simple_tools: HashMap<String, Arc<dyn ErasedSimpleTool>>,
+    simple_tools: IndexMap<String, Arc<dyn ErasedSimpleTool>>,
 }
 
 impl ToolRegistry {
     /// Create a new empty registry.
     pub fn new() -> Self {
         Self {
-            tools: HashMap::new(),
-            simple_tools: HashMap::new(),
+            tools: IndexMap::new(),
+            simple_tools: IndexMap::new(),
         }
     }
 

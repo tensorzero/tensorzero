@@ -167,6 +167,7 @@
 //! }
 //! ```
 
+pub mod action;
 mod context;
 mod error;
 mod executor;
@@ -203,6 +204,10 @@ pub use tensorzero_client::{
     http_gateway_client,
 };
 
+// Re-export mock for testing
+#[cfg(any(test, feature = "test-support"))]
+pub use tensorzero_client::MockTensorZeroClient;
+
 // Re-export autopilot types for use by tools
 pub use tensorzero_client::{
     CreateEventGatewayRequest, CreateEventResponse, EventPayload, ListEventsParams,
@@ -228,7 +233,8 @@ pub use tensorzero_client::SnapshotHash;
 
 // Re-export evaluation types
 pub use tensorzero_client::{
-    CacheEnabledMode, EvaluatorStatsResponse, RunEvaluationParams, RunEvaluationResponse,
+    CacheEnabledMode, DatapointResult, EvaluatorStatsResponse, RunEvaluationParams,
+    RunEvaluationResponse,
 };
 
 // Re-export TensorZero inference types for convenience

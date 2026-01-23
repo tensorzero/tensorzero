@@ -405,8 +405,8 @@ mod tests {
     use tensorzero::{
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-        GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
-        ListDatapointsRequest, ListInferencesRequest, UpdateDatapointRequest,
+        GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
+        InferenceResponse, ListDatapointsRequest, ListInferencesRequest, UpdateDatapointRequest,
         UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
@@ -505,6 +505,12 @@ mod tests {
             async fn list_inferences(
                 &self,
                 request: ListInferencesRequest,
+            ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+            /// Get specific inferences by their IDs.
+            async fn get_inferences(
+                &self,
+                request: GetInferencesRequest,
             ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
             async fn launch_optimization_workflow(

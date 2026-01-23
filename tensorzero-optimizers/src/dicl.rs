@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use futures::future::try_join_all;
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
@@ -32,7 +31,6 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
-#[async_trait]
 impl Optimizer for DiclOptimizationConfig {
     type Handle = DiclOptimizationJobHandle;
 
@@ -183,7 +181,6 @@ impl Optimizer for DiclOptimizationConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,

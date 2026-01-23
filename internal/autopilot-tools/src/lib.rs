@@ -163,6 +163,9 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
     visitor
         .visit_simple_tool::<tools::ListInferencesTool>()
         .await?;
+    visitor
+        .visit_simple_tool::<tools::GetInferencesTool>()
+        .await?;
 
     // Test tools (e2e_tests feature)
     // ------------------------------

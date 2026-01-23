@@ -11,8 +11,9 @@ use serde_json::{Value, json};
 
 pub const TENSORZERO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StatusResponse {
     pub status: String,
     pub version: String,

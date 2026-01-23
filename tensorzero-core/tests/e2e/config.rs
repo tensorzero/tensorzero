@@ -615,7 +615,7 @@ model = "test_model_{random_id}"
 ///
 /// The fields that must be explicitly set for hash stability are:
 /// - `gateway.fetch_and_encode_input_files_before_inference = false`
-/// - `gateway.global_outbound_http_timeout_ms = 300000` (5 minutes in ms)
+/// - `gateway.global_outbound_http_timeout_ms = 900000` (15 minutes in ms)
 /// - `gateway.template_filesystem_access.enabled = false` (and no base_path)
 ///
 /// # Why This Matters
@@ -635,8 +635,8 @@ async fn test_config_snapshot_hash_stable_with_explicit_runtime_fields() {
 [gateway]
 # Default: false - whether to fetch and encode input files before inference
 fetch_and_encode_input_files_before_inference = false
-# Default: 300000 (5 minutes) - global HTTP timeout in milliseconds
-global_outbound_http_timeout_ms = 300000
+# Default: 900000 (15 minutes) - global HTTP timeout in milliseconds
+global_outbound_http_timeout_ms = 900000
 
 # Template filesystem access must be explicitly configured (defaults to disabled)
 [gateway.template_filesystem_access]

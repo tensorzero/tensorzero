@@ -29,5 +29,9 @@ async fn test_global_http_timeout() {
         .await
         .unwrap();
     println!("API response: {inference_response}");
-    assert!(inference_response.contains("source: TimedOut"));
+    assert!(
+        inference_response
+            .contains("Request timed out due to `gateway.global_outbound_http_timeout_ms`"),
+        "Expected descriptive timeout error message, got: {inference_response}"
+    );
 }

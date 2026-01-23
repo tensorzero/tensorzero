@@ -10,12 +10,12 @@ use evaluations::stats::EvaluationStats;
 use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
 use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_with_app_state};
 use tensorzero::{
-    ActionResponse, ClientInferenceParams, CreateDatapointRequest,
-    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
-    FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
-    GetInferencesResponse, InferenceOutput, InferenceResponse, ListDatapointsRequest,
-    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
-    WriteConfigRequest, WriteConfigResponse,
+    ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
+    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
+    GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
+    InferenceOutput, InferenceResponse, ListDatapointsRequest, ListInferencesRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
@@ -29,7 +29,7 @@ use tensorzero_core::endpoints::datasets::v1::types::{
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
-use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, action};
+use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, ActionResponse};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
@@ -37,9 +37,9 @@ use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, RunEvaluationParams,
-    RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, DatapointResult, EvaluatorStatsResponse,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    RunEvaluationParams, RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -184,20 +184,19 @@ impl TensorZeroClient for EmbeddedClient {
             input,
         };
 
-        let response = action(&self.app_state, action_input).await.map_err(|e| {
-            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-        })?;
+        let result = crate::action::action(&self.app_state, action_input)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })?;
 
-        match response {
-            ActionResponse::Inference(r) => Ok(r),
+        match result {
+            ActionResponse::Inference(response) => Ok(response),
             ActionResponse::Feedback(_) => {
                 Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                    source: tensorzero_core::error::Error::new(
-                        tensorzero_core::error::ErrorDetails::InternalError {
-                            message: "Unexpected feedback response from action endpoint"
-                                .to_string(),
-                        },
-                    )
+                    source: Error::new(ErrorDetails::InternalError {
+                        message: "Unexpected feedback response from action endpoint".to_string(),
+                    })
                     .into(),
                 }))
             }
@@ -372,6 +371,19 @@ impl TensorZeroClient for EmbeddedClient {
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
+    async fn get_inferences(
+        &self,
+        request: GetInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::stored_inferences::v1::get_inferences(
+            &self.app_state.config,
+            &self.app_state.clickhouse_connection_info,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
     // ========== Optimization Operations ==========
 
     async fn launch_optimization_workflow(
@@ -521,12 +533,58 @@ impl TensorZeroClient for EmbeddedClient {
             })
             .collect();
 
+        // Build per-datapoint results if requested
+        let datapoint_results = if params.include_datapoint_results {
+            let mut results = Vec::with_capacity(
+                evaluation_stats.evaluation_infos.len() + evaluation_stats.evaluation_errors.len(),
+            );
+
+            // Add successful evaluations (inference succeeded, some evaluators may have failed)
+            for info in &evaluation_stats.evaluation_infos {
+                let evaluations: HashMap<String, Option<f64>> = info
+                    .evaluations
+                    .iter()
+                    .map(|(name, value)| {
+                        let score = value.as_ref().and_then(|v| {
+                            v.as_f64()
+                                .or_else(|| v.as_bool().map(|b| if b { 1.0 } else { 0.0 }))
+                        });
+                        (name.clone(), score)
+                    })
+                    .collect();
+
+                results.push(DatapointResult {
+                    datapoint_id: info.datapoint.id(),
+                    success: true,
+                    evaluations,
+                    evaluator_errors: info.evaluator_errors.clone(),
+                    error: None,
+                });
+            }
+
+            // Add failed evaluations (inference or datapoint-level failure)
+            for error in &evaluation_stats.evaluation_errors {
+                results.push(DatapointResult {
+                    datapoint_id: error.datapoint_id,
+                    success: false,
+                    evaluations: HashMap::new(),
+                    evaluator_errors: HashMap::new(),
+                    error: Some(error.message.clone()),
+                });
+            }
+
+            Some(results)
+        } else {
+            None
+        };
+
         Ok(RunEvaluationResponse {
             evaluation_run_id,
             num_datapoints,
             num_successes: evaluation_stats.evaluation_infos.len(),
             num_errors: evaluation_stats.evaluation_errors.len(),
             stats: stats_response,
+            datapoint_results,
         })
     }
 }

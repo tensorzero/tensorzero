@@ -348,11 +348,11 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                 },
                                 "analysis_model": {
                                     "type": "string",
-                                    "description": "Model for analysis (e.g., 'anthropic::claude-sonnet-4-5-20250929')."
+                                    "description": "Model for analysis (e.g., 'anthropic::claude-sonnet-4-5')."
                                 },
                                 "mutation_model": {
                                     "type": "string",
-                                    "description": "Model for mutation (e.g., 'anthropic::claude-sonnet-4-5-20250929')."
+                                    "description": "Model for mutation (e.g., 'anthropic::claude-sonnet-4-5')."
                                 },
                                 "initial_variants": {
                                     "type": "array",
