@@ -78,7 +78,7 @@ use crate::tool_metadata::ToolMetadata;
 /// }
 /// ```
 #[async_trait]
-pub trait SimpleTool: ToolMetadata + Default {
+pub trait SimpleTool: ToolMetadata {
     /// Execute the tool logic.
     ///
     /// # Arguments

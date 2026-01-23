@@ -203,16 +203,6 @@ impl ToolRegistry {
         }
     }
 
-    /// Register a `TaskTool`.
-    ///
-    /// # Errors
-    ///
-    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
-    pub fn register_task_tool<T: TaskTool + Default>(&mut self) -> Result<&mut Self, ToolError> {
-        let _ = self.register_task_tool_instance(T::default())?;
-        Ok(self)
-    }
-
     /// Register a `TaskTool` instance.
     ///
     /// # Errors
@@ -234,18 +224,6 @@ impl ToolRegistry {
         let wrapper = Arc::new(ErasedTaskToolWrapper::new(tool.clone()));
         self.tools.insert(name.into_owned(), wrapper);
         Ok(tool)
-    }
-
-    /// Register a `SimpleTool`.
-    ///
-    /// # Errors
-    ///
-    /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
-    pub fn register_simple_tool<T: SimpleTool + Default>(
-        &mut self,
-    ) -> Result<&mut Self, ToolError> {
-        let _ = self.register_simple_tool_instance(T::default())?;
-        Ok(self)
     }
 
     /// Register a `SimpleTool` instance.

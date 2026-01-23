@@ -203,7 +203,9 @@ mod registry_tests {
     #[test]
     fn get_returns_registered_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry
+            .register_task_tool_instance::<EchoTaskTool>(EchoTaskTool)
+            .unwrap();
 
         let tool = registry.get("echo_task").unwrap();
         assert_eq!(tool.name(), "echo_task");
@@ -222,7 +224,9 @@ mod registry_tests {
     #[test]
     fn get_simple_tool_returns_simple_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let tool = registry.get_simple_tool("echo_simple");
         assert!(tool.is_some());
@@ -231,7 +235,7 @@ mod registry_tests {
     #[test]
     fn get_simple_tool_returns_none_for_task_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         // TaskTools are not in simple_tools map
         assert!(registry.get_simple_tool("echo_task").is_none());
@@ -240,7 +244,7 @@ mod registry_tests {
     #[test]
     fn is_durable_returns_true_for_task_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         assert_eq!(registry.is_durable("echo_task"), Some(true));
     }
@@ -248,7 +252,9 @@ mod registry_tests {
     #[test]
     fn is_durable_returns_false_for_simple_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         assert_eq!(registry.is_durable("echo_simple"), Some(false));
     }
@@ -262,8 +268,10 @@ mod registry_tests {
     #[test]
     fn list_tools_returns_all_names() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let tools = registry.list_tools();
         assert_eq!(tools.len(), 2);
@@ -274,8 +282,10 @@ mod registry_tests {
     #[test]
     fn list_task_tools_filters_to_durable_only() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let task_tools = registry.list_task_tools();
         assert_eq!(task_tools.len(), 1);
@@ -285,8 +295,10 @@ mod registry_tests {
     #[test]
     fn list_simple_tools_filters_to_non_durable_only() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let simple_tools = registry.list_simple_tools();
         assert_eq!(simple_tools.len(), 1);
@@ -298,7 +310,9 @@ mod registry_tests {
         use tensorzero::Tool;
 
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let tools: Vec<Tool> = registry
             .iter()
@@ -326,12 +340,14 @@ mod registry_tests {
         assert!(registry.is_empty());
         assert_eq!(registry.len(), 0);
 
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         assert!(!registry.is_empty());
         assert_eq!(registry.len(), 1);
 
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         assert_eq!(registry.len(), 2);
     }
@@ -339,10 +355,10 @@ mod registry_tests {
     #[test]
     fn register_task_tool_errors_on_duplicate() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         // Second registration should fail
-        let result = registry.register_task_tool::<EchoTaskTool>();
+        let result = registry.register_task_tool_instance(EchoTaskTool);
         match result {
             Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
@@ -357,10 +373,12 @@ mod registry_tests {
     #[test]
     fn register_simple_tool_errors_on_duplicate() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         // Second registration should fail
-        let result = registry.register_simple_tool::<EchoSimpleTool>();
+        let result = registry.register_simple_tool_instance(EchoSimpleTool);
         match result {
             Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_simple");
@@ -409,10 +427,10 @@ mod registry_tests {
         }
 
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         // Registering a SimpleTool with the same name should fail
-        let result = registry.register_simple_tool::<ConflictingSimpleTool>();
+        let result = registry.register_simple_tool_instance(ConflictingSimpleTool);
         match result {
             Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
