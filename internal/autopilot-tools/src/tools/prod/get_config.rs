@@ -52,7 +52,6 @@ impl ToolMetadata for GetConfigTool {
 #[async_trait]
 impl SimpleTool for GetConfigTool {
     async fn execute(
-        &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,

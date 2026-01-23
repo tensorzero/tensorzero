@@ -40,7 +40,6 @@ impl ToolMetadata for ErrorSimpleTool {
 #[async_trait]
 impl SimpleTool for ErrorSimpleTool {
     async fn execute(
-        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,

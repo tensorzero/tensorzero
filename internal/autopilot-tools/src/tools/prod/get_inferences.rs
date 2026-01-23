@@ -80,7 +80,6 @@ impl ToolMetadata for GetInferencesTool {
 #[async_trait]
 impl SimpleTool for GetInferencesTool {
     async fn execute(
-        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,

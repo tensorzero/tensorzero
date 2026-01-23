@@ -147,7 +147,6 @@ impl ToolMetadata for InferenceTool {
 #[async_trait]
 impl SimpleTool for InferenceTool {
     async fn execute(
-        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,
