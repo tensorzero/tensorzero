@@ -264,7 +264,10 @@ pub async fn stream_events_handler(
             Ok(event) => match serde_json::to_string(&event) {
                 Ok(data) => Ok(SseEvent::default().event("event").data(data)),
                 Err(e) => {
-                    tracing::error!("Failed to serialize autopilot event: {}", DisplayOrDebugGateway::new(&e));
+                    tracing::error!(
+                        "Failed to serialize autopilot event: {}",
+                        DisplayOrDebugGateway::new(&e)
+                    );
                     Err(Error::new(ErrorDetails::Serialization {
                         message: e.to_string(),
                     }))
