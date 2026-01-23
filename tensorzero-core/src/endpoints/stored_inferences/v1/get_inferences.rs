@@ -8,6 +8,9 @@ use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
+#[cfg(test)]
+use crate::db::inferences::StoredInferenceOutputSource;
+
 use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
 
 /// Handler for the POST `/v1/inferences/get_inferences` endpoint.
@@ -41,7 +44,7 @@ pub async fn get_inferences(
     let params = ListInferencesParams {
         ids: Some(&request.ids),
         function_name: request.function_name.as_deref(),
-        output_source: request.output_source,
+        output_source: request.output_source.into(),
         limit: u32::MAX,
         offset: 0,
         ..Default::default()
@@ -189,7 +192,7 @@ mod tests {
         let request = GetInferencesRequest {
             ids: vec![id1, id2],
             function_name: None,
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
         };
 
         let result = get_inferences(&config, &mock_clickhouse, request)
@@ -210,7 +213,7 @@ mod tests {
         let request = GetInferencesRequest {
             ids: vec![],
             function_name: None,
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
         };
 
         let result = get_inferences(&config, &mock_clickhouse, request)
@@ -238,7 +241,7 @@ mod tests {
         let request = GetInferencesRequest {
             ids: vec![id],
             function_name: None,
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
         };
 
         let result = get_inferences(&config, &mock_clickhouse, request)
@@ -284,7 +287,7 @@ mod tests {
         let request = GetInferencesRequest {
             ids: vec![id],
             function_name: None,
-            output_source: InferenceOutputSource::Demonstration,
+            output_source: StoredInferenceOutputSource::Demonstration,
         };
 
         let result = get_inferences(&config, &mock_clickhouse, request).await;
@@ -318,7 +321,7 @@ mod tests {
             });
 
         let request = ListInferencesRequest {
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
             ..Default::default()
         };
 
@@ -351,7 +354,7 @@ mod tests {
             });
 
         let request = ListInferencesRequest {
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
             limit: Some(50),
             offset: Some(100),
             ..Default::default()
@@ -406,7 +409,7 @@ mod tests {
             function_name: Some(function_name),
             variant_name: Some(variant_name),
             episode_id: Some(episode_id),
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
             ..Default::default()
         };
 
@@ -446,7 +449,7 @@ mod tests {
             });
 
         let request = ListInferencesRequest {
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
             order_by: Some(order_by),
             ..Default::default()
         };
@@ -469,7 +472,7 @@ mod tests {
             .returning(|_, _| Box::pin(async move { Ok(vec![]) }));
 
         let request = ListInferencesRequest {
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
             ..Default::default()
         };
 

@@ -12,6 +12,9 @@ use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::{StoredInference, StoredInferenceDatabase};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
+#[cfg(test)]
+use crate::db::inferences::StoredInferenceOutputSource;
+
 use super::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse,
@@ -250,7 +253,7 @@ mod tests {
                 query: Box::new(ListInferencesRequest {
                     function_name: Some(function_name.to_string()),
                     variant_name: Some(variant_name.to_string()),
-                    output_source: InferenceOutputSource::Inference,
+                    output_source: StoredInferenceOutputSource::Inference,
                     ..Default::default()
                 }),
             },
@@ -298,7 +301,7 @@ mod tests {
                 query: Box::new(ListInferencesRequest {
                     function_name: Some(function_name.to_string()),
                     variant_name: Some(variant_name.to_string()),
-                    output_source: InferenceOutputSource::Inference,
+                    output_source: StoredInferenceOutputSource::Inference,
                     ..Default::default()
                 }),
             },
@@ -342,7 +345,7 @@ mod tests {
                 query: Box::new(ListInferencesRequest {
                     function_name: Some(function_name.to_string()),
                     variant_name: Some(variant_name.to_string()),
-                    output_source: InferenceOutputSource::Demonstration,
+                    output_source: StoredInferenceOutputSource::Demonstration,
                     ..Default::default()
                 }),
             },
@@ -654,7 +657,7 @@ mod tests {
                     function_name: Some(function_name.to_string()),
                     variant_name: None,
                     filters: Some(test_filter),
-                    output_source: InferenceOutputSource::Inference,
+                    output_source: StoredInferenceOutputSource::Inference,
                     ..Default::default()
                 }),
             },

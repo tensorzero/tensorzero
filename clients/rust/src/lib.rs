@@ -51,7 +51,9 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
 pub use tensorzero_core::db::datasets::{
     DatasetQueries, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
-pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
+pub use tensorzero_core::db::inferences::{
+    InferenceOutputSource, ListInferencesParams, StoredInferenceOutputSource,
+};
 pub use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -1199,10 +1201,19 @@ impl ClientExt for Client {
         function_name: Option<String>,
         output_source: InferenceOutputSource,
     ) -> Result<GetInferencesResponse, TensorZeroError> {
+        // Convert InferenceOutputSource to StoredInferenceOutputSource
+        // If None is provided, we default to Inference
+        let stored_output_source = match output_source {
+            InferenceOutputSource::None | InferenceOutputSource::Inference => {
+                StoredInferenceOutputSource::Inference
+            }
+            InferenceOutputSource::Demonstration => StoredInferenceOutputSource::Demonstration,
+        };
+
         let request = GetInferencesRequest {
             ids: inference_ids,
             function_name,
-            output_source,
+            output_source: stored_output_source,
         };
         match self.mode() {
             ClientMode::HTTPGateway(client) => {

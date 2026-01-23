@@ -308,6 +308,7 @@ export * from "./StoredChatInference";
 export * from "./StoredContentBlock";
 export * from "./StoredFile";
 export * from "./StoredInference";
+export * from "./StoredInferenceOutputSource";
 export * from "./StoredInput";
 export * from "./StoredInputMessage";
 export * from "./StoredInputMessageContent";

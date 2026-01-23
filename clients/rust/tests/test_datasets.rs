@@ -6,7 +6,7 @@ use tensorzero::{
     CreateDatapointsFromInferenceRequestParams, Datapoint, ListDatapointsRequest,
     UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
 };
-use tensorzero_core::db::inferences::InferenceOutputSource;
+use tensorzero_core::db::inferences::StoredInferenceOutputSource;
 use tensorzero_core::endpoints::datasets::v1::types::DatapointMetadataUpdate;
 use tensorzero_core::endpoints::stored_inferences::v1::types::ListInferencesRequest;
 use tensorzero_core::inference::types::{
@@ -542,7 +542,7 @@ async fn test_create_datapoints_from_inferences(client: Client) {
         query: Box::new(ListInferencesRequest {
             function_name: Some("write_haiku".to_string()),
             variant_name: Some("better_prompt_haiku_4_5".to_string()),
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
             ..Default::default()
         }),
     };

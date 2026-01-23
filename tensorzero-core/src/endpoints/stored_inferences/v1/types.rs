@@ -6,7 +6,8 @@ use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::db::inferences::{
-    DEFAULT_INFERENCE_QUERY_LIMIT, InferenceOutputSource, ListInferencesParams, PaginationParams,
+    DEFAULT_INFERENCE_QUERY_LIMIT, ListInferencesParams, PaginationParams,
+    StoredInferenceOutputSource,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInference;
@@ -215,7 +216,7 @@ pub struct ListInferencesRequest {
     /// inference output or demonstration feedback (manually-curated output) if available.
     /// Defaults to `Inference` if not specified.
     #[serde(default)]
-    pub output_source: InferenceOutputSource,
+    pub output_source: StoredInferenceOutputSource,
 
     /// The maximum number of inferences to return.
     /// Defaults to 20.
@@ -310,7 +311,7 @@ impl ListInferencesRequest {
             variant_name: self.variant_name.as_deref(),
             episode_id: self.episode_id.as_ref(),
             filters,
-            output_source: self.output_source,
+            output_source: self.output_source.into(),
             limit: self.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
             offset: self.offset.unwrap_or(0),
             pagination,
@@ -341,7 +342,7 @@ pub struct GetInferencesRequest {
     /// (manually-curated output) if available.
     /// Defaults to `Inference` if not specified.
     #[serde(default)]
-    pub output_source: InferenceOutputSource,
+    pub output_source: StoredInferenceOutputSource,
 }
 
 /// Response containing the requested inferences.

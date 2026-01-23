@@ -2,6 +2,7 @@
 import type { InferenceFilter } from "./InferenceFilter";
 import type { InferenceOutputSource } from "./InferenceOutputSource";
 import type { OrderBy } from "./OrderBy";
+import type { StoredInferenceOutputSource } from "./StoredInferenceOutputSource";
 
 /**
  * Parameters for creating datapoints from inferences.
@@ -43,7 +44,7 @@ export type CreateDatapointsFromInferenceRequestParams =
        * inference output or demonstration feedback (manually-curated output) if available.
        * Defaults to `Inference` if not specified.
        */
-      output_source: InferenceOutputSource;
+      output_source: StoredInferenceOutputSource;
       /**
        * The maximum number of inferences to return.
        * Defaults to 20.

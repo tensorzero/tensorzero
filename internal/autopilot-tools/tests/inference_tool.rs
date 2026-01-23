@@ -9,8 +9,8 @@ use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
 use tensorzero::{
-    ActionInput, GetInferencesRequest, GetInferencesResponse, InferenceOutputSource, Input,
-    InputMessage, InputMessageContent, ListInferencesRequest, Role,
+    ActionInput, GetInferencesRequest, GetInferencesResponse, Input, InputMessage,
+    InputMessageContent, ListInferencesRequest, Role, StoredInferenceOutputSource,
 };
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
@@ -290,7 +290,7 @@ async fn test_get_inferences_tool_basic(pool: PgPool) {
         request: GetInferencesRequest {
             ids: vec![inference_id],
             function_name: None,
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
         },
     };
 
@@ -307,7 +307,7 @@ async fn test_get_inferences_tool_basic(pool: PgPool) {
         .withf(move |request| {
             request.ids == vec![inference_id]
                 && request.function_name.is_none()
-                && request.output_source == InferenceOutputSource::Inference
+                && request.output_source == StoredInferenceOutputSource::Inference
         })
         .return_once(move |_| Ok(mock_response));
 
@@ -341,7 +341,7 @@ async fn test_get_inferences_tool_with_function_name(pool: PgPool) {
         request: GetInferencesRequest {
             ids: vec![inference_id],
             function_name: Some("specific_function".to_string()),
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
         },
     };
 
@@ -388,7 +388,7 @@ async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
         request: GetInferencesRequest {
             ids: vec![inference_id],
             function_name: None,
-            output_source: InferenceOutputSource::Demonstration,
+            output_source: StoredInferenceOutputSource::Demonstration,
         },
     };
 
@@ -402,7 +402,7 @@ async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
         .expect_get_inferences()
-        .withf(|request| request.output_source == InferenceOutputSource::Demonstration)
+        .withf(|request| request.output_source == StoredInferenceOutputSource::Demonstration)
         .return_once(move |_| Ok(mock_response));
 
     let tool = GetInferencesTool;
@@ -428,7 +428,7 @@ async fn test_get_inferences_tool_error(pool: PgPool) {
         request: GetInferencesRequest {
             ids: vec![Uuid::now_v7()],
             function_name: None,
-            output_source: InferenceOutputSource::Inference,
+            output_source: StoredInferenceOutputSource::Inference,
         },
     };
 

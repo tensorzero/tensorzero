@@ -193,6 +193,29 @@ pub enum InferenceOutputSource {
     Demonstration,
 }
 
+/// Source of an inference output when retrieving inferences via get_inferences or list_inferences.
+/// This enum excludes the `None` variant since these endpoints always return outputs.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum StoredInferenceOutputSource {
+    /// The inference output is the original output from the inference.
+    #[default]
+    Inference,
+    /// The inference output is the demonstration feedback for the inference.
+    Demonstration,
+}
+
+impl From<StoredInferenceOutputSource> for InferenceOutputSource {
+    fn from(source: StoredInferenceOutputSource) -> Self {
+        match source {
+            StoredInferenceOutputSource::Inference => InferenceOutputSource::Inference,
+            StoredInferenceOutputSource::Demonstration => InferenceOutputSource::Demonstration,
+        }
+    }
+}
+
 impl TryFrom<&str> for InferenceOutputSource {
     type Error = Error;
 

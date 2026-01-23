@@ -10,7 +10,7 @@ use tensorzero_core::db::clickhouse::query_builder::{
 };
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::inferences::{
-    InferenceOutputSource, InferenceQueries, ListInferencesParams,
+    InferenceOutputSource, InferenceQueries, ListInferencesParams, StoredInferenceOutputSource,
 };
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
@@ -86,7 +86,7 @@ async fn test_create_from_inference_query_success() {
             query: Box::new(ListInferencesRequest {
                 function_name: Some("write_haiku".to_string()),
                 variant_name: None,
-                output_source: InferenceOutputSource::Inference,
+                output_source: StoredInferenceOutputSource::Inference,
                 ..Default::default()
             }),
         },
@@ -224,7 +224,7 @@ async fn test_create_from_inference_with_filters() {
                 function_name: Some("write_haiku".to_string()),
                 variant_name: None,
                 filters: Some(filter),
-                output_source: InferenceOutputSource::Inference,
+                output_source: StoredInferenceOutputSource::Inference,
                 ..Default::default()
             }),
         },
