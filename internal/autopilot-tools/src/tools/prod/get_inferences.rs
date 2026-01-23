@@ -60,9 +60,13 @@ impl ToolMetadata for GetInferencesTool {
                 },
                 "output_source": {
                     "type": "string",
-                    "enum": ["none", "inference", "demonstration"],
+                    "enum": ["inference", "demonstration"],
                     "default": "inference",
-                    "description": "Source for the output field: 'none' (no output), 'inference' (original inference output), or 'demonstration' (demonstration feedback if available)."
+                    // Note: "none" is intentionally omitted. The get_inferences endpoint
+                    // rejects output_source: "none" since these endpoints are for retrieving
+                    // complete inference records. Other endpoints (like dataset creation)
+                    // still support "none" when only metadata is needed.
+                    "description": "Source for the output field: 'inference' (original inference output) or 'demonstration' (demonstration feedback if available)."
                 }
             },
             "required": ["ids"]
