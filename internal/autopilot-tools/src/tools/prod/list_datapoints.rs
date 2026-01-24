@@ -8,7 +8,7 @@ use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMeta
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
-use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
+use tensorzero::{ListDatapointsRequest, ListDatapointsResponse};
 
 use autopilot_client::AutopilotSideInfo;
 
@@ -30,7 +30,7 @@ pub struct ListDatapointsTool;
 
 impl ToolMetadata for ListDatapointsTool {
     type SideInfo = AutopilotSideInfo;
-    type Output = GetDatapointsResponse;
+    type Output = ListDatapointsResponse;
     type LlmParams = ListDatapointsToolParams;
 
     fn name(&self) -> Cow<'static, str> {

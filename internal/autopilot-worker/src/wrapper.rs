@@ -402,8 +402,8 @@ mod tests {
         ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
         GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
-        InferenceResponse, ListDatapointsRequest, ListInferencesRequest, UpdateDatapointRequest,
-        UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+        InferenceResponse, ListDatapointsRequest, ListDatapointsResponse, ListInferencesRequest,
+        UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -477,7 +477,7 @@ mod tests {
                 &self,
                 dataset_name: String,
                 request: ListDatapointsRequest,
-            ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+            ) -> Result<ListDatapointsResponse, TensorZeroClientError>;
 
             async fn get_datapoints(
                 &self,

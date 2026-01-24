@@ -59,11 +59,12 @@ pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWin
 pub use tensorzero_core::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, CreateDatapointsResponse,
-    CreateJsonDatapointRequest, DeleteDatapointsRequest, DeleteDatapointsResponse,
-    GetDatapointsRequest, GetDatapointsResponse, JsonDatapointOutputUpdate, ListDatapointsRequest,
-    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
-    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
-    UpdateJsonDatapointRequest,
+    CreateJsonDatapointRequest, DatapointResponseFormat, DeleteDatapointsRequest,
+    DeleteDatapointsResponse, GetDatapointsRequest, GetDatapointsResponse,
+    JsonDatapointOutputUpdate, ListDatapointsIdsOnlyResponse, ListDatapointsRequest,
+    ListDatapointsResponse, UpdateChatDatapointRequest, UpdateDatapointMetadataRequest,
+    UpdateDatapointRequest, UpdateDatapointsMetadataRequest, UpdateDatapointsRequest,
+    UpdateDatapointsResponse, UpdateJsonDatapointRequest,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
@@ -232,7 +233,8 @@ pub trait ClientExt {
     ///
     /// # Returns
     ///
-    /// A `GetDatapointsResponse` containing the datapoints.
+    /// A `ListDatapointsResponse` containing either the datapoints or just IDs,
+    /// depending on the `response_format` in the request.
     ///
     /// # Errors
     ///
@@ -241,7 +243,7 @@ pub trait ClientExt {
         &self,
         dataset_name: String,
         request: ListDatapointsRequest,
-    ) -> Result<GetDatapointsResponse, TensorZeroError>;
+    ) -> Result<ListDatapointsResponse, TensorZeroError>;
 
     /// Updates datapoints in the dataset.
     ///
@@ -782,7 +784,15 @@ impl ClientExt for Client {
                 },
             )
             .await?;
-        Ok(response.datapoints)
+        match response {
+            ListDatapointsResponse::Datapoints(dp) => Ok(dp.datapoints),
+            ListDatapointsResponse::IdsOnly(_) => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidRequest {
+                    message: "Unexpected IdsOnly response".to_string(),
+                })
+                .into(),
+            }),
+        }
     }
 
     /// DEPRECATED: Use `delete_datapoints` instead.
@@ -996,7 +1006,7 @@ impl ClientExt for Client {
         &self,
         dataset_name: String,
         request: ListDatapointsRequest,
-    ) -> Result<GetDatapointsResponse, TensorZeroError> {
+    ) -> Result<ListDatapointsResponse, TensorZeroError> {
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/list_datapoints")).map_err(|e| TensorZeroError::Other {

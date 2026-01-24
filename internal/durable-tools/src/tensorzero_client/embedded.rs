@@ -13,9 +13,9 @@ use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
-    InferenceOutput, InferenceResponse, ListDatapointsRequest, ListInferencesRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
-    WriteConfigResponse,
+    InferenceOutput, InferenceResponse, ListDatapointsRequest, ListDatapointsResponse,
+    ListInferencesRequest, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
@@ -298,7 +298,7 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         dataset_name: String,
         request: ListDatapointsRequest,
-    ) -> Result<GetDatapointsResponse, TensorZeroClientError> {
+    ) -> Result<ListDatapointsResponse, TensorZeroClientError> {
         tensorzero_core::endpoints::datasets::v1::list_datapoints(
             &self.app_state.clickhouse_connection_info,
             dataset_name,

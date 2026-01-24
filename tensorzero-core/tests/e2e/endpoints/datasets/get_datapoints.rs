@@ -1611,4 +1611,274 @@ mod list_datapoints_tests {
         // Should return all 3 datapoints, not 100
         assert_eq!(datapoints.len(), 3);
     }
+
+    #[tokio::test]
+    async fn test_list_datapoints_response_format_id() {
+        let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+        let dataset_name = format!("test-list-dp-format-id-{}", Uuid::now_v7());
+
+        // Create 3 datapoints with known IDs
+        let mut inserts = vec![];
+        let mut expected_ids = vec![];
+        for i in 0..3 {
+            let id = Uuid::now_v7();
+            expected_ids.push(id);
+            inserts.push(StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+                dataset_name: dataset_name.clone(),
+                function_name: "basic_test".to_string(),
+                name: None,
+                id,
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
+                    }],
+                },
+                output: Some(vec![
+                    tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                        text: format!("Response {i}"),
+                    }),
+                ]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: String::new(),
+                snapshot_hash: None,
+            }));
+        }
+
+        clickhouse.insert_datapoints(&inserts).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Test response_format: "id" - should return only IDs
+        let resp = http_client
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/list_datapoints"
+            )))
+            .json(&json!({
+                "response_format": "id"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert!(resp.status().is_success());
+        let resp_json: Value = resp.json().await.unwrap();
+
+        // Response should be an object with only "ids" field
+        let resp_obj = resp_json.as_object().unwrap();
+        assert_eq!(
+            resp_obj.keys().collect::<Vec<_>>(),
+            vec!["ids"],
+            "Response should contain only 'ids' field, got: {:?}",
+            resp_obj.keys().collect::<Vec<_>>()
+        );
+
+        let ids = resp_json["ids"].as_array().unwrap();
+        assert_eq!(ids.len(), 3, "Should return 3 IDs");
+
+        // Verify all returned IDs are valid UUIDs and match our expected IDs
+        let returned_ids: Vec<Uuid> = ids
+            .iter()
+            .map(|v| Uuid::parse_str(v.as_str().unwrap()).unwrap())
+            .collect();
+        for expected_id in &expected_ids {
+            assert!(
+                returned_ids.contains(expected_id),
+                "Expected ID {expected_id} not found in response"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_datapoints_response_format_datapoint() {
+        let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+        let dataset_name = format!("test-list-dp-format-datapoint-{}", Uuid::now_v7());
+
+        // Create 2 datapoints
+        let mut inserts = vec![];
+        for i in 0..2 {
+            inserts.push(StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+                dataset_name: dataset_name.clone(),
+                function_name: "basic_test".to_string(),
+                name: None,
+                id: Uuid::now_v7(),
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
+                    }],
+                },
+                output: Some(vec![
+                    tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                        text: format!("Response {i}"),
+                    }),
+                ]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: String::new(),
+                snapshot_hash: None,
+            }));
+        }
+
+        clickhouse.insert_datapoints(&inserts).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Test explicit response_format: "datapoint" - should return full datapoints
+        let resp = http_client
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/list_datapoints"
+            )))
+            .json(&json!({
+                "response_format": "datapoint"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert!(resp.status().is_success());
+        let resp_json: Value = resp.json().await.unwrap();
+
+        // Response should be an object with only "datapoints" field
+        let resp_obj = resp_json.as_object().unwrap();
+        assert_eq!(
+            resp_obj.keys().collect::<Vec<_>>(),
+            vec!["datapoints"],
+            "Response should contain only 'datapoints' field, got: {:?}",
+            resp_obj.keys().collect::<Vec<_>>()
+        );
+
+        let datapoints = resp_json["datapoints"].as_array().unwrap();
+        assert_eq!(datapoints.len(), 2, "Should return 2 datapoints");
+
+        // Verify datapoints have full structure (id, input, output, etc.)
+        for dp in datapoints {
+            assert!(dp.get("id").is_some(), "Datapoint should have 'id' field");
+            assert!(
+                dp.get("input").is_some(),
+                "Datapoint should have 'input' field"
+            );
+            assert!(
+                dp.get("function_name").is_some(),
+                "Datapoint should have 'function_name' field"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_datapoints_response_format_id_with_filter() {
+        let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+        let dataset_name = format!("test-list-dp-format-id-filter-{}", Uuid::now_v7());
+
+        // Create datapoints with different function names
+        let mut inserts = vec![];
+        let mut func_a_ids = vec![];
+        for i in 0..3 {
+            let id = Uuid::now_v7();
+            let function_name = if i < 2 {
+                func_a_ids.push(id);
+                "function_a"
+            } else {
+                "function_b"
+            };
+            inserts.push(StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+                dataset_name: dataset_name.clone(),
+                function_name: function_name.to_string(),
+                name: None,
+                id,
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
+                    }],
+                },
+                output: Some(vec![
+                    tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                        text: format!("Response {i}"),
+                    }),
+                ]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: String::new(),
+                snapshot_hash: None,
+            }));
+        }
+
+        clickhouse.insert_datapoints(&inserts).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Test response_format: "id" with function_name filter
+        let resp = http_client
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/list_datapoints"
+            )))
+            .json(&json!({
+                "response_format": "id",
+                "function_name": "function_a"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert!(resp.status().is_success());
+        let resp_json: Value = resp.json().await.unwrap();
+
+        // Response should be an object with only "ids" field
+        let resp_obj = resp_json.as_object().unwrap();
+        assert_eq!(
+            resp_obj.keys().collect::<Vec<_>>(),
+            vec!["ids"],
+            "Response should contain only 'ids' field, got: {:?}",
+            resp_obj.keys().collect::<Vec<_>>()
+        );
+
+        let ids = resp_json["ids"].as_array().unwrap();
+        assert_eq!(
+            ids.len(),
+            2,
+            "Should return 2 IDs for function_a, got {}",
+            ids.len()
+        );
+
+        // Verify returned IDs match the function_a datapoints
+        let returned_ids: Vec<Uuid> = ids
+            .iter()
+            .map(|v| Uuid::parse_str(v.as_str().unwrap()).unwrap())
+            .collect();
+        for expected_id in &func_a_ids {
+            assert!(
+                returned_ids.contains(expected_id),
+                "Expected function_a ID {expected_id} not found in response"
+            );
+        }
+    }
 }

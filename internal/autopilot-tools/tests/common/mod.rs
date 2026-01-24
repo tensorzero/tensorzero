@@ -12,9 +12,9 @@ use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
-    InferenceResponse, ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference,
-    StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
-    WriteConfigResponse,
+    InferenceResponse, ListDatapointsRequest, ListDatapointsResponse, ListInferencesRequest, Role,
+    StoredChatInference, StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -95,7 +95,7 @@ mock! {
             &self,
             dataset_name: String,
             request: ListDatapointsRequest,
-        ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+        ) -> Result<ListDatapointsResponse, TensorZeroClientError>;
 
         async fn get_datapoints(
             &self,

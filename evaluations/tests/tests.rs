@@ -19,7 +19,10 @@ use tensorzero_core::db::stored_datapoint::{
 };
 use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
-    v1::{list_datapoints, types::ListDatapointsRequest},
+    v1::{
+        list_datapoints,
+        types::{ListDatapointsRequest, ListDatapointsResponse},
+    },
 };
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::inference::types::Text;
@@ -576,13 +579,20 @@ async fn run_evaluation_with_specific_datapoint_ids() {
         offset: Some(0),
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+    let response = list_datapoints(&clickhouse, dataset_name.clone(), request)
         .await
-        .unwrap()
-        .datapoints;
+        .unwrap();
+    let dataset = match response {
+        ListDatapointsResponse::Datapoints(dp) => dp.datapoints,
+        ListDatapointsResponse::IdsOnly(_) => panic!("Expected datapoints, got IDs"),
+    };
 
     // Select only the first 5 datapoint IDs
-    let selected_ids: Vec<Uuid> = dataset.iter().take(5).map(|dp| dp.id()).collect();
+    let selected_ids: Vec<Uuid> = dataset
+        .iter()
+        .take(5)
+        .map(|dp: &Datapoint| dp.id())
+        .collect();
     assert_eq!(
         selected_ids.len(),
         5,
@@ -677,11 +687,14 @@ async fn run_exact_match_evaluation_chat() {
         offset: Some(0),
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+    let response = list_datapoints(&clickhouse, dataset_name.clone(), request)
         .await
-        .unwrap()
-        .datapoints;
-    let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
+        .unwrap();
+    let dataset = match response {
+        ListDatapointsResponse::Datapoints(dp) => dp.datapoints,
+        ListDatapointsResponse::IdsOnly(_) => panic!("Expected datapoints, got IDs"),
+    };
+    let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp: &Datapoint| dp.id()).collect();
 
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
@@ -817,11 +830,14 @@ async fn run_llm_judge_evaluation_chat() {
         offset: Some(0),
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+    let response = list_datapoints(&clickhouse, dataset_name.clone(), request)
         .await
-        .unwrap()
-        .datapoints;
-    let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
+        .unwrap();
+    let dataset = match response {
+        ListDatapointsResponse::Datapoints(dp) => dp.datapoints,
+        ListDatapointsResponse::IdsOnly(_) => panic!("Expected datapoints, got IDs"),
+    };
+    let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp: &Datapoint| dp.id()).collect();
 
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
@@ -2673,14 +2689,17 @@ async fn test_query_skips_staled_datapoints() {
         limit: Some(u32::MAX), // Get all datapoints
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+    let response = list_datapoints(&clickhouse, dataset_name.clone(), request)
         .await
-        .unwrap()
-        .datapoints;
+        .unwrap();
+    let dataset = match response {
+        ListDatapointsResponse::Datapoints(dp) => dp.datapoints,
+        ListDatapointsResponse::IdsOnly(_) => panic!("Expected datapoints, got IDs"),
+    };
 
     // This ID should not be returned
     let staled_id = Uuid::parse_str("01957bbb-44a8-7490-bfe7-32f8ed2fc797").unwrap();
-    let staled_datapoint = dataset.iter().find(|dp| dp.id() == staled_id);
+    let staled_datapoint = dataset.iter().find(|dp: &&Datapoint| dp.id() == staled_id);
     assert!(staled_datapoint.is_none());
     assert_eq!(dataset.len(), 21);
 }

@@ -60,6 +60,7 @@ use tensorzero_core::{
         datasets::InsertDatapointParams,
         workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
     },
+    error::{Error as TensorZeroCoreError, ErrorDetails},
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
     },
@@ -69,8 +70,9 @@ use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
     InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ListDatapointsResponse, ListInferencesParams, OptimizationJobHandle, PostgresConfig,
+    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1124,14 +1126,27 @@ impl TensorZeroGateway {
         let fut = client.list_datapoints(dataset_name, request);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
-            Ok(datapoints) => {
-                let py_datapoints = datapoints
-                    .datapoints
-                    .into_iter()
-                    .map(|x| x.into_pyobject(this.py()))
-                    .collect::<Result<Vec<_>, _>>()?;
-                PyList::new(this.py(), py_datapoints)
-            }
+            Ok(response) => match response {
+                ListDatapointsResponse::Datapoints(dp) => {
+                    let py_datapoints = dp
+                        .datapoints
+                        .into_iter()
+                        .map(|x| x.into_pyobject(this.py()))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    PyList::new(this.py(), py_datapoints)
+                }
+                ListDatapointsResponse::IdsOnly(_) => Err(convert_error(
+                    this.py(),
+                    TensorZeroError::Other {
+                        source: TensorZeroCoreError::new(ErrorDetails::InvalidRequest {
+                            message:
+                                "`response_format: id` is not yet supported in the Python client"
+                                    .to_string(),
+                        })
+                        .into(),
+                    },
+                )),
+            },
             Err(e) => Err(convert_error(this.py(), e)),
         }
     }
@@ -2370,9 +2385,25 @@ impl AsyncTensorZeroGateway {
                 ..Default::default()
             };
             let res = client.list_datapoints(dataset_name, request).await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
+            Python::attach(|py| {
+                match res {
+                Ok(response) => match response {
+                    ListDatapointsResponse::Datapoints(dp) => {
+                        Ok(PyList::new(py, dp.datapoints)?.unbind())
+                    }
+                    ListDatapointsResponse::IdsOnly(_) => Err(convert_error(
+                        py,
+                        TensorZeroError::Other {
+                            source: TensorZeroCoreError::new(ErrorDetails::InvalidRequest {
+                                message: "`response_format: id` is not yet supported in the Python client"
+                                    .to_string(),
+                            })
+                            .into(),
+                        },
+                    )),
+                },
                 Err(e) => Err(convert_error(py, e)),
+            }
             })
         })
     }

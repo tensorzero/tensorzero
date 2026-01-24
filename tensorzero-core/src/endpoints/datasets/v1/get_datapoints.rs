@@ -8,7 +8,10 @@ use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
-use super::types::{GetDatapointsRequest, GetDatapointsResponse, ListDatapointsRequest};
+use super::types::{
+    DatapointResponseFormat, GetDatapointsRequest, GetDatapointsResponse,
+    ListDatapointsIdsOnlyResponse, ListDatapointsRequest, ListDatapointsResponse,
+};
 
 const DEFAULT_LIMIT: u32 = 20;
 const DEFAULT_OFFSET: u32 = 0;
@@ -22,7 +25,7 @@ pub async fn list_datapoints_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<ListDatapointsRequest>,
-) -> Result<Json<GetDatapointsResponse>, Error> {
+) -> Result<Json<ListDatapointsResponse>, Error> {
     let response =
         list_datapoints(&app_state.clickhouse_connection_info, dataset_name, request).await?;
 
@@ -77,7 +80,7 @@ pub async fn list_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     dataset_name: String,
     request: ListDatapointsRequest,
-) -> Result<GetDatapointsResponse, Error> {
+) -> Result<ListDatapointsResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
     #[expect(deprecated)]
@@ -102,13 +105,29 @@ pub async fn list_datapoints(
         search_query_experimental: request.search_query_experimental,
     };
 
+    // For now, we just re-use the existing query, and throw away
+    // everything except the id when we want 'DatapointResponseFormat::Id'
+    // If this ever becomes a bottleneck, we can write a specialized
+    // ClickHouse/Postgres query that just gets the id
     let datapoints = clickhouse.get_datapoints(&params).await?;
-    let datapoints = datapoints
-        .into_iter()
-        .map(|dp| dp.into_datapoint())
-        .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(GetDatapointsResponse { datapoints })
+    match request.response_format {
+        DatapointResponseFormat::Id => {
+            let ids = datapoints.into_iter().map(|dp| dp.id()).collect();
+            Ok(ListDatapointsResponse::IdsOnly(
+                ListDatapointsIdsOnlyResponse { ids },
+            ))
+        }
+        DatapointResponseFormat::Datapoint => {
+            let datapoints = datapoints
+                .into_iter()
+                .map(|dp| dp.into_datapoint())
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(ListDatapointsResponse::Datapoints(GetDatapointsResponse {
+                datapoints,
+            }))
+        }
+    }
 }
 
 pub async fn get_datapoints(
