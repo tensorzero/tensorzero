@@ -1,11 +1,17 @@
 #![expect(clippy::print_stdout)]
+use std::collections::HashMap;
+use std::time::Duration;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::config::{
     MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
 };
-use tensorzero_core::db::{
-    TimeWindow,
-    clickhouse::test_helpers::get_clickhouse,
-    feedback::{FeedbackQueries, FeedbackRow, GetVariantPerformanceParams},
+use tensorzero_core::db::TimeWindow;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::evaluation_queries::EvaluationQueries;
+use tensorzero_core::db::feedback::{
+    BooleanMetricFeedbackInsert, CommentFeedbackInsert, CommentTargetType,
+    DemonstrationFeedbackInsert, FeedbackQueries, FeedbackRow, FloatMetricFeedbackInsert,
+    GetVariantPerformanceParams, StaticEvaluationHumanFeedbackInsert,
 };
 use tensorzero_core::function::FunctionConfigType;
 use uuid::Uuid;
@@ -931,4 +937,392 @@ async fn test_get_variant_performances_empty_for_nonexistent_metric() {
         results.is_empty(),
         "Should return empty results for non-existent metric"
     );
+}
+
+// =====================================================================
+// Tests for feedback write methods
+// =====================================================================
+
+#[tokio::test]
+async fn test_insert_boolean_feedback() {
+    let clickhouse = get_clickhouse().await;
+
+    let feedback_id = Uuid::now_v7();
+    // Use a known inference ID from the test database
+    let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
+    let metric_name = format!("e2e_test_boolean_metric_{feedback_id}");
+
+    let insert = BooleanMetricFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        metric_name: metric_name.clone(),
+        value: true,
+        tags: {
+            let mut tags = HashMap::new();
+            tags.insert("test_tag".to_string(), "test_value".to_string());
+            tags
+        },
+        snapshot_hash: SnapshotHash::new_test(),
+    };
+
+    // Insert should succeed
+    clickhouse
+        .insert_boolean_feedback(&insert)
+        .await
+        .expect("Boolean feedback insert should succeed");
+
+    // Wait for ClickHouse to process the insert
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read back the feedback
+    let feedback = clickhouse
+        .query_feedback_by_target_id(target_id, None, None, Some(1000))
+        .await
+        .expect("Query should succeed");
+
+    // Find our inserted feedback
+    let found = feedback.iter().any(|f| match f {
+        FeedbackRow::Boolean(b) => b.id == feedback_id && b.metric_name == metric_name,
+        _ => false,
+    });
+    assert!(found, "Should find the inserted boolean feedback");
+}
+
+#[tokio::test]
+async fn test_insert_float_feedback() {
+    let clickhouse = get_clickhouse().await;
+
+    let feedback_id = Uuid::now_v7();
+    // Use a known inference ID from the test database
+    let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
+    let metric_name = format!("e2e_test_float_metric_{feedback_id}");
+
+    let insert = FloatMetricFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        metric_name: metric_name.clone(),
+        value: 0.87,
+        tags: HashMap::new(),
+        snapshot_hash: SnapshotHash::new_test(),
+    };
+
+    // Insert should succeed
+    clickhouse
+        .insert_float_feedback(&insert)
+        .await
+        .expect("Float feedback insert should succeed");
+
+    // Wait for ClickHouse to process the insert
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read back the feedback
+    let feedback = clickhouse
+        .query_feedback_by_target_id(target_id, None, None, Some(1000))
+        .await
+        .expect("Query should succeed");
+
+    // Find our inserted feedback
+    let found = feedback.iter().any(|f| match f {
+        FeedbackRow::Float(fl) => fl.id == feedback_id && fl.metric_name == metric_name,
+        _ => false,
+    });
+    assert!(found, "Should find the inserted float feedback");
+}
+
+#[tokio::test]
+async fn test_insert_comment_feedback_inference_level() {
+    let clickhouse = get_clickhouse().await;
+
+    let feedback_id = Uuid::now_v7();
+    // Use a known inference ID from the test database
+    let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
+    let comment_value = format!("E2E test comment for inference {feedback_id}");
+
+    let insert = CommentFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        target_type: CommentTargetType::Inference,
+        value: comment_value.clone(),
+        tags: HashMap::new(),
+        snapshot_hash: SnapshotHash::new_test(),
+    };
+
+    // Insert should succeed
+    clickhouse
+        .insert_comment_feedback(&insert)
+        .await
+        .expect("Comment feedback insert should succeed");
+
+    // Wait for ClickHouse to process the insert
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read back the feedback
+    let feedback = clickhouse
+        .query_feedback_by_target_id(target_id, None, None, Some(1000))
+        .await
+        .expect("Query should succeed");
+
+    // Find our inserted feedback
+    let found = feedback.iter().any(|f| match f {
+        FeedbackRow::Comment(c) => c.id == feedback_id && c.value == comment_value,
+        _ => false,
+    });
+    assert!(found, "Should find the inserted comment feedback");
+}
+
+#[tokio::test]
+async fn test_insert_comment_feedback_episode_level() {
+    let clickhouse = get_clickhouse().await;
+
+    let feedback_id = Uuid::now_v7();
+    // Use a known episode ID from the test database
+    let target_id = Uuid::parse_str("0192e14c-09b8-7d3e-8618-46aed8c213dc").unwrap();
+    let comment_value = format!("E2E test comment for episode {feedback_id}");
+
+    let insert = CommentFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        target_type: CommentTargetType::Episode,
+        value: comment_value.clone(),
+        tags: {
+            let mut tags = HashMap::new();
+            tags.insert("priority".to_string(), "high".to_string());
+            tags
+        },
+        snapshot_hash: SnapshotHash::new_test(),
+    };
+
+    // Insert should succeed
+    clickhouse
+        .insert_comment_feedback(&insert)
+        .await
+        .expect("Comment feedback insert should succeed");
+
+    // Wait for ClickHouse to process the insert
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read back the feedback
+    let feedback = clickhouse
+        .query_feedback_by_target_id(target_id, None, None, Some(1000))
+        .await
+        .expect("Query should succeed");
+
+    // Find our inserted feedback
+    let found = feedback.iter().any(|f| match f {
+        FeedbackRow::Comment(c) => c.id == feedback_id && c.value == comment_value,
+        _ => false,
+    });
+    assert!(found, "Should find the inserted comment feedback");
+}
+
+#[tokio::test]
+async fn test_insert_demonstration_feedback() {
+    let clickhouse = get_clickhouse().await;
+
+    let feedback_id = Uuid::now_v7();
+    // Use a known inference ID from the test database
+    let inference_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
+    let demo_value = format!(r#"{{"content":"E2E test demonstration {feedback_id}"}}"#);
+
+    let insert = DemonstrationFeedbackInsert {
+        id: feedback_id,
+        inference_id,
+        value: demo_value.clone(),
+        tags: HashMap::new(),
+        snapshot_hash: SnapshotHash::new_test(),
+    };
+
+    // Insert should succeed
+    clickhouse
+        .insert_demonstration_feedback(&insert)
+        .await
+        .expect("Demonstration feedback insert should succeed");
+
+    // Wait for ClickHouse to process the insert
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read back the feedback using demonstration-specific query
+    let feedback = clickhouse
+        .query_demonstration_feedback_by_inference_id(inference_id, None, None, Some(1000))
+        .await
+        .expect("Query should succeed");
+
+    // Find our inserted feedback
+    let found = feedback
+        .iter()
+        .any(|d| d.id == feedback_id && d.value == demo_value);
+    assert!(found, "Should find the inserted demonstration feedback");
+}
+
+#[tokio::test]
+async fn test_insert_static_eval_feedback() {
+    let clickhouse = get_clickhouse().await;
+
+    let feedback_id = Uuid::now_v7();
+    let datapoint_id = Uuid::now_v7();
+    let evaluator_inference_id = Uuid::now_v7();
+    let metric_name = format!("e2e_test_quality_{feedback_id}");
+    let output = format!("Test output for static evaluation {feedback_id}");
+
+    let insert = StaticEvaluationHumanFeedbackInsert {
+        feedback_id,
+        metric_name: metric_name.clone(),
+        datapoint_id,
+        output: output.clone(),
+        value: "0.95".to_string(),
+        evaluator_inference_id: Some(evaluator_inference_id),
+    };
+
+    // Insert should succeed
+    clickhouse
+        .insert_static_eval_feedback(&insert)
+        .await
+        .expect("Static eval feedback insert should succeed");
+
+    // Wait for ClickHouse to process the insert
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read back the feedback using evaluation queries
+    let feedback = clickhouse
+        .get_inference_evaluation_human_feedback(&metric_name, &datapoint_id, &output)
+        .await
+        .expect("Query should succeed");
+
+    assert!(
+        feedback.is_some(),
+        "Should find the inserted static eval feedback"
+    );
+    let feedback = feedback.unwrap();
+    assert_eq!(
+        feedback.value,
+        serde_json::json!(0.95),
+        "Value should match"
+    );
+    assert_eq!(
+        feedback.evaluator_inference_id, evaluator_inference_id,
+        "Evaluator inference ID should match"
+    );
+}
+
+#[tokio::test]
+async fn test_insert_static_eval_feedback_without_evaluator_inference_id() {
+    let clickhouse = get_clickhouse().await;
+
+    let feedback_id = Uuid::now_v7();
+    let datapoint_id = Uuid::now_v7();
+    let metric_name = format!("e2e_test_quality_no_evaluator_{feedback_id}");
+    let output = format!("Test output without evaluator {feedback_id}");
+
+    let insert = StaticEvaluationHumanFeedbackInsert {
+        feedback_id,
+        metric_name: metric_name.clone(),
+        datapoint_id,
+        output: output.clone(),
+        value: "true".to_string(),
+        evaluator_inference_id: None,
+    };
+
+    // Insert should succeed
+    clickhouse
+        .insert_static_eval_feedback(&insert)
+        .await
+        .expect("Static eval feedback insert without evaluator_inference_id should succeed");
+
+    // Wait for ClickHouse to process the insert
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read back the feedback using evaluation queries
+    let feedback = clickhouse
+        .get_inference_evaluation_human_feedback(&metric_name, &datapoint_id, &output)
+        .await
+        .expect("Query should succeed");
+
+    assert!(
+        feedback.is_some(),
+        "Should find the inserted static eval feedback"
+    );
+    let feedback = feedback.unwrap();
+    assert_eq!(
+        feedback.value,
+        serde_json::json!(true),
+        "Value should match"
+    );
+    // When evaluator_inference_id is not provided, ClickHouse uses default zero UUID
+    assert_eq!(
+        feedback.evaluator_inference_id,
+        Uuid::nil(),
+        "Evaluator inference ID should be nil UUID when not provided"
+    );
+}
+
+#[tokio::test]
+async fn test_insert_feedback_with_multiple_tags() {
+    let clickhouse = get_clickhouse().await;
+
+    let feedback_id = Uuid::now_v7();
+    let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
+    let metric_name = format!("e2e_test_with_tags_{feedback_id}");
+
+    let mut tags = HashMap::new();
+    tags.insert("user_id".to_string(), "user_12345".to_string());
+    tags.insert("session_id".to_string(), "session_abc".to_string());
+    tags.insert("source".to_string(), "e2e_test".to_string());
+    tags.insert("environment".to_string(), "test".to_string());
+
+    let insert = BooleanMetricFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        metric_name: metric_name.clone(),
+        value: false,
+        tags: tags.clone(),
+        snapshot_hash: SnapshotHash::new_test(),
+    };
+
+    // Insert should succeed
+    clickhouse
+        .insert_boolean_feedback(&insert)
+        .await
+        .expect("Feedback insert with multiple tags should succeed");
+
+    // Wait for ClickHouse to process the insert
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read back the feedback
+    let feedback = clickhouse
+        .query_feedback_by_target_id(target_id, None, None, Some(1000))
+        .await
+        .expect("Query should succeed");
+
+    // Find our inserted feedback and verify tags
+    let found = feedback.iter().find(|f| match f {
+        FeedbackRow::Boolean(b) => b.id == feedback_id && b.metric_name == metric_name,
+        _ => false,
+    });
+    assert!(
+        found.is_some(),
+        "Should find the inserted feedback with tags"
+    );
+
+    if let Some(FeedbackRow::Boolean(b)) = found {
+        assert_eq!(
+            b.tags.get("user_id"),
+            Some(&"user_12345".to_string()),
+            "user_id tag should match"
+        );
+        assert_eq!(
+            b.tags.get("session_id"),
+            Some(&"session_abc".to_string()),
+            "session_id tag should match"
+        );
+        assert_eq!(
+            b.tags.get("source"),
+            Some(&"e2e_test".to_string()),
+            "source tag should match"
+        );
+        assert_eq!(
+            b.tags.get("environment"),
+            Some(&"test".to_string()),
+            "environment tag should match"
+        );
+    }
 }
