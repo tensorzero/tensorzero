@@ -4,6 +4,9 @@
 //! different registration strategies while ensuring the same set of tools is
 //! processed regardless of the visitor implementation.
 
+use std::collections::HashSet;
+use std::sync::Mutex;
+
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, TaskTool};
 use serde::Serialize;
@@ -54,4 +57,65 @@ pub trait ToolVisitor {
         T: SimpleTool + Default,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display;
+}
+
+/// A visitor that collects tool names from `for_each_tool`.
+///
+/// This is used by `collect_tool_names` to derive the set of available
+/// tool names from the single source of truth in `for_each_tool`.
+pub struct ToolNameCollector {
+    names: Mutex<HashSet<String>>,
+}
+
+impl ToolNameCollector {
+    pub fn new() -> Self {
+        Self {
+            names: Mutex::new(HashSet::new()),
+        }
+    }
+
+    /// Consume the collector and return the collected tool names.
+    ///
+    /// If the mutex was poisoned (which would only happen if a panic occurred
+    /// while holding the lock), this returns the data anyway since we still
+    /// want to use it.
+    pub fn into_names(self) -> HashSet<String> {
+        self.names.into_inner().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+impl Default for ToolNameCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ToolVisitor for ToolNameCollector {
+    type Error = std::convert::Infallible;
+
+    async fn visit_task_tool<T>(&self) -> Result<(), Self::Error>
+    where
+        T: TaskTool + Default,
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+    {
+        // unwrap_or_else handles the (practically impossible) poisoned case
+        if let Ok(mut names) = self.names.lock() {
+            names.insert(T::name().to_string());
+        }
+        Ok(())
+    }
+
+    async fn visit_simple_tool<T>(&self) -> Result<(), Self::Error>
+    where
+        T: SimpleTool + Default,
+        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
+        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+    {
+        if let Ok(mut names) = self.names.lock() {
+            names.insert(T::name().to_string());
+        }
+        Ok(())
+    }
 }

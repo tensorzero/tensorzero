@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -189,7 +190,10 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
 }
 
 impl GatewayHandle {
-    pub async fn new(config: UnwrittenConfig) -> Result<Self, Error> {
+    pub async fn new(
+        config: UnwrittenConfig,
+        available_tools: HashSet<String>,
+    ) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
@@ -198,6 +202,7 @@ impl GatewayHandle {
             clickhouse_url,
             postgres_url,
             valkey_url,
+            available_tools,
         ))
         .await
     }
@@ -207,6 +212,7 @@ impl GatewayHandle {
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         valkey_url: Option<String>,
+        available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let config = Arc::new(Box::pin(config.into_config(&clickhouse_connection_info)).await?);
@@ -220,6 +226,7 @@ impl GatewayHandle {
             valkey_connection_info,
             http_client,
             None,
+            available_tools,
         )
         .await
     }
@@ -272,6 +279,7 @@ impl GatewayHandle {
         valkey_connection_info: ValkeyConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
+        available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
@@ -313,8 +321,12 @@ impl GatewayHandle {
                 .build(),
         );
 
-        let autopilot_client =
-            setup_autopilot_client(&postgres_connection_info, deployment_id.as_ref()).await?;
+        let autopilot_client = setup_autopilot_client(
+            &postgres_connection_info,
+            deployment_id.as_ref(),
+            available_tools,
+        )
+        .await?;
 
         Ok(Self {
             app_state: AppStateData {
@@ -529,6 +541,7 @@ pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionIn
 async fn setup_autopilot_client(
     postgres_connection_info: &PostgresConnectionInfo,
     deployment_id: Option<&String>,
+    available_tools: HashSet<String>,
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
@@ -549,9 +562,6 @@ async fn setup_autopilot_client(
             }
             let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
                 .unwrap_or_else(|_| "autopilot".to_string());
-
-            // Collect available tool names for filtering unknown tool calls
-            let available_tools = autopilot_client::collect_tool_names();
 
             let mut builder = AutopilotClient::builder()
                 .api_key(api_key)
@@ -681,6 +691,7 @@ pub async fn start_openai_compatible_gateway(
         clickhouse_url,
         postgres_url,
         valkey_url,
+        HashSet::new(), // available_tools
     ))
     .await?;
 
@@ -1035,6 +1046,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
+            HashSet::new(), // available_tools
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");
