@@ -11,7 +11,9 @@ Verifies that text and raw_text content preserves all fields through:
 This catches type generation issues for text content types.
 """
 
+import asyncio
 import json
+import time
 from dataclasses import asdict
 
 import pytest
@@ -90,6 +92,9 @@ async def test_async_text_content_roundtrip_complete_flow(
 
     # Store inference_id for retrieval
     inference_id = str(result.inference_id)
+
+    # Wait for results to be written to ClickHouse (required for batch writes)
+    await asyncio.sleep(1)
 
     # ============================================================================
     # Step 3: Query inference back via get_inferences
@@ -374,6 +379,9 @@ def test_sync_text_content_roundtrip_complete_flow(sync_client: TensorZeroGatewa
     original_text = text_response.text
 
     inference_id = str(result.inference_id)
+
+    # Wait for results to be written to ClickHouse (required for batch writes)
+    time.sleep(1)
 
     # ============================================================================
     # Step 3: Query via get_inferences

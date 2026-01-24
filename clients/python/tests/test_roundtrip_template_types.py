@@ -13,7 +13,9 @@ focuses on the input/storage/datapoint lifecycle.
 This catches type generation issues for template content types.
 """
 
+import asyncio
 import json
+import time
 from dataclasses import asdict
 
 import pytest
@@ -73,6 +75,9 @@ async def test_async_template_content_roundtrip_complete_flow(
     assert isinstance(result, JsonInferenceResponse), "Result must be JsonInferenceResponse instance"
     assert result.inference_id is not None, "Inference must return ID"
     inference_id = str(result.inference_id)
+
+    # Wait for results to be written to ClickHouse (required for batch writes)
+    await asyncio.sleep(1)
 
     # ============================================================================
     # Step 2: Query inference back via get_inferences
@@ -301,6 +306,9 @@ def test_sync_template_content_roundtrip_complete_flow(sync_client: TensorZeroGa
     assert result.inference_id is not None, "Result must have inference_id"
 
     inference_id = str(result.inference_id)
+
+    # Wait for results to be written to ClickHouse (required for batch writes)
+    time.sleep(1)
 
     # ============================================================================
     # Step 2: Query via get_inferences

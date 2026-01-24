@@ -13,7 +13,9 @@ This catches type generation issues for thought content types.
 Uses the dummy "reasoner" model which returns thought content blocks.
 """
 
+import asyncio
 import json
+import time
 from dataclasses import asdict
 
 import pytest
@@ -93,6 +95,9 @@ async def test_async_thought_content_roundtrip_complete_flow(
 
     # Store inference_id for retrieval
     inference_id = str(result.inference_id)
+
+    # Wait for results to be written to ClickHouse (required for batch writes)
+    await asyncio.sleep(1)
 
     # ============================================================================
     # Step 3: Query inference back via get_inferences
@@ -346,6 +351,9 @@ def test_sync_thought_content_roundtrip_complete_flow(sync_client: TensorZeroGat
     original_thought_text = thought_response.text
 
     inference_id = str(result.inference_id)
+
+    # Wait for results to be written to ClickHouse (required for batch writes)
+    time.sleep(1)
 
     # ============================================================================
     # Step 3: Query via get_inferences

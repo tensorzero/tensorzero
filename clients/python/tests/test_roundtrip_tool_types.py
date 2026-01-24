@@ -11,7 +11,9 @@ Verifies that tool call data preserves all fields through:
 This catches type generation issues like PR #5803.
 """
 
+import asyncio
 import json
+import time
 from dataclasses import asdict
 
 import pytest
@@ -112,6 +114,9 @@ async def test_async_tool_call_roundtrip_complete_flow(
 
     # Store inference_id for retrieval
     inference_id = str(result.inference_id)
+
+    # Wait for results to be written to ClickHouse (required for batch writes)
+    await asyncio.sleep(1)
 
     # ============================================================================
     # Step 3: Query inference back via get_inferences
@@ -535,6 +540,9 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
 
     # Store inference_id for retrieval
     inference_id = str(result.inference_id)
+
+    # Wait for results to be written to ClickHouse (required for batch writes)
+    time.sleep(1)
 
     # ============================================================================
     # Step 3: Query inference back via get_inferences
