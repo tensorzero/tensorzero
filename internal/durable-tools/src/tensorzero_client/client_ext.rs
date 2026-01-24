@@ -35,9 +35,9 @@ use tensorzero_optimizers::endpoints::{
 use uuid::Uuid;
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, RunEvaluationParams,
-    RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, EvaluatorStatsResponse,
+    GatewayListEventsResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
+    RunEvaluationParams, RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// Implementation of `TensorZeroClient` for the TensorZero SDK `Client`.
@@ -155,7 +155,7 @@ impl TensorZeroClient for Client {
         &self,
         session_id: Uuid,
         params: ListEventsParams,
-    ) -> Result<ListEventsResponse, TensorZeroClientError> {
+    ) -> Result<GatewayListEventsResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let mut url = http

@@ -47,4 +47,8 @@ pub enum AutopilotError {
         response: ApproveAllToolCallsResponse,
         errors: Vec<(Uuid, Box<AutopilotError>)>,
     },
+
+    /// Internal error - indicates a bug in the client.
+    #[error("Internal error: {0}")]
+    Internal(String),
 }

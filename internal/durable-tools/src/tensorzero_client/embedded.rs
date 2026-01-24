@@ -38,7 +38,7 @@ use uuid::Uuid;
 
 use super::{
     CreateEventGatewayRequest, CreateEventResponse, DatapointResult, EvaluatorStatsResponse,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    GatewayListEventsResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
     RunEvaluationParams, RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
 };
 
@@ -145,7 +145,7 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         session_id: Uuid,
         params: ListEventsParams,
-    ) -> Result<ListEventsResponse, TensorZeroClientError> {
+    ) -> Result<GatewayListEventsResponse, TensorZeroClientError> {
         let autopilot_client = self
             .app_state
             .autopilot_client

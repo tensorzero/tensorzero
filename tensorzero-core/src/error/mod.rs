@@ -1780,6 +1780,12 @@ impl From<autopilot_client::AutopilotError> for Error {
                     status_code: None,
                 })
             }
+            autopilot_client::AutopilotError::Internal(message) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Internal error: {message}"),
+                    status_code: None,
+                })
+            }
         }
     }
 }

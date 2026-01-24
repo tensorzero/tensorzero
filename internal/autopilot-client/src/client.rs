@@ -21,8 +21,8 @@ use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
-    StreamEventsParams, ToolCallAuthorizationStatus,
+    GatewayListEventsResponse, GatewayStreamUpdate, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -401,11 +401,14 @@ impl AutopilotClient {
     /// Unknown tool calls (those not in `available_tools`) are filtered from
     /// both `events` and `pending_tool_calls`, and automatically rejected via a durable task.
     /// `ToolCallAuthorization::NotAvailable` events are also filtered from results.
+    ///
+    /// Returns `GatewayListEventsResponse` which uses `GatewayEvent` - a narrower type
+    /// that excludes `NotAvailable` authorization status.
     pub async fn list_events(
         &self,
         session_id: Uuid,
         params: ListEventsParams,
-    ) -> Result<ListEventsResponse, AutopilotError> {
+    ) -> Result<GatewayListEventsResponse, AutopilotError> {
         let url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events"))?;
@@ -417,11 +420,12 @@ impl AutopilotClient {
             .send()
             .await?;
         let response = self.check_response(response).await?;
-        let mut body: ListEventsResponse = response.json().await?;
+        let body: ListEventsResponse = response.json().await?;
         self.cache_tool_call_events(&body.events);
         self.cache_tool_call_events(&body.pending_tool_calls);
 
-        // Filter out unknown tool calls (spawn auto-reject tasks) and NotAvailable authorizations
+        // Filter out unknown tool calls (spawn auto-reject tasks) and NotAvailable authorizations,
+        // then convert to gateway types
         let mut filtered_events = Vec::new();
         for event in body.events {
             if let EventPayload::ToolCall(tool_call) = &event.payload
@@ -431,10 +435,15 @@ impl AutopilotClient {
                 continue;
             }
             if !Self::should_filter_event(&event) {
-                filtered_events.push(event);
+                // Conversion should succeed since we filtered out NotAvailable events
+                let gateway_event = event.try_into().map_err(|e| {
+                    AutopilotError::Internal(format!(
+                        "Event conversion failed after filtering: {e}"
+                    ))
+                })?;
+                filtered_events.push(gateway_event);
             }
         }
-        body.events = filtered_events;
 
         let mut filtered_pending_tool_calls = Vec::new();
         for event in body.pending_tool_calls {
@@ -445,12 +454,22 @@ impl AutopilotClient {
                 continue;
             }
             if !Self::should_filter_event(&event) {
-                filtered_pending_tool_calls.push(event);
+                // Conversion should succeed since we filtered out NotAvailable events
+                let gateway_event = event.try_into().map_err(|e| {
+                    AutopilotError::Internal(format!(
+                        "Event conversion failed after filtering: {e}"
+                    ))
+                })?;
+                filtered_pending_tool_calls.push(gateway_event);
             }
         }
-        body.pending_tool_calls = filtered_pending_tool_calls;
 
-        Ok(body)
+        Ok(GatewayListEventsResponse {
+            events: filtered_events,
+            previous_user_message_event_id: body.previous_user_message_event_id,
+            status: body.status,
+            pending_tool_calls: filtered_pending_tool_calls,
+        })
     }
 
     /// Gets a single event by ID.
@@ -600,12 +619,16 @@ impl AutopilotClient {
     /// Returns `AutopilotError::Http` if the server returns an error status code
     /// (e.g., 401 Unauthorized, 404 Not Found). This is checked before returning
     /// the stream, so connection errors are caught immediately.
+    /// Returns a stream of `GatewayStreamUpdate` - a narrower type that excludes
+    /// `NotAvailable` authorization status.
     pub async fn stream_events(
         &self,
         session_id: Uuid,
         params: StreamEventsParams,
-    ) -> Result<impl Stream<Item = Result<StreamUpdate, AutopilotError>> + use<>, AutopilotError>
-    {
+    ) -> Result<
+        impl Stream<Item = Result<GatewayStreamUpdate, AutopilotError>> + use<>,
+        AutopilotError,
+    > {
         let mut url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events/stream"))?;
@@ -679,7 +702,13 @@ impl AutopilotClient {
                                         }
                                     }
 
-                                    Some(Ok(update))
+                                    // Convert to gateway type - should succeed since we filtered NotAvailable above
+                                    match update.try_into() {
+                                        Ok(gateway_update) => Some(Ok(gateway_update)),
+                                        Err(e) => Some(Err(AutopilotError::Internal(format!(
+                                            "StreamUpdate conversion failed after filtering: {e}"
+                                        )))),
+                                    }
                                 }
                                 Err(e) => Some(Err(AutopilotError::Json(e))),
                             }

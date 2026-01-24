@@ -37,8 +37,8 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventResponse, EventPayload, EventPayloadToolResult, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    CreateEventResponse, EventPayload, EventPayloadToolResult, GatewayListEventsResponse,
+    ListEventsParams, ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
@@ -220,11 +220,14 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     ) -> Result<CreateEventResponse, TensorZeroClientError>;
 
     /// List events in an autopilot session.
+    ///
+    /// Returns `GatewayListEventsResponse` which uses narrower types that exclude
+    /// `NotAvailable` authorization status.
     async fn list_autopilot_events(
         &self,
         session_id: Uuid,
         params: ListEventsParams,
-    ) -> Result<ListEventsResponse, TensorZeroClientError>;
+    ) -> Result<GatewayListEventsResponse, TensorZeroClientError>;
 
     /// List autopilot sessions.
     async fn list_autopilot_sessions(
