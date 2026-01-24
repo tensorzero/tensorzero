@@ -87,6 +87,11 @@ pub struct RunEvaluationParams {
     /// Whether to include per-datapoint results in the response.
     #[serde(default)]
     pub include_datapoint_results: bool,
+    /// Additional tags to apply to all inferences made during the evaluation.
+    /// These tags will be added to each inference, with internal evaluation tags
+    /// taking precedence in case of conflicts.
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
 }
 
 /// Result for a single datapoint evaluation.
@@ -217,6 +222,7 @@ pub async fn run_evaluation(
         cache_mode: params.inference_cache,
         max_datapoints: params.max_datapoints,
         precision_targets: params.precision_targets.clone(),
+        tags: params.tags.clone(),
     };
 
     let result = run_evaluation_with_app_state(app_state, run_params)

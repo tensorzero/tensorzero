@@ -662,20 +662,18 @@ api_base = "https://example.com/v1/messages"
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-Enables Anthropic's beta structured outputs feature, which provides native support for strict JSON schema validation and strict tool parameter validation.
+Enables strict validation for tool parameters when using tools with `strict = true`.
 
 When enabled:
 
 - Adds the `anthropic-beta: structured-outputs-2025-11-13` header to requests
-- For JSON functions with `json_mode = "strict"`, forwards the output schema in the `output_format` field
 - For tools with `strict = true`, forwards the `strict` parameter to enable strict validation
 
-```toml title="tensorzero.toml"
-[models.claude_structured.providers.anthropic]
-type = "anthropic"
-model_name = "claude-sonnet-4-5"
-beta_structured_outputs = true
-```
+<Note>
+
+For JSON functions with `json_mode = "strict"`, TensorZero automatically uses Anthropic's structured outputs feature without this setting. This setting is only needed for strict tool parameter validation.
+
+</Note>
 
 </Accordion>
 
@@ -4546,7 +4544,8 @@ There are no additional fields available for this type.
 
 The `[postgres]` section defines the configuration for PostgreSQL connectivity.
 
-PostgreSQL is required for certain TensorZero features including [rate limiting](/operations/enforce-custom-rate-limits/) and [Track-and-Stop experimentation](/experimentation/run-adaptive-ab-tests/).
+PostgreSQL is required for certain TensorZero features including [adaptive experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
+PostgreSQL can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey-redis) is recommended for high-throughput deployments.
 You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
 
 ### `connection_pool_size`
@@ -4566,7 +4565,7 @@ If `true`, the gateway will throw an error on startup if it fails to connect to 
 If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
 If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
 
-If you have features that require PostgreSQL (e.g. rate limiting, adaptive experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
+If you have features that require PostgreSQL (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
 
 ## `[rate_limiting]`
 

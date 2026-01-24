@@ -313,6 +313,7 @@ model = "eval_test_model_{id}"
             max_datapoints: None,
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
+            tags: HashMap::new(),
         })),
     };
 
@@ -398,6 +399,7 @@ json_mode = "on"
             max_datapoints: None,
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
+            tags: HashMap::new(),
         })),
     };
 
@@ -482,6 +484,7 @@ json_mode = "on"
             max_datapoints: None,
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
+            tags: HashMap::new(),
         })),
     };
 
@@ -634,6 +637,7 @@ json_mode = "on"
             max_datapoints: None,
             precision_targets: HashMap::new(),
             include_datapoint_results: true,
+            tags: HashMap::new(),
         })),
     };
 

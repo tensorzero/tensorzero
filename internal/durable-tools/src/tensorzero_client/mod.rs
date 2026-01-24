@@ -35,8 +35,8 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
-    ListSessionsResponse, ToolOutcome,
+    CreateEventResponse, EventPayload, EventPayloadToolResult, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
