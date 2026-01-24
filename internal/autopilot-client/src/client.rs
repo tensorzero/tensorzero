@@ -273,6 +273,18 @@ impl AutopilotClient {
         !self.available_tools.contains(&tool_call.name)
     }
 
+    /// Check if an event should be filtered from responses.
+    ///
+    /// Returns `true` for:
+    /// - `ToolCallAuthorization` events with `NotAvailable` status
+    fn should_filter_event(event: &Event) -> bool {
+        matches!(
+            &event.payload,
+            EventPayload::ToolCallAuthorization(auth)
+                if matches!(auth.status, ToolCallAuthorizationStatus::NotAvailable)
+        )
+    }
+
     /// Spawns a durable task to execute an approved tool call.
     ///
     /// This is called after a `ToolCallAuthorization` event with `Approved` status
@@ -387,7 +399,7 @@ impl AutopilotClient {
     /// Lists events for a session.
     ///
     /// Unknown tool calls (those not in `available_tools`) are filtered from
-    /// `pending_tool_calls` and automatically rejected via a durable task.
+    /// both `events` and `pending_tool_calls`, and automatically rejected via a durable task.
     /// `ToolCallAuthorization::NotAvailable` events are also filtered from results.
     pub async fn list_events(
         &self,
@@ -409,20 +421,34 @@ impl AutopilotClient {
         self.cache_tool_call_events(&body.events);
         self.cache_tool_call_events(&body.pending_tool_calls);
 
-        // Filter out unknown tool calls and spawn auto-reject tasks for them
-        let mut known_pending_tool_calls = Vec::new();
-        for event in body.pending_tool_calls {
-            if let EventPayload::ToolCall(tool_call) = &event.payload {
-                if self.is_unknown_tool(tool_call) {
-                    reject_missing_tool(&self.spawn_client, tool_call).await?;
-                } else {
-                    known_pending_tool_calls.push(event);
-                }
-            } else {
-                known_pending_tool_calls.push(event);
+        // Filter out unknown tool calls (spawn auto-reject tasks) and NotAvailable authorizations
+        let mut filtered_events = Vec::new();
+        for event in body.events {
+            if let EventPayload::ToolCall(tool_call) = &event.payload
+                && self.is_unknown_tool(tool_call)
+            {
+                reject_missing_tool(&self.spawn_client, tool_call).await?;
+                continue;
+            }
+            if !Self::should_filter_event(&event) {
+                filtered_events.push(event);
             }
         }
-        body.pending_tool_calls = known_pending_tool_calls;
+        body.events = filtered_events;
+
+        let mut filtered_pending_tool_calls = Vec::new();
+        for event in body.pending_tool_calls {
+            if let EventPayload::ToolCall(tool_call) = &event.payload
+                && self.is_unknown_tool(tool_call)
+            {
+                reject_missing_tool(&self.spawn_client, tool_call).await?;
+                continue;
+            }
+            if !Self::should_filter_event(&event) {
+                filtered_pending_tool_calls.push(event);
+            }
+        }
+        body.pending_tool_calls = filtered_pending_tool_calls;
 
         Ok(body)
     }
@@ -631,6 +657,11 @@ impl AutopilotClient {
                         if message.event == "event" {
                             match serde_json::from_str::<StreamUpdate>(&message.data) {
                                 Ok(update) => {
+                                    // Filter out NotAvailable authorizations
+                                    if Self::should_filter_event(&update.event) {
+                                        return None;
+                                    }
+
                                     if let EventPayload::ToolCall(tool_call) = &update.event.payload
                                     {
                                         cache.insert(update.event.id, tool_call.clone());
