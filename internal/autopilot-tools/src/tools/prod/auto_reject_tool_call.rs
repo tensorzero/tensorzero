@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, TaskTool, ToolContext, ToolMetadata, ToolResult};
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
 
@@ -66,12 +66,11 @@ impl ToolMetadata for AutoRejectToolCallTool {
 }
 
 #[async_trait]
-impl SimpleTool for AutoRejectToolCallTool {
+impl TaskTool for AutoRejectToolCallTool {
     async fn execute(
         _llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: SimpleToolContext<'_>,
-        _idempotency_key: &str,
+        ctx: &mut ToolContext<'_>,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Send ToolCallAuthorization::NotAvailable to autopilot API
         ctx.client()

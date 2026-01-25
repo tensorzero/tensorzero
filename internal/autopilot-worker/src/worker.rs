@@ -6,6 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use autopilot_client::AutopilotSideInfo;
 use autopilot_tools::ToolVisitor;
+use autopilot_tools::tools::AutoRejectToolCallTool;
 use durable_tools::{
     SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };
@@ -93,11 +94,11 @@ impl AutopilotWorker {
         };
         autopilot_tools::for_each_tool(&visitor).await?;
 
-        // Register internal tools directly without the ClientSimpleToolWrapper.
+        // Register internal tools directly without the ClientTaskToolWrapper.
         // AutoRejectToolCallTool only writes a NotAvailable authorization -
         // it doesn't need the wrapper to publish a tool_result.
         self.executor
-            .register_simple_tool::<autopilot_tools::tools::AutoRejectToolCallTool>()
+            .register_task_tool::<AutoRejectToolCallTool>()
             .await?;
 
         Ok(())
