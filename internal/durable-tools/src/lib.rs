@@ -171,6 +171,7 @@ mod context;
 mod error;
 mod executor;
 mod registry;
+pub mod run_evaluation;
 mod simple_tool;
 mod task_tool;
 pub mod tensorzero_client;
@@ -230,10 +231,10 @@ pub use tensorzero::{
 // Re-export config snapshot types for historical inference
 pub use tensorzero_client::SnapshotHash;
 
-// Re-export evaluation types
+// Re-export action and evaluation types
 pub use tensorzero_client::{
-    CacheEnabledMode, DatapointResult, EvaluatorStatsResponse, RunEvaluationParams,
-    RunEvaluationResponse,
+    ActionInput, ActionInputInfo, ActionResponse, CacheEnabledMode, DatapointResult,
+    EvaluatorStats, RunEvaluationParams, RunEvaluationResponse,
 };
 
 // Re-export TensorZero inference types for convenience

@@ -3,12 +3,7 @@
 //! This implementation is used when the worker runs inside the gateway process
 //! and wants to call inference and autopilot endpoints without HTTP overhead.
 
-use std::collections::HashMap;
-
 use async_trait::async_trait;
-use evaluations::stats::EvaluationStats;
-use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
-use evaluations::{EvaluationUpdate, OutputFormat, run_evaluation_with_app_state};
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
@@ -29,17 +24,17 @@ use tensorzero_core::endpoints::datasets::v1::types::{
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
-use tensorzero_core::endpoints::internal::action::{ActionInput, ActionInputInfo, ActionResponse};
 use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
 use tensorzero_core::error::{Error, ErrorDetails};
-use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
 
+use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
+
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, DatapointResult, EvaluatorStatsResponse,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
-    RunEvaluationParams, RunEvaluationResponse, TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse,
+    TensorZeroClient, TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -178,29 +173,17 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
-    ) -> Result<InferenceResponse, TensorZeroClientError> {
+    ) -> Result<ActionResponse, TensorZeroClientError> {
         let action_input = ActionInputInfo {
             snapshot_hash,
             input,
         };
 
-        let result = crate::action::action(&self.app_state, action_input)
+        crate::action::action(&self.app_state, action_input)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            })?;
-
-        match result {
-            ActionResponse::Inference(response) => Ok(response),
-            ActionResponse::Feedback(_) => {
-                Err(TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InternalError {
-                        message: "Unexpected feedback response from action endpoint".to_string(),
-                    })
-                    .into(),
-                }))
-            }
-        }
+            })
     }
 
     async fn get_config_snapshot(
@@ -445,147 +428,8 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         params: RunEvaluationParams,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
-        // Look up the evaluation config
-        let evaluation_config = self
-            .app_state
-            .config
-            .evaluations
-            .get(&params.evaluation_name)
-            .ok_or_else(|| {
-                TensorZeroClientError::Evaluation(format!(
-                    "Evaluation '{}' not found in config",
-                    params.evaluation_name
-                ))
-            })?
-            .clone();
-
-        // Get the function config for this evaluation
-        let EvaluationConfig::Inference(ref inference_eval_config) = *evaluation_config;
-        let function_config = self
-            .app_state
-            .config
-            .functions
-            .get(&inference_eval_config.function_name)
-            .map(|func| EvaluationFunctionConfig::from(func.as_ref()))
-            .ok_or_else(|| {
-                TensorZeroClientError::Evaluation(format!(
-                    "Function '{}' not found in config",
-                    inference_eval_config.function_name
-                ))
-            })?;
-
-        // Build params for run_evaluation_with_app_state
-        let app_state_params = RunEvaluationWithAppStateParams {
-            evaluation_config: (*evaluation_config).clone(),
-            function_config,
-            evaluation_name: params.evaluation_name,
-            dataset_name: params.dataset_name,
-            datapoint_ids: params.datapoint_ids,
-            variant: EvaluationVariant::Name(params.variant_name),
-            concurrency: params.concurrency,
-            cache_mode: params.inference_cache,
-            max_datapoints: params.max_datapoints,
-            precision_targets: params.precision_targets,
-            tags: params.tags,
-        };
-
-        // Run the evaluation using app state directly
-        let result = run_evaluation_with_app_state(self.app_state.clone(), app_state_params)
+        crate::run_evaluation::run_evaluation(self.app_state.clone(), &params)
             .await
-            .map_err(|e| TensorZeroClientError::Evaluation(format!("Evaluation failed: {e}")))?;
-
-        let mut receiver = result.receiver;
-        let num_datapoints = result.run_info.num_datapoints;
-        let evaluation_run_id = result.run_info.evaluation_run_id;
-
-        // Collect results - we use a dummy writer since we don't need CLI output
-        let mut evaluation_stats = EvaluationStats::new(OutputFormat::Jsonl, num_datapoints);
-        let mut dummy_writer = std::io::sink();
-
-        while let Some(update) = receiver.recv().await {
-            match update {
-                EvaluationUpdate::RunInfo(_) => {
-                    // Skip RunInfo
-                    continue;
-                }
-                update => {
-                    // Ignore write errors to the dummy sink
-                    let _ = evaluation_stats.push(update, &mut dummy_writer);
-                }
-            }
-        }
-
-        // Compute statistics
-        let EvaluationConfig::Inference(inference_config) = &*result.evaluation_config;
-        let stats = evaluation_stats.compute_stats(&inference_config.evaluators);
-
-        // Convert to response format
-        let stats_response: HashMap<String, EvaluatorStatsResponse> = stats
-            .into_iter()
-            .map(|(name, s)| {
-                (
-                    name,
-                    EvaluatorStatsResponse {
-                        mean: s.mean,
-                        stderr: s.stderr,
-                        count: s.count,
-                    },
-                )
-            })
-            .collect();
-
-        // Build per-datapoint results if requested
-        let datapoint_results = if params.include_datapoint_results {
-            let mut results = Vec::with_capacity(
-                evaluation_stats.evaluation_infos.len() + evaluation_stats.evaluation_errors.len(),
-            );
-
-            // Add successful evaluations (inference succeeded, some evaluators may have failed)
-            for info in &evaluation_stats.evaluation_infos {
-                let evaluations: HashMap<String, Option<f64>> = info
-                    .evaluations
-                    .iter()
-                    .map(|(name, value)| {
-                        let score = value.as_ref().and_then(|v| {
-                            v.as_f64()
-                                .or_else(|| v.as_bool().map(|b| if b { 1.0 } else { 0.0 }))
-                        });
-                        (name.clone(), score)
-                    })
-                    .collect();
-
-                results.push(DatapointResult {
-                    datapoint_id: info.datapoint.id(),
-                    success: true,
-                    evaluations,
-                    evaluator_errors: info.evaluator_errors.clone(),
-                    error: None,
-                });
-            }
-
-            // Add failed evaluations (inference or datapoint-level failure)
-            for error in &evaluation_stats.evaluation_errors {
-                results.push(DatapointResult {
-                    datapoint_id: error.datapoint_id,
-                    success: false,
-                    evaluations: HashMap::new(),
-                    evaluator_errors: HashMap::new(),
-                    error: Some(error.message.clone()),
-                });
-            }
-
-            Some(results)
-        } else {
-            None
-        };
-
-        Ok(RunEvaluationResponse {
-            evaluation_run_id,
-            num_datapoints,
-            num_successes: evaluation_stats.evaluation_infos.len(),
-            num_errors: evaluation_stats.evaluation_errors.len(),
-            stats: stats_response,
-            datapoint_results,
-        })
+            .map_err(|e| TensorZeroClientError::Evaluation(e.to_string()))
     }
 }

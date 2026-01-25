@@ -5,13 +5,14 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{
-    CacheEnabledMode, NonControlToolError, RunEvaluationParams, RunEvaluationResponse, SimpleTool,
-    SimpleToolContext, ToolMetadata, ToolResult,
+    ActionInput, ActionResponse, CacheEnabledMode, NonControlToolError, RunEvaluationParams,
+    RunEvaluationResponse, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult,
 };
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
+use tensorzero_core::config::snapshot::SnapshotHash;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -165,9 +166,35 @@ impl SimpleTool for RunEvaluationTool {
             tags: side_info.to_tags(),
         };
 
-        ctx.client()
-            .run_evaluation(params)
+        // Since autopilot sessions always have a config snapshot hash set, we use the action
+        // endpoint to ensure evaluations run against the historical config snapshot.
+        // If this assumption changes (e.g., we want to run against current config), use this instead:
+        //
+        // ctx.client()
+        //     .run_evaluation(params)
+        //     .await
+        //     .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
+
+        let snapshot_hash: SnapshotHash =
+            side_info
+                .config_snapshot_hash
+                .parse()
+                .map_err(|_: std::convert::Infallible| {
+                    AutopilotToolError::validation("Invalid snapshot hash")
+                })?;
+
+        let response = ctx
+            .client()
+            .action(snapshot_hash, ActionInput::RunEvaluation(Box::new(params)))
             .await
-            .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
+            .map_err(|e| AutopilotToolError::client_error("run_evaluation", e))?;
+
+        match response {
+            ActionResponse::RunEvaluation(eval_response) => Ok(eval_response),
+            _ => Err(AutopilotToolError::validation(
+                "Unexpected response type from action endpoint",
+            )
+            .into()),
+        }
     }
 }
