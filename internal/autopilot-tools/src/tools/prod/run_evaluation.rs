@@ -75,11 +75,11 @@ impl ToolMetadata for RunEvaluationTool {
     type Output = RunEvaluationResponse;
     type LlmParams = RunEvaluationToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("run_evaluation")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Run an evaluation on a dataset. This runs inference on each datapoint using the \
              specified variant, then runs the configured evaluators. Returns statistics \
@@ -87,7 +87,7 @@ impl ToolMetadata for RunEvaluationTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Run an evaluation on a dataset using configured evaluators.",
@@ -148,7 +148,7 @@ impl ToolMetadata for RunEvaluationTool {
 impl SimpleTool for RunEvaluationTool {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        _side_info: <Self as ToolMetadata>::SideInfo,
+        side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
@@ -162,6 +162,7 @@ impl SimpleTool for RunEvaluationTool {
             max_datapoints: llm_params.max_datapoints,
             precision_targets: llm_params.precision_targets,
             include_datapoint_results: llm_params.include_datapoint_results,
+            tags: side_info.to_tags(),
         };
 
         ctx.client()

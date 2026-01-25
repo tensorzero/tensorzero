@@ -1,15 +1,14 @@
 //! Wrapper that adds result publishing to client tools.
 
 use std::borrow::Cow;
-use std::marker::PhantomData;
 
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use autopilot_tools::AutopilotToolError;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, NonControlToolError, SimpleTool, SimpleToolContext,
-    TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolError, ToolMetadata, ToolOutcome,
-    ToolResult as DurableToolResult, ToolResultExt,
+    CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, NonControlToolError,
+    SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient, ToolAppState, ToolContext,
+    ToolError, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -45,28 +44,34 @@ struct PublishResultParams {
 /// executor.register_task_tool::<ClientTaskToolWrapper<MyTool>>().await;
 /// ```
 pub struct ClientTaskToolWrapper<T: TaskTool> {
-    _marker: PhantomData<T>,
+    inner: T,
 }
 
-impl<T: TaskTool> Default for ClientTaskToolWrapper<T> {
+impl<T: TaskTool> ClientTaskToolWrapper<T> {
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
+}
+
+impl<T: TaskTool + Default> Default for ClientTaskToolWrapper<T> {
     fn default() -> Self {
         Self {
-            _marker: PhantomData,
+            inner: T::default(),
         }
     }
 }
 
 impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
-    fn name() -> Cow<'static, str> {
-        T::name()
+    fn name(&self) -> Cow<'static, str> {
+        self.inner.name()
     }
 
-    fn description() -> Cow<'static, str> {
-        T::description()
+    fn description(&self) -> Cow<'static, str> {
+        self.inner.description()
     }
 
-    fn parameters_schema() -> DurableToolResult<Schema> {
-        T::parameters_schema()
+    fn parameters_schema(&self) -> DurableToolResult<Schema> {
+        self.inner.parameters_schema()
     }
 
     type LlmParams = T::LlmParams;
@@ -84,6 +89,7 @@ where
     <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
@@ -98,12 +104,14 @@ where
             },
         )?;
         // Execute the underlying tool
-        let result = T::execute(llm_params, side_info, ctx)
+        let result = self
+            .inner
+            .execute(llm_params, side_info, ctx)
             .await
             .propagate_control()?;
 
         // Prepare the outcome for the autopilot API
-        let tool_name = T::name().to_string();
+        let tool_name = self.inner.name().to_string();
         let outcome = match result {
             Ok(output) => {
                 let result_json = serde_json::to_string(&output)?;
@@ -149,10 +157,10 @@ async fn publish_result(
         .create_autopilot_event(
             params.session_id,
             CreateEventGatewayRequest {
-                payload: EventPayload::ToolResult {
+                payload: EventPayload::ToolResult(EventPayloadToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
-                },
+                }),
                 previous_user_message_event_id: None,
             },
         )
@@ -174,13 +182,20 @@ async fn publish_result(
 ///
 /// * `T` - The underlying SimpleTool to wrap
 pub struct ClientSimpleToolWrapper<T: SimpleTool> {
-    _marker: PhantomData<T>,
+    inner: T,
 }
 
-impl<T: SimpleTool> Default for ClientSimpleToolWrapper<T> {
+impl<T: SimpleTool> ClientSimpleToolWrapper<T> {
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
+}
+
+impl<T: SimpleTool + Default> Default for ClientSimpleToolWrapper<T> {
     fn default() -> Self {
         Self {
-            _marker: PhantomData,
+            inner: T::default(),
         }
     }
 }
@@ -190,12 +205,12 @@ where
     T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
     <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
-    fn name() -> Cow<'static, str> {
-        T::name()
+    fn name(&self) -> Cow<'static, str> {
+        self.inner.name()
     }
 
-    fn description() -> Cow<'static, str> {
-        T::description()
+    fn description(&self) -> Cow<'static, str> {
+        self.inner.description()
     }
 
     type LlmParams = T::LlmParams;
@@ -221,11 +236,12 @@ where
     <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
 {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
         ctx: &mut ToolContext<'_>,
     ) -> DurableToolResult<Self::Output> {
-        let tool_name = T::name().to_string();
+        let tool_name = self.inner.name().to_string();
         let tool_call_event_id = side_info.tool_call_event_id;
         let session_id = side_info.session_id;
         // Convert AutopilotSideInfo to the underlying tool's SideInfo
@@ -538,11 +554,11 @@ mod tests {
     struct TestTaskTool;
 
     impl ToolMetadata for TestTaskTool {
-        fn name() -> Cow<'static, str> {
+        fn name(&self) -> Cow<'static, str> {
             Cow::Borrowed("test_task_tool")
         }
 
-        fn description() -> Cow<'static, str> {
+        fn description(&self) -> Cow<'static, str> {
             Cow::Borrowed("A test task tool for unit testing")
         }
 
@@ -554,6 +570,7 @@ mod tests {
     #[async_trait]
     impl TaskTool for TestTaskTool {
         async fn execute(
+            &self,
             llm_params: Self::LlmParams,
             _side_info: Self::SideInfo,
             _ctx: &mut ToolContext<'_>,
@@ -580,11 +597,11 @@ mod tests {
     struct TestSimpleTool;
 
     impl ToolMetadata for TestSimpleTool {
-        fn name() -> Cow<'static, str> {
+        fn name(&self) -> Cow<'static, str> {
             Cow::Borrowed("test_simple_tool")
         }
 
-        fn description() -> Cow<'static, str> {
+        fn description(&self) -> Cow<'static, str> {
             Cow::Borrowed("A test simple tool for unit testing")
         }
 
@@ -627,10 +644,10 @@ mod tests {
                 *sid == expected_session_id
                     && matches!(
                         &request.payload,
-                        EventPayload::ToolResult {
+                        EventPayload::ToolResult(EventPayloadToolResult {
                             tool_call_event_id: tceid,
                             outcome: ToolOutcome::Success(_),
-                        } if *tceid == expected_tool_call_event_id
+                        }) if *tceid == expected_tool_call_event_id
                     )
             })
             .returning(|sid, _| {
@@ -667,10 +684,10 @@ mod tests {
             .withf(move |_sid, request| {
                 matches!(
                     &request.payload,
-                    EventPayload::ToolResult {
+                    EventPayload::ToolResult(EventPayloadToolResult {
                         tool_call_event_id: tceid,
                         outcome: ToolOutcome::Failure { error },
-                    } if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
+                    }) if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
                 )
             })
             .returning(|sid, _| {
@@ -724,26 +741,16 @@ mod tests {
 
     #[test]
     fn test_client_tool_wrapper_metadata_delegation() {
-        assert_eq!(
-            ClientTaskToolWrapper::<TestTaskTool>::name(),
-            "test_task_tool"
-        );
-        assert_eq!(
-            ClientTaskToolWrapper::<TestTaskTool>::description(),
-            "A test task tool for unit testing"
-        );
+        let wrapper = ClientTaskToolWrapper::new(TestTaskTool);
+        assert_eq!(wrapper.name(), "test_task_tool");
+        assert_eq!(wrapper.description(), "A test task tool for unit testing");
     }
 
     #[test]
     fn test_client_simple_tool_wrapper_metadata_delegation() {
-        assert_eq!(
-            ClientSimpleToolWrapper::<TestSimpleTool>::name(),
-            "test_simple_tool"
-        );
-        assert_eq!(
-            ClientSimpleToolWrapper::<TestSimpleTool>::description(),
-            "A test simple tool for unit testing"
-        );
+        let wrapper = ClientSimpleToolWrapper::new(TestSimpleTool);
+        assert_eq!(wrapper.name(), "test_simple_tool");
+        assert_eq!(wrapper.description(), "A test simple tool for unit testing");
     }
 
     #[test]

@@ -17,7 +17,11 @@ use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
-use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::feedback::{
+    BooleanMetricFeedbackInsert, CommentFeedbackInsert, CommentTargetType,
+    DemonstrationFeedbackInsert, FeedbackQueries, FloatMetricFeedbackInsert,
+};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
@@ -53,7 +57,7 @@ const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
 /// We also poll in the intermediate time so that we can return as soon as we find a target entry.
 const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
-/// The expected payload is a JSON object with the following fields:
+// TODO(shuyangli): rename this to CreateFeedbackRequest and export
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
@@ -92,6 +96,7 @@ impl From<&MetricConfigType> for FeedbackType {
     }
 }
 
+// TODO(shuyangli): rename this to CreateFeedbackResponse and export
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeedbackResponse {
     pub feedback_id: Uuid,
@@ -314,19 +319,21 @@ async fn write_comment(
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
-    let payload = json!({
-        "target_type": level,
-        "target_id": target_id,
-        "value": value,
-        "id": feedback_id,
-        "tags": tags,
-        "snapshot_hash": snapshot_hash,
-    });
+    let target_type = match level {
+        MetricConfigLevel::Inference => CommentTargetType::Inference,
+        MetricConfigLevel::Episode => CommentTargetType::Episode,
+    };
+    let insert = CommentFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        target_type,
+        value: value.to_string(),
+        tags: tags.clone(),
+        snapshot_hash,
+    };
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = connection_info
-                .write_batched(&[payload], TableName::CommentFeedback)
-                .await;
+            let _ = connection_info.insert_comment_feedback(&insert).await;
         });
     }
     Ok(())
@@ -364,12 +371,16 @@ async fn write_demonstration(
             message: format!("Failed to serialize parsed value to json: {e}"),
         })
     })?;
-    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
+    let insert = DemonstrationFeedbackInsert {
+        id: feedback_id,
+        inference_id,
+        value: string_value,
+        tags: tags.clone(),
+        snapshot_hash: config.hash.clone(),
+    };
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = connection_info
-                .write_batched(&[payload], TableName::DemonstrationFeedback)
-                .await;
+            let _ = connection_info.insert_demonstration_feedback(&insert).await;
         });
     }
     Ok(())
@@ -400,16 +411,21 @@ async fn write_float(
         Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
     };
 
-    value.as_f64().ok_or_else(|| {
+    let float_value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
+    let insert = FloatMetricFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        metric_name: metric_name.clone(),
+        value: float_value,
+        tags: tags.clone(),
+        snapshot_hash: config.hash.clone(),
+    };
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let payload = payload;
-            let payload_array = [payload];
             let clickhouse = connection_info;
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
@@ -421,7 +437,7 @@ async fn write_float(
                     &value,
                     target_id
                 ),
-                clickhouse.write_batched(&payload_array, TableName::FloatMetricFeedback)
+                clickhouse.insert_float_feedback(&insert)
             );
         });
     }
@@ -452,15 +468,21 @@ async fn write_boolean(
         // This will also throw if the function does not exist.
         Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
     };
-    value.as_bool().ok_or_else(|| {
+    let bool_value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
+    let insert = BooleanMetricFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        metric_name: metric_name.clone(),
+        value: bool_value,
+        tags: tags.clone(),
+        snapshot_hash: config.hash.clone(),
+    };
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let payload_array = [payload];
             let clickhouse = connection_info;
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
@@ -472,7 +494,7 @@ async fn write_boolean(
                     &value,
                     target_id
                 ),
-                clickhouse.write_batched(&payload_array, TableName::BooleanMetricFeedback)
+                clickhouse.insert_boolean_feedback(&insert)
             );
         });
     }

@@ -25,11 +25,11 @@ pub trait ToolMetadata: Send + Sync + 'static {
     type SideInfo: SideInfo;
     type Output: Serialize + DeserializeOwned + Send + 'static;
 
-    fn name() -> Cow<'static, str>;
-    fn description() -> Cow<'static, str>;
+    fn name(&self) -> Cow<'static, str>;
+    fn description(&self) -> Cow<'static, str>;
 
     // Automatically derived from LlmParams - override only if needed
-    fn parameters_schema() -> Schema { ... }
+    fn parameters_schema(&self) -> Schema { ... }
 }
 ```
 
@@ -110,10 +110,11 @@ impl ToolMetadata for MyTool {
     // ...
 }
 
-// At spawn time, both are provided:
-executor.spawn_tool::<MyTool>(
-    llm_params,   // From LLM tool call
-    side_info,    // Internal context
+// At spawn time, both are provided as JSON:
+executor.spawn_tool_by_name(
+    "my_tool",
+    serde_json::to_value(llm_params)?,   // From LLM tool call
+    serde_json::to_value(side_info)?,    // Internal context
     episode_id,
 ).await?;
 ```
@@ -161,11 +162,11 @@ impl ToolMetadata for SearchTool {
     type Output = SearchResult;
     type LlmParams = SearchParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("search")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Search the web")
     }
     // parameters_schema() is automatically derived from LlmParams
@@ -198,11 +199,11 @@ impl ToolMetadata for ResearchTool {
     type Output = ResearchResult;
     type LlmParams = ResearchParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("research")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Research a topic")
     }
     // parameters_schema() is automatically derived from LlmParams
@@ -245,15 +246,16 @@ async fn main() -> anyhow::Result<()> {
     // Create the queue (required before spawning)
     executor.durable().create_queue(None).await?;
 
-    // Register tools
-    executor.register_simple_tool::<SearchTool>().await;
-    executor.register_task_tool::<ResearchTool>().await;
+    // Register tools (pass instances)
+    executor.register_simple_tool_instance(SearchTool).await?;
+    executor.register_task_tool_instance(ResearchTool).await?;
 
-    // Spawn a tool execution
+    // Spawn a tool execution by name
     let episode_id = Uuid::now_v7();
-    executor.spawn_tool::<ResearchTool>(
-        ResearchParams { topic: "rust".into() },
-        (),
+    executor.spawn_tool_by_name(
+        "research",
+        serde_json::json!({"topic": "rust"}),
+        serde_json::json!(null),  // No side info
         episode_id,
     ).await?;
 

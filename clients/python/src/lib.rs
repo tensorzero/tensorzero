@@ -1515,6 +1515,7 @@ impl TensorZeroGateway {
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
+            tags: HashMap::new(), // No external tags for Python client evaluations
         };
 
         let result = tokio_block_on_without_gil(
@@ -2780,6 +2781,7 @@ impl AsyncTensorZeroGateway {
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
+                tags: HashMap::new(), // No external tags for Python client evaluations
             };
 
             let result =

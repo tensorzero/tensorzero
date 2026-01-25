@@ -37,8 +37,8 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
-    ListSessionsResponse, ToolOutcome,
+    CreateEventResponse, EventPayload, EventPayloadToolResult, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
@@ -110,6 +110,11 @@ pub struct RunEvaluationParams {
     /// Default is false to avoid response bloat for large evaluations.
     #[serde(default)]
     pub include_datapoint_results: bool,
+    /// Additional tags to apply to all inferences made during the evaluation.
+    /// These tags will be added to each inference, with internal evaluation tags
+    /// taking precedence in case of conflicts.
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
 }
 
 /// Statistics for a single evaluator.
