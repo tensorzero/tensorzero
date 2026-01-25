@@ -92,6 +92,14 @@ impl AutopilotWorker {
             executor: &self.executor,
         };
         autopilot_tools::for_each_tool(&visitor).await?;
+
+        // Register internal tools directly without the ClientSimpleToolWrapper.
+        // AutoRejectToolCallTool only writes a NotAvailable authorization -
+        // it doesn't need the wrapper to publish a tool_result.
+        self.executor
+            .register_simple_tool::<autopilot_tools::tools::AutoRejectToolCallTool>()
+            .await?;
+
         Ok(())
     }
 

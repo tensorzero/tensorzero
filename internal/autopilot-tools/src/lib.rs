@@ -187,11 +187,6 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .visit_simple_tool::<tools::GetInferencesTool>()
         .await?;
 
-    // Internal tools
-    visitor
-        .visit_simple_tool::<tools::AutoRejectToolCallTool>()
-        .await?;
-
     // Test tools (e2e_tests feature)
     // ------------------------------
     #[cfg(feature = "e2e_tests")]
