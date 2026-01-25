@@ -38,17 +38,17 @@ impl ToolMetadata for AutoRejectToolCallTool {
     type Output = ();
     type LlmParams = AutoRejectToolCallParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("__auto_reject_tool_call__")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Internal tool for rejecting unknown tool calls. Not intended for direct use.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Internal tool for auto-rejecting unknown tool calls.",
@@ -68,6 +68,7 @@ impl ToolMetadata for AutoRejectToolCallTool {
 #[async_trait]
 impl TaskTool for AutoRejectToolCallTool {
     async fn execute(
+        &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
         ctx: &mut ToolContext<'_>,

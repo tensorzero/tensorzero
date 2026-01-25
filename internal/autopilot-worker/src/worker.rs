@@ -98,7 +98,7 @@ impl AutopilotWorker {
         // AutoRejectToolCallTool only writes a NotAvailable authorization -
         // it doesn't need the wrapper to publish a tool_result.
         self.executor
-            .register_task_tool::<AutoRejectToolCallTool>()
+            .register_task_tool_instance(AutoRejectToolCallTool)
             .await?;
 
         Ok(())
@@ -155,14 +155,14 @@ struct LocalToolVisitor<'a> {
 impl ToolVisitor for LocalToolVisitor<'_> {
     type Error = ToolError;
 
-    async fn visit_task_tool<T>(&self) -> Result<(), ToolError>
+    async fn visit_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
     where
-        T: TaskTool + Default,
+        T: TaskTool,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
         self.executor
-            .register_task_tool::<ClientTaskToolWrapper<T>>()
+            .register_task_tool_instance(ClientTaskToolWrapper::new(tool))
             .await?;
         Ok(())
     }
@@ -175,7 +175,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor
-            .register_task_tool::<ClientSimpleToolWrapper<T>>()
+            .register_task_tool_instance(ClientSimpleToolWrapper::<T>::default())
             .await?;
         Ok(())
     }

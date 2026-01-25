@@ -26,11 +26,11 @@ impl ToolMetadata for ErrorSimpleTool {
     type Output = ();
     type LlmParams = ErrorSimpleParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("error_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Always returns an error with the specified message. A SimpleTool for testing error propagation.",
         )

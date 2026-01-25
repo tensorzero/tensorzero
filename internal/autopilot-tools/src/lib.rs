@@ -87,8 +87,8 @@ pub async fn collect_tool_names() -> HashSet<String> {
 /// impl ToolVisitor for LocalVisitor<'_> {
 ///     type Error = ToolError;
 ///
-///     async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError> {
-///         self.0.register_task_tool::<T>().await?;
+///     async fn visit_task_tool<T: TaskTool>(&self, tool: T) -> Result<(), ToolError> {
+///         self.0.register_task_tool_instance(tool).await?;
 ///         Ok(())
 ///     }
 ///
@@ -112,8 +112,8 @@ pub async fn collect_tool_names() -> HashSet<String> {
 /// impl ToolVisitor for RemoteVisitor<'_> {
 ///     type Error = ToolError;
 ///
-///     async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError> {
-///         self.0.register_client_tool::<T>().await?;
+///     async fn visit_task_tool<T: TaskTool>(&self, tool: T) -> Result<(), ToolError> {
+///         self.0.register_client_tool_instance(tool).await?;
 ///         Ok(())
 ///     }
 ///
@@ -159,7 +159,7 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .visit_simple_tool::<tools::DeleteDatapointsTool>()
         .await?;
     visitor
-        .visit_task_tool::<tools::LaunchOptimizationWorkflowTool>()
+        .visit_task_tool(tools::LaunchOptimizationWorkflowTool)
         .await?;
     visitor
         .visit_simple_tool::<tools::GetLatestFeedbackByMetricTool>()
@@ -192,11 +192,11 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
     #[cfg(feature = "e2e_tests")]
     {
         // TaskTools
-        visitor.visit_task_tool::<tools::EchoTool>().await?;
-        visitor.visit_task_tool::<tools::SlowTool>().await?;
-        visitor.visit_task_tool::<tools::FailingTool>().await?;
-        visitor.visit_task_tool::<tools::FlakyTool>().await?;
-        visitor.visit_task_tool::<tools::PanicTool>().await?;
+        visitor.visit_task_tool(tools::EchoTool).await?;
+        visitor.visit_task_tool(tools::SlowTool).await?;
+        visitor.visit_task_tool(tools::FailingTool).await?;
+        visitor.visit_task_tool(tools::FlakyTool).await?;
+        visitor.visit_task_tool(tools::PanicTool).await?;
 
         // SimpleTools
         visitor.visit_simple_tool::<tools::GoodSimpleTool>().await?;

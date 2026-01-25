@@ -1,3 +1,4 @@
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{MetricConfig, MetricConfigLevel};
 use crate::error::Error;
 use crate::function::FunctionConfigType;
@@ -14,6 +15,63 @@ use mockall::automock;
 
 use super::{TableBounds, TimeWindow};
 use crate::serde_util::deserialize_u64;
+
+// ===== Insert types for write operations =====
+
+/// Row to insert into boolean_metric_feedback
+#[derive(Debug, Serialize)]
+pub struct BooleanMetricFeedbackInsert {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub metric_name: String,
+    pub value: bool,
+    pub tags: HashMap<String, String>,
+    pub snapshot_hash: SnapshotHash,
+}
+
+/// Row to insert into float_metric_feedback
+#[derive(Debug, Serialize)]
+pub struct FloatMetricFeedbackInsert {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub metric_name: String,
+    pub value: f64,
+    pub tags: HashMap<String, String>,
+    pub snapshot_hash: SnapshotHash,
+}
+
+/// Row to insert into comment_feedback
+#[derive(Debug, Serialize)]
+pub struct CommentFeedbackInsert {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub target_type: CommentTargetType,
+    pub value: String,
+    pub tags: HashMap<String, String>,
+    pub snapshot_hash: SnapshotHash,
+}
+
+/// Row to insert into demonstration_feedback
+#[derive(Debug, Serialize)]
+pub struct DemonstrationFeedbackInsert {
+    pub id: Uuid,
+    pub inference_id: Uuid,
+    pub value: String,
+    pub tags: HashMap<String, String>,
+    pub snapshot_hash: SnapshotHash,
+}
+
+/// Row to insert into static_evaluation_human_feedback
+#[derive(Debug, Serialize)]
+pub struct StaticEvaluationHumanFeedbackInsert {
+    pub feedback_id: Uuid,
+    pub metric_name: String,
+    pub datapoint_id: Uuid,
+    pub output: String,
+    pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_inference_id: Option<Uuid>,
+}
 
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -121,6 +179,30 @@ pub trait FeedbackQueries {
         &self,
         params: GetVariantPerformanceParams<'_>,
     ) -> Result<Vec<VariantPerformanceRow>, Error>;
+
+    // ===== Write methods =====
+
+    /// Insert a boolean metric feedback row
+    async fn insert_boolean_feedback(&self, row: &BooleanMetricFeedbackInsert)
+    -> Result<(), Error>;
+
+    /// Insert a float metric feedback row
+    async fn insert_float_feedback(&self, row: &FloatMetricFeedbackInsert) -> Result<(), Error>;
+
+    /// Insert a comment feedback row
+    async fn insert_comment_feedback(&self, row: &CommentFeedbackInsert) -> Result<(), Error>;
+
+    /// Insert a demonstration feedback row
+    async fn insert_demonstration_feedback(
+        &self,
+        row: &DemonstrationFeedbackInsert,
+    ) -> Result<(), Error>;
+
+    /// Insert a static evaluation human feedback row
+    async fn insert_static_eval_feedback(
+        &self,
+        row: &StaticEvaluationHumanFeedbackInsert,
+    ) -> Result<(), Error>;
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

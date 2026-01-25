@@ -58,11 +58,11 @@
 //!     type Output = SearchResult;
 //!     type LlmParams = SearchParams;
 //!
-//!     fn name() -> Cow<'static, str> {
+//!     fn name(&self) -> Cow<'static, str> {
 //!         Cow::Borrowed("search")
 //!     }
 //!
-//!     fn description() -> Cow<'static, str> {
+//!     fn description(&self) -> Cow<'static, str> {
 //!         Cow::Borrowed("Search the web")
 //!     }
 //!     // parameters_schema() is automatically derived from LlmParams
@@ -99,11 +99,11 @@
 //!     type Output = ResearchResult;
 //!     type LlmParams = ResearchParams;
 //!
-//!     fn name() -> Cow<'static, str> {
+//!     fn name(&self) -> Cow<'static, str> {
 //!         Cow::Borrowed("research")
 //!     }
 //!
-//!     fn description() -> Cow<'static, str> {
+//!     fn description(&self) -> Cow<'static, str> {
 //!         Cow::Borrowed("Research a topic")
 //!     }
 //! }
@@ -146,13 +146,16 @@
 //!         .build()
 //!         .await?;
 //!
-//!     executor.register_simple_tool::<SearchTool>().await;
-//!     executor.register_task_tool::<ResearchTool>().await;
+//!     // Register tools (pass instances)
+//!     executor.register_simple_tool_instance(SearchTool).await?;
+//!     executor.register_task_tool_instance(ResearchTool).await?;
 //!
+//!     // Spawn a tool execution by name
 //!     let episode_id = Uuid::now_v7();
-//!     executor.spawn_tool::<ResearchTool>(
-//!         ResearchParams { topic: "rust".into() },
-//!         (),  // No side info
+//!     executor.spawn_tool_by_name(
+//!         "research",
+//!         serde_json::json!({"topic": "rust"}),
+//!         serde_json::json!(null),  // No side info
 //!         episode_id,
 //!     ).await?;
 //!
@@ -168,6 +171,7 @@ mod context;
 mod error;
 mod executor;
 mod registry;
+pub mod run_evaluation;
 mod simple_tool;
 mod task_tool;
 pub mod tensorzero_client;
@@ -228,10 +232,10 @@ pub use tensorzero::{
 // Re-export config snapshot types for historical inference
 pub use tensorzero_client::SnapshotHash;
 
-// Re-export evaluation types
+// Re-export action and evaluation types
 pub use tensorzero_client::{
-    CacheEnabledMode, DatapointResult, EvaluatorStatsResponse, RunEvaluationParams,
-    RunEvaluationResponse,
+    ActionInput, ActionInputInfo, ActionResponse, CacheEnabledMode, DatapointResult,
+    EvaluatorStats, RunEvaluationParams, RunEvaluationResponse,
 };
 
 // Re-export TensorZero inference types for convenience

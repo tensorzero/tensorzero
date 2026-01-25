@@ -20,9 +20,9 @@ use autopilot_client::AutopilotSideInfo;
 ///
 /// # Type Parameters
 ///
-/// The `Default` bound on tool types is required because:
-/// - `SimpleTool` registration requires `Default` for instantiation
-/// - Remote execution adapters (like `ClientToolTaskAdapter`) require `Default`
+/// The `Default` bound on tool types is required for the type-based registration
+/// helpers. If you need runtime-configured tools, use the instance registration
+/// helpers on `ToolExecutor` instead.
 ///
 /// The bounds on `SideInfo` are required for:
 /// - `TryFrom<AutopilotSideInfo>`: Converting caller params to tool-specific side info
@@ -42,9 +42,9 @@ pub trait ToolVisitor {
     ///
     /// For local execution, this typically calls `register_task_tool`.
     /// For remote execution, this wraps the tool in an adapter.
-    async fn visit_task_tool<T>(&self) -> Result<(), Self::Error>
+    async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
     where
-        T: TaskTool + Default,
+        T: TaskTool,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display;
 
@@ -94,15 +94,15 @@ impl Default for ToolNameCollector {
 impl ToolVisitor for ToolNameCollector {
     type Error = std::convert::Infallible;
 
-    async fn visit_task_tool<T>(&self) -> Result<(), Self::Error>
+    async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
     where
-        T: TaskTool + Default,
+        T: TaskTool,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
         // unwrap_or_else handles the (practically impossible) poisoned case
         if let Ok(mut names) = self.names.lock() {
-            names.insert(T::name().to_string());
+            names.insert(tool.name().to_string());
         }
         Ok(())
     }
@@ -114,7 +114,7 @@ impl ToolVisitor for ToolNameCollector {
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
         if let Ok(mut names) = self.names.lock() {
-            names.insert(T::name().to_string());
+            names.insert(T::default().name().to_string());
         }
         Ok(())
     }

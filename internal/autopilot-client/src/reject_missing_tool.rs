@@ -14,8 +14,10 @@ use crate::types::{AutopilotSideInfo, EventPayloadToolCall};
 /// to the autopilot API so the session can continue without hanging on an
 /// unknown tool.
 ///
-/// Since `spawn_tool_by_name` only enqueues to the database (doesn't execute
-/// the tool synchronously), this method is fast and safe to call inline.
+/// This function is idempotent - it checks if a task already exists for this
+/// tool_call_event_id before spawning a new one. This prevents duplicate tasks
+/// from being created when the function is called multiple times for the same
+/// tool call (e.g., on each poll/SSE event).
 ///
 /// # Errors
 ///
@@ -24,9 +26,11 @@ pub async fn reject_missing_tool(
     spawn_client: &Arc<SpawnClient>,
     tool_call: &EventPayloadToolCall,
 ) -> Result<(), AutopilotError> {
+    let tool_call_event_id = tool_call.side_info.tool_call_event_id;
+
     let side_info = AutopilotSideInfo {
         session_id: tool_call.side_info.session_id,
-        tool_call_event_id: tool_call.side_info.tool_call_event_id,
+        tool_call_event_id,
         config_snapshot_hash: tool_call.side_info.config_snapshot_hash.clone(),
         optimization: tool_call.side_info.optimization.clone(),
     };
