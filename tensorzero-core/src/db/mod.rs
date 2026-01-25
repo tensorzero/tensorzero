@@ -13,6 +13,7 @@ use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
+pub mod batch_inference;
 pub mod clickhouse;
 pub mod datasets;
 pub mod evaluation_queries;
