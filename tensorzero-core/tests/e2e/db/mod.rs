@@ -1,4 +1,5 @@
 mod bandit_queries;
+mod batch_inference_queries;
 mod dataset_queries;
 mod evaluation_queries;
 mod feedback_queries;

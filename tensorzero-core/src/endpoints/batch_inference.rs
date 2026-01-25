@@ -4,7 +4,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json, debug_handler};
 use futures::future::{join_all, try_join_all};
 use indexmap::IndexMap;
-use itertools::{Itertools, izip};
+use itertools::izip;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,6 +21,7 @@ use super::inference::{
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
+use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
@@ -34,9 +35,9 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
-    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, FinishReason,
-    InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    Latency, ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage,
+    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, InferenceDatabaseInsert,
+    InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput, Latency,
+    ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage,
 };
 use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::JSONSchema;
@@ -592,77 +593,18 @@ pub async fn get_batch_request(
     clickhouse: &ClickHouseConnectionInfo,
     path_params: &PollPathParams,
 ) -> Result<BatchRequestRow<'static>, Error> {
-    let response = match path_params {
-        PollPathParams {
-            batch_id,
-            inference_id: None,
-        } => {
-            let query = format!(
-                r"
-                    SELECT
-                        batch_id,
-                        id,
-                        batch_params,
-                        model_name,
-                        model_provider_name,
-                        status,
-                        function_name,
-                        variant_name,
-                        raw_request,
-                        raw_response,
-                        errors
-                    FROM BatchRequest
-                    WHERE batch_id = '{batch_id}'
-                    ORDER BY timestamp DESC
-                    LIMIT 1
-                    FORMAT JSONEachRow
-                "
-            );
-            let response = clickhouse.run_query_synchronous_no_params(query).await?;
-            if response.response.is_empty() {
-                return Err(ErrorDetails::BatchNotFound { id: *batch_id }.into());
-            }
-            response
+    let batch_request = clickhouse
+        .get_batch_request(path_params.batch_id, path_params.inference_id)
+        .await?;
+
+    match batch_request {
+        Some(row) => Ok(row),
+        None => {
+            // Return the appropriate ID for the error message
+            let id = path_params.inference_id.unwrap_or(path_params.batch_id);
+            Err(ErrorDetails::BatchNotFound { id }.into())
         }
-        PollPathParams {
-            batch_id,
-            inference_id: Some(inference_id),
-        } => {
-            let query = format!(
-                r"
-                    SELECT br.batch_id as batch_id,
-                        br.id as id,
-                        br.batch_params as batch_params,
-                        br.model_name as model_name,
-                        br.model_provider_name as model_provider_name,
-                        br.status as status,
-                        br.function_name as function_name,
-                        br.variant_name as variant_name,
-                        br.raw_request as raw_request,
-                        br.raw_response as raw_response,
-                        br.errors as errors
-                    FROM BatchIdByInferenceId bi
-                    JOIN BatchRequest br ON bi.batch_id = br.batch_id
-                    WHERE bi.inference_id = '{inference_id}' AND bi.batch_id = '{batch_id}'
-                    ORDER BY br.timestamp DESC
-                    LIMIT 1
-                    FORMAT JSONEachRow
-                ",
-            );
-            let response = clickhouse.run_query_synchronous_no_params(query).await?;
-            if response.response.is_empty() {
-                return Err(ErrorDetails::BatchNotFound { id: *inference_id }.into());
-            }
-            response
-        }
-    };
-    let batch_request =
-        serde_json::from_str::<BatchRequestRow>(&response.response).map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseDeserialization {
-                message: e.to_string(),
-            })
-        })?;
-    Ok(batch_request)
+    }
 }
 
 /// Polls a batch inference request from the model provider that
@@ -1142,30 +1084,9 @@ pub async fn get_batch_inferences(
     batch_id: Uuid,
     inference_ids: &[Uuid],
 ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error> {
-    // Guard against the provider not giving us any inference ids
-    if inference_ids.is_empty() {
-        return Ok(vec![]);
-    }
-    let query = format!(
-        "SELECT * FROM BatchModelInference WHERE batch_id = '{}' AND inference_id IN ({}) FORMAT JSONEachRow",
-        batch_id,
-        inference_ids.iter().map(|id| format!("'{id}'")).join(",")
-    );
-    let response = clickhouse_connection_info
-        .run_query_synchronous_no_params(query)
-        .await?;
-    let rows = response
-        .response
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(serde_json::from_str::<BatchModelInferenceRow>)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to deserialize batch model inference row: {e}"),
-            })
-        })?;
-    Ok(rows)
+    clickhouse_connection_info
+        .get_batch_model_inferences(batch_id, inference_ids)
+        .await
 }
 
 /// This function gets the already-completed batch inference response from the database
@@ -1178,286 +1099,94 @@ pub async fn get_completed_batch_inference_response(
     path_params: &PollPathParams,
     function: &FunctionConfig,
 ) -> Result<CompletedBatchInferenceResponse, Error> {
-    match function {
-        FunctionConfig::Chat(_) => match path_params {
-            PollPathParams {
-                batch_id,
-                inference_id: None,
-            } => {
-                let query = format!(
-                    "WITH batch_inferences AS (
-                        SELECT inference_id
-                        FROM BatchModelInference
-                        WHERE batch_id = '{}'
-                    )
-                    SELECT
-                        ci.id as inference_id,
-                        ci.episode_id as episode_id,
-                        ci.variant_name as variant_name,
-                        ci.output as output,
-                        toUInt32(SUM(mi.input_tokens)) as input_tokens,
-                        toUInt32(SUM(mi.output_tokens)) as output_tokens,
-                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
-                    FROM ChatInference ci
-                    LEFT JOIN ModelInference mi ON ci.id = mi.inference_id
-                    WHERE ci.id IN (SELECT inference_id FROM batch_inferences)
-                    AND ci.function_name = '{}'
-                    AND ci.variant_name = '{}'
-                    GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output
-                    FORMAT JSONEachRow",
-                    batch_id, batch_request.function_name, batch_request.variant_name
-                );
-                let response = clickhouse_connection_info
-                    .run_query_synchronous_no_params(query)
-                    .await?;
-                let mut inference_responses = Vec::new();
-                for row in response.response.lines() {
-                    let inference_response: ChatInferenceResponseDatabaseRead =
-                        serde_json::from_str(row).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: e.to_string(),
-                            })
-                        })?;
-                    inference_responses
-                        .push(InferenceResponse::Chat(inference_response.try_into()?));
-                }
-                Ok(CompletedBatchInferenceResponse {
-                    batch_id: *batch_id,
-                    inferences: inference_responses,
-                })
-            }
-            PollPathParams {
-                inference_id: Some(inference_id),
-                ..
-            } => {
-                let query = format!(
-                    "WITH inf_lookup AS (
-                        SELECT episode_id
-                        FROM InferenceById
-                        WHERE id_uint = toUInt128(toUUID('{}'))
-                        LIMIT 1
-                    )
-                    SELECT
-                        ci.id as inference_id,
-                        ci.episode_id as episode_id,
-                        ci.variant_name as variant_name,
-                        ci.output as output,
-                        toUInt32(SUM(mi.input_tokens)) as input_tokens,
-                        toUInt32(SUM(mi.output_tokens)) as output_tokens,
-                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
-                    FROM ChatInference ci \
-                    LEFT JOIN ModelInference mi ON ci.id = mi.inference_id \
-                    JOIN inf_lookup ON ci.episode_id = inf_lookup.episode_id \
-                    WHERE ci.id = '{}' \
-                    AND ci.function_name = '{}' \
-                    AND ci.variant_name = '{}' \
-                    GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output \
-                    FORMAT JSONEachRow",
-                    inference_id,
-                    inference_id,
-                    batch_request.function_name,
-                    batch_request.variant_name
-                );
-                let response = clickhouse_connection_info
-                    .run_query_synchronous_no_params(query)
-                    .await?;
-                if response.response.is_empty() {
-                    return Err(ErrorDetails::InferenceNotFound {
-                        inference_id: *inference_id,
-                    }
-                    .into());
-                }
-                let inference_response: ChatInferenceResponseDatabaseRead =
-                    serde_json::from_str(&response.response).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: e.to_string(),
-                        })
-                    })?;
-                let inference_response = InferenceResponse::Chat(inference_response.try_into()?);
-                Ok(CompletedBatchInferenceResponse {
-                    batch_id: batch_request.batch_id,
-                    inferences: vec![inference_response],
-                })
-            }
-        },
-        FunctionConfig::Json(_) => match path_params {
-            PollPathParams {
-                inference_id: None, ..
-            } => {
-                let query = format!(
-                    "WITH batch_inferences AS (
-                        SELECT inference_id
-                        FROM BatchModelInference
-                        WHERE batch_id = '{}'
-                    )
-                    SELECT
-                        ji.id as inference_id,
-                        ji.episode_id as episode_id,
-                        ji.variant_name as variant_name,
-                        ji.output as output,
-                        toUInt32(SUM(mi.input_tokens)) as input_tokens,
-                        toUInt32(SUM(mi.output_tokens)) as output_tokens,
-                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
-                    FROM JsonInference ji
-                    LEFT JOIN ModelInference mi ON ji.id = mi.inference_id
-                    WHERE ji.id IN (SELECT inference_id FROM batch_inferences)
-                    AND ji.function_name = '{}'
-                    AND ji.variant_name = '{}'
-                    GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output
-                    FORMAT JSONEachRow",
-                    path_params.batch_id, batch_request.function_name, batch_request.variant_name
-                );
-                let response = clickhouse_connection_info
-                    .run_query_synchronous_no_params(query)
-                    .await?;
-                let mut inference_responses = Vec::new();
-                for row in response.response.lines() {
-                    let inference_response: JsonInferenceResponseDatabaseRead =
-                        serde_json::from_str(row).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: e.to_string(),
-                            })
-                        })?;
-                    inference_responses
-                        .push(InferenceResponse::Json(inference_response.try_into()?));
-                }
-                Ok(CompletedBatchInferenceResponse {
-                    batch_id: batch_request.batch_id,
-                    inferences: inference_responses,
-                })
-            }
-            PollPathParams {
-                inference_id: Some(inference_id),
-                ..
-            } => {
-                let query = format!(
-                    "WITH inf_lookup AS (
-                        SELECT episode_id
-                        FROM InferenceById
-                        WHERE id_uint = toUInt128(toUUID('{}'))
-                        LIMIT 1
-                    )
-                    SELECT
-                        ji.id as inference_id,
-                        ji.episode_id as episode_id,
-                        ji.variant_name as variant_name,
-                        ji.output as output,
-                        toUInt32(SUM(mi.input_tokens)) as input_tokens,
-                        toUInt32(SUM(mi.output_tokens)) as output_tokens,
-                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
-                    FROM JsonInference ji \
-                    LEFT JOIN ModelInference mi ON ji.id = mi.inference_id \
-                    JOIN inf_lookup ON ji.episode_id = inf_lookup.episode_id \
-                    WHERE ji.id = '{}' \
-                    AND ji.function_name = '{}' \
-                    AND ji.variant_name = '{}' \
-                    GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output \
-                    FORMAT JSONEachRow",
-                    inference_id,
-                    inference_id,
-                    batch_request.function_name,
-                    batch_request.variant_name
-                );
-                let response = clickhouse_connection_info
-                    .run_query_synchronous_no_params(query)
-                    .await?;
-                if response.response.is_empty() {
-                    return Err(ErrorDetails::InferenceNotFound {
-                        inference_id: *inference_id,
-                    }
-                    .into());
-                }
-                let inference_response: JsonInferenceResponseDatabaseRead =
-                    serde_json::from_str(&response.response).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: e.to_string(),
-                        })
-                    })?;
-                let inference_response = InferenceResponse::Json(inference_response.try_into()?);
-                Ok(CompletedBatchInferenceResponse {
-                    batch_id: batch_request.batch_id,
-                    inferences: vec![inference_response],
-                })
-            }
-        },
+    let rows = match function {
+        FunctionConfig::Chat(_) => {
+            clickhouse_connection_info
+                .get_completed_chat_batch_inferences(
+                    path_params.batch_id,
+                    &batch_request.function_name,
+                    &batch_request.variant_name,
+                    path_params.inference_id,
+                )
+                .await?
+        }
+        FunctionConfig::Json(_) => {
+            clickhouse_connection_info
+                .get_completed_json_batch_inferences(
+                    path_params.batch_id,
+                    &batch_request.function_name,
+                    &batch_request.variant_name,
+                    path_params.inference_id,
+                )
+                .await?
+        }
+    };
+
+    // If querying for a specific inference and no results, return NotFound error
+    if let Some(inference_id) = path_params.inference_id
+        && rows.is_empty()
+    {
+        return Err(ErrorDetails::InferenceNotFound { inference_id }.into());
     }
+
+    let inferences = rows
+        .into_iter()
+        .map(|row| convert_row_to_inference_response(row, function))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(CompletedBatchInferenceResponse {
+        batch_id: batch_request.batch_id,
+        inferences,
+    })
 }
 
-#[derive(Debug, Deserialize)]
-struct ChatInferenceResponseDatabaseRead {
-    pub inference_id: Uuid,
-    pub episode_id: Uuid,
-    pub variant_name: String,
-    pub output: String,
-    pub input_tokens: Option<u32>,
-    pub output_tokens: Option<u32>,
-    pub finish_reason: Option<FinishReason>,
-}
+/// Convert a CompletedBatchInferenceRow to an InferenceResponse based on function type.
+fn convert_row_to_inference_response(
+    row: CompletedBatchInferenceRow,
+    function: &FunctionConfig,
+) -> Result<InferenceResponse, Error> {
+    let usage = Usage {
+        input_tokens: row.input_tokens,
+        output_tokens: row.output_tokens,
+    };
 
-impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
-    type Error = Error;
-
-    fn try_from(value: ChatInferenceResponseDatabaseRead) -> Result<Self, Self::Error> {
-        let usage = Usage {
-            input_tokens: value.input_tokens,
-            output_tokens: value.output_tokens,
-        };
-        let output: Vec<ContentBlockChatOutput> =
-            serde_json::from_str(&value.output).map_err(|e| {
+    match function {
+        FunctionConfig::Chat(_) => {
+            let output: Vec<ContentBlockChatOutput> =
+                serde_json::from_str(&row.output).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: e.to_string(),
+                    })
+                })?;
+            Ok(InferenceResponse::Chat(ChatInferenceResponse {
+                inference_id: row.inference_id,
+                episode_id: row.episode_id,
+                variant_name: row.variant_name,
+                content: output,
+                usage,
+                raw_usage: None, // batch inference does not support include_raw_usage (#5452)
+                original_response: None,
+                raw_response: None,
+                finish_reason: row.finish_reason,
+            }))
+        }
+        FunctionConfig::Json(_) => {
+            let output: JsonInferenceOutput = serde_json::from_str(&row.output).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: e.to_string(),
                 })
             })?;
-        Ok(ChatInferenceResponse {
-            inference_id: value.inference_id,
-            episode_id: value.episode_id,
-            variant_name: value.variant_name,
-            content: output,
-            usage,
-            raw_usage: None, // batch inference does not support include_raw_usage (#5452)
-            // This is currently unsupported in the batch API
-            original_response: None,
-            raw_response: None,
-            finish_reason: value.finish_reason,
-        })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct JsonInferenceResponseDatabaseRead {
-    pub inference_id: Uuid,
-    pub episode_id: Uuid,
-    pub variant_name: String,
-    pub output: String,
-    pub input_tokens: Option<u32>,
-    pub output_tokens: Option<u32>,
-    pub finish_reason: Option<FinishReason>,
-}
-
-impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
-    type Error = Error;
-
-    fn try_from(value: JsonInferenceResponseDatabaseRead) -> Result<Self, Self::Error> {
-        let usage = Usage {
-            input_tokens: value.input_tokens,
-            output_tokens: value.output_tokens,
-        };
-        let output: JsonInferenceOutput = serde_json::from_str(&value.output).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: e.to_string(),
-            })
-        })?;
-        Ok(JsonInferenceResponse {
-            inference_id: value.inference_id,
-            episode_id: value.episode_id,
-            variant_name: value.variant_name,
-            output,
-            usage,
-            raw_usage: None, // batch inference does not support include_raw_usage (#5452)
-            // This is currently unsupported in the batch API
-            original_response: None,
-            raw_response: None,
-            finish_reason: value.finish_reason,
-        })
+            Ok(InferenceResponse::Json(JsonInferenceResponse {
+                inference_id: row.inference_id,
+                episode_id: row.episode_id,
+                variant_name: row.variant_name,
+                output,
+                usage,
+                raw_usage: None, // batch inference does not support include_raw_usage (#5452)
+                original_response: None,
+                raw_response: None,
+                finish_reason: row.finish_reason,
+            }))
+        }
     }
 }
