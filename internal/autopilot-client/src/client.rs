@@ -424,9 +424,6 @@ impl AutopilotClient {
         self.cache_tool_call_events(&body.events);
         self.cache_tool_call_events(&body.pending_tool_calls);
 
-        // Collect event IDs that are already in events (not just pending)
-        let event_ids: HashSet<Uuid> = body.events.iter().map(|e| e.id).collect();
-
         // Filter out unknown tool calls and NotAvailable authorizations, then convert to gateway types.
         // We don't reject unknown tool calls from events - only from pending_tool_calls below.
         let mut filtered_events = Vec::new();
@@ -448,16 +445,13 @@ impl AutopilotClient {
             }
         }
 
-        // Filter pending tool calls and reject unknown ones that aren't already in events
+        // Filter pending tool calls and reject unknown ones
         let mut filtered_pending_tool_calls = Vec::new();
         for event in body.pending_tool_calls {
             if let EventPayload::ToolCall(tool_call) = &event.payload
                 && self.is_unknown_tool(tool_call)
             {
-                // Only reject if this tool call isn't already in the events list
-                if !event_ids.contains(&event.id) {
-                    reject_missing_tool(&self.spawn_client, tool_call).await?;
-                }
+                reject_missing_tool(&self.spawn_client, tool_call).await?;
                 continue;
             }
             if !Self::should_filter_event(&event) {
