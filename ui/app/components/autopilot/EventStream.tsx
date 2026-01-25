@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
 import { type RefObject, useState } from "react";
 import { Skeleton } from "~/components/ui/skeleton";
 import { TableItemTime } from "~/components/ui/TableItems";
@@ -8,9 +8,10 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import type {
+  AutopilotStatus,
   Event,
   EventPayload,
-  InputMessageContent,
+  EventPayloadMessageContent,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 
@@ -47,6 +48,7 @@ type EventStreamProps = {
   authLoadingStates?: Map<string, "approving" | "rejecting">;
   onAuthorize?: (eventId: string, approved: boolean) => Promise<void>;
   optimisticMessages?: OptimisticMessage[];
+  status?: AutopilotStatus;
 };
 
 export function ToolEventId({ id }: { id: string }) {
@@ -107,22 +109,8 @@ export function getToolCallEventId(event: ToolEvent): string {
   return payload.tool_call_event_id;
 }
 
-function getMessageText(content: InputMessageContent[]) {
-  const textBlock = content.find(
-    (block) => block.type === "text" && "text" in block,
-  );
-  if (textBlock && "text" in textBlock) {
-    return textBlock.text;
-  }
-
-  const rawTextBlock = content.find(
-    (block) => block.type === "raw_text" && "value" in block,
-  );
-  if (rawTextBlock && "value" in rawTextBlock) {
-    return rawTextBlock.value;
-  }
-
-  return "Message content";
+function getMessageText(content: EventPayloadMessageContent[]) {
+  return content.map((cb) => cb.text).join("\n\n");
 }
 
 /**
@@ -179,7 +167,7 @@ function summarizeEvent(event: Event): EventSummary {
     case "error":
       // TODO: handle errors
       return {};
-    case "other":
+    case "unknown":
       return {};
     default:
       return {};
@@ -231,6 +219,26 @@ function renderEventTitle(event: Event) {
         case "failure":
           // TODO: need tool name
           return <>Tool Result &middot; Failure</>;
+        case "rejected":
+          // TODO: need tool name
+          return (
+            <span className="inline-flex items-center gap-2">
+              <span>Tool Result &middot; Rejected</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex cursor-help items-center text-yellow-600"
+                    aria-label="Tool rejected"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  {payload.outcome.reason}
+                </TooltipContent>
+              </Tooltip>
+            </span>
+          );
         case "missing":
           // TODO: need tool name
           return (
@@ -251,7 +259,7 @@ function renderEventTitle(event: Event) {
               </Tooltip>
             </span>
           );
-        case "other":
+        case "unknown":
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
@@ -284,7 +292,7 @@ function renderEventTitle(event: Event) {
     case "error":
       // TODO: handle errors better
       return "Error";
-    case "other":
+    case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
           <span>Unknown Event</span>
@@ -411,7 +419,7 @@ function SessionStartedDivider() {
   return (
     <div className="flex items-center gap-4 py-2">
       <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted text-xs">Session Started</span>
+      <span className="text-fg-muted text-xs">Started</span>
       <div className="border-border flex-1 border-t" />
     </div>
   );
@@ -433,6 +441,45 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
   );
 }
 
+function getStatusLabel(status: AutopilotStatus): string {
+  switch (status.status) {
+    case "idle":
+      return "Ready";
+    case "server_side_processing":
+      return "Thinking...";
+    case "waiting_for_tool_call_authorization":
+      return "Waiting";
+    case "waiting_for_tool_execution":
+      return "Executing tool...";
+    case "waiting_for_retry":
+      return "Something went wrong. Retrying...";
+    case "failed":
+      return "Something went wrong. Please try again.";
+  }
+}
+
+function isLoadingStatus(status: AutopilotStatus): boolean {
+  return (
+    status.status === "server_side_processing" ||
+    status.status === "waiting_for_tool_execution" ||
+    status.status === "waiting_for_retry"
+  );
+}
+
+function StatusIndicator({ status }: { status: AutopilotStatus }) {
+  const showSpinner = isLoadingStatus(status);
+  return (
+    <div className="flex items-center gap-4 py-2">
+      <div className="border-border flex-1 border-t" />
+      <span className="text-fg-muted flex items-center gap-1.5 text-xs">
+        {getStatusLabel(status)}
+        {showSpinner && <Loader2 className="h-3 w-3 animate-spin" />}
+      </span>
+      <div className="border-border flex-1 border-t" />
+    </div>
+  );
+}
+
 export default function EventStream({
   events,
   className,
@@ -441,6 +488,7 @@ export default function EventStream({
   topSentinelRef,
   pendingToolCallIds,
   optimisticMessages = [],
+  status,
 }: EventStreamProps) {
   return (
     <div className={cn("flex flex-col gap-3", className)}>
@@ -467,6 +515,9 @@ export default function EventStream({
       {optimisticMessages.map((message) => (
         <OptimisticMessageItem key={message.tempId} message={message} />
       ))}
+
+      {/* Status indicator at the bottom */}
+      {status && <StatusIndicator status={status} />}
     </div>
   );
 }

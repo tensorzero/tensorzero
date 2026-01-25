@@ -15,7 +15,7 @@ interface UseDatasetOptionsParams {
 
 /**
  * Shared hook for dataset selection components (DatasetCombobox, DatasetSelect).
- * Provides fetched dataset data, icons, filtering, and create-option logic.
+ * Provides fetched dataset data, icons, and display helpers.
  */
 export function useDatasetOptions({
   functionName,
@@ -115,30 +115,6 @@ export function useDatasetOptions({
     [datasetsByName],
   );
 
-  const filterItems = useCallback(
-    (searchValue: string) => {
-      const query = searchValue.toLowerCase();
-      if (!query) return sortedDatasetNames;
-      return sortedDatasetNames.filter((item) =>
-        item.toLowerCase().includes(query),
-      );
-    },
-    [sortedDatasetNames],
-  );
-
-  const shouldShowCreateOption = useCallback(
-    (searchValue: string) => {
-      return (
-        allowCreation &&
-        Boolean(searchValue.trim()) &&
-        !sortedDatasetNames.some(
-          (name) => name.toLowerCase() === searchValue.trim().toLowerCase(),
-        )
-      );
-    },
-    [allowCreation, sortedDatasetNames],
-  );
-
   return {
     items: sortedDatasetNames,
     isLoading,
@@ -148,7 +124,5 @@ export function useDatasetOptions({
     getPrefix,
     getSuffix,
     getSelectedDataset,
-    filterItems,
-    shouldShowCreateOption,
   };
 }

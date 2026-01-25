@@ -69,22 +69,22 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     type Output = LaunchOptimizationWorkflowToolOutput;
     type LlmParams = LaunchOptimizationWorkflowToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("launch_optimization_workflow")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Launch an optimization workflow (fine-tuning, prompt optimization, etc.) \
              using stored inferences and poll until completion.",
         )
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(default_max_wait_secs())
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Launch an optimization workflow using stored inferences.",
@@ -348,11 +348,11 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                 },
                                 "analysis_model": {
                                     "type": "string",
-                                    "description": "Model for analysis (e.g., 'anthropic::claude-sonnet-4-5-20250929')."
+                                    "description": "Model for analysis (e.g., 'anthropic::claude-sonnet-4-5')."
                                 },
                                 "mutation_model": {
                                     "type": "string",
-                                    "description": "Model for mutation (e.g., 'anthropic::claude-sonnet-4-5-20250929')."
+                                    "description": "Model for mutation (e.g., 'anthropic::claude-sonnet-4-5')."
                                 },
                                 "initial_variants": {
                                     "type": "array",
@@ -408,6 +408,7 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
 #[async_trait]
 impl TaskTool for LaunchOptimizationWorkflowTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
         ctx: &mut ToolContext<'_>,

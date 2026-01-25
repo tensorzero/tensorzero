@@ -14,12 +14,13 @@ use uuid::Uuid;
 
 // ===== HELPER FUNCTIONS =====
 
-fn generate_rate_limit_config(rules: &[&str]) -> String {
+fn generate_rate_limit_config(rules: &[&str], backend: &str) -> String {
     let rules_toml = rules.join("\n\n");
     format!(
         r#"
 [rate_limiting]
 enabled = true
+backend = "{backend}"
 
 {rules_toml}
 
@@ -38,6 +39,45 @@ type = "chat_completion"
 model = "dummy"
 "#,
     )
+}
+
+/// Macro to generate rate limiting tests for all combinations of backend (Postgres, Valkey)
+/// and streaming mode (streaming, non-streaming).
+///
+/// Usage:
+/// ```ignore
+/// make_rate_limit_tests!(test_name, async fn helper_name(backend: &str, stream: bool) { ... });
+/// ```
+///
+/// This generates four tests:
+/// - test_name_postgres_non_streaming
+/// - test_name_postgres_streaming
+/// - test_name_valkey_non_streaming
+/// - test_name_valkey_streaming
+macro_rules! make_rate_limit_tests {
+    ($test_name:ident) => {
+        paste::paste! {
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$test_name _postgres_non_streaming>]() {
+                $test_name("postgres", false).await;
+            }
+
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$test_name _postgres_streaming>]() {
+                $test_name("postgres", true).await;
+            }
+
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$test_name _valkey_non_streaming>]() {
+                $test_name("valkey", false).await;
+            }
+
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$test_name _valkey_streaming>]() {
+                $test_name("valkey", true).await;
+            }
+        }
+    };
 }
 
 async fn make_request_with_tags(
@@ -125,29 +165,23 @@ fn assert_rate_limit_exceeded<T: Debug>(result: Result<T, TensorZeroError>) {
 
 // ===== BASIC TAG-BASED TESTS =====
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_concrete_tag_value_non_streaming() {
-    Box::pin(test_rate_limiting_concrete_tag_value_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_concrete_tag_value);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_concrete_tag_value_streaming() {
-    Box::pin(test_rate_limiting_concrete_tag_value_helper(true)).await;
-}
-
-async fn test_rate_limiting_concrete_tag_value_helper(stream: bool) {
+async fn test_rate_limiting_concrete_tag_value(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 5, refill_rate = 3 }}
 always = true
 scope = [
     {{ tag_key = "test1_customer_id_{id}", tag_value = "customer_alpha" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let tags_match = HashMap::from([(
         format!("test1_customer_id_{id}"),
         "customer_alpha".to_string(),
@@ -192,29 +226,23 @@ scope = [
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_total_tag_value_non_streaming() {
-    Box::pin(test_rate_limiting_total_tag_value_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_total_tag_value);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_total_tag_value_streaming() {
-    Box::pin(test_rate_limiting_total_tag_value_helper(true)).await;
-}
-
-async fn test_rate_limiting_total_tag_value_helper(stream: bool) {
+async fn test_rate_limiting_total_tag_value(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 3, refill_rate = 3 }}
 always = true
 scope = [
     {{ tag_key = "test2_tenant_id_{id}", tag_value = "tensorzero::total" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let tags1 = HashMap::from([(format!("test2_tenant_id_{id}"), "tenant_gamma".to_string())]);
     let tags2 = HashMap::from([(format!("test2_tenant_id_{id}"), "tenant_delta".to_string())]);
     let no_tags = HashMap::new();
@@ -238,29 +266,23 @@ scope = [
     assert!(result5.is_ok());
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_each_tag_value() {
-    Box::pin(test_rate_limiting_each_tag_value_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_each_tag_value);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_each_tag_value_streaming() {
-    Box::pin(test_rate_limiting_each_tag_value_helper(true)).await;
-}
-
-async fn test_rate_limiting_each_tag_value_helper(stream: bool) {
+async fn test_rate_limiting_each_tag_value(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 2, refill_rate = 2 }}
 always = true
 scope = [
     {{ tag_key = "test3_workspace_id_{id}", tag_value = "tensorzero::each" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let tags_workspace1 = HashMap::from([(
         format!("test3_workspace_id_{id}"),
         "workspace_epsilon".to_string(),
@@ -294,39 +316,33 @@ scope = [
 
 // ===== PRIORITY TESTS =====
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_priority_always_non_streaming() {
-    Box::pin(test_rate_limiting_priority_always_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_priority_always);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_priority_always_streaming() {
-    Box::pin(test_rate_limiting_priority_always_helper(true)).await;
-}
-
-async fn test_rate_limiting_priority_always_helper(stream: bool) {
+async fn test_rate_limiting_priority_always(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[
-        &format!(
-            r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[
+            &format!(
+                r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 3, refill_rate = 2 }}
 priority = 1
 scope = [
     {{ tag_key = "test4_account_id_{id}", tag_value = "account_eta" }}
 ]"#
-        ),
-        &format!(
-            r#"[[rate_limiting.rules]]
+            ),
+            &format!(
+                r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 8, refill_rate = 5 }}
 always = true
 scope = [
     {{ tag_key = "test4_service_id_{id}", tag_value = "service_theta" }}
 ]"#
-        ),
-    ]);
+            ),
+        ],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     // Tags that match BOTH rules - should apply both rules (always + priority)
     let tags_both = HashMap::from([
         (format!("test4_account_id_{id}"), "account_eta".to_string()),
@@ -373,48 +389,42 @@ scope = [
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_priority_numeric_non_streaming() {
-    test_rate_limiting_priority_numeric_helper(false).await;
-}
+make_rate_limit_tests!(test_rate_limiting_priority_numeric);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_priority_numeric_streaming() {
-    test_rate_limiting_priority_numeric_helper(true).await;
-}
-
-async fn test_rate_limiting_priority_numeric_helper(stream: bool) {
+async fn test_rate_limiting_priority_numeric(backend: &str, stream: bool) {
     // Test with different scopes that can overlap but aren't identical
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[
-        &format!(
-            r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[
+            &format!(
+                r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 2, refill_rate = 2 }}
 priority = 1
 scope = [
     {{ tag_key = "test5_team_id_{id}", tag_value = "team_iota" }}
 ]"#
-        ),
-        &format!(
-            r#"[[rate_limiting.rules]]
+            ),
+            &format!(
+                r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 5, refill_rate = 5 }}
 priority = 3
 scope = [
     {{ tag_key = "test5_project_id_{id}", tag_value = "project_kappa" }}
 ]"#
-        ),
-        &format!(
-            r#"[[rate_limiting.rules]]
+            ),
+            &format!(
+                r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 1, refill_rate = 1 }}
 priority = 2
 scope = [
     {{ tag_key = "test5_environment_id_{id}", tag_value = "env_lambda" }}
 ]"#
-        ),
-    ]);
+            ),
+        ],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
 
     // Test 1: Request that matches only the highest priority rule (priority=3)
     let tags_highest_only = HashMap::from([(
@@ -456,30 +466,24 @@ scope = [
 
 // ===== RESOURCE TYPE TESTS =====
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_tokens_non_streaming() {
-    Box::pin(test_rate_limiting_tokens_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_tokens);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_tokens_streaming() {
-    Box::pin(test_rate_limiting_tokens_helper(true)).await;
-}
-
-async fn test_rate_limiting_tokens_helper(stream: bool) {
+async fn test_rate_limiting_tokens(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 tokens_per_minute = {{ capacity = 150, refill_rate = 50 }}
 always = true
 scope = [
     {{ tag_key = "test_tokens_user_id_{id}", tag_value = "123" }}
 ]"#
-    )]);
-
-    let client = Arc::new(
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+        )],
+        backend,
     );
+
+    let client =
+        Arc::new(tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await);
     let tags = HashMap::from([(format!("test_tokens_user_id_{id}"), "123".to_string())]);
 
     // Each request uses 11 input tokens and borrows ~102 tokens upfront
@@ -504,30 +508,24 @@ scope = [
     assert_rate_limit_exceeded(result_6);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_multiple_resources_non_streaming() {
-    Box::pin(test_rate_limiting_multiple_resources_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_multiple_resources);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_multiple_resources_streaming() {
-    Box::pin(test_rate_limiting_multiple_resources_helper(true)).await;
-}
-
-async fn test_rate_limiting_multiple_resources_helper(stream: bool) {
+async fn test_rate_limiting_multiple_resources(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 tokens_per_minute = {{ capacity = 10000, refill_rate = 100 }}
 model_inferences_per_minute = {{ capacity = 3, refill_rate = 3 }}
 always = true
 scope = [
     {{ tag_key = "test_multi_user_id_{id}", tag_value = "123" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let tags = HashMap::from([(format!("test_multi_user_id_{id}"), "123".to_string())]);
 
     // Should be limited by model_inferences_per_minute (3) rather than tokens (100)
@@ -547,30 +545,24 @@ scope = [
 
 // ===== CONCURRENT REQUEST TESTS =====
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_concurrent_requests_non_streaming() {
-    test_rate_limiting_concurrent_requests_helper(false).await;
-}
+make_rate_limit_tests!(test_rate_limiting_concurrent_requests);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_concurrent_requests_streaming() {
-    test_rate_limiting_concurrent_requests_helper(true).await;
-}
-
-async fn test_rate_limiting_concurrent_requests_helper(stream: bool) {
+async fn test_rate_limiting_concurrent_requests(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 5, refill_rate = 5 }}
 always = true
 scope = [
     {{ tag_key = "user_id_{id}", tag_value = "123" }}
 ]"#
-    )]);
-
-    let client = Arc::new(
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+        )],
+        backend,
     );
+
+    let client =
+        Arc::new(tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await);
     let tags = HashMap::from([(format!("user_id_{id}"), "123".to_string())]);
 
     // Launch 10 concurrent requests
@@ -578,7 +570,7 @@ scope = [
         .map(|_| {
             let client_clone = client.clone();
             let tags_clone = tags.clone();
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(
                 async move { make_request_with_tags(&client_clone, tags_clone, stream).await },
@@ -633,37 +625,31 @@ scope = [
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_concurrent_different_tags_non_streaming() {
-    test_rate_limiting_concurrent_different_tags_helper(false).await;
-}
+make_rate_limit_tests!(test_rate_limiting_concurrent_different_tags);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_concurrent_different_tags_streaming() {
-    test_rate_limiting_concurrent_different_tags_helper(true).await;
-}
-
-async fn test_rate_limiting_concurrent_different_tags_helper(stream: bool) {
+async fn test_rate_limiting_concurrent_different_tags(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 2, refill_rate = 2 }}
 always = true
 scope = [
     {{ tag_key = "user_id_{id}", tag_value = "tensorzero::each" }}
 ]"#
-    )]);
-
-    let client = Arc::new(
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+        )],
+        backend,
     );
+
+    let client =
+        Arc::new(tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await);
 
     // Launch concurrent requests for different users
     let handles: Vec<_> = (0..6)
         .map(|i| {
             let client_clone = client.clone();
             let tags = HashMap::from([(format!("user_id_{id}"), format!("user{}", i % 3))]);
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 (
@@ -705,30 +691,24 @@ scope = [
 
 // ===== COMPLEX SCOPE TESTS =====
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_multiple_scopes_non_streaming() {
-    Box::pin(test_rate_limiting_multiple_scopes_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_multiple_scopes);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_multiple_scopes_streaming() {
-    Box::pin(test_rate_limiting_multiple_scopes_helper(true)).await;
-}
-
-async fn test_rate_limiting_multiple_scopes_helper(stream: bool) {
+async fn test_rate_limiting_multiple_scopes(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 3, refill_rate = 3 }}
 always = true
 scope = [
     {{ tag_key = "test6_application_id_{id}", tag_value = "app1" }},
     {{ tag_key = "test6_user_id_{id}", tag_value = "tensorzero::total" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
 
     let tags_match = HashMap::from([
         (format!("test6_application_id_{id}"), "app1".to_string()),
@@ -762,29 +742,23 @@ scope = [
     assert!(result.is_ok(), "Missing tag should not be rate limited");
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_missing_tags_non_streaming() {
-    Box::pin(test_rate_limiting_missing_tags_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_missing_tags);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_missing_tags_streaming() {
-    Box::pin(test_rate_limiting_missing_tags_helper(true)).await;
-}
-
-async fn test_rate_limiting_missing_tags_helper(stream: bool) {
+async fn test_rate_limiting_missing_tags(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 1, refill_rate = 1 }}
 always = true
 scope = [
     {{ tag_key = "test7_required_tag_{id}", tag_value = "value" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
 
     let tags_with_required =
         HashMap::from([(format!("test7_required_tag_{id}"), "value".to_string())]);
@@ -814,29 +788,23 @@ scope = [
 
 // ===== EDGE CASES AND ERROR HANDLING =====
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_zero_limit_non_streaming() {
-    test_rate_limiting_zero_limit_helper(false).await;
-}
+make_rate_limit_tests!(test_rate_limiting_zero_limit);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_zero_limit_streaming() {
-    test_rate_limiting_zero_limit_helper(true).await;
-}
-
-async fn test_rate_limiting_zero_limit_helper(stream: bool) {
+async fn test_rate_limiting_zero_limit(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = 0
 always = true
 scope = [
     {{ tag_key = "test8_user_id_{id}", tag_value = "123" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let tags = HashMap::from([(format!("test8_user_id_{id}"), "123".to_string())]);
 
     // First request should fail immediately due to zero limit
@@ -844,22 +812,15 @@ scope = [
     assert_rate_limit_exceeded(result);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_disabled_non_streaming() {
-    test_rate_limiting_disabled_helper(false).await;
-}
+make_rate_limit_tests!(test_rate_limiting_disabled);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_disabled_streaming() {
-    test_rate_limiting_disabled_helper(true).await;
-}
-
-async fn test_rate_limiting_disabled_helper(stream: bool) {
+async fn test_rate_limiting_disabled(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = &format!(
+    let config = format!(
         r#"
 [rate_limiting]
 enabled = false
+backend = "{backend}"
 
 [[rate_limiting.rules]]
 model_inferences_per_minute = 1
@@ -884,8 +845,7 @@ model = "dummy"
 "#
     );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let tags = HashMap::from([(format!("test9_user_id_{id}"), "123".to_string())]);
 
     // All requests should succeed when rate limiting is disabled
@@ -898,29 +858,23 @@ model = "dummy"
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_bucket_configuration_non_streaming() {
-    test_rate_limiting_bucket_configuration_helper(false).await;
-}
+make_rate_limit_tests!(test_rate_limiting_bucket_configuration);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_bucket_configuration_streaming() {
-    test_rate_limiting_bucket_configuration_helper(true).await;
-}
-
-async fn test_rate_limiting_bucket_configuration_helper(stream: bool) {
+async fn test_rate_limiting_bucket_configuration(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 10, refill_rate = 2 }}
 always = true
 scope = [
     {{ tag_key = "test10_user_id_{id}", tag_value = "123" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let tags = HashMap::from([(format!("test10_user_id_{id}"), "123".to_string())]);
 
     // Should be able to make requests up to the capacity (10)
@@ -941,30 +895,24 @@ scope = [
     assert_rate_limit_exceeded(result);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_large_limit_non_streaming() {
-    test_rate_limiting_large_limit_helper(false).await;
-}
+make_rate_limit_tests!(test_rate_limiting_large_limit);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_large_limit_streaming() {
-    test_rate_limiting_large_limit_helper(true).await;
-}
-
-async fn test_rate_limiting_large_limit_helper(stream: bool) {
+async fn test_rate_limiting_large_limit(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_minute = {{ capacity = 1000000, refill_rate = 1000000 }}
 always = true
 scope = [
     {{ tag_key = "test11_user_id_{id}", tag_value = "123" }}
 ]"#
-    )]);
-
-    let client = Arc::new(
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+        )],
+        backend,
     );
+
+    let client =
+        Arc::new(tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await);
     let tags = HashMap::from([(format!("test11_user_id_{id}"), "123".to_string())]);
 
     // Launch 100 concurrent requests to test large limit handling
@@ -972,7 +920,7 @@ scope = [
         .map(|_| {
             let client_clone = client.clone();
             let tags_clone = tags.clone();
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+
             #[expect(clippy::disallowed_methods)]
             tokio::spawn(
                 async move { make_request_with_tags(&client_clone, tags_clone, stream).await },
@@ -996,58 +944,53 @@ scope = [
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_time_intervals_non_streaming() {
-    Box::pin(test_rate_limiting_time_intervals_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_time_intervals);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_time_intervals_streaming() {
-    Box::pin(test_rate_limiting_time_intervals_helper(true)).await;
-}
-
-async fn test_rate_limiting_time_intervals_helper(stream: bool) {
+async fn test_rate_limiting_time_intervals(backend: &str, stream: bool) {
     // Test different time intervals work correctly
+    // We use concurrent requests to avoid flakiness from token refill if the requests are not cached
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
 model_inferences_per_second = {{ capacity = 2, refill_rate = 2 }}
 always = true
 scope = [
     {{ tag_key = "test12_user_id_{id}", tag_value = "123" }}
 ]"#
-    )]);
+        )],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let tags = HashMap::from([(format!("test12_user_id_{id}"), "123".to_string())]);
 
-    // Should be able to make 2 requests per second
-    let result1 = make_request_with_tags(&client, tags.clone(), stream).await;
-    assert!(result1.is_ok());
+    // Launch 3 concurrent requests - exactly 2 should succeed due to capacity limit
+    let (result1, result2, result3) = futures::join!(
+        make_request_with_tags(&client, tags.clone(), stream),
+        make_request_with_tags(&client, tags.clone(), stream),
+        make_request_with_tags(&client, tags.clone(), stream),
+    );
 
-    let result2 = make_request_with_tags(&client, tags.clone(), stream).await;
-    assert!(result2.is_ok());
+    let results = [&result1, &result2, &result3];
+    let success_count = results.iter().filter(|r| r.is_ok()).count();
+    let failure_count = results.iter().filter(|r| r.is_err()).count();
 
-    // Third request should fail
-    let result3 = make_request_with_tags(&client, tags.clone(), stream).await;
-    assert_rate_limit_exceeded(result3);
+    assert_eq!(
+        success_count, 2,
+        "Should have exactly 2 successful requests (capacity = 2)"
+    );
+    assert_eq!(failure_count, 1, "Should have exactly 1 failed request");
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_no_rules_non_streaming() {
-    test_rate_limiting_no_rules_helper(false).await;
-}
+make_rate_limit_tests!(test_rate_limiting_no_rules);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_no_rules_streaming() {
-    test_rate_limiting_no_rules_helper(true).await;
-}
-
-async fn test_rate_limiting_no_rules_helper(stream: bool) {
-    let config = r#"
+async fn test_rate_limiting_no_rules(backend: &str, stream: bool) {
+    let config = format!(
+        r#"
 [rate_limiting]
 enabled = true
+backend = "{backend}"
 
 [models."dummy"]
 routing = ["dummy"]
@@ -1062,10 +1005,10 @@ type = "chat"
 [functions.basic_test.variants.default]
 type = "chat_completion"
 model = "dummy"
-"#;
+"#
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let id = Uuid::now_v7();
     let tags = HashMap::from([(format!("test13_user_id_{id}"), "123".to_string())]);
 
@@ -1101,8 +1044,7 @@ model = "dummy"
 retries = { num_retries = 3 }
 "#;
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(config).await;
     // First call should succeed (the model works on 1, 3, 5, ...)
     client
         .inference(ClientInferenceParams {
@@ -1142,26 +1084,30 @@ retries = { num_retries = 3 }
     assert!(err.to_string().contains("TensorZero rate limit exceeded"));
 }
 
+// This test verifies that cancelled streams return their borrowed tokens.
+// It checks for postgres-specific SQL logs, so it only runs with the Postgres backend.
 #[tokio::test]
-async fn test_rate_limiting_cancelled_stream_return_tokens() {
+async fn test_rate_limiting_cancelled_stream_return_tokens_postgres() {
     let logs_contain = tensorzero_core::utils::testing::capture_logs_with_filter("sqlx=trace");
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[&format!(
-        r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[&format!(
+            r#"[[rate_limiting.rules]]
     tokens_per_minute = {{ capacity = 100, refill_rate = 100 }}
     always = true
     scope = [
         {{ tag_key = "test1_customer_id_{id}", tag_value = "customer_alpha" }}
     ]"#
-    )]);
+        )],
+        "postgres",
+    );
 
     let tags_match = HashMap::from([(
         format!("test1_customer_id_{id}"),
         "customer_alpha".to_string(),
     )]);
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::slow_second_chunk".to_string()),
@@ -1203,55 +1149,49 @@ async fn test_rate_limiting_cancelled_stream_return_tokens() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_priority_override_with_each_non_streaming() {
-    Box::pin(test_rate_limiting_priority_override_with_each_helper(false)).await;
-}
+make_rate_limit_tests!(test_rate_limiting_priority_override_with_each);
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_rate_limiting_priority_override_with_each_streaming() {
-    Box::pin(test_rate_limiting_priority_override_with_each_helper(true)).await;
-}
-
-async fn test_rate_limiting_priority_override_with_each_helper(stream: bool) {
+async fn test_rate_limiting_priority_override_with_each(backend: &str, stream: bool) {
     let id = Uuid::now_v7();
-    let config = generate_rate_limit_config(&[
-        // Collectively, all users can make a maximum of 1k model inferences per hour and 10M tokens per day
-        &format!(
-            r#"[[rate_limiting.rules]]
+    let config = generate_rate_limit_config(
+        &[
+            // Collectively, all users can make a maximum of 1k model inferences per hour and 10M tokens per day
+            &format!(
+                r#"[[rate_limiting.rules]]
 always = true
 model_inferences_per_hour = {{ capacity = 1000, refill_rate = 1000 }}
 tokens_per_day = {{ capacity = 10_000_000, refill_rate = 10_000_000 }}
 scope = [
     {{ tag_key = "user_id_{id}", tag_value = "tensorzero::total" }}
 ]"#
-        ),
-        // Each individual user can make a maximum of 1 model inference per minute
-        &format!(
-            r#"[[rate_limiting.rules]]
+            ),
+            // Each individual user can make a maximum of 1 model inference per minute
+            &format!(
+                r#"[[rate_limiting.rules]]
 priority = 0
 model_inferences_per_minute = {{ capacity = 1, refill_rate = 1 }}
 scope = [
     {{ tag_key = "user_id_{id}", tag_value = "tensorzero::each" }}
 ]"#
-        ),
-        // But override the individual limit for the CEO
-        &format!(
-            r#"[[rate_limiting.rules]]
+            ),
+            // But override the individual limit for the CEO
+            &format!(
+                r#"[[rate_limiting.rules]]
 priority = 1
 model_inferences_per_minute = {{ capacity = 5, refill_rate = 5 }}
 scope = [
     {{ tag_key = "user_id_{id}", tag_value = "ceo" }}
 ]"#
-        ),
-        // The entire system (i.e. without restricting the scope) can make a maximum of 10M tokens per hour
-        r"[[rate_limiting.rules]]
+            ),
+            // The entire system (i.e. without restricting the scope) can make a maximum of 10M tokens per hour
+            r"[[rate_limiting.rules]]
 always = true
 tokens_per_hour = { capacity = 10_000_000, refill_rate = 10_000_000 }",
-    ]);
+        ],
+        backend,
+    );
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
 
     let tags_intern = HashMap::from([(format!("user_id_{id}"), "intern".to_string())]);
     let tags_ceo = HashMap::from([(format!("user_id_{id}"), "ceo".to_string())]);

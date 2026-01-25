@@ -1,6 +1,5 @@
 //! OpenAI Reinforcement Fine-Tuning (RFT) optimizer implementation
 
-use async_trait::async_trait;
 use futures::future::try_join_all;
 use secrecy::ExposeSecret;
 use std::sync::Arc;
@@ -34,7 +33,6 @@ use crate::{
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
-#[async_trait]
 impl Optimizer for OpenAIRFTConfig {
     type Handle = OpenAIRFTJobHandle;
 
@@ -198,7 +196,6 @@ impl Optimizer for OpenAIRFTConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for OpenAIRFTJobHandle {
     async fn poll(
         &self,

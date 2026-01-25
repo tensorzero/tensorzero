@@ -20,8 +20,9 @@ pub struct CloneDatapointsRequest {
     pub datapoint_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CloneDatapointsResponse {
     pub datapoint_ids: Vec<Option<Uuid>>, // None for missing source datapoints
 }

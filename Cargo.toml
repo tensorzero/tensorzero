@@ -27,7 +27,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2026.1.2"
+version = "2026.1.5"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -107,7 +107,7 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 blake3 = "1.8.3"
 moka = { version = "0.12.10", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "75bde52f2a40d1fabd72443ddcf26e1342e28b56" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "b779f5a3f7e34f4f8a758ec4627d56538945cfeb" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }

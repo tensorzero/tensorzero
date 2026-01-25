@@ -38,7 +38,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic".to_string(),
-        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_name: "claude-haiku-4-5-anthropic".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -46,7 +46,7 @@ async fn get_providers() -> E2ETestProviders {
     let image_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic".to_string(),
-        model_name: "anthropic::claude-3-haiku-20240307".into(),
+        model_name: "anthropic::claude-haiku-4-5".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -54,7 +54,7 @@ async fn get_providers() -> E2ETestProviders {
     let pdf_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic".to_string(),
-        model_name: "anthropic::claude-sonnet-4-5-20250929".into(),
+        model_name: "anthropic::claude-sonnet-4-5".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -62,7 +62,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic-extra-body".to_string(),
-        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_name: "claude-haiku-4-5-anthropic".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -70,7 +70,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic-extra-headers".to_string(),
-        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_name: "claude-haiku-4-5-anthropic".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -78,7 +78,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic-dynamic".to_string(),
-        model_name: "claude-3-haiku-20240307-anthropic-dynamic".into(),
+        model_name: "claude-haiku-4-5-anthropic-dynamic".into(),
         model_provider_name: "anthropic".into(),
         credentials,
     }];
@@ -87,21 +87,21 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "anthropic".to_string(),
-            model_name: "claude-3-haiku-20240307-anthropic".into(),
+            model_name: "claude-haiku-4-5-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "anthropic-implicit".to_string(),
-            model_name: "claude-3-haiku-20240307-anthropic".into(),
+            model_name: "claude-haiku-4-5-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "anthropic-strict".to_string(),
-            model_name: "claude-3-haiku-20240307-anthropic".into(),
+            model_name: "claude-haiku-4-5-anthropic".into(),
             model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
@@ -110,7 +110,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic_json_mode_off".to_string(),
-        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_name: "claude-haiku-4-5-anthropic".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -118,7 +118,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic-shorthand".to_string(),
-        model_name: "anthropic::claude-3-haiku-20240307".into(),
+        model_name: "anthropic::claude-haiku-4-5".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -126,7 +126,7 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic".to_string(),
-        model_name: "claude-3-haiku-20240307".into(),
+        model_name: "claude-haiku-4-5".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -134,17 +134,14 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic-shorthand".to_string(),
-        model_name: "anthropic::claude-3-haiku-20240307".into(),
+        model_name: "anthropic::claude-haiku-4-5".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
 
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "anthropic".into(),
-        model_info: HashMap::from([(
-            "model_name".to_string(),
-            "claude-3-haiku-20240307".to_string(),
-        )]),
+        model_info: HashMap::from([("model_name".to_string(), "claude-haiku-4-5".to_string())]),
         use_modal_headers: false,
     }];
 
@@ -160,7 +157,6 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         bad_auth_extra_headers,
         extra_body_inference: extra_body_providers,
-        // TODO (#5680): we disabled Anthropic tests on JSON functions + reasoning because the prefill breaks
         reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers,
         cache_input_tokens_inference: standard_providers.clone(),
@@ -198,7 +194,7 @@ async fn test_thinking_rejected_128k() {
     // See: https://github.com/tensorzero/tensorzero/issues/5380
     let random = Uuid::now_v7();
     let payload = json!({
-        "model_name": "anthropic::claude-sonnet-4-5-20250929",
+        "model_name": "anthropic::claude-sonnet-4-5",
         "input":{
             "messages": [
                 {
@@ -311,7 +307,7 @@ async fn test_empty_chunks_success() {
 pub async fn test_thinking_signature() {
     test_thinking_signature_helper(
         "anthropic-thinking",
-        "anthropic::claude-sonnet-4-5-20250929",
+        "anthropic::claude-sonnet-4-5",
         "anthropic",
     )
     .await;
@@ -501,12 +497,7 @@ pub async fn test_thinking_signature_helper(
 
 #[tokio::test]
 pub async fn test_redacted_thinking() {
-    test_redacted_thinking_helper(
-        "anthropic::claude-sonnet-4-5-20250929",
-        "anthropic",
-        "anthropic",
-    )
-    .await;
+    test_redacted_thinking_helper("anthropic::claude-sonnet-4-5", "anthropic", "anthropic").await;
 }
 
 pub async fn test_redacted_thinking_helper(
@@ -798,12 +789,12 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
     if stream {
         assert_eq!(
             raw_request,
-            "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
+            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
         );
     } else {
         assert_eq!(
             raw_request,
-            "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
+            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
         );
     }
 }
@@ -899,12 +890,12 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
     if stream {
         assert_eq!(
             raw_request,
-            "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}"
+            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}"
         );
     } else {
         assert_eq!(
             raw_request,
-            "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}"
+            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}"
         );
     }
 }
@@ -912,7 +903,7 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn test_streaming_thinking() {
-    test_streaming_thinking_helper("anthropic::claude-sonnet-4-5-20250929", "anthropic").await;
+    test_streaming_thinking_helper("anthropic::claude-sonnet-4-5", "anthropic").await;
 }
 
 pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &str) {
@@ -1214,7 +1205,7 @@ async fn test_forward_image_url() {
     let client = make_embedded_gateway_with_config(&config).await;
 
     let response = client.inference(ClientInferenceParams {
-        model_name: Some("anthropic::claude-3-haiku-20240307".to_string()),
+        model_name: Some("anthropic::claude-haiku-4-5".to_string()),
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
@@ -1251,7 +1242,7 @@ async fn test_forward_image_url() {
         .unwrap();
     assert_eq!(
         raw_request,
-        "{\"model\":\"claude-3-haiku-20240307\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"max_tokens\":4096,\"stream\":false}"
+        "{\"model\":\"claude-haiku-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"max_tokens\":64000,\"stream\":false}"
     );
 
     let file_path =
@@ -1296,7 +1287,7 @@ async fn test_forward_file_url() {
     let client = make_embedded_gateway_with_config(&config).await;
 
     let response = client.inference(ClientInferenceParams {
-        model_name: Some("anthropic::claude-sonnet-4-5-20250929".to_string()),
+        model_name: Some("anthropic::claude-sonnet-4-5".to_string()),
         input: Input {
             messages: vec![InputMessage {
                 role: Role::User,
@@ -1333,7 +1324,7 @@ async fn test_forward_file_url() {
         .unwrap();
     assert_eq!(
         raw_request,
-        "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"max_tokens\":64000,\"stream\":false}"
+        "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"max_tokens\":64000,\"stream\":false}"
     );
 
     let file_path =

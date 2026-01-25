@@ -612,17 +612,13 @@ impl ClientExt for Client {
                 let builder = client.http_client.post(url).json(&params);
                 Ok(client.send_and_parse_http_response(builder).await?.0)
             }
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(Box::pin(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::internal::action::action(
-                        &gateway.handle.app_state,
-                        params,
-                    )
-                    .await
-                    .map_err(err_to_http)
-                }))
-                .await?)
-            }
+            ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message: "Action endpoint is not supported for embedded gateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
         }
     }
 
@@ -1304,7 +1300,7 @@ impl ClientExt for Client {
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     launch_optimization(
                         &gateway.handle.app_state.http_client,
                         params,
@@ -1313,7 +1309,7 @@ impl ClientExt for Client {
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await?)
             }
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
@@ -1334,7 +1330,7 @@ impl ClientExt for Client {
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                with_embedded_timeout(*timeout, async {
+                Box::pin(with_embedded_timeout(*timeout, async {
                     launch_optimization_workflow(
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.config.clone(),
@@ -1343,7 +1339,7 @@ impl ClientExt for Client {
                     )
                     .await
                     .map_err(err_to_http)
-                })
+                }))
                 .await
             }
             ClientMode::HTTPGateway(client) => {

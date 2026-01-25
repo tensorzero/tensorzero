@@ -46,8 +46,9 @@ use super::{
     infer_model_request_stream, prepare_model_inference_request,
 };
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MixtureOfNConfig {
     weight: Option<f64>,
     candidates: Vec<String>,
@@ -85,9 +86,10 @@ impl MixtureOfNConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -98,16 +100,18 @@ pub struct UninitializedMixtureOfNConfig {
     pub fuser: UninitializedFuserConfig,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedFuserConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,

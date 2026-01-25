@@ -16,6 +16,7 @@ pub async fn create_test_gateway(config: &str) -> Client {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

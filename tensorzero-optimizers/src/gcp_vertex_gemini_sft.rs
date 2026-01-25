@@ -1,6 +1,5 @@
 //! GCP Vertex Gemini Supervised Fine-Tuning (SFT) optimizer implementation
 
-use async_trait::async_trait;
 use futures::{future::try_join_all, try_join};
 use std::sync::Arc;
 use url::Url;
@@ -50,7 +49,6 @@ fn get_sft_config(provider_types: &ProviderTypesConfig) -> Result<&GCPSFTConfig,
         })
 }
 
-#[async_trait]
 impl Optimizer for GCPVertexGeminiSFTConfig {
     type Handle = GCPVertexGeminiSFTJobHandle;
 
@@ -278,7 +276,6 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for GCPVertexGeminiSFTJobHandle {
     async fn poll(
         &self,
