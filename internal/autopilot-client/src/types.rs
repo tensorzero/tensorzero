@@ -12,6 +12,7 @@ pub use tensorzero_types::{
     Base64File, File, ObjectStoragePointer, RawText, Role, Template, Text, Thought,
     ToolCallWrapper, Unknown, UrlFile,
 };
+use tensorzero_types::{InputMessage, InputMessageContent};
 use uuid::Uuid;
 
 // =============================================================================
@@ -39,6 +40,41 @@ pub enum EventPayloadMessageContent {
 pub struct EventPayloadMessage {
     pub role: Role,
     pub content: Vec<EventPayloadMessageContent>,
+}
+
+impl TryFrom<InputMessage> for EventPayloadMessage {
+    type Error = &'static str;
+
+    fn try_from(msg: InputMessage) -> Result<Self, Self::Error> {
+        let content = msg
+            .content
+            .into_iter()
+            .map(|c| match c {
+                InputMessageContent::Text(text) => Ok(EventPayloadMessageContent::Text(text)),
+                _ => Err("EventPayloadMessage only supports Text content blocks"),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(EventPayloadMessage {
+            role: msg.role,
+            content,
+        })
+    }
+}
+
+impl From<EventPayloadMessage> for InputMessage {
+    fn from(msg: EventPayloadMessage) -> Self {
+        InputMessage {
+            role: msg.role,
+            content: msg
+                .content
+                .into_iter()
+                .map(|c| match c {
+                    EventPayloadMessageContent::Text(text) => InputMessageContent::Text(text),
+                })
+                .collect(),
+        }
+    }
 }
 
 /// A session representing an autopilot conversation.
