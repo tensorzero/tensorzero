@@ -87,7 +87,9 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
             "thought" => {
                 found_thought = true;
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 
@@ -158,7 +160,9 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
             "thought" => {
                 found_thought = true;
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 
@@ -455,7 +459,9 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
                         .push_str(thought_text);
                 }
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 

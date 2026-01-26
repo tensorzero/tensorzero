@@ -223,7 +223,7 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_reasoning_inference_request_simple() {
+        async fn test_reasoning_inference_request_simple_nonstreaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
                 test_reasoning_inference_request_simple_nonstreaming_with_provider(provider).await;
@@ -231,7 +231,7 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_streaming_reasoning_inference_request_simple() {
+        async fn test_reasoning_inference_request_simple_streaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
                 test_reasoning_inference_request_simple_streaming_with_provider(provider).await;
