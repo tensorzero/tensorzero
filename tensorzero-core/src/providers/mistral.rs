@@ -520,7 +520,10 @@ pub(super) fn prepare_mistral_tools<'a>(
     match &request.tool_config {
         None => Ok((None, None, None)),
         Some(tool_config) => {
-            if !tool_config.any_tools_available() {
+            // Get scoped provider tools first
+            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
+
+            if !tool_config.any_tools_available() && provider_tools.is_empty() {
                 return Ok((None, None, None));
             }
             let mut tools: Vec<MistralTool<'a>> = tool_config
@@ -529,7 +532,6 @@ pub(super) fn prepare_mistral_tools<'a>(
                 .collect();
 
             // Add provider tools (e.g., web_search, code_interpreter)
-            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
             tools.extend(
                 provider_tools
                     .iter()
@@ -1722,5 +1724,55 @@ mod tests {
         assert!(logs_contain(
             "Mistral does not support the inference parameter `verbosity`"
         ));
+    }
+
+    /// Test that provider-only tool configurations (no function tools) work correctly
+    #[test]
+    fn test_prepare_mistral_tools_provider_only() {
+        use crate::providers::test_helpers::provider_only_tool_config;
+
+        let tool_config = provider_only_tool_config("test-model", "mistral");
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            ..Default::default()
+        };
+
+        let result = prepare_mistral_tools(&request, "test-model", "mistral");
+        assert!(
+            result.is_ok(),
+            "prepare_mistral_tools should succeed with provider-only tools"
+        );
+
+        let (tools, tool_choice, _parallel) = result.expect("should succeed");
+        assert!(
+            tools.is_some(),
+            "tools should be Some when provider tools are present"
+        );
+        let tools = tools.expect("tools should be Some");
+        assert_eq!(
+            tools.len(),
+            1,
+            "should have exactly one tool (the provider tool)"
+        );
+
+        // Verify it's a provider tool
+        match &tools[0] {
+            MistralTool::ProviderTool(tool) => {
+                assert_eq!(
+                    tool.get("type").and_then(|v| v.as_str()),
+                    Some("web_search"),
+                    "provider tool should be web_search"
+                );
+            }
+            MistralTool::Function(_) => panic!("Expected a ProviderTool"),
+        }
+
+        assert!(tool_choice.is_some(), "tool_choice should be set");
     }
 }

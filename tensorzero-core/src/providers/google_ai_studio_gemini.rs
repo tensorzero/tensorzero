@@ -987,7 +987,10 @@ fn prepare_tools<'a>(
 > {
     match &request.tool_config {
         Some(tool_config) => {
-            if !tool_config.any_tools_available() {
+            // Get scoped provider tools first
+            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
+
+            if !tool_config.any_tools_available() && provider_tools.is_empty() {
                 return Ok((None, None));
             }
             // Build function tools
@@ -998,7 +1001,6 @@ fn prepare_tools<'a>(
                     .collect(),
             })];
             // Add provider tools (e.g., google_search, code_execution)
-            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
             tools.extend(
                 provider_tools
                     .iter()
@@ -3171,5 +3173,52 @@ mod tests {
         assert!(logs_contain(
             "The image detail parameter is not supported by Google AI Studio Gemini"
         ));
+    }
+
+    /// Test that provider-only tool configurations (no function tools) work correctly
+    #[test]
+    fn test_prepare_tools_provider_only() {
+        use crate::providers::test_helpers::provider_only_tool_config;
+
+        let tool_config = provider_only_tool_config("test-model", "google_ai_studio_gemini");
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            ..Default::default()
+        };
+
+        let result = prepare_tools(&request, "test-model", "google_ai_studio_gemini");
+        assert!(
+            result.is_ok(),
+            "prepare_tools should succeed with provider-only tools"
+        );
+
+        let (tools, tool_config_result) = result.expect("should succeed");
+        assert!(
+            tools.is_some(),
+            "tools should be Some when provider tools are present"
+        );
+        let tools = tools.expect("tools should be Some");
+        // Should have function declarations (empty) + provider tool
+        assert!(
+            !tools.is_empty(),
+            "should have at least the provider tool entry"
+        );
+
+        // Find the provider tool
+        let has_provider_tool = tools
+            .iter()
+            .any(|t| matches!(t, GeminiToolEntry::ProviderTool(_)));
+        assert!(
+            has_provider_tool,
+            "should have a provider tool in the result"
+        );
+
+        assert!(tool_config_result.is_some(), "tool_config should be set");
     }
 }

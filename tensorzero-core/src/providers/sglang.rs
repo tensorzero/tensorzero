@@ -142,7 +142,7 @@ impl InferenceProvider for SGLangProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -152,7 +152,7 @@ impl InferenceProvider for SGLangProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
-            SGLangRequest::new(&self.model_name, request).await?,
+            SGLangRequest::new(&self.model_name, request, model_name, provider_name).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -244,7 +244,7 @@ impl InferenceProvider for SGLangProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -254,7 +254,7 @@ impl InferenceProvider for SGLangProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            SGLangRequest::new(&self.model_name, request).await?,
+            SGLangRequest::new(&self.model_name, request, model_name, provider_name).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -608,24 +608,40 @@ type PreparedSGLangToolsResult<'a> = (
 /// Otherwise convert the tool choice and tools to SGLang format
 pub(super) fn prepare_sglang_tools<'a>(
     request: &'a ModelInferenceRequest,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<PreparedSGLangToolsResult<'a>, Error> {
     match &request.tool_config {
         None => Ok((None, None, None)),
         Some(tool_config) => {
-            if !tool_config.any_tools_available() {
+            // Get scoped provider tools first
+            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
+
+            if !tool_config.any_tools_available() && provider_tools.is_empty() {
                 return Ok((None, None, None));
             }
-            let tools = Some(
-                tool_config
-                    .strict_tools_available()?
-                    .map(Into::into)
-                    .collect(),
+            let mut tools: Vec<OpenAITool> = tool_config
+                .strict_tools_available()?
+                .map(Into::into)
+                .collect();
+
+            // Add provider tools
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| OpenAITool::ProviderTool(&t.tool)),
             );
+
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             // SGLang does not support allowed_tools constraint, use regular tool_choice
             let tool_choice = Some((&tool_config.tool_choice).into());
-            Ok((tools, tool_choice, parallel_tool_calls))
+
+            if tools.is_empty() {
+                Ok((None, None, parallel_tool_calls))
+            } else {
+                Ok((Some(tools), tool_choice, parallel_tool_calls))
+            }
         }
     }
 }
@@ -666,6 +682,8 @@ impl<'a> SGLangRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<SGLangRequest<'a>, Error> {
         let response_format = SGLangResponseFormat::new(request.json_mode, request.output_schema)?;
         let stream_options = if request.stream {
@@ -690,7 +708,8 @@ impl<'a> SGLangRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_sglang_tools(request)?;
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_sglang_tools(request, tensorzero_model_name, tensorzero_provider_name)?;
         let mut sglang_request = SGLangRequest {
             messages,
             model,
@@ -858,9 +877,10 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let sglang_request = SGLangRequest::new(&model_name, &basic_request)
-            .await
-            .unwrap();
+        let sglang_request =
+            SGLangRequest::new(&model_name, &basic_request, "test-model", "test-provider")
+                .await
+                .unwrap();
 
         assert_eq!(sglang_request.model, &model_name);
         assert_eq!(sglang_request.messages.len(), 2);
@@ -897,9 +917,14 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        SGLangRequest::new(&model_name, &request_with_tools)
-            .await
-            .expect_err("requires a schema");
+        SGLangRequest::new(
+            &model_name,
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .expect_err("requires a schema");
 
         // Test request with in strict JSON mode requires an no output schema
         let request_with_tools = ModelInferenceRequest {
@@ -923,9 +948,14 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        SGLangRequest::new(&model_name, &request_with_tools)
-            .await
-            .expect_err("requires a schema");
+        SGLangRequest::new(
+            &model_name,
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .expect_err("requires a schema");
 
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
@@ -951,9 +981,14 @@ mod tests {
             ..Default::default()
         };
 
-        let sglang_request = SGLangRequest::new(&model_name, &request_with_tools)
-            .await
-            .unwrap();
+        let sglang_request = SGLangRequest::new(
+            &model_name,
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(sglang_request.model, &model_name);
         assert_eq!(sglang_request.messages.len(), 1);
@@ -1011,9 +1046,14 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &SGLangRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
+                &SGLangRequest::new(
+                    "test-model",
+                    &generic_request,
+                    "test-model",
+                    "test-provider",
+                )
+                .await
+                .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1102,9 +1142,14 @@ mod tests {
             ..Default::default()
         };
 
-        let sglang_request = SGLangRequest::new(&model_name, &request_with_tools)
-            .await
-            .unwrap();
+        let sglang_request = SGLangRequest::new(
+            &model_name,
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
 
         let tools = sglang_request.tools.unwrap();
         assert_eq!(tools.len(), 2);
@@ -1157,9 +1202,14 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let sglang_request = SGLangRequest::new(&model_name, &request_without_tools)
-            .await
-            .unwrap();
+        let sglang_request = SGLangRequest::new(
+            &model_name,
+            &request_without_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
         assert!(sglang_request.tools.is_none());
         assert!(sglang_request.tool_choice.is_none());
         assert!(sglang_request.parallel_tool_calls.is_none());
@@ -1190,5 +1240,55 @@ mod tests {
         assert!(logs_contain(
             "SGLang does not support the inference parameter `verbosity`"
         ));
+    }
+
+    /// Test that provider-only tool configurations (no function tools) work correctly
+    #[test]
+    fn test_prepare_sglang_tools_provider_only() {
+        use crate::providers::test_helpers::provider_only_tool_config;
+
+        let tool_config = provider_only_tool_config("test-model", "sglang");
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            ..Default::default()
+        };
+
+        let result = prepare_sglang_tools(&request, "test-model", "sglang");
+        assert!(
+            result.is_ok(),
+            "prepare_sglang_tools should succeed with provider-only tools"
+        );
+
+        let (tools, tool_choice, _parallel) = result.expect("should succeed");
+        assert!(
+            tools.is_some(),
+            "tools should be Some when provider tools are present"
+        );
+        let tools = tools.expect("tools should be Some");
+        assert_eq!(
+            tools.len(),
+            1,
+            "should have exactly one tool (the provider tool)"
+        );
+
+        // Verify it's a provider tool
+        match &tools[0] {
+            OpenAITool::ProviderTool(tool) => {
+                assert_eq!(
+                    tool.get("type").and_then(|v| v.as_str()),
+                    Some("web_search"),
+                    "provider tool should be web_search"
+                );
+            }
+            _ => panic!("Expected a ProviderTool"),
+        }
+
+        assert!(tool_choice.is_some(), "tool_choice should be set");
     }
 }

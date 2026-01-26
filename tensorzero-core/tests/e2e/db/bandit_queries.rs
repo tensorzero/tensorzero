@@ -1,4 +1,5 @@
 #![expect(clippy::print_stdout)]
+use std::cmp::Reverse;
 use tensorzero_core::db::{
     TimeWindow, clickhouse::test_helpers::get_clickhouse, feedback::FeedbackQueries,
 };
@@ -52,7 +53,7 @@ async fn test_clickhouse_metrics_by_variant_many_results() {
     assert_eq!(metrics_by_variant.len(), 3);
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by(|a, b| b.count.cmp(&a.count));
+    metrics_by_variant.sort_by_key(|v| Reverse(v.count));
     let metric = metrics_by_variant.first().unwrap();
     assert_eq!(metric.variant_name, "dicl");
     assert_eq!(metric.count, 39);
@@ -81,7 +82,7 @@ async fn test_clickhouse_metrics_by_variant_episode_boolean() {
         .unwrap();
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by(|a, b| b.count.cmp(&a.count));
+    metrics_by_variant.sort_by_key(|v| Reverse(v.count));
     println!("metrics_by_variant: {metrics_by_variant:?}");
     assert_eq!(metrics_by_variant.len(), 3);
     let metric = metrics_by_variant.first().unwrap();
@@ -112,7 +113,7 @@ async fn test_clickhouse_metrics_by_variant_episode_float() {
         .unwrap();
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by(|a, b| b.count.cmp(&a.count));
+    metrics_by_variant.sort_by_key(|v| Reverse(v.count));
     println!("metrics_by_variant: {metrics_by_variant:?}");
     assert_eq!(metrics_by_variant.len(), 3);
     let metric = metrics_by_variant.first().unwrap();
@@ -893,7 +894,7 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_baseline_continuity(
             .collect();
 
         // Sort by period
-        variant_points.sort_by(|a, b| a.period_end.cmp(&b.period_end));
+        variant_points.sort_by_key(|p| p.period_end);
 
         if variant_points.len() > 1 {
             // Verify counts are non-decreasing (cumulative)

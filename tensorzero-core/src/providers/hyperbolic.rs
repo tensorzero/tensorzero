@@ -28,6 +28,9 @@ use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
+use super::chat_completions::{
+    ChatCompletionTool, ChatCompletionToolChoice, prepare_chat_completion_tools,
+};
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, SystemOrDeveloper, get_chat_url,
     handle_openai_error, prepare_openai_messages, stream_openai,
@@ -140,7 +143,7 @@ impl InferenceProvider for HyperbolicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -149,16 +152,17 @@ impl InferenceProvider for HyperbolicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body =
-            serde_json::to_value(HyperbolicRequest::new(&self.model_name, request).await?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing Hyperbolic request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(
+            HyperbolicRequest::new(&self.model_name, request, model_name, provider_name).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Hyperbolic request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = get_chat_url(&HYPERBOLIC_DEFAULT_BASE_URL)?;
         let api_key = self
             .credentials
@@ -242,7 +246,7 @@ impl InferenceProvider for HyperbolicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -251,16 +255,17 @@ impl InferenceProvider for HyperbolicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body =
-            serde_json::to_value(HyperbolicRequest::new(&self.model_name, request).await?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing Hyperbolic request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(
+            HyperbolicRequest::new(&self.model_name, request, model_name, provider_name).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Hyperbolic request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = get_chat_url(&HYPERBOLIC_DEFAULT_BASE_URL)?;
         let api_key = self
             .credentials
@@ -344,6 +349,12 @@ struct HyperbolicRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<ChatCompletionToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
 }
 
 fn apply_inference_params(
@@ -382,6 +393,8 @@ impl<'a> HyperbolicRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<HyperbolicRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
@@ -409,6 +422,15 @@ impl<'a> HyperbolicRequest<'a> {
             },
         )
         .await?;
+
+        // Prepare tools - Hyperbolic doesn't support allowed_tools constraint
+        let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(
+            request,
+            false,
+            tensorzero_model_name,
+            tensorzero_provider_name,
+        )?;
+
         let mut hyperbolic_request = HyperbolicRequest {
             messages,
             model,
@@ -421,6 +443,9 @@ impl<'a> HyperbolicRequest<'a> {
             top_p: *top_p,
             stop: stop_sequences.clone(),
             reasoning_effort: None,
+            tools,
+            tool_choice,
+            parallel_tool_calls,
         };
 
         apply_inference_params(&mut hyperbolic_request, &request.inference_params_v2);
@@ -561,9 +586,14 @@ mod tests {
             ..Default::default()
         };
 
-        let hyperbolic_request = HyperbolicRequest::new("openai/gpt-oss-20b", &request_with_tools)
-            .await
-            .expect("failed to create Hyperbolic Request during test");
+        let hyperbolic_request = HyperbolicRequest::new(
+            "openai/gpt-oss-20b",
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .expect("failed to create Hyperbolic Request during test");
 
         assert_eq!(hyperbolic_request.messages.len(), 1);
         assert_eq!(hyperbolic_request.temperature, Some(0.5));
@@ -651,9 +681,14 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &HyperbolicRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
+                &HyperbolicRequest::new(
+                    "test-model",
+                    &generic_request,
+                    "test-model",
+                    "test-provider",
+                )
+                .await
+                .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -699,6 +734,9 @@ mod tests {
             top_p: None,
             stop: None,
             reasoning_effort: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
         };
 
         apply_inference_params(&mut request, &inference_params);
@@ -715,5 +753,56 @@ mod tests {
         assert!(logs_contain(
             "Hyperbolic does not support the inference parameter `verbosity`"
         ));
+    }
+
+    /// Test that provider-only tool configurations (no function tools) work correctly
+    #[tokio::test]
+    async fn test_hyperbolic_request_provider_only_tools() {
+        use crate::providers::test_helpers::provider_only_tool_config;
+
+        let tool_config = provider_only_tool_config("test-model", "hyperbolic");
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            ..Default::default()
+        };
+
+        let hyperbolic_request =
+            HyperbolicRequest::new("test-model", &request, "test-model", "hyperbolic")
+                .await
+                .expect("should create request with provider-only tools");
+
+        assert!(
+            hyperbolic_request.tools.is_some(),
+            "tools should be Some when provider tools are present"
+        );
+        let tools = hyperbolic_request.tools.expect("tools should be Some");
+        assert_eq!(
+            tools.len(),
+            1,
+            "should have exactly one tool (the provider tool)"
+        );
+
+        // Verify it's a provider tool
+        match &tools[0] {
+            ChatCompletionTool::ProviderTool(tool) => {
+                assert_eq!(
+                    tool.get("type").and_then(|v| v.as_str()),
+                    Some("web_search"),
+                    "provider tool should be web_search"
+                );
+            }
+            ChatCompletionTool::Function(_) => panic!("Expected a ProviderTool"),
+        }
+
+        assert!(
+            hyperbolic_request.tool_choice.is_some(),
+            "tool_choice should be set"
+        );
     }
 }
