@@ -236,10 +236,10 @@ local function get_balance(keys, args)
 end
 
 -- Register all functions with version suffix for safe rolling deploys
-server.register_function('t0_consume_tickets_v1', consume_tickets)
-server.register_function('t0_return_tickets_v1', return_tickets)
+server.register_function('tensorzero_consume_tickets_v2', consume_tickets)
+server.register_function('tensorzero_return_tickets_v2', return_tickets)
 server.register_function{
-    function_name = 't0_get_balance_v1',
+    function_name = 'tensorzero_get_balance_v2',
     callback = get_balance,
     flags = { 'no-writes' }  -- Enables FCALL_RO on read replicas
 }
