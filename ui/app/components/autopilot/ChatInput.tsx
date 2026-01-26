@@ -46,6 +46,7 @@ export function ChatInput({
   isNewSession = false,
 }: ChatInputProps) {
   const [text, setText] = useState("");
+  const [isMultiline, setIsMultiline] = useState(false);
   const fetcher = useFetcher<MessageResponse>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
@@ -69,7 +70,7 @@ export function ChatInput({
     () =>
       isNewSession
         ? PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)]
-        : "Type a message...",
+        : "Send a message...",
     [isNewSession],
   );
 
@@ -86,6 +87,7 @@ export function ChatInput({
       MAX_HEIGHT,
     );
     textarea.style.height = `${newHeight}px`;
+    setIsMultiline(newHeight > MIN_HEIGHT);
   }, []);
 
   useEffect(() => {
@@ -143,7 +145,7 @@ export function ChatInput({
   );
 
   return (
-    <div className={cn("flex items-end gap-2", className)}>
+    <div className={cn("relative", className)}>
       <Textarea
         ref={textareaRef}
         value={text}
@@ -151,7 +153,10 @@ export function ChatInput({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled || isSubmitting}
-        className="resize-none overflow-y-auto"
+        className={cn(
+          "resize-none overflow-y-auto py-[11px] pr-14 pl-4 transition-[border-radius] focus-visible:ring-0",
+          isMultiline ? "rounded-md" : "rounded-full",
+        )}
         style={{ minHeight: MIN_HEIGHT, maxHeight: MAX_HEIGHT }}
         rows={1}
       />
@@ -160,17 +165,18 @@ export function ChatInput({
         onClick={handleSend}
         disabled={!canSend}
         className={cn(
-          "flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md",
-          "bg-fg-primary text-bg-primary hover:bg-fg-secondary",
+          "absolute right-2 bottom-1",
+          "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md",
+          "text-fg-primary hover:text-fg-secondary",
           "disabled:cursor-not-allowed disabled:opacity-50",
           "transition-colors",
         )}
         aria-label="Send message"
       >
         {isSubmitting ? (
-          <Loader2 className="h-5 w-5 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
-          <SendHorizontal className="h-5 w-5" />
+          <SendHorizontal className="h-4 w-4" />
         )}
       </button>
     </div>
