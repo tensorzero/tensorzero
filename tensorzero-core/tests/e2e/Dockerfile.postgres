@@ -1,3 +1,35 @@
+# Stage 1: Build pg_parquet from source
+FROM pgvector/pgvector:pg14-trixie AS pg_parquet_builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+        git \
+        pkg-config \
+        libssl-dev \
+        libclang-dev \
+        postgresql-server-dev-14 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install cargo-pgrx matching pg_parquet's pinned version
+ARG CARGO_PGRX_VERSION=0.16.1
+RUN cargo install --force --locked cargo-pgrx@${CARGO_PGRX_VERSION}
+
+# Initialize pgrx with the system PG14
+RUN cargo pgrx init --pg14=$(which pg_config)
+
+# Clone and build pg_parquet
+RUN git clone --depth 1 https://github.com/CrunchyData/pg_parquet.git /build/pg_parquet
+WORKDIR /build/pg_parquet
+RUN cargo pgrx install --release --features pg14
+
+# Stage 2: Runtime image
 FROM pgvector/pgvector:pg14-trixie
 
 # Install pg_cron from Debian packages
@@ -5,5 +37,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends postgresql-14-cron \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure postgresql.conf to load pg_cron
-RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample
+# Copy pg_parquet extension files from builder
+COPY --from=pg_parquet_builder /usr/lib/postgresql/14/lib/pg_parquet.so /usr/lib/postgresql/14/lib/
+COPY --from=pg_parquet_builder /usr/share/postgresql/14/extension/pg_parquet* /usr/share/postgresql/14/extension/
+
+# Configure shared_preload_libraries via an init script that appends to the
+# actual postgresql.conf during container initialization (before the final
+# postgres start). This is more reliable than modifying postgresql.conf.sample,
+# whose path varies between source-compiled and package-installed PostgreSQL.
+COPY <<'EOF' /docker-entrypoint-initdb.d/01-shared-preload-libraries.sh
+#!/bin/bash
+echo "shared_preload_libraries = 'pg_cron,pg_parquet'" >> "$PGDATA/postgresql.conf"
+EOF
+RUN chmod +x /docker-entrypoint-initdb.d/01-shared-preload-libraries.sh

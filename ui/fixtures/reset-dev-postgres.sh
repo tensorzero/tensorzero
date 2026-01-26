@@ -45,6 +45,7 @@ echo "==> Running migrations..."
 
 SQLX_OFFLINE=1 cargo run --package gateway --bin gateway -- --run-postgres-migrations
 
+# TENSORZERO_USE_SERVER_COPY=0
 ./ui/fixtures/load_fixtures_postgres.sh
 
 echo "==> Done! Database $DB_NAME is ready."

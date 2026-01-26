@@ -25,11 +25,18 @@ set -euo pipefail
 # Environment variables:
 #   TENSORZERO_POSTGRES_URL - Postgres connection URL (default: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures)
 #   TENSORZERO_SKIP_TRUNCATE - Set to 1 to skip truncating tables before loading
+#   TENSORZERO_FIXTURES_DIR - Path to fixtures directory as seen by postgres server (default: /fixtures for docker, or $SCRIPT_DIR for local)
 
 POSTGRES_URL="${TENSORZERO_POSTGRES_URL:-postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$SCRIPT_DIR"
+
+# Determine fixtures directory path as seen by the postgres server.
+# Defaults to server-side COPY (faster, requires volume mount .:/fixtures:ro).
+# Set TENSORZERO_USE_SERVER_COPY=0 for client-side \copy (no volume mount needed).
+USE_SERVER_COPY="${TENSORZERO_USE_SERVER_COPY:-1}"
+SERVER_FIXTURES_DIR="${TENSORZERO_FIXTURES_DIR:-/fixtures}"
 
 # Helper function to load JSONL into a table via temp TEXT table
 load_jsonl() {
@@ -42,9 +49,27 @@ load_jsonl() {
         return
     fi
 
+    local start_time=$SECONDS
     echo "Loading $file into $table..."
 
-    psql -q "$POSTGRES_URL" <<EOF
+    if [ "$USE_SERVER_COPY" = "1" ]; then
+        # Server-side COPY (file must be accessible to postgres server)
+        local server_file="${SERVER_FIXTURES_DIR}/${file}"
+        psql -q "$POSTGRES_URL" <<EOF
+-- Create temp table for raw text (each line is a JSON string)
+CREATE TEMP TABLE tmp_jsonl (data TEXT);
+
+-- Load JSONL data using server-side COPY
+COPY tmp_jsonl (data) FROM '${server_file}' WITH (FORMAT csv, QUOTE E'\x01', DELIMITER E'\x02');
+
+-- Insert into target table (cast text to jsonb for parsing)
+$insert_sql
+
+DROP TABLE tmp_jsonl;
+EOF
+    else
+        # Client-side \copy (default for local development)
+        psql -q "$POSTGRES_URL" <<EOF
 -- Create temp table for raw text (each line is a JSON string)
 CREATE TEMP TABLE tmp_jsonl (data TEXT);
 
@@ -56,10 +81,12 @@ $insert_sql
 
 DROP TABLE tmp_jsonl;
 EOF
+    fi
 
-    echo "  Done"
+    echo "  Done ($(( SECONDS - start_time ))s)"
 }
 
+TOTAL_START=$SECONDS
 echo "Loading fixtures into Postgres..."
 echo "  URL: $POSTGRES_URL"
 
@@ -494,6 +521,7 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (episode_id) DO NOTHING;
 "
 
+BACKFILL_START=$SECONDS
 echo "Backfilling model provider statistics and latency histograms..."
 psql -q "$POSTGRES_URL" <<EOF
 SELECT tensorzero.refresh_model_provider_statistics_incremental(
@@ -506,41 +534,128 @@ SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(
     full_refresh => TRUE
 );
 EOF
+echo "  Done ($(( SECONDS - BACKFILL_START ))s)"
 
+
+# =====================================================================
+# Large Fixtures (optional)
+# =====================================================================
+
+# If TENSORZERO_SKIP_LARGE_FIXTURES equals 1, skip large fixtures
+if [ "${TENSORZERO_SKIP_LARGE_FIXTURES:-}" = "1" ]; then
+    echo ""
+    echo "TENSORZERO_SKIP_LARGE_FIXTURES is set to 1 - skipping large fixtures"
+else
+    echo ""
+    echo "Loading large fixtures..."
+
+    # Download large fixtures if not present
+    if [ ! -d "large-fixtures" ] || [ -z "$(ls -A large-fixtures/*.parquet 2>/dev/null)" ]; then
+        echo "Downloading large fixtures..."
+        uv run ./download-large-fixtures.py
+    fi
+
+    # Convert source parquet to Postgres-compatible parquet
+    CONVERT_START=$SECONDS
+    echo "Converting parquet to Postgres-compatible format..."
+    uv run ./load_large_fixtures_postgres.py
+    echo "  Conversion done ($(( SECONDS - CONVERT_START ))s)"
+
+    # Enable pg_parquet extension for server-side COPY FROM parquet
+    echo "Creating pg_parquet extension..."
+    psql -q "$POSTGRES_URL" -c "CREATE EXTENSION IF NOT EXISTS pg_parquet"
+
+    SERVER_PARQUET_DIR="${SERVER_FIXTURES_DIR}/large-fixtures/postgres-parquet"
+
+    # Tables we're bulk loading into
+    BULK_TABLES="'boolean_metric_feedback','float_metric_feedback','comment_feedback','demonstration_feedback','chat_inferences','chat_inference_data','json_inferences','json_inference_data','model_inferences','model_inference_data'"
+
+    # Drop non-PK indexes on bulk-loaded tables (index maintenance is the main bottleneck).
+    # Save index definitions so we can recreate them after loading.
+    echo "Dropping non-PK indexes for bulk loading..."
+    INDEX_DROP_START=$SECONDS
+    INDEX_DEFS=$(psql -qtAX "$POSTGRES_URL" -c "
+        SELECT indexdef || ';'
+        FROM pg_indexes i
+        WHERE i.schemaname = 'tensorzero'
+          AND i.tablename IN ($BULK_TABLES)
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_index pi
+              JOIN pg_class c ON c.oid = pi.indexrelid
+              WHERE c.relname = i.indexname AND pi.indisprimary
+          )
+        ORDER BY i.indexname;
+    ")
+    INDEX_COUNT=$(echo "$INDEX_DEFS" | grep -c 'CREATE INDEX' || true)
+    if [ "$INDEX_COUNT" -gt 0 ]; then
+        INDEX_NAMES=$(psql -qtAX "$POSTGRES_URL" -c "
+            SELECT i.indexname
+            FROM pg_indexes i
+            WHERE i.schemaname = 'tensorzero'
+              AND i.tablename IN ($BULK_TABLES)
+              AND NOT EXISTS (
+                  SELECT 1 FROM pg_index pi
+                  JOIN pg_class c ON c.oid = pi.indexrelid
+                  WHERE c.relname = i.indexname AND pi.indisprimary
+              )
+            ORDER BY i.indexname;
+        ")
+        for idx in $INDEX_NAMES; do
+            psql -q "$POSTGRES_URL" -c "DROP INDEX IF EXISTS tensorzero.\"${idx}\""
+        done
+        echo "  Dropped $INDEX_COUNT indexes ($(( SECONDS - INDEX_DROP_START ))s)"
+    else
+        echo "  No non-PK indexes found"
+    fi
+
+    # Bulk load large parquet files in parallel batches of 2.
+    # Each table gets its own psql backend with synchronous_commit=off.
+    # Tables are independent (no FK constraints) and indexes are already dropped.
+    # Parallelism is limited to avoid OOM in the Postgres container.
+    BULK_LOAD_START=$SECONDS
+    echo "Bulk loading all large fixtures (2-way parallel)..."
+
+    copy_parquet() {
+        local table="$1"
+        local col_names="$2"
+        psql -q "$POSTGRES_URL" -c "SET synchronous_commit = off; COPY tensorzero.${table} (${col_names}) FROM '${SERVER_PARQUET_DIR}/${table}.parquet' WITH (format 'parquet')"
+        echo "  Loaded ${table}"
+    }
+
+    # Batch 1: feedback tables
+    copy_parquet "boolean_metric_feedback" "id, target_id, metric_name, value, tags, created_at" &
+    copy_parquet "float_metric_feedback" "id, target_id, metric_name, value, tags, created_at" &
+    wait
+
+    # Batch 2: feedback tables
+    copy_parquet "comment_feedback" "id, target_id, target_type, value, tags, created_at" &
+    copy_parquet "demonstration_feedback" "id, inference_id, value, tags, created_at" &
+    wait
+
+    # Batch 3: inference metadata
+    copy_parquet "chat_inferences" "id, function_name, variant_name, episode_id, processing_time_ms, ttft_ms, tags, created_at" &
+    copy_parquet "json_inferences" "id, function_name, variant_name, episode_id, processing_time_ms, ttft_ms, tags, created_at" &
+    wait
+
+    # Batch 4: inference metadata + data
+    copy_parquet "model_inferences" "id, inference_id, input_tokens, output_tokens, response_time_ms, model_name, model_provider_name, ttft_ms, cached, finish_reason, created_at" &
+    copy_parquet "chat_inference_data" "id, input, output, inference_params, extra_body, dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice, parallel_tool_calls, created_at" &
+    wait
+
+    # Batch 5: inference data (heavy JSONB columns)
+    copy_parquet "json_inference_data" "id, input, output, output_schema, inference_params, extra_body, auxiliary_content, created_at" &
+    copy_parquet "model_inference_data" "id, raw_request, raw_response, system, input_messages, output, created_at" &
+    wait
+    echo "  Bulk load done ($(( SECONDS - BULK_LOAD_START ))s)"
+
+    # Recreate indexes (single-pass build is much faster than per-row maintenance)
+    if [ "$INDEX_COUNT" -gt 0 ]; then
+        INDEX_REBUILD_START=$SECONDS
+        echo "Recreating $INDEX_COUNT indexes..."
+        echo "$INDEX_DEFS" | psql -q "$POSTGRES_URL"
+        echo "  Done ($(( SECONDS - INDEX_REBUILD_START ))s)"
+    fi
+fi
 
 echo ""
-echo "All fixtures loaded successfully!"
-
-# Print row counts
-echo ""
-echo "Row counts:"
-psql -q "$POSTGRES_URL" <<EOF
-SELECT 'chat_inferences' as table_name, count(*) as count FROM tensorzero.chat_inferences
-UNION ALL
-SELECT 'chat_inference_data', count(*) FROM tensorzero.chat_inference_data
-UNION ALL
-SELECT 'json_inferences', count(*) FROM tensorzero.json_inferences
-UNION ALL
-SELECT 'json_inference_data', count(*) FROM tensorzero.json_inference_data
-UNION ALL
-SELECT 'model_inferences', count(*) FROM tensorzero.model_inferences
-UNION ALL
-SELECT 'model_inference_data', count(*) FROM tensorzero.model_inference_data
-UNION ALL
-SELECT 'boolean_metric_feedback', count(*) FROM tensorzero.boolean_metric_feedback
-UNION ALL
-SELECT 'float_metric_feedback', count(*) FROM tensorzero.float_metric_feedback
-UNION ALL
-SELECT 'comment_feedback', count(*) FROM tensorzero.comment_feedback
-UNION ALL
-SELECT 'demonstration_feedback', count(*) FROM tensorzero.demonstration_feedback
-UNION ALL
-SELECT 'chat_datapoints', count(*) FROM tensorzero.chat_datapoints
-UNION ALL
-SELECT 'json_datapoints', count(*) FROM tensorzero.json_datapoints
-UNION ALL
-SELECT 'workflow_evaluation_runs', count(*) FROM tensorzero.workflow_evaluation_runs
-UNION ALL
-SELECT 'workflow_evaluation_run_episodes', count(*) FROM tensorzero.workflow_evaluation_run_episodes
-ORDER BY table_name;
-EOF
+echo "All fixtures loaded successfully! ($(( SECONDS - TOTAL_START ))s total)"
