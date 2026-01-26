@@ -320,7 +320,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="/api-keys"
                 icon={KeyRound}
                 title="API Keys"
-                description="Manage API keys"
+                description=""
               />
             </div>
           </div>
