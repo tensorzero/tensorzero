@@ -154,7 +154,7 @@ export function ChatInput({
         placeholder={placeholder}
         disabled={disabled || isSubmitting}
         className={cn(
-          "resize-none overflow-y-auto py-[11px] pr-14 pl-4 transition-[border-radius] focus-visible:ring-0",
+          "resize-none overflow-y-auto py-[11px] pr-14 pl-4 text-sm transition-[border-radius] focus-visible:ring-0",
           isMultiline ? "rounded-md" : "rounded-full",
         )}
         style={{ minHeight: MIN_HEIGHT, maxHeight: MAX_HEIGHT }}
