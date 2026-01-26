@@ -967,27 +967,30 @@ fn create_previous_raw_response_chunk(
         metadata
             .previous_model_inference_results
             .iter()
-            .filter(|r| !r.cached)
             .flat_map(|r| {
-                // First add any failed raw responses from the previous model inference
+                // Always start with failed raw responses from the previous model inference
+                // (these are populated even for cache hits when earlier providers failed)
                 let mut result = r.failed_raw_responses.clone();
-                // If there are passed-through relay_raw_response (from relay), use them
-                if let Some(passed_through) = &r.relay_raw_response {
-                    result.extend(passed_through.clone());
-                } else {
-                    // Otherwise, generate entries from the model inference result
-                    let api_type = r
-                        .raw_usage
-                        .as_ref()
-                        .and_then(|entries| entries.first())
-                        .map(|entry| entry.api_type)
-                        .unwrap_or(ApiType::ChatCompletions);
-                    result.push(RawResponseEntry {
-                        model_inference_id: Some(r.id),
-                        provider_type: r.model_provider_name.to_string(),
-                        api_type,
-                        data: r.raw_response.clone(),
-                    });
+                // For non-cached results, also include the successful response
+                if !r.cached {
+                    // If there are passed-through relay_raw_response (from relay), use them
+                    if let Some(passed_through) = &r.relay_raw_response {
+                        result.extend(passed_through.clone());
+                    } else {
+                        // Otherwise, generate entries from the model inference result
+                        let api_type = r
+                            .raw_usage
+                            .as_ref()
+                            .and_then(|entries| entries.first())
+                            .map(|entry| entry.api_type)
+                            .unwrap_or(ApiType::ChatCompletions);
+                        result.push(RawResponseEntry {
+                            model_inference_id: Some(r.id),
+                            provider_type: r.model_provider_name.to_string(),
+                            api_type,
+                            data: r.raw_response.clone(),
+                        });
+                    }
                 }
                 result
             }),
@@ -2089,11 +2092,12 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ApiType, Base64File, ChatInferenceResultChunk, ContentBlockChunk, ContentBlockOutput, File,
-        InputMessageContent, JsonInferenceResultChunk, Latency, ModelInferenceResponseWithMetadata,
-        ObjectStoragePointer, RequestMessagesOrBatch, Role, Text, TextChunk, UrlFile,
+        ApiType, Base64File, ChatInferenceResult, ChatInferenceResultChunk, ContentBlockChunk,
+        ContentBlockOutput, File, InputMessageContent, JsonInferenceResultChunk, Latency,
+        ModelInferenceResponseWithMetadata, ObjectStoragePointer, RequestMessagesOrBatch, Role,
+        Text, TextChunk, UrlFile,
         storage::{StorageKind, StoragePath},
-        usage::RawUsageEntry,
+        usage::{RawResponseEntry, RawUsageEntry},
     };
 
     #[tokio::test]
@@ -3108,5 +3112,197 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Test that failed_raw_responses from cached inferences ARE preserved in raw_response
+    /// This covers the case where provider A fails, provider B succeeds from cache,
+    /// and we still want to return provider A's failed raw response.
+    #[tokio::test]
+    async fn test_create_stream_preserves_failed_raw_responses_from_cached() {
+        // Create a failed raw response entry (from a provider that failed before the cache hit)
+        let failed_raw_response = RawResponseEntry {
+            model_inference_id: None, // Failed attempts don't have model_inference_id
+            provider_type: "failed_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: r#"{"error": "provider failed"}"#.to_string(),
+        };
+
+        // Create a CACHED inference that has failed_raw_responses from earlier provider attempts
+        let cached_inference = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            output: vec![ContentBlockOutput::Text(Text {
+                text: "cached output".to_string(),
+            })],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: "{}".to_string(),
+            raw_response: r#"{"cached": true}"#.to_string(),
+            usage: Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+            model_provider_name: "cached_provider".into(),
+            model_name: "cached-model".into(),
+            cached: true, // This is a cache hit
+            finish_reason: Some(FinishReason::Stop),
+            raw_usage: None, // Cache hits don't have raw_usage
+            relay_raw_response: None,
+            failed_raw_responses: vec![failed_raw_response], // But they DO have failed_raw_responses
+        };
+
+        let mut metadata = create_test_metadata();
+        metadata.previous_model_inference_results = vec![cached_inference];
+        metadata.include_raw_response = true;
+
+        let function = Arc::new(FunctionConfig::Chat(FunctionConfigChat::default()));
+        let config = Arc::new(Config::default());
+        let clickhouse = ClickHouseConnectionInfo::new_fake();
+        let deferred_tasks = TaskTracker::new();
+
+        // Create a simple stream with one chunk
+        let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk::default());
+        let input_stream: Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>> =
+            Box::pin(futures::stream::iter(vec![Ok(chunk)]));
+        let input_stream: InferenceResultStream = futures::StreamExt::peekable(input_stream);
+
+        let mut stream = std::pin::pin!(create_stream(
+            function,
+            config,
+            metadata,
+            input_stream,
+            clickhouse,
+            deferred_tasks,
+        ));
+
+        // Collect all chunks
+        let mut chunks = vec![];
+        while let Some(chunk) = stream.next().await {
+            chunks.push(chunk);
+        }
+
+        // Check that the failed_raw_response IS present (not filtered out with the cached result)
+        let mut found_failed_provider = false;
+        let mut found_cached_provider = false;
+        for chunk in &chunks {
+            if let Ok(InferenceResponseChunk::Chat(c)) = chunk
+                && let Some(raw_response) = &c.raw_response
+            {
+                for entry in raw_response {
+                    if entry.provider_type == "failed_provider" {
+                        found_failed_provider = true;
+                    }
+                    if entry.provider_type == "cached_provider" {
+                        found_cached_provider = true;
+                    }
+                }
+            }
+        }
+
+        assert!(
+            found_failed_provider,
+            "failed_raw_responses from cached inference should be preserved"
+        );
+        assert!(
+            !found_cached_provider,
+            "cached inference's own raw_response should NOT be included"
+        );
+    }
+
+    /// Test that failed_raw_responses from cached inferences ARE preserved in raw_response
+    /// (non-streaming path via InferenceResponse::new)
+    #[tokio::test]
+    async fn test_non_streaming_preserves_failed_raw_responses_from_cached() {
+        // Create a failed raw response entry (from a provider that failed before the cache hit)
+        let failed_raw_response = RawResponseEntry {
+            model_inference_id: None, // Failed attempts don't have model_inference_id
+            provider_type: "failed_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: r#"{"error": "provider failed"}"#.to_string(),
+        };
+
+        // Create a CACHED model inference response with failed_raw_responses
+        let cached_model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            output: vec![ContentBlockOutput::Text(Text {
+                text: "cached output".to_string(),
+            })],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: "{}".to_string(),
+            raw_response: r#"{"cached": true}"#.to_string(),
+            usage: Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+            model_provider_name: "cached_provider".into(),
+            model_name: "cached-model".into(),
+            cached: true, // This is a cache hit
+            finish_reason: Some(FinishReason::Stop),
+            raw_usage: None, // Cache hits don't have raw_usage
+            relay_raw_response: None,
+            failed_raw_responses: vec![failed_raw_response], // But they DO have failed_raw_responses
+        };
+
+        // Create a ChatInferenceResult with the cached response
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlockOutput::Text(Text {
+            text: "cached output".to_string(),
+        })];
+        let chat_result = ChatInferenceResult::new(
+            inference_id,
+            content,
+            vec![cached_model_response],
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+
+        // Create InferenceResponse using the non-streaming path
+        let episode_id = Uuid::now_v7();
+        let response = InferenceResponse::new(
+            InferenceResult::Chat(chat_result),
+            episode_id,
+            "test_variant".to_string(),
+            false, // include_raw_usage
+            false, // include_original_response
+            true,  // include_raw_response - THIS IS WHAT WE'RE TESTING
+        );
+
+        // Verify the response contains the failed_raw_response but not the cached response
+        let raw_response = response.raw_response();
+        assert!(
+            raw_response.is_some(),
+            "raw_response should be present when include_raw_response is true"
+        );
+
+        let entries = raw_response.expect("raw_response should be Some");
+        let mut found_failed_provider = false;
+        let mut found_cached_provider = false;
+
+        for entry in entries {
+            if entry.provider_type == "failed_provider" {
+                found_failed_provider = true;
+            }
+            if entry.provider_type == "cached_provider" {
+                found_cached_provider = true;
+            }
+        }
+
+        assert!(
+            found_failed_provider,
+            "failed_raw_responses from cached inference should be preserved (non-streaming path)"
+        );
+        assert!(
+            !found_cached_provider,
+            "cached inference's own raw_response should NOT be included (non-streaming path)"
+        );
     }
 }
