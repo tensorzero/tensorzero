@@ -117,8 +117,12 @@ export function ChatInput({
       } else {
         previousUserMessageEventIdRef.current = data.event_id;
         setText("");
-        textareaRef.current?.focus();
         onMessageSentRef.current?.(data, pendingTextRef.current);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+          });
+        });
       }
     }
   }, [fetcher.state, fetcher.data]);
@@ -167,7 +171,7 @@ export function ChatInput({
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled || isSubmitting}
+        disabled={disabled}
         className={cn(
           "resize-none overflow-y-auto py-[11px] pr-14 pl-4 text-sm transition-[border-radius] focus-visible:ring-0",
           isMultiline ? "rounded-md" : "rounded-full",
