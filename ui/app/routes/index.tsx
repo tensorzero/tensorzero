@@ -61,7 +61,7 @@ function DirectoryCard({
           <h3 className="text-fg-primary overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap transition-colors group-hover:text-orange-600">
             {title}
           </h3>
-          <p className="text-fg-secondary overflow-hidden text-xs text-ellipsis whitespace-nowrap">
+          <p className="text-fg-secondary overflow-hidden text-xs text-ellipsis whitespace-nowrap transition-colors group-hover:text-orange-500">
             {typeof description === "string" ? (
               description
             ) : (
