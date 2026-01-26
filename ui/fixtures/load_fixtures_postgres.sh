@@ -61,7 +61,7 @@ EOF
 fi
 
 # Download JSONL fixtures from R2 if not present
-if [ ! -f "chat_inference_examples.jsonl" ] || [ ! -f "json_inference_examples.jsonl" ]; then
+if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_examples.jsonl" ]; then
     echo "Downloading small fixtures..."
     uv run ./download-small-fixtures.py
 fi
@@ -69,7 +69,7 @@ fi
 # Chat Inferences
 # Note: input, output, tool_params, inference_params are JSONB in our schema
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
-load_jsonl "chat_inference_examples.jsonl" "tensorzero.chat_inferences" "
+load_jsonl "small-fixtures/chat_inference_examples.jsonl" "tensorzero.chat_inferences" "
 INSERT INTO tensorzero.chat_inferences (
     id, function_name, variant_name, episode_id,
     input, output, tool_params, inference_params,
@@ -103,7 +103,7 @@ ON CONFLICT (id, created_at) DO NOTHING;
 # JSON Inferences
 # Note: input, output, output_schema, inference_params, auxiliary_content are JSONB in our schema
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
-load_jsonl "json_inference_examples.jsonl" "tensorzero.json_inferences" "
+load_jsonl "small-fixtures/json_inference_examples.jsonl" "tensorzero.json_inferences" "
 INSERT INTO tensorzero.json_inferences (
     id, function_name, variant_name, episode_id,
     input, output, output_schema, inference_params,
