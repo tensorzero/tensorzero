@@ -74,7 +74,10 @@ echo "deb https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/s
 sudo apt-get update
 sudo apt-get install -y clickhouse-client
 
-curl "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
+curl \
+    --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 30 \
+    "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
+
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
 . "$HOME/.cargo/env"
 curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
