@@ -183,7 +183,13 @@ jobs:
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
 
   client-tests:
-    needs: [build-gateway-e2e-container, build-gateway-container, build-mock-provider-api-container, build-fixtures-container]
+    needs:
+      [
+        build-gateway-e2e-container,
+        build-gateway-container,
+        build-mock-provider-api-container,
+        build-fixtures-container,
+      ]
     # Run even when build jobs are skipped (merge_group case where general.yml already built them)
     if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
@@ -493,6 +499,15 @@ jobs:
         if: always()
         run: docker logs gateway-e2e 2>&1 || echo "No gateway container logs available"
 
+      - name: Check e2e logs for impossible error messages
+        run: |
+          LOGS=$(docker logs gateway-e2e 2>&1)
+          if [ -z "$LOGS" ]; then
+            echo "ERROR: Gateway logs are empty"
+            exit 1
+          fi
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
+
       - name: Terminate the gateway container
         if: always()
         run: |
@@ -515,10 +530,6 @@ jobs:
         if: always()
         continue-on-error: true
         run: cat vllm_gpt_oss_modal_logs.txt
-
-      - name: Check e2e logs for impossible error messages
-        run: |
-          grep --invert-match -i "please file a bug report" <<< "$LOGS"
 
       - name: Upload client-tests provider-proxy cache
         # Only upload the cache when we're running from a 'good' run

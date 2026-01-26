@@ -708,7 +708,12 @@ jobs:
       actions: read
       # Permission to fetch GitHub OIDC token authentication for Namespace login
       id-token: write
-    needs: [build-gateway-container, build-mock-provider-api-container, build-fixtures-container]
+    needs:
+      [
+        build-gateway-container,
+        build-mock-provider-api-container,
+        build-fixtures-container,
+      ]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
