@@ -50,7 +50,7 @@ function DirectoryCard({
 }: DirectoryCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="border-border group flex w-full flex-row items-center gap-3 rounded-xl border p-4 transition-colors hover:border-card-highlight-icon-bg hover:bg-card-highlight">
+      <Card className="border-border group flex w-full flex-row items-center gap-3 rounded-xl border p-4 transition-colors hover:border-card-highlight-border hover:bg-card-highlight">
         <div className="bg-bg-tertiary group-hover:bg-card-highlight-icon-bg h-8 w-8 rounded-lg p-2 transition-colors">
           <Icon
             className="text-fg-secondary group-hover:text-card-highlight-icon transition-colors"
