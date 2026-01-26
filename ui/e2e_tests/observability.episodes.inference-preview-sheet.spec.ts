@@ -172,11 +172,11 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
     await sheet.waitFor({ state: "visible" });
 
     // Wait for action buttons to appear
-    await expect(sheet.getByRole("button", { name: /Try with/i })).toBeVisible({
+    // Try with uses ButtonSelect which renders a combobox
+    await expect(sheet.getByText(/Try with variant/i)).toBeVisible({
       timeout: 10000,
     });
-    // Add to dataset is a combobox button with "Add to dataset" text
-    await expect(sheet.getByRole("combobox")).toBeVisible();
+    // Add to dataset is also a combobox
     await expect(sheet.getByText("Add to dataset")).toBeVisible();
     await expect(
       sheet.getByRole("button", { name: /Add feedback/i }),

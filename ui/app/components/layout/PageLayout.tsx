@@ -4,13 +4,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { Suspense, use, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "~/utils/common";
-import { Skeleton } from "~/components/ui/skeleton";
 import {
   Breadcrumbs,
   type BreadcrumbSegment,
 } from "~/components/layout/Breadcrumbs";
+import {
+  PageCount,
+  SectionCount,
+  type CountValue,
+} from "~/components/layout/CountDisplay";
 
 const PageLayout: React.FC<React.ComponentProps<"div">> = ({
   children,
@@ -27,32 +31,6 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
     {children}
   </div>
 );
-
-type CountValue = number | bigint | Promise<number | bigint>;
-
-function CountDisplay({
-  count,
-  size = "lg",
-  className,
-}: {
-  count: CountValue;
-  size?: "lg" | "md";
-  className?: string;
-}) {
-  const resolvedCount = count instanceof Promise ? use(count) : count;
-  return (
-    <span
-      data-testid="count-display"
-      className={cn(
-        "text-fg-muted font-medium",
-        size === "lg" ? "text-2xl" : "text-xl",
-        className,
-      )}
-    >
-      {resolvedCount.toLocaleString()}
-    </span>
-  );
-}
 
 interface PageHeaderProps {
   eyebrow?: ReactNode;
@@ -79,31 +57,19 @@ function PageHeader({
         {eyebrow && (
           <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>
         )}
-        <div>
+        <div className="flex items-center gap-2">
           {title && (
             <h1
               className={cn(
-                "inline align-middle text-2xl font-medium",
+                "text-2xl font-medium",
                 !heading && name && "font-mono",
               )}
             >
               {title}
             </h1>
           )}
-          {count !== undefined && (
-            <Suspense
-              fallback={
-                <Skeleton className="ml-2 inline-block h-6 w-16 align-middle" />
-              }
-            >
-              <CountDisplay count={count} className="ml-2 align-middle" />
-            </Suspense>
-          )}
-          {tag && (
-            <span className="ml-3 inline-flex items-center align-middle">
-              {tag}
-            </span>
-          )}
+          {count !== undefined && <PageCount count={count} />}
+          {tag && <span className="ml-1 inline-flex items-center">{tag}</span>}
         </div>
       </div>
       {children && <div className="mt-8 flex flex-col gap-8">{children}</div>}
@@ -147,11 +113,7 @@ function SectionHeader({
   return (
     <h2 className="flex items-center gap-2 text-xl font-medium">
       {heading}
-      {count !== undefined && (
-        <Suspense fallback={<Skeleton className="h-6 w-12" />}>
-          <CountDisplay count={count} size="md" />
-        </Suspense>
-      )}
+      {count !== undefined && <SectionCount count={count} />}
       {badge && (
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>

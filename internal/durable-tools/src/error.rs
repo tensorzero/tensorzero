@@ -97,6 +97,10 @@ pub enum NonControlToolError {
         /// Structured error data for persistence and later retrieval.
         error_data: JsonValue,
     },
+
+    //// Error occurred while trying to spawn a subtask
+    #[error("failed to spawn subtask `{name}`: {error}")]
+    SubtaskSpawnFailed { name: String, error: String },
 }
 
 /// Result type alias for tool operations.
@@ -158,6 +162,12 @@ impl From<TaskError> for ToolError {
             }
             TaskError::ChildCancelled { step_name } => {
                 ToolError::NonControl(NonControlToolError::ChildCancelled { step_name })
+            }
+            TaskError::SubtaskSpawnFailed { name, error } => {
+                ToolError::NonControl(NonControlToolError::SubtaskSpawnFailed {
+                    name,
+                    error: error.to_string(),
+                })
             }
         }
     }
@@ -232,6 +242,9 @@ impl From<DurableError> for ToolError {
             }
             DurableError::InvalidEventName { reason } => {
                 ToolError::NonControl(NonControlToolError::InvalidEventName { reason })
+            }
+            DurableError::InvalidTaskParams { message, .. } => {
+                ToolError::NonControl(NonControlToolError::InvalidParams { message })
             }
         }
     }

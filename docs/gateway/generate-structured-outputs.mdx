@@ -455,19 +455,15 @@ Unless you're using an [advanced variant type](/gateway/guides/inference-time-op
 
 ### Anthropic
 
-Anthropic supports native structured outputs through their beta API.
-To use this feature with TensorZero, enable `beta_structured_outputs = true` in your Anthropic provider configuration and set `json_mode = "strict"`.
-Alternatively, you can use `extra_headers`.
+For the direct Anthropic provider, `json_mode = "strict"` automatically uses Anthropic's structured outputs feature for guaranteed schema compliance.
 
-```toml tensorzero.toml
-[models.claude_structured]
-routing = ["anthropic"]
+AWS Bedrock and GCP Vertex AI do not support Anthropic's structured outputs, so `json_mode = "strict"` falls back to prompt-based JSON mode. Use `json_mode = "tool"` for more reliable schema compliance on these providers.
 
-[models.claude_structured.providers.anthropic]
-type = "anthropic"
-model_name = "claude-sonnet-4-5-20250929"
-beta_structured_outputs = true
-```
+<Warning>
+
+For Anthropic's extended thinking models, only `json_mode = "strict"` (direct Anthropic) or `json_mode = "off"` are compatible. Other modes use prefill or forced tool use, which conflict with thinking.
+
+</Warning>
 
 ### Gemini (GCP Vertex AI, Google AI Studio)
 

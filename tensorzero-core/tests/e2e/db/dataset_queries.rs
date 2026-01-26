@@ -2613,7 +2613,7 @@ mod tool_call_storage_tests {
 
         let provider_tool = ProviderTool {
             scope: ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
-                model_name: "claude-3-opus".to_string(),
+                model_name: "claude-opus-4-5".to_string(),
                 provider_name: Some("anthropic".to_string()),
             }),
             tool: json!({

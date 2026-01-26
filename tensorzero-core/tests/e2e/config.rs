@@ -15,6 +15,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
 };
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::Text;
@@ -26,6 +27,7 @@ async fn test_embedded_invalid_glob() {
         config_file: Some("/invalid/tensorzero-e2e/glob/**/*.toml".into()),
         clickhouse_url: None,
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -67,6 +69,7 @@ async fn test_embedded_duplicate_key() {
         config_file: Some(glob.clone()),
         clickhouse_url: None,
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -121,6 +124,7 @@ async fn test_from_components_basic() {
         config,
         clickhouse_connection_info,
         postgres_connection_info,
+        valkey_connection_info: ValkeyConnectionInfo::Disabled,
         http_client,
         timeout: Some(Duration::from_secs(60)),
     })
@@ -525,6 +529,7 @@ model = "test_model_{random_id}"
         &live_config,
         Some(CLICKHOUSE_URL.clone()),
         None,  // No Postgres
+        None,  // No Valkey
         false, // Don't verify credentials
         Some(Duration::from_secs(60)),
     ))
@@ -615,7 +620,7 @@ model = "test_model_{random_id}"
 ///
 /// The fields that must be explicitly set for hash stability are:
 /// - `gateway.fetch_and_encode_input_files_before_inference = false`
-/// - `gateway.global_outbound_http_timeout_ms = 300000` (5 minutes in ms)
+/// - `gateway.global_outbound_http_timeout_ms = 900000` (15 minutes in ms)
 /// - `gateway.template_filesystem_access.enabled = false` (and no base_path)
 ///
 /// # Why This Matters
@@ -635,8 +640,8 @@ async fn test_config_snapshot_hash_stable_with_explicit_runtime_fields() {
 [gateway]
 # Default: false - whether to fetch and encode input files before inference
 fetch_and_encode_input_files_before_inference = false
-# Default: 300000 (5 minutes) - global HTTP timeout in milliseconds
-global_outbound_http_timeout_ms = 300000
+# Default: 900000 (15 minutes) - global HTTP timeout in milliseconds
+global_outbound_http_timeout_ms = 900000
 
 # Template filesystem access must be explicitly configured (defaults to disabled)
 [gateway.template_filesystem_access]
@@ -714,6 +719,7 @@ model = "test_model_{random_id}"
         &live_config,
         Some(CLICKHOUSE_URL.clone()),
         None,  // No Postgres
+        None,  // No Valkey
         false, // Don't verify credentials
         Some(Duration::from_secs(60)),
     ))
@@ -942,7 +948,8 @@ model = "test_model_{random_id}"
         retrieved_snapshot,
         &live_config,
         Some(CLICKHOUSE_URL.clone()),
-        None,
+        None, // No Postgres
+        None, // No Valkey
         false,
         Some(Duration::from_secs(60)),
     ))

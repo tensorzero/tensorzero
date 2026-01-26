@@ -801,7 +801,10 @@ enum GeminiResponseMimeType {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiThinkingConfig {
-    thinking_budget: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_level: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -853,26 +856,18 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
-    }
-
-    if let Some(budget_tokens) = thinking_budget_tokens {
+    if reasoning_effort.is_some() || thinking_budget_tokens.is_some() {
+        let thinking_config = GeminiThinkingConfig {
+            thinking_budget: *thinking_budget_tokens,
+            thinking_level: reasoning_effort.clone(),
+        };
         if let Some(gen_config) = &mut request.generation_config {
-            gen_config.thinking_config = Some(GeminiThinkingConfig {
-                thinking_budget: *budget_tokens,
-            });
+            gen_config.thinking_config = Some(thinking_config);
         } else {
             request.generation_config = Some(GeminiGenerationConfig {
                 stop_sequences: None,
                 temperature: None,
-                thinking_config: Some(GeminiThinkingConfig {
-                    thinking_budget: *budget_tokens,
-                }),
+                thinking_config: Some(thinking_config),
                 top_p: None,
                 presence_penalty: None,
                 frequency_penalty: None,
@@ -3093,19 +3088,19 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "Google AI Studio Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
-
-        // Test that thinking_budget_tokens is applied correctly in generation_config
-        assert!(request.generation_config.is_some());
+        // Test that thinking_budget_tokens and reasoning_effort are applied correctly in generation_config
+        assert!(
+            request.generation_config.is_some(),
+            "generation_config should be set when thinking params are provided"
+        );
         let gen_config = request.generation_config.unwrap();
         assert_eq!(
             gen_config.thinking_config,
             Some(GeminiThinkingConfig {
-                thinking_budget: 1024,
-            })
+                thinking_budget: Some(1024),
+                thinking_level: Some("high".to_string()),
+            }),
+            "thinking_config should contain both thinking_budget and thinking_level"
         );
 
         // Test that verbosity warns

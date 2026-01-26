@@ -877,7 +877,7 @@ mod tests {
             },
             ProviderTool {
                 scope: ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
-                    model_name: "claude-3".to_string(),
+                    model_name: "claude-4".to_string(),
                     provider_name: Some("anthropic".to_string()),
                 }),
                 tool: json!({"type": "claude_tool"}),
@@ -895,8 +895,8 @@ mod tests {
         assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
         assert_eq!(result[1].tool, json!({"type": "gpt4_tool"}));
 
-        // Test matching claude-3/anthropic: should return unscoped + claude_tool
-        let result = config.get_scoped_provider_tools("claude-3", "anthropic");
+        // Test matching claude-4/anthropic: should return unscoped + claude_tool
+        let result = config.get_scoped_provider_tools("claude-4", "anthropic");
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
         assert_eq!(result[1].tool, json!({"type": "claude_tool"}));
@@ -1663,7 +1663,7 @@ mod tests {
         });
         assert!(scope.matches("gpt-4", "openai"));
         assert!(!scope.matches("gpt-4", "azure"));
-        assert!(!scope.matches("claude-3", "openai"));
+        assert!(!scope.matches("claude-4", "openai"));
     }
 
     #[test]
@@ -1676,6 +1676,6 @@ mod tests {
         assert!(scope.matches("gpt-4", "openai"));
         assert!(scope.matches("gpt-4", "azure"));
         assert!(scope.matches("gpt-4", "any-provider"));
-        assert!(!scope.matches("claude-3", "anthropic"));
+        assert!(!scope.matches("claude-4", "anthropic"));
     }
 }

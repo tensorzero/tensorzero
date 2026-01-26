@@ -3,8 +3,8 @@ use axum::extract::State;
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::db::inferences::{InferenceQueries, ListInferencesParams};
-use crate::error::Error;
+use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
+use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -32,6 +32,13 @@ pub async fn get_inferences(
     clickhouse: &impl InferenceQueries,
     request: GetInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
+    // Validate output_source parameter
+    if request.output_source == InferenceOutputSource::None {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Invalid output_source: 'none' is not supported for this endpoint. Use 'inference' or 'demonstration'.".to_string(),
+        }));
+    }
+
     // If no IDs are provided, return an empty response.
     if request.ids.is_empty() {
         return Ok(GetInferencesResponse { inferences: vec![] });
@@ -79,6 +86,13 @@ pub async fn list_inferences(
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
+    // Validate output_source parameter
+    if request.output_source == InferenceOutputSource::None {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Invalid output_source: 'none' is not supported for this endpoint. Use 'inference' or 'demonstration'.".to_string(),
+        }));
+    }
+
     let params = request.as_list_inferences_params()?;
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
     let inferences = inferences_storage
@@ -478,5 +492,61 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.inferences.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_inferences_rejects_output_source_none() {
+        let config = create_test_config();
+        let id = Uuid::now_v7();
+
+        let mut mock_clickhouse = MockInferenceQueries::new();
+        // Should NOT call list_inferences when output_source is None
+        mock_clickhouse.expect_list_inferences().times(0);
+
+        let request = GetInferencesRequest {
+            ids: vec![id],
+            function_name: None,
+            output_source: InferenceOutputSource::None,
+        };
+
+        let result = get_inferences(&config, &mock_clickhouse, request).await;
+
+        assert!(
+            result.is_err(),
+            "Expected error for output_source: None, but got Ok"
+        );
+        let error = result.unwrap_err();
+        let error_message = error.to_string().to_lowercase();
+        assert!(
+            error_message.contains("none"),
+            "Error message should mention 'none': {error_message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_inferences_rejects_output_source_none() {
+        let config = create_test_config();
+
+        let mut mock_clickhouse = MockInferenceQueries::new();
+        // Should NOT call list_inferences when output_source is None
+        mock_clickhouse.expect_list_inferences().times(0);
+
+        let request = ListInferencesRequest {
+            output_source: InferenceOutputSource::None,
+            ..Default::default()
+        };
+
+        let result = list_inferences(&config, &mock_clickhouse, request).await;
+
+        assert!(
+            result.is_err(),
+            "Expected error for output_source: None, but got Ok"
+        );
+        let error = result.unwrap_err();
+        let error_message = error.to_string().to_lowercase();
+        assert!(
+            error_message.contains("none"),
+            "Error message should mention 'none': {error_message}"
+        );
     }
 }

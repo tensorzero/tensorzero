@@ -21,6 +21,7 @@ use uuid::Uuid;
 
 use crate::Clients;
 use crate::helpers::get_cache_options;
+use crate::merge_tags;
 
 #[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
@@ -52,6 +53,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub evaluation_run_id: Uuid,
     pub input: &'a Input,
     pub inference_cache: CacheEnabledMode,
+    pub external_tags: &'a HashMap<String, String>,
 }
 
 #[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
@@ -68,6 +70,7 @@ pub async fn run_llm_judge_evaluator(
         evaluation_run_id,
         input,
         inference_cache,
+        external_tags,
     } = params;
     debug!("Checking for existing human feedback");
     let serialized_output = inference_response.get_serialized_output()?;
@@ -101,6 +104,18 @@ pub async fn run_llm_judge_evaluator(
         };
 
     debug!("Making LLM judge inference request");
+    let internal_tags = HashMap::from([
+        (
+            "tensorzero::evaluation_run_id".to_string(),
+            evaluation_run_id.to_string(),
+        ),
+        (
+            "tensorzero::evaluation_name".to_string(),
+            evaluation_name.to_string(),
+        ),
+    ]);
+    let tags = merge_tags(external_tags, internal_tags)?;
+
     let params = ClientInferenceParams {
         function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
@@ -114,16 +129,7 @@ pub async fn run_llm_judge_evaluator(
         variant_name: None,
         dryrun: Some(false),
         internal: true,
-        tags: HashMap::from([
-            (
-                "tensorzero::evaluation_run_id".to_string(),
-                evaluation_run_id.to_string(),
-            ),
-            (
-                "tensorzero::evaluation_name".to_string(),
-                evaluation_name.to_string(),
-            ),
-        ]),
+        tags,
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,
         credentials: HashMap::new(),

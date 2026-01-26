@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# IMPORTANT: You likely should not run this script manually. Instead, comment `/regen-fixtures` in the PR on GitHub. (TensorZero team only)
+
 set -euxo pipefail
 
 cd "$(dirname "$0")"/../

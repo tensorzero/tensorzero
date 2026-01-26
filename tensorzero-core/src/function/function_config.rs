@@ -87,6 +87,7 @@ pub enum FunctionConfigType {
 }
 
 impl FunctionConfigType {
+    /// Returns the ClickHouse table name for the given function type.
     pub fn table_name(&self) -> &'static str {
         match self {
             FunctionConfigType::Chat => "ChatInference",
@@ -94,6 +95,15 @@ impl FunctionConfigType {
         }
     }
 
+    /// Returns the Postgres table name for the given function type.
+    pub fn postgres_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_inferences",
+            FunctionConfigType::Json => "tensorzero.json_inferences",
+        }
+    }
+
+    /// Returns the ClickHouse datapoint table name for the given function type.
     pub fn datapoint_table_name(&self) -> &'static str {
         match self {
             FunctionConfigType::Chat => "ChatInferenceDatapoint",
