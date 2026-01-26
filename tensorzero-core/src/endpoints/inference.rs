@@ -2051,7 +2051,7 @@ mod tests {
     use crate::inference::types::{
         ApiType, Base64File, ChatInferenceResultChunk, ContentBlockChunk, ContentBlockOutput, File,
         InputMessageContent, JsonInferenceResultChunk, Latency, ModelInferenceResponseWithMetadata,
-        ObjectStoragePointer, RequestMessagesOrBatch, Role, Text, TextChunk, UrlFile,
+        ObjectStoragePointer, RequestMessagesOrBatch, Role, Text, TextChunk, ThoughtChunk, UrlFile,
         storage::{StorageKind, StoragePath},
         usage::RawUsageEntry,
     };
@@ -2124,7 +2124,15 @@ mod tests {
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: Some("Test content".to_string()),
-            thought: Some("Thought 1".to_string()),
+            thought: Some(Box::new(ThoughtChunk {
+                id: "0".to_string(),
+                text: Some("Thought 1".to_string()),
+                signature: None,
+                summary_id: None,
+                summary_text: None,
+                provider_type: None,
+                extra_data: None,
+            })),
             usage: None,
             raw_usage: None,
             raw_response: None,

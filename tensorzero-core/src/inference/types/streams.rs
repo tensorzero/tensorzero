@@ -113,7 +113,7 @@ pub struct ChatInferenceResultChunk {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct JsonInferenceResultChunk {
     pub raw: Option<String>,
-    pub thought: Option<String>,
+    pub thought: Option<Box<ThoughtChunk>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -228,20 +228,14 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     fn from(chunk: ProviderInferenceResponseChunk) -> Self {
         let mut raw = None;
         let mut thought = None;
-        for content in &chunk.content {
+        for content in chunk.content {
             match content {
                 ContentBlockChunk::ToolCall(tool_call) => {
                     raw = Some(tool_call.raw_arguments.to_owned());
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
-                    // Take text if present, otherwise fall back to summary_text
-                    // (OpenRouter's reasoning.summary type uses summary_text instead of text)
-                    if thought_chunk.text.is_some() {
-                        thought.clone_from(&thought_chunk.text);
-                    } else {
-                        thought.clone_from(&thought_chunk.summary_text);
-                    }
+                    thought = Some(Box::new(thought_chunk));
                 }
                 ContentBlockChunk::Unknown(_) => {
                     // Unknown chunks are ignored for JSON functions
@@ -594,27 +588,124 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                         }
                     }
                 }
-                if let Some(thought) = chunk.thought {
-                    match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
-                        // If there is already a thought block, append to it
-                        Some(ContentBlockOutput::Thought(existing_thought)) => {
-                            existing_thought
-                                .text
-                                .get_or_insert_default()
-                                .push_str(&thought);
+                if let Some(thought_chunk) = chunk.thought {
+                    let ThoughtChunk {
+                        id: _,
+                        text,
+                        signature,
+                        summary_id,
+                        summary_text,
+                        provider_type,
+                        extra_data,
+                    } = *thought_chunk;
+
+                    // Handle text if present
+                    if let Some(text) = text {
+                        match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
+                            Some(ContentBlockOutput::Thought(existing_thought)) => {
+                                existing_thought
+                                    .text
+                                    .get_or_insert_default()
+                                    .push_str(&text);
+                            }
+                            _ => {
+                                blocks.insert(
+                                    (ContentBlockOutputType::Thought, String::new()),
+                                    ContentBlockOutput::Thought(Thought {
+                                        text: Some(text),
+                                        summary: None,
+                                        signature: None,
+                                        provider_type: provider_type.clone(),
+                                        extra_data: extra_data.clone(),
+                                    }),
+                                );
+                            }
                         }
-                        // If there is no thought block, create one
-                        _ => {
-                            blocks.insert(
-                                (ContentBlockOutputType::Thought, String::new()),
-                                ContentBlockOutput::Thought(Thought {
-                                    text: Some(thought),
-                                    summary: None,
-                                    signature: None,
-                                    provider_type: None,
-                                    extra_data: None,
-                                }),
-                            );
+                    }
+
+                    // Handle signature if present
+                    if let Some(signature) = signature {
+                        match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
+                            Some(ContentBlockOutput::Thought(existing_thought)) => {
+                                match &mut existing_thought.signature {
+                                    Some(existing) => existing.push_str(&signature),
+                                    None => {
+                                        existing_thought.signature = Some(signature);
+                                    }
+                                }
+                            }
+                            _ => {
+                                blocks.insert(
+                                    (ContentBlockOutputType::Thought, String::new()),
+                                    ContentBlockOutput::Thought(Thought {
+                                        text: None,
+                                        summary: None,
+                                        signature: Some(signature),
+                                        provider_type: provider_type.clone(),
+                                        extra_data: extra_data.clone(),
+                                    }),
+                                );
+                            }
+                        }
+                    }
+
+                    // Handle summary if present (summary_id and summary_text both required)
+                    if summary_id.is_some() && summary_text.is_none() {
+                        tracing::error!(
+                            "Summary id is present but summary text is missing for JSON thought"
+                        );
+                    }
+                    if summary_id.is_none() && summary_text.is_some() {
+                        tracing::error!(
+                            "Summary text is present but summary id is missing for JSON thought"
+                        );
+                    }
+                    if let (Some(summary_id), Some(summary_text)) = (summary_id, summary_text) {
+                        // For JSON mode, we use a single thought block with id ""
+                        // so we track summary ids in thought_summaries with key ""
+                        let summary_set = thought_summaries.entry(String::new()).or_default();
+                        let (index, _) = summary_set.insert_full(summary_id);
+
+                        match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
+                            Some(ContentBlockOutput::Thought(existing_thought)) => {
+                                match &mut existing_thought.summary {
+                                    Some(existing) => {
+                                        if index >= existing.len() {
+                                            existing.resize(
+                                                index + 1,
+                                                ThoughtSummaryBlock::SummaryText {
+                                                    text: String::new(),
+                                                },
+                                            );
+                                        }
+                                        match &mut existing[index] {
+                                            ThoughtSummaryBlock::SummaryText { text } => {
+                                                text.push_str(&summary_text);
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        existing_thought.summary =
+                                            Some(vec![ThoughtSummaryBlock::SummaryText {
+                                                text: summary_text,
+                                            }]);
+                                    }
+                                }
+                            }
+                            _ => {
+                                blocks.insert(
+                                    (ContentBlockOutputType::Thought, String::new()),
+                                    ContentBlockOutput::Thought(Thought {
+                                        text: None,
+                                        summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                                            text: summary_text,
+                                        }]),
+                                        signature: None,
+                                        provider_type,
+                                        extra_data,
+                                    }),
+                                );
+                            }
                         }
                     }
                 }
@@ -1051,7 +1142,15 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some("Thought 1".to_string()),
+                thought: Some(Box::new(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 1".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })),
                 usage: Some(usage1),
                 raw_usage: None,
                 raw_response: None,
@@ -1061,7 +1160,15 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some("Thought 2".to_string()),
+                thought: Some(Box::new(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 2".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })),
                 usage: Some(usage2),
                 raw_usage: None,
                 raw_response: None,
@@ -1140,7 +1247,15 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some("Thought 1".to_string()),
+                thought: Some(Box::new(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 1".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })),
                 usage: Some(model_inference_usage),
                 raw_usage: None,
                 raw_response: None,
@@ -1235,7 +1350,15 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some(String::new()),
-                thought: Some("Thought 2".to_string()),
+                thought: Some(Box::new(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 2".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })),
                 usage: None,
                 raw_usage: None,
                 raw_response: None,
@@ -1357,7 +1480,15 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some("Thought 1".to_string()),
+                thought: Some(Box::new(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 1".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })),
                 usage: Some(usage1),
                 raw_usage: None,
                 raw_response: None,
@@ -1367,7 +1498,15 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some("Thought 2".to_string()),
+                thought: Some(Box::new(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 2".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })),
                 usage: Some(usage2),
                 raw_usage: None,
                 raw_response: None,
@@ -1475,7 +1614,15 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some("Thought 1".to_string()),
+                thought: Some(Box::new(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 1".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })),
                 usage: Some(usage1),
                 raw_usage: None,
                 raw_response: None,
@@ -1485,7 +1632,15 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some("Thought 2".to_string()),
+                thought: Some(Box::new(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 2".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })),
                 usage: Some(usage2),
                 raw_usage: None,
                 raw_response: None,
@@ -2415,7 +2570,18 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(thought_chunk);
         assert_eq!(result.raw, None);
-        assert_eq!(result.thought, Some("thinking...".to_string()));
+        assert_eq!(
+            result.thought,
+            Some(Box::new(ThoughtChunk {
+                id: "123".to_string(),
+                text: Some("thinking...".to_string()),
+                summary_id: None,
+                summary_text: None,
+                signature: None,
+                provider_type: None,
+                extra_data: None,
+            }))
+        );
         assert_eq!(result.finish_reason, None);
         // Test case for multiple content blocks - should use last raw content
         let mixed_chunk = ProviderInferenceResponseChunk {
@@ -2448,7 +2614,18 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(mixed_chunk);
         assert_eq!(result.raw, Some("final content".to_string()));
-        assert_eq!(result.thought, Some("final thought".to_string()));
+        assert_eq!(
+            result.thought,
+            Some(Box::new(ThoughtChunk {
+                id: "789".to_string(),
+                text: Some("final thought".to_string()),
+                summary_id: None,
+                summary_text: None,
+                signature: None,
+                provider_type: None,
+                extra_data: None,
+            }))
+        );
 
         // Test case for empty content
         let empty_chunk = ProviderInferenceResponseChunk {
@@ -2487,8 +2664,16 @@ mod tests {
         let result = JsonInferenceResultChunk::from(summary_chunk);
         assert_eq!(
             result.thought,
-            Some("This is a summary".to_string()),
-            "summary_text should be extracted when text is None"
+            Some(Box::new(ThoughtChunk {
+                id: "0".to_string(),
+                text: None,
+                summary_id: Some("0".to_string()),
+                summary_text: Some("This is a summary".to_string()),
+                signature: None,
+                provider_type: Some("openrouter".to_string()),
+                extra_data: None,
+            })),
+            "ThoughtChunk should be preserved when text is None"
         );
     }
 }

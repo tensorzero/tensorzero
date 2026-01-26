@@ -166,10 +166,10 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::common::test_inference_extra_body_with_provider;
         use $crate::providers::common::test_assistant_prefill_inference_request_with_provider;
-        use $crate::providers::reasoning::test_reasoning_inference_request_simple_with_provider;
-        use $crate::providers::reasoning::test_streaming_reasoning_inference_request_simple_with_provider;
-        use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
-        use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider_json_mode;
+        use $crate::providers::reasoning::test_reasoning_inference_request_simple_nonstreaming_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_simple_streaming_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_json_mode_nonstreaming_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_json_mode_streaming_with_provider;
         use $crate::providers::common::test_short_inference_request_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
@@ -226,7 +226,7 @@ macro_rules! generate_provider_tests {
         async fn test_reasoning_inference_request_simple() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_reasoning_inference_request_simple_with_provider(provider).await;
+                test_reasoning_inference_request_simple_nonstreaming_with_provider(provider).await;
             }
         }
 
@@ -234,7 +234,7 @@ macro_rules! generate_provider_tests {
         async fn test_streaming_reasoning_inference_request_simple() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_streaming_reasoning_inference_request_simple_with_provider(provider).await;
+                test_reasoning_inference_request_simple_streaming_with_provider(provider).await;
             }
         }
 
@@ -491,18 +491,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_reasoning_inference_request_json_mode() {
+        async fn test_reasoning_inference_request_json_mode_nonstreaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_reasoning_inference_request_with_provider_json_mode(provider).await;
+                test_reasoning_inference_request_json_mode_nonstreaming_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_streaming_reasoning_inference_request_json_mode() {
+        async fn test_reasoning_inference_request_json_mode_streaming() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_streaming_reasoning_inference_request_with_provider_json_mode(provider).await;
+                test_reasoning_inference_request_json_mode_streaming_with_provider(provider).await;
             }
         }
 
