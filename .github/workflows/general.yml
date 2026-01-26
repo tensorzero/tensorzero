@@ -991,6 +991,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      id-token: write
     needs: [build-gateway-container, build-mock-provider-api-container]
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
@@ -1029,6 +1031,10 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
       - name: Install uv
         uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
         with:
@@ -1037,10 +1043,10 @@ jobs:
       - name: Download ClickHouse fixtures
         run: |
           uv run ./ui/fixtures/download-small-fixtures.py
-      
+
       - name: Login to Namespace registry
         run: nsc docker login
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download container images
         run: |

@@ -15,6 +15,9 @@ use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
+use tensorzero_core::endpoints::datasets::v1::types::{
+    DatapointMetadataUpdate, UpdateDatapointMetadataRequest, UpdateDatapointsMetadataRequest,
+};
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Template, Text,
@@ -1539,7 +1542,7 @@ async fn test_update_metadata_set_name_to_null() {
 }
 
 #[tokio::test]
-async fn test_update_metadata_batch() {
+async fn test_update_metadata_multiple_datapoints() {
     skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
@@ -1615,22 +1618,27 @@ async fn test_update_metadata_batch() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update both datapoints' metadata
+    let update_request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![
+            UpdateDatapointMetadataRequest {
+                id: datapoint_id1,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("updated_name1".to_string())),
+                },
+            },
+            UpdateDatapointMetadataRequest {
+                id: datapoint_id2,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("updated_name2".to_string())),
+                },
+            },
+        ],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [
-                {
-                    "id": datapoint_id1.to_string(),
-                    "metadata": {"name": "updated_name1"}
-                },
-                {
-                    "id": datapoint_id2.to_string(),
-                    "metadata": {"name": "updated_name2"}
-                }
-            ]
-        }))
+        .json(&update_request)
         .send()
         .await
         .unwrap();

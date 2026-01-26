@@ -152,7 +152,7 @@ async fn test_get_inference_count_json_function() {
     let client = Client::new();
 
     // First get the current count
-    let url = get_gateway_endpoint("/internal/functions/judge_answer/inference_count");
+    let url = get_gateway_endpoint("/internal/functions/json_success/inference_count");
     let resp = client.get(url.clone()).send().await.unwrap();
     let status = resp.status();
     let body = resp.text().await.unwrap();
@@ -163,9 +163,9 @@ async fn test_get_inference_count_json_function() {
     let initial_response: InferenceCountResponse = serde_json::from_str(&body).unwrap();
     let initial_count = initial_response.inference_count;
 
-    // Create a new inference for judge_answer function
+    // Create a new inference for json_success function
     let inference_payload = json!({
-        "function_name": "judge_answer",
+        "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "TestBot"},
             "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
