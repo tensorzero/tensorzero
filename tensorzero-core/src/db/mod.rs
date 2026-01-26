@@ -97,6 +97,18 @@ impl TimeWindow {
             TimeWindow::Cumulative => "year", // Cumulative uses a full year as fallback
         }
     }
+
+    /// Converts the time window to the PostgreSQL date_trunc time unit.
+    pub fn to_postgres_time_unit(&self) -> &'static str {
+        match self {
+            TimeWindow::Minute => "minute",
+            TimeWindow::Hour => "hour",
+            TimeWindow::Day => "day",
+            TimeWindow::Week => "week",
+            TimeWindow::Month => "month",
+            TimeWindow::Cumulative => "year", // Not used, but uses a full year as fallback
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
