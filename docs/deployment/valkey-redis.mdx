@@ -85,6 +85,5 @@ If both `TENSORZERO_VALKEY_URL` and `TENSORZERO_POSTGRES_URL` are set, the gatew
 
 ### Durability
 
-A critical failure of Valkey (e.g. crash or power outage) could mean losing rate limiting data since the last backup.
-When the rate limiting window is granular (e.g. minutes), this can be tolerated.
-If your rate limiting config includes larger windows, we recommend setting up [recurrent RDB backups](https://valkey.io/topics/persistence/) (point-in-time snapshots) for better durability guarantees.
+A critical failure of Valkey (e.g. server crash) may result in loss of rate limiting data since the last backup.
+This is generally tolerable if your rate limiting windows are short (e.g. minutes), but if you require precise limits or longer time windows, we recommend configuring [recurring RDB (point-in-time) snapshots](https://valkey.io/topics/persistence/) for improved durability.
