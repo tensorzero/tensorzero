@@ -109,6 +109,16 @@ const navigation: NavigationSection[] = [
       },
     ],
   },
+  {
+    title: "Tools",
+    items: [
+      {
+        title: "Playground",
+        url: "/playground",
+        icon: Playground,
+      },
+    ],
+  },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -168,20 +178,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}
-            <SidebarMenuItem className="list-none">
-              <SidebarMenuButton
-                asChild
-                tooltip={state === "collapsed" ? "Playground" : undefined}
-                isActive={activePathUtils.isActive("/playground")}
-              >
-                <Link to="/playground" className="flex items-center gap-2">
-                  <Playground className="h-4 w-4" />
-                  <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                    Playground
-                  </span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
           </SidebarGroupContent>
         </SidebarGroup>
         {navigation.map((section) => (
