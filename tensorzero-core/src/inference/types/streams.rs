@@ -113,7 +113,7 @@ pub struct ChatInferenceResultChunk {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct JsonInferenceResultChunk {
     pub raw: Option<String>,
-    pub thought: Option<Box<ThoughtChunk>>,
+    pub thought: Vec<ThoughtChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -227,7 +227,7 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
 impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     fn from(chunk: ProviderInferenceResponseChunk) -> Self {
         let mut raw = None;
-        let mut thought = None;
+        let mut thought = Vec::new();
         for content in chunk.content {
             match content {
                 ContentBlockChunk::ToolCall(tool_call) => {
@@ -235,7 +235,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
-                    thought = Some(Box::new(thought_chunk));
+                    thought.push(thought_chunk);
                 }
                 ContentBlockChunk::Unknown(_) => {
                     // Unknown chunks are ignored for JSON functions
@@ -588,7 +588,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                         }
                     }
                 }
-                if let Some(thought_chunk) = chunk.thought {
+                for thought_chunk in chunk.thought {
                     let ThoughtChunk {
                         id: _,
                         text,
@@ -597,7 +597,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                         summary_text,
                         provider_type,
                         extra_data,
-                    } = *thought_chunk;
+                    } = thought_chunk;
 
                     // Handle text if present
                     if let Some(text) = text {
@@ -1142,7 +1142,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some(Box::new(ThoughtChunk {
+                thought: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 1".to_string()),
                     signature: None,
@@ -1150,7 +1150,7 @@ mod tests {
                     summary_text: None,
                     provider_type: None,
                     extra_data: None,
-                })),
+                }],
                 usage: Some(usage1),
                 raw_usage: None,
                 raw_response: None,
@@ -1160,7 +1160,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some(Box::new(ThoughtChunk {
+                thought: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 2".to_string()),
                     signature: None,
@@ -1168,7 +1168,7 @@ mod tests {
                     summary_text: None,
                     provider_type: None,
                     extra_data: None,
-                })),
+                }],
                 usage: Some(usage2),
                 raw_usage: None,
                 raw_response: None,
@@ -1247,7 +1247,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some(Box::new(ThoughtChunk {
+                thought: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 1".to_string()),
                     signature: None,
@@ -1255,7 +1255,7 @@ mod tests {
                     summary_text: None,
                     provider_type: None,
                     extra_data: None,
-                })),
+                }],
                 usage: Some(model_inference_usage),
                 raw_usage: None,
                 raw_response: None,
@@ -1265,7 +1265,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\"}".to_string()),
-                thought: None,
+                thought: vec![],
                 usage: None,
                 raw_usage: None,
                 raw_response: None,
@@ -1340,7 +1340,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":\"John\",".to_string()),
-                thought: None,
+                thought: vec![],
                 usage: Some(model_inference_usage),
                 raw_usage: None,
                 raw_response: None,
@@ -1350,7 +1350,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some(String::new()),
-                thought: Some(Box::new(ThoughtChunk {
+                thought: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 2".to_string()),
                     signature: None,
@@ -1358,7 +1358,7 @@ mod tests {
                     summary_text: None,
                     provider_type: None,
                     extra_data: None,
-                })),
+                }],
                 usage: None,
                 raw_usage: None,
                 raw_response: None,
@@ -1368,7 +1368,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"age\":30}".to_string()),
-                thought: None,
+                thought: vec![],
                 usage: None,
                 raw_usage: None,
                 raw_response: None,
@@ -1480,7 +1480,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some(Box::new(ThoughtChunk {
+                thought: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 1".to_string()),
                     signature: None,
@@ -1488,7 +1488,7 @@ mod tests {
                     summary_text: None,
                     provider_type: None,
                     extra_data: None,
-                })),
+                }],
                 usage: Some(usage1),
                 raw_usage: None,
                 raw_response: None,
@@ -1498,7 +1498,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some(Box::new(ThoughtChunk {
+                thought: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 2".to_string()),
                     signature: None,
@@ -1506,7 +1506,7 @@ mod tests {
                     summary_text: None,
                     provider_type: None,
                     extra_data: None,
-                })),
+                }],
                 usage: Some(usage2),
                 raw_usage: None,
                 raw_response: None,
@@ -1614,7 +1614,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some(Box::new(ThoughtChunk {
+                thought: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 1".to_string()),
                     signature: None,
@@ -1622,7 +1622,7 @@ mod tests {
                     summary_text: None,
                     provider_type: None,
                     extra_data: None,
-                })),
+                }],
                 usage: Some(usage1),
                 raw_usage: None,
                 raw_response: None,
@@ -1632,7 +1632,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some(Box::new(ThoughtChunk {
+                thought: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 2".to_string()),
                     signature: None,
@@ -1640,7 +1640,7 @@ mod tests {
                     summary_text: None,
                     provider_type: None,
                     extra_data: None,
-                })),
+                }],
                 usage: Some(usage2),
                 raw_usage: None,
                 raw_response: None,
@@ -2521,7 +2521,7 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(tool_chunk);
         assert_eq!(result.raw, Some("{\"key\": \"value\"}".to_string()));
-        assert_eq!(result.thought, None);
+        assert!(result.thought.is_empty());
         assert_eq!(result.raw_response, None);
         assert_eq!(result.raw_chunk, "raw response");
         assert_eq!(result.provider_latency, Some(Duration::from_secs(1)));
@@ -2548,7 +2548,7 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(text_chunk);
         assert_eq!(result.raw, Some("some text".to_string()));
-        assert_eq!(result.thought, None);
+        assert!(result.thought.is_empty());
 
         // Test case for Thought content
         let thought_chunk = ProviderInferenceResponseChunk {
@@ -2572,7 +2572,7 @@ mod tests {
         assert_eq!(result.raw, None);
         assert_eq!(
             result.thought,
-            Some(Box::new(ThoughtChunk {
+            vec![ThoughtChunk {
                 id: "123".to_string(),
                 text: Some("thinking...".to_string()),
                 summary_id: None,
@@ -2580,7 +2580,7 @@ mod tests {
                 signature: None,
                 provider_type: None,
                 extra_data: None,
-            }))
+            }]
         );
         assert_eq!(result.finish_reason, None);
         // Test case for multiple content blocks - should use last raw content
@@ -2616,7 +2616,7 @@ mod tests {
         assert_eq!(result.raw, Some("final content".to_string()));
         assert_eq!(
             result.thought,
-            Some(Box::new(ThoughtChunk {
+            vec![ThoughtChunk {
                 id: "789".to_string(),
                 text: Some("final thought".to_string()),
                 summary_id: None,
@@ -2624,7 +2624,7 @@ mod tests {
                 signature: None,
                 provider_type: None,
                 extra_data: None,
-            }))
+            }]
         );
 
         // Test case for empty content
@@ -2639,7 +2639,7 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(empty_chunk);
         assert_eq!(result.raw, None);
-        assert_eq!(result.thought, None);
+        assert!(result.thought.is_empty());
         assert_eq!(result.finish_reason, None);
 
         // Test case: ThoughtChunk with only summary_text (no text)
@@ -2664,7 +2664,7 @@ mod tests {
         let result = JsonInferenceResultChunk::from(summary_chunk);
         assert_eq!(
             result.thought,
-            Some(Box::new(ThoughtChunk {
+            vec![ThoughtChunk {
                 id: "0".to_string(),
                 text: None,
                 summary_id: Some("0".to_string()),
@@ -2672,7 +2672,7 @@ mod tests {
                 signature: None,
                 provider_type: Some("openrouter".to_string()),
                 extra_data: None,
-            })),
+            }],
             "ThoughtChunk should be preserved when text is None"
         );
     }

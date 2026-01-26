@@ -2124,7 +2124,7 @@ mod tests {
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: Some("Test content".to_string()),
-            thought: Some(Box::new(ThoughtChunk {
+            thought: vec![ThoughtChunk {
                 id: "0".to_string(),
                 text: Some("Thought 1".to_string()),
                 signature: None,
@@ -2132,7 +2132,7 @@ mod tests {
                 summary_text: None,
                 provider_type: None,
                 extra_data: None,
-            })),
+            }],
             usage: None,
             raw_usage: None,
             raw_response: None,
@@ -2749,7 +2749,7 @@ mod tests {
 
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: Some(r#"{"key": "value"}"#.to_string()),
-            thought: None,
+            thought: vec![],
             usage: Some(Usage {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
