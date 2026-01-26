@@ -4,6 +4,7 @@ import {
   Await,
   data,
   useAsyncError,
+  useLocation,
   useNavigate,
   type RouteHandle,
 } from "react-router";
@@ -228,11 +229,15 @@ export async function action({ request }: Route.ActionArgs) {
   };
 }
 
-function ApiKeysContent({ data }: { data: ApiKeysData }) {
+function ApiKeysContent({
+  data,
+  onOpenModal,
+}: {
+  data: ApiKeysData;
+  onOpenModal: () => void;
+}) {
   const { apiKeys, offset, limit } = data;
   const navigate = useNavigate();
-  const [generateModalIsOpen, setGenerateModalIsOpen] = useState(false);
-  const [modalKey, setModalKey] = useState(0);
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -246,26 +251,11 @@ function ApiKeysContent({ data }: { data: ApiKeysData }) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  const handleOpenModal = () => {
-    setModalKey((prev) => prev + 1);
-    setGenerateModalIsOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setGenerateModalIsOpen(false);
-    if (offset > 0) {
-      const searchParams = new URLSearchParams(window.location.search);
-      searchParams.set("offset", "0");
-      searchParams.set("limit", String(limit));
-      navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-    }
-  };
-
   return (
     <>
       <ApiKeysPageHeader />
       <SectionLayout>
-        <AuthActions onGenerateKey={handleOpenModal} />
+        <AuthActions onGenerateKey={onOpenModal} />
         <AuthTable apiKeys={apiKeys} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
@@ -274,29 +264,51 @@ function ApiKeysContent({ data }: { data: ApiKeysData }) {
           disableNext={apiKeys.length < limit}
         />
       </SectionLayout>
-      <GenerateApiKeyModal
-        key={modalKey}
-        isOpen={generateModalIsOpen}
-        onClose={handleCloseModal}
-      />
     </>
   );
 }
 
 export default function ApiKeysPage({ loaderData }: Route.ComponentProps) {
   const { postgresAvailable, apiKeysData } = loaderData;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [generateModalIsOpen, setGenerateModalIsOpen] = useState(false);
+  const [modalKey, setModalKey] = useState(0);
 
   if (!postgresAvailable) {
     return <PostgresRequiredState />;
   }
 
+  const handleOpenModal = () => {
+    setModalKey((prev) => prev + 1);
+    setGenerateModalIsOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setGenerateModalIsOpen(false);
+    // Reset to first page after creating API key
+    const searchParams = new URLSearchParams(window.location.search);
+    const offset = parseInt(searchParams.get("offset") || "0");
+    if (offset > 0) {
+      searchParams.set("offset", "0");
+      navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    }
+  };
+
   return (
     <PageLayout>
-      <Suspense fallback={<ApiKeysContentSkeleton />}>
+      <Suspense key={location.key} fallback={<ApiKeysContentSkeleton />}>
         <Await resolve={apiKeysData} errorElement={<ApiKeysErrorState />}>
-          {(resolvedData) => <ApiKeysContent data={resolvedData} />}
+          {(resolvedData) => (
+            <ApiKeysContent data={resolvedData} onOpenModal={handleOpenModal} />
+          )}
         </Await>
       </Suspense>
+      <GenerateApiKeyModal
+        key={modalKey}
+        isOpen={generateModalIsOpen}
+        onClose={handleCloseModal}
+      />
     </PageLayout>
   );
 }
