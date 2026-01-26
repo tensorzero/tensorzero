@@ -52,7 +52,7 @@ export default function TensorZeroStatusIndicator({
       <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
         {statusText}
       </span>
-      {status && !versionsMatch && (
+      {status && !versionsMatch && !collapsed && (
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="text-[10px] text-yellow-600 whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
