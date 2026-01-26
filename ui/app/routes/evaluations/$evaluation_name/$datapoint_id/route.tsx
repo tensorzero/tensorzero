@@ -143,9 +143,8 @@ async function fetchEvaluationResultsData(
       (id) => !foundEvaluationRunIds.has(id),
     );
 
-    throw data(
+    throw new Error(
       `Evaluation run ID(s) not found: ${missingEvaluationRunIds.join(", ")}`,
-      { status: 404 },
     );
   }
 
