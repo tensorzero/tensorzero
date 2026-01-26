@@ -95,7 +95,7 @@ cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
 
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
-    max_attempts=90
+    max_attempts=180
     while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
         echo "Waiting for gateway to be healthy..."
         sleep 1
