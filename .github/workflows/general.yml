@@ -1134,7 +1134,7 @@ jobs:
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
 
-  check-production-docker-container:
+  check-production-deployment-docker-compose:
     needs: [build-gateway-container]
     permissions:
       contents: read
@@ -1272,7 +1272,7 @@ jobs:
     needs:
       [
         check-version-consistency,
-        check-production-docker-container,
+        check-production-deployment-docker-compose,
         check-if-edited-then-edit,
         check-docker-compose-released,
         check-docker-compose-commit,
