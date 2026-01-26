@@ -4,7 +4,6 @@ import {
   Episodes,
   Functions,
   SupervisedFineTuning,
-  Documentation,
   Dataset,
   GridCheck,
   SequenceChecks,
@@ -100,22 +99,22 @@ const navigation: NavigationSection[] = [
     ],
   },
   {
-    title: "Data",
-    items: [
-      {
-        title: "Datasets",
-        url: "/datasets",
-        icon: Dataset,
-      },
-    ],
-  },
-  {
-    title: "Tools",
+    title: "Resources",
     items: [
       {
         title: "Playground",
         url: "/playground",
         icon: Playground,
+      },
+      {
+        title: "Datasets",
+        url: "/datasets",
+        icon: Dataset,
+      },
+      {
+        title: "API Keys",
+        url: "/api-keys",
+        icon: KeyRound,
       },
     ],
   },
@@ -211,38 +210,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter className="relative">
         <ReadOnlyBadge />
         <TensorZeroStatusIndicator collapsed={state === "collapsed"} />
-        <SidebarMenuItem className="list-none">
-          <SidebarMenuButton
-            asChild
-            tooltip={state === "collapsed" ? "API Keys" : undefined}
-            isActive={activePathUtils.isActive("/api-keys")}
-          >
-            <Link to="/api-keys" className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4" />
-              <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                API Keys
-              </span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem className="list-none">
-          <SidebarMenuButton
-            asChild
-            tooltip={state === "collapsed" ? "Docs ↗" : undefined}
-          >
-            <Link
-              to="https://www.tensorzero.com/docs"
-              className="flex w-full items-center gap-2"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Documentation className="h-4 w-4" />
-              <span className="flex items-center gap-1.5 whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                Docs <span>↗</span>
-              </span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
         <SidebarMenuItem className="list-none">
           <SidebarMenuButton
             aria-label="Toggle sidebar"

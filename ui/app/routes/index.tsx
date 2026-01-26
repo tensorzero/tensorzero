@@ -20,6 +20,7 @@ import {
   Playground,
   Model,
 } from "~/components/icons/Icons";
+import { KeyRound } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -261,63 +262,65 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
 
-          <div id="evaluations" className="flex w-full flex-col gap-2">
-            <h2 className="text-md text-fg-secondary font-medium">
-              Evaluations
-            </h2>
-            <div className="flex flex-col gap-2">
-              <DirectoryCard
-                source="/evaluations"
-                icon={GridCheck}
-                title="Inference Evaluations"
-                description={inferenceEvaluationsDesc}
-              />
-              <DirectoryCard
-                source="/workflow_evaluations"
-                icon={SequenceChecks}
-                title="Workflow Evaluations"
-                description={dynamicEvaluationsDesc}
-              />
+          <div className="flex w-full flex-col gap-12 lg:gap-6">
+            <div id="evaluations" className="flex w-full flex-col gap-2">
+              <h2 className="text-md text-fg-secondary font-medium">
+                Evaluations
+              </h2>
+              <div className="flex flex-col gap-2">
+                <DirectoryCard
+                  source="/evaluations"
+                  icon={GridCheck}
+                  title="Inference Evaluations"
+                  description={inferenceEvaluationsDesc}
+                />
+                <DirectoryCard
+                  source="/workflow_evaluations"
+                  icon={SequenceChecks}
+                  title="Workflow Evaluations"
+                  description={dynamicEvaluationsDesc}
+                />
+              </div>
+            </div>
+
+            <div
+              id="optimization"
+              className="mt-auto flex w-full flex-col gap-2"
+            >
+              <h2 className="text-md text-fg-secondary font-medium">
+                Optimization
+              </h2>
+              <div className="flex flex-col gap-2">
+                <DirectoryCard
+                  source="/optimization/supervised-fine-tuning"
+                  icon={SupervisedFineTuning}
+                  title="Supervised Fine-tuning"
+                  description={numFunctionsDesc}
+                />
+              </div>
             </div>
           </div>
 
-          <div id="optimization" className="flex w-full flex-col gap-2">
-            <h2 className="text-md text-fg-secondary font-medium">
-              Optimization
-            </h2>
-            <div className="flex flex-col gap-2">
-              <DirectoryCard
-                source="/optimization/supervised-fine-tuning"
-                icon={SupervisedFineTuning}
-                title="Supervised Fine-tuning"
-                description={numFunctionsDesc}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2: Data, Tools */}
-        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
-          <div id="data" className="flex w-full flex-col gap-2">
-            <h2 className="text-md text-fg-secondary font-medium">Data</h2>
-            <div className="flex flex-col gap-2">
-              <DirectoryCard
-                source="/datasets"
-                icon={Dataset}
-                title="Datasets"
-                description={numDatasetsDesc}
-              />
-            </div>
-          </div>
-
-          <div id="tools" className="flex w-full flex-col gap-2">
-            <h2 className="text-md text-fg-secondary font-medium">Tools</h2>
+          <div id="resources" className="flex w-full flex-col gap-2">
+            <h2 className="text-md text-fg-secondary font-medium">Resources</h2>
             <div className="flex flex-col gap-2">
               <DirectoryCard
                 source="/playground"
                 icon={Playground}
                 title="Playground"
                 description={numVariantsDesc}
+              />
+              <DirectoryCard
+                source="/datasets"
+                icon={Dataset}
+                title="Datasets"
+                description={numDatasetsDesc}
+              />
+              <DirectoryCard
+                source="/api-keys"
+                icon={KeyRound}
+                title="API Keys"
+                description="Manage API keys"
               />
             </div>
           </div>
