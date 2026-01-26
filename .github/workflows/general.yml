@@ -251,8 +251,7 @@ jobs:
       # Permission for rust-cache to read/write cache
       actions: read
     runs-on: windows-latest
-    # TODO (#5873): Temporarily disabled - re-enable when ready
-    if: false && github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
@@ -1265,8 +1264,7 @@ jobs:
   check-all-general-jobs-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
-    needs:
-      [
+    needs: [
         check-version-consistency,
         check-production-docker-container,
         check-if-edited-then-edit,
@@ -1275,7 +1273,7 @@ jobs:
         check-python-client-build,
         check-node-bindings,
         check-python-schemas,
-        build-windows,
+        # TODO (#5873): Add build-windows back when re-enabled
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
