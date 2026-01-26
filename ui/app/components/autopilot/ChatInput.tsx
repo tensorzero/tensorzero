@@ -117,6 +117,7 @@ export function ChatInput({
       } else {
         previousUserMessageEventIdRef.current = data.event_id;
         setText("");
+        textareaRef.current?.focus();
         onMessageSentRef.current?.(data, pendingTextRef.current);
       }
     }
