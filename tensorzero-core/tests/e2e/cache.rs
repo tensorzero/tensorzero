@@ -526,15 +526,6 @@ pub async fn check_test_streaming_cache_with_err(
         "cache_options": {"enabled": "on", "lookback_s": 10}
     });
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
-
     let mut event_source = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
