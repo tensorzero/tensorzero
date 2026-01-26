@@ -256,6 +256,9 @@ jobs:
 
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           # Environment variables only used by the gateway container
           # We deliberately leave these unset when starting the UI container, to ensure

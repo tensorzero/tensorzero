@@ -956,11 +956,11 @@ jobs:
 
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Login to Namespace registry
         run: nsc docker login
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download gateway container image
         run: |
@@ -1114,6 +1114,9 @@ jobs:
     uses: ./.github/workflows/ui-tests.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
+    secrets:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     needs: [build-gateway-container, build-mock-provider-api-container]
 
   ui-tests-e2e:
