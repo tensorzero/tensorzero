@@ -47,23 +47,26 @@ export default function TensorZeroStatusIndicator({
   );
 
   const content = (
-    <div className="text-fg-muted flex h-8 items-center gap-2 overflow-hidden p-2 text-xs">
-      {statusDot}
-      <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-        {statusText}
-      </span>
+    <div className="text-fg-muted flex flex-col gap-1 overflow-hidden p-2 text-xs">
+      <div className="flex items-center gap-2">
+        {statusDot}
+        <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+          {statusText}
+        </span>
+      </div>
       {status && !versionsMatch && !collapsed && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="text-[10px] text-yellow-600 whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-              Version mismatch: UI {uiVersion}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="right" align="center">
-            Please make sure your UI has the same version as the gateway.
-            Otherwise you might have compatibility issues.
-          </TooltipContent>
-        </Tooltip>
+        <div className="ml-6 transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-[10px] text-yellow-600 whitespace-nowrap">
+                Version mismatch: UI {uiVersion}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="right" align="center">
+              You may experience compatibility issues
+            </TooltipContent>
+          </Tooltip>
+        </div>
       )}
     </div>
   );
@@ -75,10 +78,7 @@ export default function TensorZeroStatusIndicator({
         <TooltipContent side="right" align="center">
           {statusText}
           {status && !versionsMatch && (
-            <div className="text-yellow-600">
-              Version mismatch: UI {uiVersion}. Please make sure your UI has the
-              same version as the gateway.
-            </div>
+            <div className="text-yellow-600">Version mismatch: UI {uiVersion}</div>
           )}
         </TooltipContent>
       </Tooltip>
