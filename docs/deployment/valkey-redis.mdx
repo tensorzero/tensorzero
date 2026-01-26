@@ -1,0 +1,89 @@
+---
+title: Deploy Valkey / Redis (optional)
+description: Learn how to deploy Valkey for high-performance rate limiting in TensorZero.
+---
+
+<Note>
+
+**Most TensorZero deployments will not require Valkey or Redis.**
+
+</Note>
+
+TensorZero can use a Redis-compatible data store like [Valkey](https://valkey.io/) as a high-performance backend for its [rate limiting functionality](/operations/enforce-custom-rate-limits).
+
+<Tip>
+
+We recommend Valkey over Postgres if you're handling 100+ QPS or have extreme latency requirements.
+TensorZero's rate limiting implementation can achieve sub-millisecond P99 latency at 10k+ QPS using Valkey.
+
+</Tip>
+
+## Deploy
+
+You can self-host Valkey or use a managed Redis-compatible service (e.g. AWS ElastiCache, GCP Memorystore).
+
+<Tabs>
+
+<Tab title="Docker Compose">
+
+Add Valkey to your `docker-compose.yml`:
+
+```yaml title="docker-compose.yml"
+services:
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey-data:/data
+
+volumes:
+  valkey-data:
+```
+
+</Tab>
+
+<Tab title="Docker">
+
+Run Valkey with Docker:
+
+```bash
+docker run -d --name valkey -p 6379:6379 valkey/valkey:8
+```
+
+</Tab>
+
+</Tabs>
+
+<Note>
+
+If you find any compatibility issues, please open a detailed [GitHub Discussion](https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports).
+
+</Note>
+
+## Configure
+
+To configure TensorZero to use Valkey, set the `TENSORZERO_VALKEY_URL` environment variable with your Valkey connection details.
+
+```bash title=".env"
+TENSORZERO_VALKEY_URL="redis://[hostname]:[port]"
+
+# Example:
+TENSORZERO_VALKEY_URL="redis://localhost:6379"
+```
+
+TensorZero automatically loads the required Lua functions into Valkey on startup.
+No manual setup is required.
+
+<Warning>
+
+If both `TENSORZERO_VALKEY_URL` and `TENSORZERO_POSTGRES_URL` are set, the gateway uses Valkey for rate limiting.
+
+</Warning>
+
+## Best Practices
+
+### Durability
+
+A critical failure of Valkey (e.g. server crash) may result in loss of rate limiting data since the last backup.
+This is generally tolerable if your rate limiting windows are short (e.g. minutes), but if you require precise limits or longer time windows, we recommend configuring [recurring RDB (point-in-time) snapshots](https://valkey.io/topics/persistence/) for improved durability.

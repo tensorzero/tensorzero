@@ -50,11 +50,11 @@ impl ToolMetadata for FeedbackTool {
     type Output = FeedbackResponse;
     type LlmParams = FeedbackToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("feedback")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Submit feedback for a TensorZero inference or episode. \
              Use metric_name='comment' for free-text comments, 'demonstration' for demonstrations, \
@@ -62,7 +62,7 @@ impl ToolMetadata for FeedbackTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Submit feedback for an inference or episode.",

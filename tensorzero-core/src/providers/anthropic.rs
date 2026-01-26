@@ -275,7 +275,10 @@ impl InferenceProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
-        if self.beta_structured_outputs {
+        // Add beta header for json_mode=strict (for output_format) OR beta_structured_outputs (for strict tools)
+        if matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict)
+            || self.beta_structured_outputs
+        {
             builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
         }
 
@@ -326,7 +329,6 @@ impl InferenceProvider for AnthropicProvider {
                 raw_response,
                 model_name: tensorzero_model_name,
                 provider_name: &model_provider.name,
-                beta_structured_outputs: self.beta_structured_outputs,
                 model_inference_id,
             };
             Ok(response_with_latency.try_into()?)
@@ -378,7 +380,10 @@ impl InferenceProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
-        if self.beta_structured_outputs {
+        // Add beta header for json_mode=strict (for output_format) OR beta_structured_outputs (for strict tools)
+        if matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict)
+            || self.beta_structured_outputs
+        {
             builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
         }
 
@@ -403,7 +408,7 @@ impl InferenceProvider for AnthropicProvider {
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
-        if needs_json_prefill(request, self.beta_structured_outputs) {
+        if needs_json_prefill(request) {
             prefill_json_chunk_response(chunk);
         }
         Ok((stream, raw_request))
@@ -851,14 +856,12 @@ pub(super) struct AnthropicMessagesConfig {
     pub(super) fetch_and_encode_input_files_before_inference: bool,
 }
 
-fn needs_json_prefill(request: &ModelInferenceRequest<'_>, beta_structured_outputs: bool) -> bool {
-    matches!(
-        request.json_mode,
-        ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-    ) && matches!(request.function_type, FunctionType::Json)
-        // Anthropic rejects prefill when 'output_format' is specified
-        && !(beta_structured_outputs
-            && matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict))
+/// Returns true if we should use JSON prefill for this request.
+/// Prefill is only used for json_mode=on. For json_mode=strict, we use
+/// the beta structured outputs feature with output_format instead.
+fn needs_json_prefill(request: &ModelInferenceRequest<'_>) -> bool {
+    matches!(request.json_mode, ModelInferenceRequestJsonMode::On)
+        && matches!(request.function_type, FunctionType::Json)
 }
 
 impl<'a> AnthropicRequestBody<'a> {
@@ -888,7 +891,7 @@ impl<'a> AnthropicRequestBody<'a> {
                 AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
             }))
             .await?;
-        let messages = if needs_json_prefill(request, beta_structured_outputs) {
+        let messages = if needs_json_prefill(request) {
             prefill_json_message(messages)
         } else {
             messages
@@ -931,19 +934,16 @@ impl<'a> AnthropicRequestBody<'a> {
             service_tier: None, // handled below
             tool_choice,
             tools,
-            output_format: if beta_structured_outputs {
-                match request.json_mode {
-                    ModelInferenceRequestJsonMode::Strict => {
-                        request
-                            .output_schema
-                            .map(|schema| AnthropicOutputFormat::JsonSchema {
-                                schema: schema.clone(),
-                            })
-                    }
-                    ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
+            // Always use output_format for json_mode=strict (not gated by beta_structured_outputs)
+            output_format: match request.json_mode {
+                ModelInferenceRequestJsonMode::Strict => {
+                    request
+                        .output_schema
+                        .map(|schema| AnthropicOutputFormat::JsonSchema {
+                            schema: schema.clone(),
+                        })
                 }
-            } else {
-                None
+                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
             },
             stop_sequences: request.borrow_stop_sequences(),
         };
@@ -1254,7 +1254,6 @@ struct AnthropicResponseWithMetadata<'a> {
     input_messages: Vec<RequestMessage>,
     model_name: &'a str,
     provider_name: &'a str,
-    beta_structured_outputs: bool,
     model_inference_id: Uuid,
 }
 
@@ -1270,7 +1269,6 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             input_messages,
             model_name,
             provider_name,
-            beta_structured_outputs,
             model_inference_id,
         } = value;
         let output: Vec<ContentBlockOutput> = response
@@ -1278,7 +1276,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             .into_iter()
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
-        let content = if needs_json_prefill(generic_request, beta_structured_outputs) {
+        let content = if needs_json_prefill(generic_request) {
             prefill_json_response(output)?
         } else {
             output
@@ -2533,7 +2531,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
 
@@ -2592,7 +2589,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
 
@@ -2664,7 +2660,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();

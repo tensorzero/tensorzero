@@ -2,7 +2,7 @@
   "name": "tensorzero-ui",
   "private": true,
   "type": "module",
-  "version": "2026.1.3",
+  "version": "2026.1.5",
   "scripts": {
     "build": "NODE_ENV=production react-router build",
     "dev": "react-router dev",

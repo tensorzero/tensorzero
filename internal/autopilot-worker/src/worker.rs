@@ -153,7 +153,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
         self.executor
-            .register_task_tool::<ClientTaskToolWrapper<T>>()
+            .register_task_tool_instance(ClientTaskToolWrapper::<T>::default())
             .await?;
         Ok(())
     }
@@ -166,7 +166,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
     {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor
-            .register_task_tool::<ClientSimpleToolWrapper<T>>()
+            .register_task_tool_instance(ClientSimpleToolWrapper::<T>::default())
             .await?;
         Ok(())
     }

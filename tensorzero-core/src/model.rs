@@ -2946,7 +2946,7 @@ mod tests {
             tags: Arc::new(tags.clone()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new(
                 Arc::new(rate_limit_config),
-                postgres_mock.clone(),
+                Arc::new(postgres_mock.clone()),
             )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
