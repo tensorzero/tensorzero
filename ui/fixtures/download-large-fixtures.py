@@ -71,10 +71,29 @@ def calculate_etag(file_path):
         return f"{combined_md5}-{num_parts}"
 
 
-def get_remote_etag(filename):
-    """Get ETag from R2 bucket via public URL."""
-    response = requests.head(f"{R2_PUBLIC_BUCKET_URL}/{filename}", timeout=30)
-    return response.headers.get("ETag", "").strip('"')
+def get_remote_etag(filename, retries: int = 3):
+    """Get ETag from R2 bucket via public URL with retry logic."""
+    last_error = None
+    for attempt in range(retries):
+        try:
+            response = requests.head(f"{R2_PUBLIC_BUCKET_URL}/{filename}", timeout=30)
+            response.raise_for_status()
+            etag = response.headers.get("ETag")
+            if not etag:
+                raise Exception(f"Missing ETag header for {filename}")
+            return etag.strip('"')
+        except Exception as exc:
+            last_error = exc
+            if attempt < retries - 1:
+                sleep_time = 3**attempt
+                print(
+                    f"Error fetching ETag for {filename} (attempt {attempt + 1} of {retries}): {exc}",
+                    flush=True,
+                )
+                print(f"Retrying in {sleep_time} seconds...", flush=True)
+                time.sleep(sleep_time)
+
+    raise Exception(f"Failed to fetch ETag for {filename} after {retries} attempts") from last_error
 
 
 def verify_etags():
@@ -133,26 +152,35 @@ def sync_fixtures_from_r2(retries: int = 3) -> None:
         "AWS_RETRY_MODE": "adaptive",
     }
 
+    last_error = None
     for attempt in range(retries):
         print(f"Running aws s3 sync (attempt {attempt + 1} of {retries})...", flush=True)
         result = subprocess.run(cmd, env=env)
 
         if result.returncode == 0:
             print("Sync completed successfully. Verifying ETags...", flush=True)
-            verify_etags()
-            return
-
-        print(
-            f"aws s3 sync failed with exit code {result.returncode} (attempt {attempt + 1} of {retries})",
-            flush=True,
-        )
+            try:
+                verify_etags()
+                return
+            except Exception as exc:
+                last_error = exc
+                print(
+                    f"ETag verification failed (attempt {attempt + 1} of {retries}): {exc}",
+                    flush=True,
+                )
+        else:
+            last_error = Exception(f"aws s3 sync failed with exit code {result.returncode}")
+            print(
+                f"aws s3 sync failed with exit code {result.returncode} (attempt {attempt + 1} of {retries})",
+                flush=True,
+            )
 
         if attempt < retries - 1:
             sleep_time = 3**attempt  # Exponential backoff: 1, 3, 9 seconds
             print(f"Retrying in {sleep_time} seconds...", flush=True)
             time.sleep(sleep_time)
 
-    raise Exception(f"aws s3 sync failed after {retries} attempts")
+    raise Exception(f"Fixture sync failed after {retries} attempts") from last_error
 
 
 # =============================================================================
