@@ -1513,27 +1513,30 @@ impl InferenceResponse {
             let entries: Vec<RawResponseEntry> = inference_result
                 .model_inference_results()
                 .iter()
-                .filter(|r| !r.cached) // Exclude TensorZero cache hits
                 .flat_map(|r| {
-                    // Start with failed raw responses from this model inference
+                    // Always start with failed raw responses from this model inference
+                    // (these are populated even for cache hits when earlier providers failed)
                     let mut result = r.failed_raw_responses.clone();
-                    // If there are passed-through relay_raw_response (from relay), use them
-                    if let Some(passed_through) = &r.relay_raw_response {
-                        result.extend(passed_through.clone());
-                    } else {
-                        // Otherwise, generate entries from the model inference result
-                        let api_type = r
-                            .raw_usage
-                            .as_ref()
-                            .and_then(|entries| entries.first())
-                            .map(|entry| entry.api_type)
-                            .unwrap_or(ApiType::ChatCompletions);
-                        result.push(RawResponseEntry {
-                            model_inference_id: Some(r.id),
-                            provider_type: r.model_provider_name.to_string(),
-                            api_type,
-                            data: r.raw_response.clone(),
-                        });
+                    // For non-cached results, also include the successful response
+                    if !r.cached {
+                        // If there are passed-through relay_raw_response (from relay), use them
+                        if let Some(passed_through) = &r.relay_raw_response {
+                            result.extend(passed_through.clone());
+                        } else {
+                            // Otherwise, generate entries from the model inference result
+                            let api_type = r
+                                .raw_usage
+                                .as_ref()
+                                .and_then(|entries| entries.first())
+                                .map(|entry| entry.api_type)
+                                .unwrap_or(ApiType::ChatCompletions);
+                            result.push(RawResponseEntry {
+                                model_inference_id: Some(r.id),
+                                provider_type: r.model_provider_name.to_string(),
+                                api_type,
+                                data: r.raw_response.clone(),
+                            });
+                        }
                     }
                     result
                 })

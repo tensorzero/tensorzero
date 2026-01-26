@@ -4,9 +4,12 @@ import type { ApiType } from "./ApiType";
 /**
  * A single entry in the raw response array, representing raw response data from one model inference.
  * This preserves the original provider-specific response string that TensorZero normalizes.
+ *
+ * For failed provider attempts (e.g., in error responses), `model_inference_id` is `None`
+ * since no model inference row was created.
  */
 export type RawResponseEntry = {
-  model_inference_id: string;
+  model_inference_id?: string;
   provider_type: string;
   api_type: ApiType;
   data: string;
