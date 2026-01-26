@@ -237,11 +237,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               rel="noopener noreferrer"
             >
               <Documentation className="h-4 w-4" />
-              <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                Docs
-              </span>
-              <span className="ml-auto whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                ↗
+              <span className="flex items-center gap-1.5 whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                Docs <span>↗</span>
               </span>
             </Link>
           </SidebarMenuButton>
