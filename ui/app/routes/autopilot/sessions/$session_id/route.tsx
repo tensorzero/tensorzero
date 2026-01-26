@@ -21,10 +21,12 @@ import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
+import { YoloModeIndicator } from "~/components/autopilot/YoloModeIndicator";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
+import { useYoloMode } from "~/hooks/useYoloMode";
 import type { AutopilotStatus, Event } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 
@@ -218,6 +220,9 @@ function EventStreamContent({
     return undefined;
   }, [oldestPendingToolCall?.id]);
 
+  // State for approve all loading
+  const [isApproveAllLoading, setIsApproveAllLoading] = useState(false);
+
   // Handle tool call authorization
   const handleAuthorize = useCallback(
     async (eventId: string, approved: boolean) => {
@@ -255,6 +260,7 @@ function EventStreamContent({
           description:
             "Failed to submit tool call authorization. Please try again.",
         });
+        throw err; // Re-throw for yolo mode error handling
       } finally {
         setAuthLoadingStates((prev) => {
           const next = new Map(prev);
@@ -265,6 +271,70 @@ function EventStreamContent({
     },
     [sessionId, toast],
   );
+
+  // Handle approve all tool calls
+  const handleApproveAll = useCallback(
+    async (lastToolCallEventId: string) => {
+      userActionRef.current = true;
+      setIsApproveAllLoading(true);
+
+      try {
+        const response = await fetch(
+          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/approve_all`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              last_tool_call_event_id: lastToolCallEventId,
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to approve all tool calls");
+        }
+      } catch (err) {
+        logger.error("Failed to approve all tool calls:", err);
+        toast.error({
+          title: "Failed to approve all",
+          description: err instanceof Error ? err.message : "Please try again.",
+        });
+        throw err; // Re-throw for yolo mode error handling
+      } finally {
+        setIsApproveAllLoading(false);
+      }
+    },
+    [sessionId, toast],
+  );
+
+  // Yolo mode hook
+  const { isYoloEnabled, setYoloEnabled, currentAutoApprovingTool } =
+    useYoloMode({
+      sessionId: isNewSession ? NIL_UUID : sessionId,
+      pendingToolCalls,
+      onApproveToolCall: useCallback(
+        (eventId: string) => handleAuthorize(eventId, true),
+        [handleAuthorize],
+      ),
+      onApproveAll: handleApproveAll,
+    });
+
+  // Keyboard shortcut for yolo mode: Cmd/Ctrl+Shift+Y
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() === "y" &&
+        event.shiftKey &&
+        (event.metaKey || event.ctrlKey)
+      ) {
+        event.preventDefault();
+        setYoloEnabled(!isYoloEnabled);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [setYoloEnabled, isYoloEnabled]);
 
   /*
    * SCROLL BEHAVIOR SPEC:
@@ -495,7 +565,7 @@ function EventStreamContent({
       </div>
 
       {/* Pinned approval card - outside scroll container */}
-      {oldestPendingToolCall && (
+      {oldestPendingToolCall && !isYoloEnabled ? (
         <div className="mt-4">
           <PendingToolCallCard
             key={oldestPendingToolCall.id}
@@ -507,9 +577,28 @@ function EventStreamContent({
             }
             additionalCount={pendingToolCalls.length - 1}
             isInCooldown={isInCooldown}
+            onApproveAll={
+              pendingToolCalls.length > 1
+                ? () =>
+                    handleApproveAll(
+                      pendingToolCalls[pendingToolCalls.length - 1].id,
+                    )
+                : undefined
+            }
+            isApproveAllLoading={isApproveAllLoading}
+            isYoloEnabled={isYoloEnabled}
+            onYoloToggle={setYoloEnabled}
           />
         </div>
-      )}
+      ) : isYoloEnabled && !isNewSession ? (
+        <div className="mt-4">
+          <YoloModeIndicator
+            isEnabled={isYoloEnabled}
+            onToggle={setYoloEnabled}
+            currentToolName={currentAutoApprovingTool}
+          />
+        </div>
+      ) : null}
     </>
   );
 }
