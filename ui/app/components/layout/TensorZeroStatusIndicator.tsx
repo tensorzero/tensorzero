@@ -74,6 +74,11 @@ export default function TensorZeroStatusIndicator({
         <TooltipTrigger asChild>{content}</TooltipTrigger>
         <TooltipContent side="right" align="center">
           {statusText}
+          {status && !versionsMatch && (
+            <div className="text-yellow-600">
+              Version mismatch: UI {uiVersion}
+            </div>
+          )}
         </TooltipContent>
       </Tooltip>
     );
