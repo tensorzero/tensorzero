@@ -438,7 +438,6 @@ export default function EvaluationDatapointPage({
           }
           name={params.datapoint_id}
         >
-          {/* BasicInfo - depends on evaluation results */}
           <Suspense
             key={`${location.key}-basicinfo`}
             fallback={<BasicInfoLayoutSkeleton rows={5} />}
@@ -456,25 +455,24 @@ export default function EvaluationDatapointPage({
               )}
             </Await>
           </Suspense>
-
-          {/* EvalRunSelector - depends on run info only */}
-          <Suspense
-            key={`${location.key}-selector`}
-            fallback={<EvalRunSelectorSkeleton />}
-          >
-            <Await
-              resolve={runInfoData}
-              errorElement={<SectionAsyncErrorState />}
-            >
-              {(infoData) => (
-                <EvalRunSelectorWithData
-                  data={infoData}
-                  evaluationName={params.evaluation_name}
-                />
-              )}
-            </Await>
-          </Suspense>
         </PageHeader>
+
+        <Suspense
+          key={`${location.key}-selector`}
+          fallback={<EvalRunSelectorSkeleton />}
+        >
+          <Await
+            resolve={runInfoData}
+            errorElement={<SectionAsyncErrorState />}
+          >
+            {(infoData) => (
+              <EvalRunSelectorWithData
+                data={infoData}
+                evaluationName={params.evaluation_name}
+              />
+            )}
+          </Await>
+        </Suspense>
 
         {/* Main content - depends on evaluation results */}
         <Suspense
