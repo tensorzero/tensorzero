@@ -170,6 +170,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   const function_name = evaluation_config.function_name;
   const newFeedbackId = searchParams.get("newFeedbackId");
+  const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
 
   const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
   const selectedRunIds = selected_evaluation_run_ids
@@ -204,6 +205,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluationResultsData,
     selectedRunIds,
     newFeedbackId,
+    newJudgeDemonstrationId,
   };
 }
 
@@ -405,8 +407,13 @@ export default function EvaluationDatapointPage({
   loaderData,
   params,
 }: Route.ComponentProps) {
-  const { runInfoData, evaluationResultsData, selectedRunIds, newFeedbackId } =
-    loaderData;
+  const {
+    runInfoData,
+    evaluationResultsData,
+    selectedRunIds,
+    newFeedbackId,
+    newJudgeDemonstrationId,
+  } = loaderData;
   const location = useLocation();
   const { toast } = useToast();
 
@@ -417,7 +424,7 @@ export default function EvaluationDatapointPage({
       return () => dismiss({ immediate: true });
     }
     return;
-  }, [newFeedbackId, toast]);
+  }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
