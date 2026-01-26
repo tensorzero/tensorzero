@@ -229,6 +229,47 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id) DO NOTHING;
 "
 
+# =====================================================================
+# Large Fixtures (optional)
+# =====================================================================
+
+# If TENSORZERO_SKIP_LARGE_FIXTURES equals 1, skip large fixtures
+if [ "${TENSORZERO_SKIP_LARGE_FIXTURES:-}" = "1" ]; then
+    echo ""
+    echo "TENSORZERO_SKIP_LARGE_FIXTURES is set to 1 - skipping large fixtures"
+else
+    echo ""
+    echo "Loading large fixtures..."
+
+    # Download large fixtures if not present
+    if [ ! -d "large-fixtures" ] || [ -z "$(ls -A large-fixtures/*.parquet 2>/dev/null)" ]; then
+        echo "Downloading large fixtures..."
+        uv run ./download-large-fixtures.py
+    fi
+
+    # Convert parquet to CSV
+    echo "Converting parquet to CSV..."
+    uv run ./load_large_fixtures_postgres.py
+
+    CSV_DIR="$SCRIPT_DIR/large-fixtures/postgres-csv"
+
+    # Helper function to load a CSV file directly into a feedback table
+    load_large_feedback() {
+        local table="$1"
+        local col_names="$2"  # column names in CSV order
+
+        echo "Loading large fixtures into $table..."
+        psql -q "$POSTGRES_URL" -c "\copy tensorzero.${table} ($col_names) FROM '$CSV_DIR/${table}.csv' WITH (FORMAT csv)"
+        echo "  Done"
+    }
+
+    # Load each feedback table (CSV includes created_at derived from UUIDv7)
+    load_large_feedback "boolean_metric_feedback" "id, target_id, metric_name, value, tags, created_at"
+    load_large_feedback "float_metric_feedback" "id, target_id, metric_name, value, tags, created_at"
+    load_large_feedback "comment_feedback" "id, target_id, target_type, value, tags, created_at"
+    load_large_feedback "demonstration_feedback" "id, inference_id, value, tags, created_at"
+fi
+
 echo ""
 echo "All fixtures loaded successfully!"
 
