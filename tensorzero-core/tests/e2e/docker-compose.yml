@@ -18,6 +18,7 @@ services:
       - "3030:3030"
 
   fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
       context: ../../..
