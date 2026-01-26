@@ -8,9 +8,9 @@ on:
       S3_SECRET_ACCESS_KEY:
         required: true
       R2_ACCESS_KEY_ID:
-        required: false
+        required: true
       R2_SECRET_ACCESS_KEY:
-        required: false
+        required: true
       OPENAI_API_KEY:
         required: false
       FIREWORKS_ACCOUNT_ID:
