@@ -8,4 +8,4 @@ source $HOME/.local/bin/env
 uv run ./ui/fixtures/download-large-fixtures.py
 uv run ./ui/fixtures/download-small-fixtures.py
 # Zip the fixtures
-tar -czvf fixtures.tar.gz ./ui/fixtures/large-fixtures ./ui/fixtures/*.jsonl
+tar -czvf fixtures.tar.gz ./ui/fixtures/large-fixtures ./ui/fixtures/small-fixtures/*.jsonl
