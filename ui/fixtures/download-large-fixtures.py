@@ -126,6 +126,7 @@ def sync_fixtures_from_r2(retries: int = 3) -> None:
     ]
 
     env = {
+        **os.environ,  # Preserve PATH and other environment variables
         "AWS_ACCESS_KEY_ID": os.environ["R2_ACCESS_KEY_ID"],
         "AWS_SECRET_ACCESS_KEY": os.environ["R2_SECRET_ACCESS_KEY"],
         "AWS_MAX_ATTEMPTS": "15",
