@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT bucket_key as key, is_successful as success, tickets_remaining, tickets_consumed\n             FROM consume_multiple_resource_tickets($1, $2, $3, $4, $5)",
+  "query": "SELECT bucket_key as key, is_successful as success, tickets_remaining, tickets_consumed\n             FROM tensorzero.consume_multiple_resource_tickets($1, $2, $3, $4, $5)",
   "describe": {
     "columns": [
       {
@@ -44,5 +44,5 @@
       null
     ]
   },
-  "hash": "a4d2aa2e85389d921b4c1581321838689d73b9496a26b3116bafd0584e500016"
+  "hash": "2ec7fee182456e6d7be7134ac1ee9da0099534c9b249429d98802460618a8a50"
 }
