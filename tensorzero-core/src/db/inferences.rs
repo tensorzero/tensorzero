@@ -11,7 +11,7 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockall::automock;
 
-use crate::config::Config;
+use crate::config::{Config, MetricConfigLevel};
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
@@ -313,6 +313,16 @@ pub struct CountInferencesParams<'a> {
     pub search_query_experimental: Option<&'a str>,
 }
 
+/// Function information retrieved for feedback validation.
+/// Contains the function name, type, variant, and episode ID associated with an inference or episode.
+#[derive(Debug, Deserialize, PartialEq)]
+pub struct FunctionInfo {
+    pub function_name: String,
+    pub function_type: FunctionType,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+}
+
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait InferenceQueries {
@@ -335,4 +345,40 @@ pub trait InferenceQueries {
         config: &Config,
         params: &CountInferencesParams<'_>,
     ) -> Result<u64, Error>;
+
+    /// Get function information for feedback validation by target_id.
+    ///
+    /// When `level` is `Inference`, queries by inference_id from `InferenceById`.
+    /// When `level` is `Episode`, queries by episode_id from `InferenceByEpisodeId`.
+    ///
+    /// Returns `None` if the target doesn't exist.
+    async fn get_function_info(
+        &self,
+        target_id: &Uuid,
+        level: MetricConfigLevel,
+    ) -> Result<Option<FunctionInfo>, Error>;
+
+    /// Get tool parameters from a chat inference for demonstration validation.
+    ///
+    /// Returns the tool configuration that was used at inference time, which is needed
+    /// to validate demonstration feedback against the actual tools available.
+    ///
+    /// Returns `None` if the inference doesn't exist.
+    async fn get_chat_inference_tool_params(
+        &self,
+        function_name: &str,
+        inference_id: Uuid,
+    ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error>;
+
+    /// Get output schema from a json inference for demonstration validation.
+    ///
+    /// Returns the output schema that was used at inference time, which is needed
+    /// to validate demonstration feedback against the actual schema.
+    ///
+    /// Returns `None` if the inference doesn't exist.
+    async fn get_json_inference_output_schema(
+        &self,
+        function_name: &str,
+        inference_id: Uuid,
+    ) -> Result<Option<Value>, Error>;
 }
