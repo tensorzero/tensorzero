@@ -616,9 +616,7 @@ export default function AutopilotSessionEventsPage({
       <PageHeader
         eyebrow={
           <Breadcrumbs
-            segments={[
-              { label: "Autopilot Sessions", href: "/autopilot/sessions" },
-            ]}
+            segments={[{ label: "Autopilot", href: "/autopilot/sessions" }]}
           />
         }
         name={isNewSession ? "New Session" : sessionId}
