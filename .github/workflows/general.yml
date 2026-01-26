@@ -956,11 +956,11 @@ jobs:
 
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Login to Namespace registry
         run: nsc docker login
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download gateway container image
         run: |
@@ -1264,8 +1264,7 @@ jobs:
   check-all-general-jobs-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
-    needs:
-      [
+    needs: [
         check-version-consistency,
         check-production-docker-container,
         check-if-edited-then-edit,
@@ -1274,7 +1273,7 @@ jobs:
         check-python-client-build,
         check-node-bindings,
         check-python-schemas,
-        build-windows,
+        # TODO (#5873): Add build-windows back when re-enabled
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
