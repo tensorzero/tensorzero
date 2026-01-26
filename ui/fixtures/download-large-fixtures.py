@@ -39,7 +39,7 @@ FIXTURES = [
 ]
 R2_PUBLIC_BUCKET_URL = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
 R2_S3_ENDPOINT_URL = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/"
-S3_FIXTURES_DIR = Path("./large-fixtures")
+LARGE_FIXTURES_DIR = Path("./large-fixtures")
 
 
 # =============================================================================
@@ -100,7 +100,7 @@ def verify_etags():
     """Verify ETags of all downloaded fixtures match remote."""
     mismatches = []
     for fixture in FIXTURES:
-        local_file = S3_FIXTURES_DIR / fixture
+        local_file = LARGE_FIXTURES_DIR / fixture
         if not local_file.exists():
             raise Exception(f"Fixture {fixture} not found after sync")
 
@@ -137,7 +137,7 @@ def sync_fixtures_from_r2(retries: int = 3) -> None:
         "180",
         "sync",
         "s3://tensorzero-fixtures/",
-        str(S3_FIXTURES_DIR),
+        str(LARGE_FIXTURES_DIR),
         # Only download the files in `FIXTURES`
         "--exclude",
         "*",
@@ -197,7 +197,7 @@ def download_file_http(filename, remote_etag):
             response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
 
-            local_file = S3_FIXTURES_DIR / filename
+            local_file = LARGE_FIXTURES_DIR / filename
 
             with open(local_file, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
@@ -220,7 +220,7 @@ def download_fixtures_http():
     """Download all fixtures via public HTTP (fallback when no R2 credentials)."""
 
     def process_fixture(fixture):
-        local_file = S3_FIXTURES_DIR / fixture
+        local_file = LARGE_FIXTURES_DIR / fixture
         remote_etag = get_remote_etag(fixture)
 
         if not local_file.exists():
@@ -251,7 +251,7 @@ def download_fixtures_http():
 
 
 def main():
-    S3_FIXTURES_DIR.mkdir(exist_ok=True)
+    LARGE_FIXTURES_DIR.mkdir(exist_ok=True)
 
     if os.environ.get("R2_ACCESS_KEY_ID") and os.environ.get("R2_SECRET_ACCESS_KEY"):
         print("R2 credentials found, downloading fixtures using `aws s3 sync`", flush=True)
@@ -266,7 +266,7 @@ def main():
     for fixture in FIXTURES:
         print(f"Fixture {fixture}:", flush=True)
         subprocess.run(
-            ["parquet-tools", "inspect", S3_FIXTURES_DIR / fixture],
+            ["parquet-tools", "inspect", LARGE_FIXTURES_DIR / fixture],
             check=True,
             stderr=subprocess.STDOUT,
         )

@@ -765,7 +765,7 @@ jobs:
         uses: namespacelabs/nscloud-cache-action@446d8f390563cd54ca27e8de5bdb816f63c0b706
         with:
           path: |
-            ./ui/fixtures/s3-fixtures/
+            ./ui/fixtures/large-fixtures/
 
       - name: Install uv
         uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
