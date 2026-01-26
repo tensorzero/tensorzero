@@ -39,7 +39,7 @@ FIXTURES = [
 ]
 R2_PUBLIC_BUCKET_URL = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
 R2_S3_ENDPOINT_URL = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/"
-S3_FIXTURES_DIR = Path("./s3-fixtures")
+S3_FIXTURES_DIR = Path("./large-fixtures")
 
 
 # =============================================================================

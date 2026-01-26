@@ -16,7 +16,11 @@ import requests
 # cd to directory of this file
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+
+# =============================================================================
 # Constants
+# =============================================================================
+
 PART_SIZE = 8388608
 
 # Map of remote filename (in R2) -> local filename
@@ -38,9 +42,14 @@ FIXTURES = {
     "dynamic_evaluation_run_examples.jsonl": "dynamic_evaluation_run_examples.jsonl",
 }
 
-R2_BUCKET = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
-# Download directly to the fixtures directory (not a subdirectory)
-FIXTURES_DIR = Path(".")
+R2_PUBLIC_BUCKET_URL = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
+R2_S3_ENDPOINT_URL = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/"
+FIXTURES_DIR = Path("./small-fixtures")
+
+
+# =============================================================================
+# Shared utilities
+# =============================================================================
 
 
 def calculate_etag(file_path):
@@ -67,19 +76,134 @@ def calculate_etag(file_path):
         return f"{combined_md5}-{num_parts}"
 
 
-def get_remote_etag(remote_filename):
-    """Get ETag from R2 bucket."""
-    response = requests.head(f"{R2_BUCKET}/{remote_filename}")
-    return response.headers.get("ETag", "").strip('"')
+def get_remote_etag(remote_filename, retries=3):
+    """Get ETag from R2 bucket via public URL."""
+    for i in range(retries):
+        try:
+            response = requests.head(f"{R2_PUBLIC_BUCKET_URL}/{remote_filename}", timeout=30)
+            response.raise_for_status()
+            return response.headers.get("ETag", "").strip('"')
+        except Exception as e:
+            if i < retries - 1:
+                print(
+                    f"Error getting ETag for `{remote_filename}` (attempt {i + 1} of {retries}): {e}",
+                    flush=True,
+                )
+                time.sleep(1)
+            else:
+                raise
 
 
-def download_file(remote_filename, local_filename, remote_etag):
-    """Download file from R2 bucket."""
+def verify_etags():
+    """Verify ETags of all downloaded fixtures match remote."""
+    mismatches = []
+    for remote_filename in FIXTURES.keys():
+        local_file = FIXTURES_DIR / remote_filename
+        if not local_file.exists():
+            raise Exception(f"Fixture {remote_filename} not found after sync")
+
+        local_etag = calculate_etag(local_file)
+        remote_etag = get_remote_etag(remote_filename)
+
+        if local_etag != remote_etag:
+            mismatches.append(f"{remote_filename}: local={local_etag}, remote={remote_etag}")
+        else:
+            print(f"ETag OK: {remote_filename}", flush=True)
+
+    if mismatches:
+        raise Exception("ETag mismatches after sync:\n" + "\n".join(mismatches))
+
+
+def rename_fixtures():
+    """Rename downloaded fixtures from remote names to local names."""
+    for remote_filename, local_filename in FIXTURES.items():
+        if remote_filename != local_filename:
+            src = FIXTURES_DIR / remote_filename
+            dst = FIXTURES_DIR / local_filename
+            if src.exists():
+                src.rename(dst)
+                print(f"Renamed {remote_filename} -> {local_filename}", flush=True)
+
+
+# =============================================================================
+# Authenticated path: S3 sync (used in CI with R2 credentials)
+# =============================================================================
+
+
+def sync_fixtures_from_r2(retries: int = 3) -> None:
+    """Sync fixtures from R2 using aws s3 sync with retry logic."""
+    cmd = [
+        "aws",
+        "s3",
+        "--region",
+        "auto",
+        "--endpoint-url",
+        R2_S3_ENDPOINT_URL,
+        "--no-progress",
+        "--cli-connect-timeout",
+        "30",
+        "--cli-read-timeout",
+        "180",
+        "sync",
+        "s3://tensorzero-fixtures/",
+        str(FIXTURES_DIR),
+        # Only download the files in `FIXTURES`
+        "--exclude",
+        "*",
+        *[arg for f in FIXTURES.keys() for arg in ("--include", f)],
+    ]
+
+    env = {
+        **os.environ,  # Preserve PATH and other environment variables
+        "AWS_ACCESS_KEY_ID": os.environ["R2_ACCESS_KEY_ID"],
+        "AWS_SECRET_ACCESS_KEY": os.environ["R2_SECRET_ACCESS_KEY"],
+        "AWS_MAX_ATTEMPTS": "15",
+        "AWS_RETRY_MODE": "adaptive",
+    }
+
+    for attempt in range(retries):
+        print(f"Running aws s3 sync (attempt {attempt + 1} of {retries})...", flush=True)
+        result = subprocess.run(cmd, env=env)
+
+        if result.returncode == 0:
+            print("Sync completed successfully. Verifying ETags...", flush=True)
+            try:
+                verify_etags()
+                rename_fixtures()
+                return
+            except Exception as e:
+                print(
+                    f"Verification failed (attempt {attempt + 1} of {retries}): {e}",
+                    flush=True,
+                )
+                if attempt >= retries - 1:
+                    raise
+        else:
+            print(
+                f"aws s3 sync failed with exit code {result.returncode} (attempt {attempt + 1} of {retries})",
+                flush=True,
+            )
+
+        if attempt < retries - 1:
+            sleep_time = 3**attempt  # Exponential backoff: 1, 3, 9 seconds
+            print(f"Retrying in {sleep_time} seconds...", flush=True)
+            time.sleep(sleep_time)
+
+    raise Exception(f"aws s3 sync failed after {retries} attempts")
+
+
+# =============================================================================
+# Public HTTP fallback (used locally without R2 credentials)
+# =============================================================================
+
+
+def download_file_http(remote_filename, local_filename, remote_etag):
+    """Download a single file from R2 via public HTTP URL."""
     RETRIES = 3
     for i in range(RETRIES):
         try:
-            url = f"{R2_BUCKET}/{remote_filename}"
-            response = requests.get(url, stream=True)
+            url = f"{R2_PUBLIC_BUCKET_URL}/{remote_filename}"
+            response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
 
             local_file = FIXTURES_DIR / local_filename
@@ -101,22 +225,8 @@ def download_file(remote_filename, local_filename, remote_etag):
     raise Exception(f"Failed to download `{remote_filename}` after {RETRIES} attempts")
 
 
-def main():
-    if os.environ.get("R2_ACCESS_KEY_ID") is not None and os.environ.get("R2_SECRET_ACCESS_KEY"):
-        print("R2_ACCESS_KEY_ID set, downloading fixtures using 'aws s3 cp'", flush=True)
-        for remote_filename, local_filename in FIXTURES.items():
-            local_file = FIXTURES_DIR / local_filename
-            subprocess.check_call(
-                f"aws s3 --region auto --endpoint-url https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/ "
-                f"cp s3://tensorzero-fixtures/{remote_filename} {local_file}",
-                env={
-                    "AWS_ACCESS_KEY_ID": os.environ["R2_ACCESS_KEY_ID"],
-                    "AWS_SECRET_ACCESS_KEY": os.environ["R2_SECRET_ACCESS_KEY"],
-                    "PATH": os.environ.get("PATH", ""),
-                },
-                shell=True,
-            )
-        return
+def download_fixtures_http():
+    """Download all fixtures via public HTTP (fallback when no R2 credentials)."""
 
     def process_fixture(item):
         remote_filename, local_filename = item
@@ -124,11 +234,8 @@ def main():
         remote_etag = get_remote_etag(remote_filename)
 
         if not local_file.exists():
-            print(
-                f"Downloading {remote_filename} (file doesn't exist locally)",
-                flush=True,
-            )
-            download_file(remote_filename, local_filename, remote_etag)
+            print(f"Downloading {remote_filename} (file doesn't exist locally)", flush=True)
+            download_file_http(remote_filename, local_filename, remote_etag)
             return
 
         local_etag = calculate_etag(local_file)
@@ -137,7 +244,7 @@ def main():
             print(f"Downloading {remote_filename} (ETag mismatch)", flush=True)
             print(f"Local ETag: {local_etag}", flush=True)
             print(f"Remote ETag: {remote_etag}", flush=True)
-            download_file(remote_filename, local_filename, remote_etag)
+            download_file_http(remote_filename, local_filename, remote_etag)
         else:
             print(f"Skipping {remote_filename} (up to date)", flush=True)
 
@@ -146,6 +253,25 @@ def main():
         # Loop over the results to propagate exceptions
         for result in executor.map(process_fixture, FIXTURES.items()):
             assert result is None
+
+
+# =============================================================================
+# Main
+# =============================================================================
+
+
+def main():
+    FIXTURES_DIR.mkdir(exist_ok=True)
+
+    if os.environ.get("R2_ACCESS_KEY_ID") and os.environ.get("R2_SECRET_ACCESS_KEY"):
+        print("R2 credentials found, downloading fixtures using `aws s3 sync`", flush=True)
+        sync_fixtures_from_r2()
+    else:
+        print(
+            "WARNING: `R2_ACCESS_KEY_ID` or `R2_SECRET_ACCESS_KEY` not set. Falling back to slow public HTTP downloads.",
+            flush=True,
+        )
+        download_fixtures_http()
 
 
 if __name__ == "__main__":

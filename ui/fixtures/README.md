@@ -17,7 +17,7 @@ Large fixtures should _not_ be committed to the repository. Instead:
 
 **For parquet files:**
 
-1. Add the new fixtures to `./s3-fixtures`
+1. Add the new fixtures to `./large-fixtures`
 2. Run `./upload-large-fixtures.sh`
 3. List the new fixture files in `download-large-fixtures.py`
 
