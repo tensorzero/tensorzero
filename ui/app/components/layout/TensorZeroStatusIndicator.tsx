@@ -52,16 +52,16 @@ export default function TensorZeroStatusIndicator({
       <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
         {statusText}
       </span>
-      {status && !versionsMatch && !collapsed && (
+      {status && !versionsMatch && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="text-[10px] text-yellow-600 transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-              (!)
+            <span className="text-[10px] text-yellow-600 whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+              Version mismatch: UI {uiVersion}
             </span>
           </TooltipTrigger>
           <TooltipContent side="right" align="center">
-            Version mismatch: UI {uiVersion}. Please make sure your UI has the
-            same version as the gateway.
+            Please make sure your UI has the same version as the gateway.
+            Otherwise you might have compatibility issues.
           </TooltipContent>
         </Tooltip>
       )}
@@ -76,7 +76,8 @@ export default function TensorZeroStatusIndicator({
           {statusText}
           {status && !versionsMatch && (
             <div className="text-yellow-600">
-              Version mismatch: UI {uiVersion}
+              Version mismatch: UI {uiVersion}. Please make sure your UI has the
+              same version as the gateway.
             </div>
           )}
         </TooltipContent>
