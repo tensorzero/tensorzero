@@ -31,6 +31,7 @@ pub struct EvaluateInferenceParams {
     pub clients: Arc<Clients>,
     pub evaluation_run_id: Uuid,
     pub inference_cache: CacheEnabledMode,
+    pub external_tags: Arc<HashMap<String, String>>,
     pub send_feedback: bool,
 }
 
@@ -63,6 +64,7 @@ pub(crate) async fn evaluate_inference(
         clients,
         evaluation_run_id,
         inference_cache,
+        external_tags,
         send_feedback,
     } = params;
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
@@ -96,6 +98,8 @@ pub(crate) async fn evaluate_inference(
                 let evaluation_name = evaluation_name.clone();
                 let clients = clients.clone();
                 let evaluator_name_clone = evaluator_name.clone();
+                let external_tags = external_tags.clone();
+                let external_tags_for_feedback = external_tags.clone();
 
                 let result = run_evaluator(RunEvaluatorParams {
                     evaluation_config: &evaluation_config,
@@ -107,6 +111,7 @@ pub(crate) async fn evaluate_inference(
                     evaluation_run_id,
                     input: &input,
                     inference_cache,
+                    external_tags,
                 })
                 .await;
 
@@ -121,7 +126,13 @@ pub(crate) async fn evaluate_inference(
                         if let Some(value) = result.value() {
                             debug!(evaluator_name = %evaluator_name, value = ?value, "Evaluator produced value, sending feedback");
                             // If there is a valid result, send feedback to TensorZero
-                            let mut tags = HashMap::from([
+                            // Start with external tags, then apply internal tags last so they always win
+                            let mut tags: HashMap<String, String> = external_tags_for_feedback
+                                .iter()
+                                .map(|(k, v)| (k.clone(), v.clone()))
+                                .collect();
+                            tags.extend(result.tags());
+                            tags.extend([
                                 (
                                     "tensorzero::evaluation_run_id".to_string(),
                                     evaluation_run_id.to_string(),
@@ -145,7 +156,6 @@ pub(crate) async fn evaluate_inference(
                                     evaluator_inference_id.to_string(),
                                 );
                             }
-                            tags.extend(result.tags());
                             // Only send feedback when send_feedback is true
                             // Dynamic variants have send_feedback=false and skip feedback persistence
                             if send_feedback {
@@ -203,6 +213,7 @@ struct RunEvaluatorParams<'a> {
     evaluation_run_id: Uuid,
     input: &'a Input,
     inference_cache: CacheEnabledMode,
+    external_tags: Arc<HashMap<String, String>>,
 }
 
 /// Runs the evaluator specified by evaluator_name on the given inference response and datapoint.
@@ -226,6 +237,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         evaluation_run_id,
         input,
         inference_cache,
+        external_tags,
     } = params;
     let EvaluationConfig::Inference(inference_evaluation_config) = evaluation_config;
     let evaluator_config = match inference_evaluation_config.evaluators.get(&evaluator_name) {
@@ -259,6 +271,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
                 evaluation_run_id,
                 input,
                 inference_cache,
+                external_tags: external_tags.as_ref(),
             })
             .await?;
             debug!(result = ?result, "LLM judge evaluator completed");

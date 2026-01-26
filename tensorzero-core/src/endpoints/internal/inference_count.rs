@@ -14,6 +14,7 @@ use crate::db::inference_count::{
     GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
+use crate::feature_flags::ENABLE_POSTGRES_READ;
 use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -27,8 +28,9 @@ pub struct InferenceCountQueryParams {
 }
 
 /// Grouping options for inference count
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceCountGroupBy {
     /// Group by variant name
@@ -36,8 +38,9 @@ pub enum InferenceCountGroupBy {
 }
 
 /// Response containing inference count
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct InferenceCountResponse {
     /// The count of inferences for the function (and optionally variant)
     pub inference_count: u64,
@@ -47,8 +50,9 @@ pub struct InferenceCountResponse {
 }
 
 /// Inference count for a variant
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceCountByVariant {
     /// The variant name
     pub variant_name: String,
@@ -77,8 +81,9 @@ pub struct InferenceWithFeedbackCountQueryParams {
 }
 
 /// Response containing inference count with feedback count
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceWithFeedbackCountResponse {
     /// Number of feedbacks for the metric
     pub feedback_count: u64,
@@ -101,16 +106,18 @@ fn default_max_periods() -> u32 {
 }
 
 /// Response containing function throughput data grouped by variant and time period
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetFunctionThroughputByVariantResponse {
     /// Throughput data for each (period, variant) combination
     pub throughput: Vec<VariantThroughput>,
 }
 
 /// Response containing all functions with their inference counts
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListFunctionsWithInferenceCountResponse {
     /// List of functions with their inference counts, ordered by most recent inference
     pub functions: Vec<FunctionInferenceCount>,
@@ -130,15 +137,14 @@ pub async fn get_inference_count_handler(
     Path(function_name): Path<String>,
     Query(params): Query<InferenceCountQueryParams>,
 ) -> Result<Json<InferenceCountResponse>, Error> {
-    Ok(Json(
-        get_inference_count(
-            &app_state.config,
-            &app_state.clickhouse_connection_info,
-            &function_name,
-            params,
-        )
-        .await?,
-    ))
+    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+        &app_state.postgres_connection_info
+    } else {
+        &app_state.clickhouse_connection_info
+    };
+
+    let response = get_inference_count(&app_state.config, database, &function_name, params).await?;
+    Ok(Json(response))
 }
 
 /// HTTP handler for the feedback stats endpoint
@@ -156,22 +162,27 @@ pub async fn get_inference_with_feedback_count_handler(
     Path((function_name, metric_name)): Path<(String, String)>,
     Query(params): Query<InferenceWithFeedbackCountQueryParams>,
 ) -> Result<Json<InferenceWithFeedbackCountResponse>, Error> {
-    Ok(Json(
-        get_inference_with_feedback_count(
-            &app_state.config,
-            &app_state.clickhouse_connection_info,
-            function_name,
-            metric_name,
-            params,
-        )
-        .await?,
-    ))
+    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+        &app_state.postgres_connection_info
+    } else {
+        &app_state.clickhouse_connection_info
+    };
+
+    let response = get_inference_with_feedback_count(
+        &app_state.config,
+        database,
+        function_name,
+        metric_name,
+        params,
+    )
+    .await?;
+    Ok(Json(response))
 }
 
 /// Core business logic for getting inference count
 async fn get_inference_count(
     config: &Config,
-    clickhouse: &impl InferenceCountQueries,
+    database: &(dyn InferenceCountQueries + Sync),
     function_name: &str,
     params: InferenceCountQueryParams,
 ) -> Result<InferenceCountResponse, Error> {
@@ -199,7 +210,7 @@ async fn get_inference_count(
 
     // Handle group_by=variant case
     if let Some(InferenceCountGroupBy::Variant) = params.group_by {
-        let variant_rows = clickhouse.count_inferences_by_variant(count_params).await?;
+        let variant_rows = database.count_inferences_by_variant(count_params).await?;
 
         let inference_count = variant_rows.iter().map(|r| r.inference_count).sum();
         let count_by_variant = variant_rows.into_iter().map(Into::into).collect();
@@ -210,9 +221,7 @@ async fn get_inference_count(
         });
     }
 
-    let inference_count = clickhouse
-        .count_inferences_for_function(count_params)
-        .await?;
+    let inference_count = database.count_inferences_for_function(count_params).await?;
 
     Ok(InferenceCountResponse {
         inference_count,
@@ -223,7 +232,7 @@ async fn get_inference_count(
 /// Core business logic for getting feedback count
 async fn get_inference_with_feedback_count(
     config: &Config,
-    clickhouse_connection_info: &impl InferenceCountQueries,
+    database: &(dyn InferenceCountQueries + Sync),
     function_name: String,
     metric_name: String,
     params: InferenceWithFeedbackCountQueryParams,
@@ -236,7 +245,7 @@ async fn get_inference_with_feedback_count(
     // TODO(shuyangli): it's probably wrong that we're not distinguishing between the feedback type
     // ("demonstration") and the metric name, but we can fix it later.
     if metric_name == "demonstration" {
-        let feedback_count = clickhouse_connection_info
+        let feedback_count = database
             .count_inferences_with_demonstration_feedback(
                 CountInferencesWithDemonstrationFeedbacksParams {
                     function_name: &function_name,
@@ -257,24 +266,20 @@ async fn get_inference_with_feedback_count(
 
     // Get feedback and matching inference counts based on metric type
     let (feedback_count, inference_count) = try_join(
-        clickhouse_connection_info.count_inferences_with_feedback(
-            CountInferencesWithFeedbackParams {
-                function_name: &function_name,
-                function_type,
-                metric_name: &metric_name,
-                metric_config,
-                metric_threshold: None,
-            },
-        ),
-        clickhouse_connection_info.count_inferences_with_feedback(
-            CountInferencesWithFeedbackParams {
-                function_name: &function_name,
-                function_type,
-                metric_name: &metric_name,
-                metric_config,
-                metric_threshold: Some(params.threshold),
-            },
-        ),
+        database.count_inferences_with_feedback(CountInferencesWithFeedbackParams {
+            function_name: &function_name,
+            function_type,
+            metric_name: &metric_name,
+            metric_config,
+            metric_threshold: None,
+        }),
+        database.count_inferences_with_feedback(CountInferencesWithFeedbackParams {
+            function_name: &function_name,
+            function_type,
+            metric_name: &metric_name,
+            metric_config,
+            metric_threshold: Some(params.threshold),
+        }),
     )
     .await?;
 
@@ -296,13 +301,15 @@ pub async fn get_function_throughput_by_variant_handler(
     Path(function_name): Path<String>,
     Query(params): Query<FunctionThroughputByVariantQueryParams>,
 ) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
-    let response = get_function_throughput_by_variant(
-        &state.config,
-        &state.clickhouse_connection_info,
-        &function_name,
-        params,
-    )
-    .await?;
+    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+        &state.postgres_connection_info
+    } else {
+        &state.clickhouse_connection_info
+    };
+
+    let response =
+        get_function_throughput_by_variant(&state.config, database, &function_name, params).await?;
+
     Ok(Json(response))
 }
 
@@ -310,14 +317,14 @@ pub async fn get_function_throughput_by_variant_handler(
 /// Validates the function exists and returns throughput data grouped by variant and time period.
 pub async fn get_function_throughput_by_variant(
     config: &Config,
-    clickhouse_connection_info: &impl InferenceCountQueries,
+    database: &(dyn InferenceCountQueries + Sync),
     function_name: &str,
     params: FunctionThroughputByVariantQueryParams,
 ) -> Result<GetFunctionThroughputByVariantResponse, Error> {
     // Validate function exists
     config.get_function(function_name)?;
 
-    let throughput = clickhouse_connection_info
+    let throughput = database
         .get_function_throughput_by_variant(GetFunctionThroughputByVariantParams {
             function_name,
             time_window: params.time_window,
@@ -334,17 +341,21 @@ pub async fn get_function_throughput_by_variant(
 pub async fn list_functions_with_inference_count_handler(
     State(state): State<AppStateData>,
 ) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
-    let response = list_functions_with_inference_count(&state.clickhouse_connection_info).await?;
+    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+        &state.postgres_connection_info
+    } else {
+        &state.clickhouse_connection_info
+    };
+
+    let response = list_functions_with_inference_count(database).await?;
     Ok(Json(response))
 }
 
 /// Core business logic for listing all functions with their inference counts
 async fn list_functions_with_inference_count(
-    clickhouse_connection_info: &impl InferenceCountQueries,
+    database: &(dyn InferenceCountQueries + Sync),
 ) -> Result<ListFunctionsWithInferenceCountResponse, Error> {
-    let functions = clickhouse_connection_info
-        .list_functions_with_inference_count()
-        .await?;
+    let functions = database.list_functions_with_inference_count().await?;
 
     Ok(ListFunctionsWithInferenceCountResponse { functions })
 }
@@ -354,6 +365,7 @@ mod tests {
     use super::*;
     use crate::config::{Config, ConfigFileGlob};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
+    use crate::db::postgres::PostgresConnectionInfo;
     use crate::function::FunctionConfigType;
     use crate::testing::get_unit_test_gateway_handle;
     use std::io::Write;
@@ -623,5 +635,64 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.inference_count, 10);
+    }
+
+    // Tests for ENABLE_POSTGRES_READ flag dispatch
+    // Note: The business logic functions take `&impl InferenceCountQueries` and are database-agnostic.
+    // The flag only affects which connection the handlers pass to the business logic.
+    // These tests verify the Postgres implementation can be invoked through the same interface.
+
+    #[tokio::test]
+    async fn test_get_inference_count_with_postgres_disabled_returns_error() {
+        // When Postgres is disabled, calling the Postgres implementation should return an error
+
+        let config_str = r#"
+            [functions.test_function]
+            type = "chat"
+
+            [functions.test_function.variants.test_variant]
+            type = "chat_completion"
+            model = "openai::gpt-4"
+        "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let config = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let params = InferenceCountQueryParams {
+            variant_name: None,
+            group_by: None,
+        };
+
+        let result = get_inference_count(&config, &postgres, "test_function", params).await;
+
+        assert!(
+            result.is_err(),
+            "Should return error when Postgres is disabled"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("disabled"),
+            "Error should indicate database is disabled: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_functions_with_postgres_disabled_returns_error() {
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let result = list_functions_with_inference_count(&postgres).await;
+
+        assert!(
+            result.is_err(),
+            "Should return error when Postgres is disabled"
+        );
     }
 }

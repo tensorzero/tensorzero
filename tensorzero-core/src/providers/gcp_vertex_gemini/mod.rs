@@ -90,8 +90,9 @@ const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
 /// * In streaming mode, 'thought: true' parts with non-text content produce an error (since we don't have "unknown" blocks in streaming mode)
 ///
 /// In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GCPVertexGeminiProvider {
     api_v1_base_url: Url,
     request_url: String,
@@ -105,8 +106,9 @@ pub struct GCPVertexGeminiProvider {
     batch_config: Option<BatchConfig>,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 struct BatchConfig {
     input_uri_prefix: String,
     output_uri_prefix: String,
@@ -1904,7 +1906,10 @@ enum GCPVertexGeminiResponseMimeType {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiThinkingConfig {
-    thinking_budget: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_level: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -1960,26 +1965,18 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
-    }
-
-    if let Some(budget_tokens) = thinking_budget_tokens {
+    if reasoning_effort.is_some() || thinking_budget_tokens.is_some() {
+        let thinking_config = GCPVertexGeminiThinkingConfig {
+            thinking_budget: *thinking_budget_tokens,
+            thinking_level: reasoning_effort.clone(),
+        };
         if let Some(gen_config) = &mut request.generation_config {
-            gen_config.thinking_config = Some(GCPVertexGeminiThinkingConfig {
-                thinking_budget: *budget_tokens,
-            });
+            gen_config.thinking_config = Some(thinking_config);
         } else {
             request.generation_config = Some(GCPVertexGeminiGenerationConfig {
                 stop_sequences: None,
                 temperature: None,
-                thinking_config: Some(GCPVertexGeminiThinkingConfig {
-                    thinking_budget: *budget_tokens,
-                }),
+                thinking_config: Some(thinking_config),
                 max_output_tokens: None,
                 top_p: None,
                 presence_penalty: None,
@@ -4119,7 +4116,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.0-flash-lite").unwrap();
+            prepare_tools(&request_with_tools, "gemini-2.5-flash-lite").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4648,18 +4645,18 @@ mod tests {
             "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`"
         );
 
-        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001", "google").unwrap_err().to_string();
+        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.5-flash", "google").unwrap_err().to_string();
         assert_eq!(
             non_google_publisher,
-            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`"
+            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.5-flash`"
         );
 
-        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001", "google").unwrap();
+        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash", "google").unwrap();
         assert_eq!(
             valid_model_url,
             ShorthandUrl::Publisher {
                 location: "us-central1",
-                model_id: "gemini-2.0-flash-001"
+                model_id: "gemini-2.5-flash"
             }
         );
 
@@ -5489,19 +5486,19 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
-
-        // Test that thinking_budget_tokens is applied correctly in generation_config
-        assert!(request.generation_config.is_some());
+        // Test that thinking_budget_tokens and reasoning_effort are applied correctly in generation_config
+        assert!(
+            request.generation_config.is_some(),
+            "generation_config should be set when thinking params are provided"
+        );
         let gen_config = request.generation_config.unwrap();
         assert_eq!(
             gen_config.thinking_config,
             Some(GCPVertexGeminiThinkingConfig {
-                thinking_budget: 1024,
-            })
+                thinking_budget: Some(1024),
+                thinking_level: Some("high".to_string()),
+            }),
+            "thinking_config should contain both thinking_budget and thinking_level"
         );
 
         // Test that verbosity warns

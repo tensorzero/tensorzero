@@ -22,8 +22,8 @@ async def main():
     semaphore = Semaphore(CONCURRENCY)
     data = load_beerqa()
 
-    agent_variants = ["gpt-4.1-mini", "claude-3.5-haiku"]
-    compact_context_variants = ["gpt-4.1-mini", "claude-3.5-haiku"]
+    agent_variants = ["gpt-4.1-mini", "claude-haiku-4-5"]
+    compact_context_variants = ["gpt-4.1-mini", "claude-haiku-4-5"]
 
     # Evaluate all combinations of agent and compact_context variants
     for agent_variant, compact_context_variant in itertools.product(agent_variants, compact_context_variants):

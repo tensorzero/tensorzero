@@ -1,6 +1,7 @@
 use crate::{
     db::inference_count::InferenceCountQueries,
     error::Error,
+    feature_flags::ENABLE_POSTGRES_READ,
     utils::gateway::{AppState, AppStateData},
 };
 use axum::{
@@ -11,8 +12,9 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetEpisodeInferenceCountResponse {
     pub inference_count: u64,
 }
@@ -30,8 +32,11 @@ pub async fn get_episode_inference_count_handler(
     State(app_state): AppState,
     Path(episode_id): Path<Uuid>,
 ) -> Result<Json<GetEpisodeInferenceCountResponse>, Error> {
-    let stats =
-        get_episode_inference_count(&app_state.clickhouse_connection_info, episode_id).await?;
+    let stats = if ENABLE_POSTGRES_READ.get() {
+        get_episode_inference_count(&app_state.postgres_connection_info, episode_id).await?
+    } else {
+        get_episode_inference_count(&app_state.clickhouse_connection_info, episode_id).await?
+    };
     Ok(Json(stats))
 }
 

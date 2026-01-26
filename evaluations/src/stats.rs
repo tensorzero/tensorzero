@@ -207,7 +207,7 @@ pub struct EvaluationError {
 
 /// Statistics computed about a particular evaluator
 /// We anticipate extending this over time
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvaluatorStats {
     pub mean: f32,
     pub stderr: f32,

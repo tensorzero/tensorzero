@@ -42,8 +42,9 @@ use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
@@ -86,6 +87,7 @@ pub enum FunctionConfigType {
 }
 
 impl FunctionConfigType {
+    /// Returns the ClickHouse table name for the given function type.
     pub fn table_name(&self) -> &'static str {
         match self {
             FunctionConfigType::Chat => "ChatInference",
@@ -93,6 +95,15 @@ impl FunctionConfigType {
         }
     }
 
+    /// Returns the Postgres table name for the given function type.
+    pub fn postgres_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_inferences",
+            FunctionConfigType::Json => "tensorzero.json_inferences",
+        }
+    }
+
+    /// Returns the ClickHouse datapoint table name for the given function type.
     pub fn datapoint_table_name(&self) -> &'static str {
         match self {
             FunctionConfigType::Chat => "ChatInferenceDatapoint",
@@ -260,8 +271,9 @@ impl VariantsConfigPyClass {
     }
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -287,8 +299,9 @@ pub struct FunctionConfigChat {
     pub all_explicit_templates_names: HashSet<String>,
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,

@@ -76,8 +76,9 @@ pub(crate) fn sample_static_weights(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StaticWeightsConfig {
     // Map from variant name to weight. Zero weights exclude variants from weighted sampling.
     // We enforce that weights are non-negative during setup validation.

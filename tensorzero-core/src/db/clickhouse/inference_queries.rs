@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use itertools::Itertools;
+use uuid::Uuid;
 
+use crate::config::MetricConfigLevel;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
@@ -9,15 +11,20 @@ use crate::db::clickhouse::query_builder::{
 };
 use crate::db::inferences::{
     ClickHouseStoredInferenceWithDispreferredOutputs, CountInferencesParams,
-    DEFAULT_INFERENCE_QUERY_LIMIT, InferenceMetadata, InferenceOutputSource, InferenceQueries,
-    ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
+    DEFAULT_INFERENCE_QUERY_LIMIT, FunctionInfo, InferenceMetadata, InferenceOutputSource,
+    InferenceQueries, ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
 };
 use crate::function::FunctionConfigType;
+use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::deserialize_optional_tool_info;
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     stored_inference::StoredInferenceDatabase,
 };
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::HashMap;
 
 /// Represents the structured parts of a single-table query
 /// This allows the caller to insert JOINs between the SELECT/FROM and WHERE clauses
@@ -125,6 +132,141 @@ impl InferenceQueries for ClickHouseConnectionInfo {
         })?;
 
         Ok(count)
+    }
+
+    async fn get_function_info(
+        &self,
+        target_id: &Uuid,
+        level: MetricConfigLevel,
+    ) -> Result<Option<FunctionInfo>, Error> {
+        let query = match level {
+            MetricConfigLevel::Inference => {
+                r"
+                SELECT function_name, function_type, variant_name, episode_id
+                FROM InferenceById
+                WHERE id_uint = toUInt128({target_id:UUID})
+                LIMIT 1
+                FORMAT JSONEachRow
+                SETTINGS max_threads=1
+            "
+            }
+            MetricConfigLevel::Episode => {
+                r"
+                SELECT function_name, function_type, variant_name, uint_to_uuid(episode_id_uint) as episode_id
+                FROM InferenceByEpisodeId
+                WHERE episode_id_uint = toUInt128({target_id:UUID})
+                LIMIT 1
+                FORMAT JSONEachRow
+                SETTINGS max_threads=1
+            "
+            }
+        };
+
+        let target_id_str = target_id.to_string();
+        let params = HashMap::from([("target_id", target_id_str.as_str())]);
+        let response = self
+            .inner
+            .run_query_synchronous(query.to_string(), &params)
+            .await?;
+
+        if response.response.is_empty() {
+            return Ok(None);
+        }
+
+        let info: FunctionInfo = serde_json::from_str(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })?;
+
+        Ok(Some(info))
+    }
+
+    async fn get_chat_inference_tool_params(
+        &self,
+        function_name: &str,
+        inference_id: Uuid,
+    ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
+        let query = r"
+            SELECT tool_params, dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice
+            FROM ChatInference
+            WHERE function_name = {function_name:String} AND id = {inference_id:String}
+            FORMAT JSONEachRow
+        ";
+
+        let inference_id_str = inference_id.to_string();
+        let params = HashMap::from([
+            ("function_name", function_name),
+            ("inference_id", inference_id_str.as_str()),
+        ]);
+        let response = self
+            .inner
+            .run_query_synchronous(query.to_string(), &params)
+            .await?;
+
+        if response.response.is_empty() {
+            return Ok(None);
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct ToolParamsResult {
+            #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
+            tool_params: Option<ToolCallConfigDatabaseInsert>,
+        }
+
+        let result: ToolParamsResult = serde_json::from_str(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: format!("Failed to parse tool params result: {e}"),
+            })
+        })?;
+
+        Ok(result.tool_params)
+    }
+
+    async fn get_json_inference_output_schema(
+        &self,
+        function_name: &str,
+        inference_id: Uuid,
+    ) -> Result<Option<Value>, Error> {
+        let query = r"
+            SELECT output_schema
+            FROM JsonInference
+            WHERE function_name = {function_name:String} AND id = {inference_id:String}
+            FORMAT JSONEachRow
+        ";
+
+        let inference_id_str = inference_id.to_string();
+        let params = HashMap::from([
+            ("function_name", function_name),
+            ("inference_id", inference_id_str.as_str()),
+        ]);
+        let response = self
+            .inner
+            .run_query_synchronous(query.to_string(), &params)
+            .await?;
+
+        if response.response.is_empty() {
+            return Ok(None);
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct OutputSchemaResult {
+            output_schema: String,
+        }
+
+        let result: OutputSchemaResult = serde_json::from_str(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: format!("Failed to parse output schema result: {e}"),
+            })
+        })?;
+
+        let output_schema: Value = serde_json::from_str(&result.output_schema).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: format!("Failed to parse output schema: {e}"),
+            })
+        })?;
+
+        Ok(Some(output_schema))
     }
 }
 

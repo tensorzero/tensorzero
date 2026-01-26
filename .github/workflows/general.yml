@@ -797,11 +797,6 @@ jobs:
           # Note: In replicated mode, we use the HTTP port (8124) of the second replica so we can ensure this works
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8124/tensorzero_e2e_tests" >> $GITHUB_ENV
 
-      - name: Set Postgres database URL for tests
-        run: |
-          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
-          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
-
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
@@ -916,6 +911,81 @@ jobs:
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
+
+  # Run Postgres tests
+  # Postgres does not have unit test coverage, because sqlx doesn't expose mocks. We include it here to get early CI signals.
+  postgres-tests:
+    name: "Postgres tests"
+    permissions:
+      contents: read
+      # Permission to download artifacts and for rust-cache
+      actions: read
+      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      id-token: write
+    runs-on: ubuntu-latest
+    needs: [build-gateway-container]
+    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "build-gateway-cache"
+          save-if: false
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        with:
+          tool: cargo-nextest
+
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+
+      - name: Login to Namespace registry
+        run: nsc docker login
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+
+      - name: Download gateway container image
+        run: |
+          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Set TENSORZERO_GATEWAY_TAG
+        run: |
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Set environment variables for Postgres
+        run: |
+          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+
+      - name: Launch Postgres
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up postgres gateway-postgres-migrations fixtures-postgres -d --wait
+
+      - name: Test (Rust)
+        run: cargo test-e2e --filterset 'test(db::) & test(postgres)'
+
+      - name: Print docker compose logs
+        if: always()
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
   # Run 'cargo test-optimization' against mock-provider-api
   mock-optimization-tests:
@@ -1169,11 +1239,26 @@ jobs:
     permissions:
       contents: read
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    needs: [build-gateway-e2e-container]
+    needs: [build-gateway-e2e-container, publish-dev-docker-hub-images]
     uses: ./.github/workflows/dispatch-autopilot-e2e.yml
     secrets:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
+
+  publish-dev-docker-hub-images:
+    permissions:
+      contents: read
+      actions: read
+      attestations: write
+      id-token: write
+      packages: write
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    uses: ./.github/workflows/docker-hub-publish.yml
+    with:
+      is_dev: true
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
@@ -1195,6 +1280,7 @@ jobs:
         build-gateway-e2e-container,
         build-mock-provider-api-container,
         mocked-batch-tests,
+        publish-dev-docker-hub-images,
         minikube,
         rust-build,
         rust-test,
@@ -1203,6 +1289,7 @@ jobs:
         validate-python,
         lint-rust,
         clickhouse-tests,
+        postgres-tests,
         ui-tests,
         ui-tests-e2e,
         ui-tests-e2e-regen-model-inference-cache,

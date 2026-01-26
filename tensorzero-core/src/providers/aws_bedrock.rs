@@ -54,8 +54,9 @@ const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
 /// AWS Bedrock provider using direct HTTP calls.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
@@ -268,7 +269,7 @@ impl InferenceProvider for AWSBedrockProvider {
         // Peek first chunk
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
 
-        // Handle JSON prefill for streaming
+        // Handle JSON prefill for streaming.
         if needs_json_prefill(&self.model_id, request) {
             prefill_json_chunk_response(chunk);
         }
@@ -325,6 +326,7 @@ async fn prepare_request_body(
 
     // Add JSON prefill for Claude models in JSON mode
     if needs_json_prefill(model_id, request) {
+        warn_bedrock_strict_json_mode(request.json_mode);
         prefill_json_converse_request(&mut converse_request);
     }
 
@@ -428,7 +430,6 @@ fn needs_json_prefill(model_id: &str, request: &ModelInferenceRequest<'_>) -> bo
     needs_json_prefill_raw(model_id, &request.function_type, request.json_mode)
 }
 
-/// Check if JSON prefill is needed (raw parameter version)
 fn needs_json_prefill_raw(
     model_id: &str,
     function_type: &FunctionType,
@@ -440,6 +441,17 @@ fn needs_json_prefill_raw(
             json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         )
+}
+
+/// Warn if json_mode=strict is used since Bedrock doesn't support Anthropic's output_format
+fn warn_bedrock_strict_json_mode(json_mode: ModelInferenceRequestJsonMode) {
+    if matches!(json_mode, ModelInferenceRequestJsonMode::Strict) {
+        tracing::warn!(
+            "AWS Bedrock does not support Anthropic's structured outputs feature. \
+            `json_mode = \"strict\"` will use prefill fallback instead of guaranteed schema compliance. \
+            For strict JSON schema enforcement, use direct Anthropic."
+        );
+    }
 }
 
 /// Apply inference params and build additional model request fields.

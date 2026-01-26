@@ -85,15 +85,17 @@ uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
 
 # Start postgres service for migrations
+# `cargo test-clickhouse` should not include any Postgres tests, but we're including it here to be safe.
 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
 export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
 SQLX_OFFLINE=1 cargo build-e2e
 cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
+
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
-    max_attempts=90
+    max_attempts=180
     while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
         echo "Waiting for gateway to be healthy..."
         sleep 1

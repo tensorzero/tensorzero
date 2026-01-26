@@ -1,3 +1,5 @@
+import { Skeleton } from "~/components/ui/skeleton";
+
 export function BasicInfoLayout({ children }: React.PropsWithChildren) {
   return <div className="flex flex-col gap-4 md:gap-2">{children}</div>;
 }
@@ -28,5 +30,28 @@ export function BasicInfoItemContent({
     >
       {children}
     </div>
+  );
+}
+
+interface BasicInfoLayoutSkeletonProps {
+  rows?: number;
+}
+
+export function BasicInfoLayoutSkeleton({
+  rows = 5,
+}: BasicInfoLayoutSkeletonProps) {
+  return (
+    <BasicInfoLayout>
+      {Array.from({ length: rows }).map((_, i) => (
+        <BasicInfoItem key={i}>
+          <BasicInfoItemTitle>
+            <Skeleton className="h-5 w-20" />
+          </BasicInfoItemTitle>
+          <BasicInfoItemContent>
+            <Skeleton className="h-5 w-48" />
+          </BasicInfoItemContent>
+        </BasicInfoItem>
+      ))}
+    </BasicInfoLayout>
   );
 }

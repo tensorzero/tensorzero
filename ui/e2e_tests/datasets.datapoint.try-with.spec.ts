@@ -36,8 +36,10 @@ test.describe("Try with on datapoint page", () => {
       await button.click();
 
       // Wait for the dropdown menu to appear and select an option
-      const menuOption = page.getByRole("menuitem").filter({
-        has: page.locator(`text="${option}"`),
+      // ButtonSelect uses cmdk CommandItem which has role="option"
+      const menuOption = page.getByRole("option", {
+        name: option,
+        exact: true,
       });
 
       await menuOption.waitFor({ state: "visible" });

@@ -17,8 +17,9 @@ use crate::utils::spawn_ignoring_shutdown;
 ///
 /// When created via `compile()`, `from_path()`, or `from_value()`, the schema is compiled
 /// synchronously and the compiled validator is stored immediately.
-#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct JSONSchema {
     pub value: Value,
     #[serde(skip)]
@@ -198,8 +199,9 @@ impl JSONSchema {
 /// Wraps a schema with metadata indicating whether it was defined using legacy syntax
 /// (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
 /// This is used to determine whether to show a "Legacy" badge in the UI.
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SchemaWithMetadata {
     pub schema: JSONSchema,
     pub legacy_definition: bool,

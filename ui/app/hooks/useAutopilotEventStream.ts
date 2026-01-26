@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Event, StreamUpdate } from "~/types/tensorzero";
+import type { AutopilotStatus, Event, StreamUpdate } from "~/types/tensorzero";
 
 interface UseAutopilotEventStreamOptions {
   sessionId: string;
   initialEvents: Event[];
   initialPendingToolCalls: Event[];
+  initialStatus: AutopilotStatus;
   enabled?: boolean;
 }
 
 interface UseAutopilotEventStreamResult {
   events: Event[];
   pendingToolCalls: Event[];
+  status: AutopilotStatus;
   isConnected: boolean;
   error: string | null;
   isRetrying: boolean;
@@ -27,12 +29,14 @@ export function useAutopilotEventStream({
   sessionId,
   initialEvents,
   initialPendingToolCalls,
+  initialStatus,
   enabled = true,
 }: UseAutopilotEventStreamOptions): UseAutopilotEventStreamResult {
   const [events, setEvents] = useState<Event[]>(initialEvents);
   const [pendingToolCalls, setPendingToolCalls] = useState<Event[]>(
     initialPendingToolCalls,
   );
+  const [status, setStatus] = useState<AutopilotStatus>(initialStatus);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -159,6 +163,9 @@ export function useAutopilotEventStream({
                     }
                     return prev;
                   });
+
+                  // Update autopilot status
+                  setStatus(streamUpdate.status);
                 } catch {
                   // Skip invalid JSON
                 }
@@ -228,11 +235,12 @@ export function useAutopilotEventStream({
   useEffect(() => {
     setEvents(initialEvents);
     setPendingToolCalls(initialPendingToolCalls);
+    setStatus(initialStatus);
     lastEventIdRef.current =
       initialEvents.length > 0
         ? initialEvents[initialEvents.length - 1].id
         : null;
-  }, [initialEvents, initialPendingToolCalls]);
+  }, [initialEvents, initialPendingToolCalls, initialStatus]);
 
   // Allow prepending older events (for reverse infinite scroll)
   const prependEvents = useCallback((newEvents: Event[]) => {
@@ -254,6 +262,7 @@ export function useAutopilotEventStream({
   return {
     events,
     pendingToolCalls,
+    status,
     isConnected,
     error,
     isRetrying,

@@ -32,11 +32,11 @@ impl ToolMetadata for ListInferencesTool {
     type Output = GetInferencesResponse;
     type LlmParams = ListInferencesToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("list_inferences")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "List inferences with optional filtering and pagination. \
              Can filter by function name, variant name, episode ID, tags, metrics, \
@@ -44,7 +44,7 @@ impl ToolMetadata for ListInferencesTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "List inferences with filtering and pagination.",
@@ -64,9 +64,13 @@ impl ToolMetadata for ListInferencesTool {
                 },
                 "output_source": {
                     "type": "string",
-                    "enum": ["none", "inference", "demonstration"],
+                    "enum": ["inference", "demonstration"],
                     "default": "inference",
-                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available, 'none' returns no output."
+                    // Note: "none" is intentionally omitted. The list_inferences endpoint
+                    // rejects output_source: "none" since these endpoints are for retrieving
+                    // complete inference records. Other endpoints (like dataset creation)
+                    // still support "none" when only metadata is needed.
+                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available."
                 },
                 "limit": {
                     "type": "integer",

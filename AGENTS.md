@@ -15,8 +15,8 @@
 ## For APIs
 
 - Use `_` instead of `-` in API routes.
-- Prefer using `#[cfg_attr(test, ts_rs::TS)]` for ts-rs exports.
-- For any Option types visible from the frontend, include `#[cfg_attr(test, ts(export, optional_fields))]` and `#[serde(skip_serializing_if = "Option::is_none")]` so None values are not returned over the wire. In very rare cases we may decide do return `null`s, but in general we want to omit them.
+- Prefer using `#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]` for ts-rs exports.
+- For any `Option` types visible from the frontend, include `#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]` and `#[serde(skip_serializing_if = "Option::is_none")]` so `None` values are not returned over the wire. In very rare cases we may decide do return `null`s, but in general we want to omit them.
 - Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up`.)
 - We use RFC 3339 as the standard format for datetime.
 
@@ -25,6 +25,14 @@
 - API handler will be a thin function that handles properties injected by Axum and calls a function to perform business logic.
 - Business logic layer will generate all data that TensorZero is responsible for (e.g. UUIDs for new datapoints, `staled_at` timestamps).
 - Database layer (ClickHouse and/or Postgres) will insert data as-is into the backing database, with the only exception of `updated_at` timestamps which we insert by calling native functions in the database.
+
+## For Postgres (sqlx)
+
+- **Do not use `format!` for SQL queries.** Use `sqlx::QueryBuilder` for dynamic queries.
+  - Use `.push()` for trusted SQL fragments (table names, SQL keywords).
+  - Use `.push_bind()` for user-provided values (prevents SQL injection, handles types).
+  - Use `.build_query_scalar()` for scalar results, `.build()` for row results.
+- For static queries, use `sqlx::query!` directly.
 
 # Python Dependencies
 

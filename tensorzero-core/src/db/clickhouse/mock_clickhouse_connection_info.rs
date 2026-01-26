@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::config::MetricConfigLevel;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::{
     DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
@@ -15,8 +16,8 @@ use crate::db::inference_count::{
     VariantThroughput,
 };
 use crate::db::inferences::{
-    CountInferencesParams as ListInferencesCountParams, InferenceMetadata, InferenceQueries,
-    ListInferenceMetadataParams, ListInferencesParams, MockInferenceQueries,
+    CountInferencesParams as ListInferencesCountParams, FunctionInfo, InferenceMetadata,
+    InferenceQueries, ListInferenceMetadataParams, ListInferencesParams, MockInferenceQueries,
 };
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
@@ -24,6 +25,8 @@ use crate::db::{ConfigQueries, MockConfigQueries};
 use crate::error::Error;
 use crate::inference::types::StoredModelInference;
 use crate::stored_inference::StoredInferenceDatabase;
+use crate::tool::ToolCallConfigDatabaseInsert;
+use serde_json::Value;
 
 /// Mock struct that implements all traits on ClickHouseConnectionInfo.
 /// Usage: in tests, create a new mutable instance of this struct, and use the appropriate expect_ methods on the fields inside to mock
@@ -81,6 +84,36 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
             .count_inferences(config, params)
             .await
     }
+
+    async fn get_function_info(
+        &self,
+        target_id: &Uuid,
+        level: MetricConfigLevel,
+    ) -> Result<Option<FunctionInfo>, Error> {
+        self.inference_queries
+            .get_function_info(target_id, level)
+            .await
+    }
+
+    async fn get_chat_inference_tool_params(
+        &self,
+        function_name: &str,
+        inference_id: Uuid,
+    ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
+        self.inference_queries
+            .get_chat_inference_tool_params(function_name, inference_id)
+            .await
+    }
+
+    async fn get_json_inference_output_schema(
+        &self,
+        function_name: &str,
+        inference_id: Uuid,
+    ) -> Result<Option<Value>, Error> {
+        self.inference_queries
+            .get_json_inference_output_schema(function_name, inference_id)
+            .await
+    }
 }
 
 #[async_trait]
@@ -128,7 +161,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
     }
 }
 
-#[async_trait]
 impl ConfigQueries for MockClickHouseConnectionInfo {
     async fn get_config_snapshot(
         &self,

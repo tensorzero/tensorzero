@@ -134,7 +134,7 @@ async fn test_config_from_toml_table_valid() {
                 VariantConfig::ChatCompletion(chat_config) => {
                     assert_eq!(
                         chat_config.model(),
-                        &Arc::<str>::from("anthropic::claude-3.5-sonnet")
+                        &Arc::<str>::from("anthropic::claude-sonnet-4-5")
                     );
                     assert_eq!(chat_config.weight(), Some(1.0));
                     assert_eq!(
@@ -343,9 +343,9 @@ async fn test_config_from_toml_table_missing_models() {
 #[tokio::test]
 async fn test_config_from_toml_table_missing_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["claude-3-haiku-20240307"]
+    config["models"]["claude-haiku-4-5"]
         .as_table_mut()
-        .expect("Failed to get `models.claude-3-haiku-20240307` section")
+        .expect("Failed to get `models.claude-haiku-4-5` section")
         .remove("providers")
         .expect("Failed to remove `[providers]` section");
 
@@ -353,7 +353,7 @@ async fn test_config_from_toml_table_missing_providers() {
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "models.claude-3-haiku-20240307: missing field `providers`".to_string()
+            message: "models.claude-haiku-4-5: missing field `providers`".to_string()
         })
     );
 }
@@ -504,9 +504,9 @@ async fn test_config_from_toml_table_extra_variables_root() {
 #[tokio::test]
 async fn test_config_from_toml_table_extra_variables_models() {
     let mut config = get_sample_valid_config();
-    config["models"]["claude-3-haiku-20240307"]
+    config["models"]["claude-haiku-4-5"]
         .as_table_mut()
-        .expect("Failed to get `models.claude-3-haiku-20240307` section")
+        .expect("Failed to get `models.claude-haiku-4-5` section")
         .insert("enable_agi".into(), true.into());
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
@@ -526,18 +526,18 @@ async fn test_config_from_toml_table_blacklisted_models() {
     let claude_config = config["models"]
         .as_table_mut()
         .expect("Failed to get `models` section")
-        .remove("claude-3-haiku-20240307")
+        .remove("claude-haiku-4-5")
         .expect("Failed to remove claude config");
     config["models"]
         .as_table_mut()
         .expect("Failed to get `models` section")
-        .insert("anthropic::claude-3-haiku-20240307".into(), claude_config);
+        .insert("anthropic::claude-haiku-4-5".into(), claude_config);
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err().to_string();
     assert!(
         error.contains(
-            "models: Model name 'anthropic::claude-3-haiku-20240307' contains a reserved prefix"
+            "models: Model name 'anthropic::claude-haiku-4-5' contains a reserved prefix"
         ),
         "Unexpected error: {error}"
     );
@@ -547,9 +547,9 @@ async fn test_config_from_toml_table_blacklisted_models() {
 #[tokio::test]
 async fn test_config_from_toml_table_extra_variables_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["claude-3-haiku-20240307"]["providers"]["anthropic"]
+    config["models"]["claude-haiku-4-5"]["providers"]["anthropic"]
         .as_table_mut()
-        .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
+        .expect("Failed to get `models.claude-haiku-4-5.providers.anthropic` section")
         .insert("enable_agi".into(), true.into());
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
@@ -1492,7 +1492,7 @@ async fn test_load_bad_extra_body_delete() {
 
         [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
         type = "chat_completion"
-        model = "anthropic::claude-sonnet-4-5-20250929"
+        model = "anthropic::claude-sonnet-4-5"
         max_tokens = 2048
         extra_body = [{ pointer = "/invalid-field-should-be-deleted", delete = false }]
         "#;
@@ -1516,7 +1516,7 @@ type = "chat"
 
 [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
 type = "chat_completion"
-model = "anthropic::claude-sonnet-4-5-20250929"
+model = "anthropic::claude-sonnet-4-5"
 max_tokens = 2048
 
 [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929.extra_body]
@@ -1682,7 +1682,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
@@ -1712,7 +1712,7 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "sdk"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
@@ -1746,7 +1746,7 @@ async fn test_bedrock_region_and_allow_auto() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-2"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
@@ -1765,7 +1765,7 @@ async fn test_bedrock_dynamic_region_parses() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "dynamic::aws_region"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
@@ -1785,7 +1785,7 @@ async fn test_bedrock_env_region_missing_var_errors() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "env::TENSORZERO_TEST_NONEXISTENT_REGION_VAR"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
@@ -1808,7 +1808,7 @@ async fn test_bedrock_dynamic_credentials_parses() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-1"
         access_key_id = "dynamic::aws_access_key"
         secret_access_key = "dynamic::aws_secret_key"
@@ -1829,7 +1829,7 @@ async fn test_bedrock_dynamic_credentials_with_session_token_parses() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-1"
         access_key_id = "dynamic::aws_access_key"
         secret_access_key = "dynamic::aws_secret_key"
@@ -1851,7 +1851,7 @@ async fn test_bedrock_mixed_credential_sources_errors() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-1"
         access_key_id = "dynamic::aws_access_key"
         secret_access_key = "env::AWS_SECRET_ACCESS_KEY"
@@ -1876,7 +1876,7 @@ async fn test_bedrock_access_key_without_secret_errors() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-1"
         access_key_id = "dynamic::aws_access_key"
         "#;
@@ -1900,7 +1900,7 @@ async fn test_bedrock_session_token_mismatch_errors() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-1"
         access_key_id = "dynamic::aws_access_key"
         secret_access_key = "dynamic::aws_secret_key"
@@ -1926,7 +1926,7 @@ async fn test_bedrock_dynamic_endpoint_url_parses() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-1"
         endpoint_url = "dynamic::aws_endpoint"
         "#;
@@ -1946,7 +1946,7 @@ async fn test_bedrock_static_endpoint_url_parses() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-1"
         endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
         "#;
@@ -2425,7 +2425,7 @@ async fn test_gcp_no_endpoint_and_model() {
         type = "gcp_vertex_gemini"
         location = "us-central1"
         project_id = "test-project"
-        model_id = "gemini-2.0-flash-001"
+        model_id = "gemini-2.5-flash"
         endpoint_id = "4094940393049"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
@@ -2617,7 +2617,7 @@ async fn deny_timeout_with_default_global_timeout() {
 
     assert_eq!(
         err.to_string(),
-        "The `timeouts.non_streaming.total_ms` value `99999999` is greater than `gateway.global_outbound_http_timeout_ms`: `300000`"
+        "The `timeouts.non_streaming.total_ms` value `99999999` is greater than `gateway.global_outbound_http_timeout_ms`: `900000`"
     );
 }
 

@@ -74,7 +74,7 @@ pub fn build_axum_router(
 /// We apply authentication to all routes *except* these ones, to make it difficult
 /// to accidentally skip running authentication on a route, especially if we later refactor
 /// how we build up our router.
-const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health"];
+const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health", "/internal/autopilot/status"];
 
 async fn add_version_header(request: Request, next: Next) -> Response {
     #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]

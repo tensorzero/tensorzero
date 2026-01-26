@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use uuid::Uuid;
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(
     Clone,
     Copy,
@@ -32,9 +33,8 @@ use uuid::Uuid;
     Serialize,
     ValueEnum,
     schemars::JsonSchema,
-    ts_rs::TS,
 )]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 #[clap(rename_all = "snake_case")]
 pub enum CacheEnabledMode {
@@ -55,8 +55,9 @@ impl CacheEnabledMode {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CacheParamsOptions {
     #[serde(default)]
     pub max_age_s: Option<u32>,

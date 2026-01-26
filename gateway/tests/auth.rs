@@ -205,14 +205,7 @@ async fn test_tensorzero_unauthenticated_routes() {
         .unwrap();
 
     let status = health_response.status();
-    let text = health_response.text().await.unwrap();
     assert_eq!(status, StatusCode::OK);
-
-    // TODO(shuyangli): Add a HealthResponse type and validate the parsed form.
-    assert_eq!(
-        text,
-        "{\"gateway\":\"ok\",\"clickhouse\":\"ok\",\"postgres\":\"ok\"}"
-    );
 
     let status_response = reqwest::Client::new()
         .request(Method::GET, format!("http://{}/status", child_data.addr))

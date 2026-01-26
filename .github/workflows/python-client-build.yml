@@ -259,6 +259,8 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          pattern: wheels-*
       - name: Count wheels
         run: |
           ls -lh ./wheels-*/*

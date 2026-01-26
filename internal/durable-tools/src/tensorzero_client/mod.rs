@@ -7,21 +7,19 @@
 mod client_ext;
 mod embedded;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 pub use tensorzero::{
-    ActionInput, Client, ClientBuilder, ClientBuilderError, ClientBuilderMode,
-    ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetConfigResponse, GetDatapointsResponse, InferenceResponse, ListDatapointsRequest,
-    PostgresConfig, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
-    WriteConfigRequest, WriteConfigResponse,
+    Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, ClientInferenceParams,
+    CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
+    DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
+    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, PostgresConfig,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
+    WriteConfigResponse,
 };
-use tensorzero::{GetInferencesResponse, ListInferencesRequest};
+use tensorzero::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -37,12 +35,20 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
-    ListSessionsResponse, ToolOutcome,
+    CreateEventResponse, EventPayload, EventPayloadToolResult, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, ToolOutcome,
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
-#[cfg(test)]
+// Re-export action types from crate::action
+pub use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
+
+// Re-export evaluation types from crate::run_evaluation
+pub use crate::run_evaluation::{
+    DatapointResult, EvaluatorStats, RunEvaluationParams, RunEvaluationResponse,
+};
+
+#[cfg(any(test, feature = "test-support"))]
 use mockall::automock;
 
 /// Error type for TensorZero client operations.
@@ -73,73 +79,13 @@ pub enum TensorZeroClientError {
     Evaluation(String),
 }
 
-// Note: These evaluation types are specific to durable-tools and cannot be replaced with
-// the HTTP wire types from gateway/src/routes/evaluations.rs. The HTTP endpoint uses SSE
-// streaming with per-datapoint events, while these types provide an aggregated response
-// suitable for tool use cases. Additionally, RunEvaluationParams takes only evaluation_name
-// (looking up config internally), while the HTTP endpoint requires the caller to pass in
-// the resolved evaluation_config and function_config.
-
-/// Parameters for running an evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunEvaluationParams {
-    /// Name of the evaluation to run.
-    pub evaluation_name: String,
-    /// Name of the dataset to run on.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    pub dataset_name: Option<String>,
-    /// Specific datapoint IDs to evaluate.
-    /// Either dataset_name or datapoint_ids must be provided, but not both.
-    pub datapoint_ids: Option<Vec<Uuid>>,
-    /// Name of the variant to evaluate.
-    pub variant_name: String,
-    /// Number of concurrent requests to make.
-    pub concurrency: usize,
-    /// Cache configuration for inference requests.
-    pub inference_cache: CacheEnabledMode,
-    /// Maximum number of datapoints to evaluate from the dataset.
-    pub max_datapoints: Option<u32>,
-    /// Precision targets for adaptive stopping.
-    /// Maps evaluator names to target confidence interval half-widths.
-    /// When the CI half-width for an evaluator falls below its target,
-    /// evaluation may stop early for that evaluator.
-    #[serde(default)]
-    pub precision_targets: HashMap<String, f32>,
-}
-
-/// Statistics for a single evaluator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvaluatorStatsResponse {
-    /// Mean value of the evaluator.
-    pub mean: f32,
-    /// Standard error of the evaluator.
-    pub stderr: f32,
-    /// Number of samples.
-    pub count: usize,
-}
-
-/// Response from running an evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunEvaluationResponse {
-    /// Unique identifier for this evaluation run.
-    pub evaluation_run_id: Uuid,
-    /// Number of datapoints evaluated.
-    pub num_datapoints: usize,
-    /// Number of successful evaluations.
-    pub num_successes: usize,
-    /// Number of errors.
-    pub num_errors: usize,
-    /// Per-evaluator statistics.
-    pub stats: HashMap<String, EvaluatorStatsResponse>,
-}
-
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
 ///
 /// This trait abstracts over the TensorZero client, allowing tools to
 /// call inference and autopilot operations without directly depending on
 /// the concrete client type.
 #[async_trait]
-#[cfg_attr(test, automock)]
+#[cfg_attr(any(test, feature = "test-support"), automock)]
 pub trait TensorZeroClient: Send + Sync + 'static {
     /// Run inference with the given parameters.
     ///
@@ -203,19 +149,19 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         params: ListSessionsParams,
     ) -> Result<ListSessionsResponse, TensorZeroClientError>;
 
-    /// Run inference with a historical config snapshot.
+    /// Execute an action with a historical config snapshot.
     ///
-    /// This uses the action endpoint to run inference with a specific config version,
-    /// enabling reproducibility by using the exact configuration that was active
-    /// at a previous point in time.
+    /// This uses the action endpoint to run inference, feedback, or evaluations
+    /// with a specific config version, enabling reproducibility by using the exact
+    /// configuration that was active at a previous point in time.
     ///
-    /// Returns the inference response on success. Streaming inference
-    /// is not supported and will return an error.
+    /// Returns the appropriate response type based on the action input.
+    /// Streaming inference is not supported and will return an error.
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
-    ) -> Result<InferenceResponse, TensorZeroClientError>;
+    ) -> Result<ActionResponse, TensorZeroClientError>;
 
     /// Get a config snapshot by hash, or the live config if no hash is provided.
     async fn get_config_snapshot(
@@ -279,6 +225,12 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn list_inferences(
         &self,
         request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+    /// Get specific inferences by their IDs.
+    async fn get_inferences(
+        &self,
+        request: GetInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
     // ========== Optimization Operations ==========
@@ -382,17 +334,20 @@ pub fn http_gateway_client(url: Url) -> Result<Arc<dyn TensorZeroClient>, Client
 ///     Some("tensorzero.toml".into()),
 ///     Some("http://localhost:8123".into()),
 ///     None,
+///     None,
 /// ).await?;
 /// ```
 pub async fn embedded_gateway_client(
     config_file: Option<PathBuf>,
     clickhouse_url: Option<String>,
     postgres_config: Option<String>,
+    valkey_url: Option<String>,
 ) -> Result<Arc<dyn TensorZeroClient>, ClientBuilderError> {
     let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file,
         clickhouse_url,
         postgres_config: postgres_config.map(PostgresConfig::Url),
+        valkey_url,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: false,

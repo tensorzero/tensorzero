@@ -1,3 +1,4 @@
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{MetricConfig, MetricConfigLevel};
 use crate::error::Error;
 use crate::function::FunctionConfigType;
@@ -14,6 +15,63 @@ use mockall::automock;
 
 use super::{TableBounds, TimeWindow};
 use crate::serde_util::deserialize_u64;
+
+// ===== Insert types for write operations =====
+
+/// Row to insert into boolean_metric_feedback
+#[derive(Debug, Serialize)]
+pub struct BooleanMetricFeedbackInsert {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub metric_name: String,
+    pub value: bool,
+    pub tags: HashMap<String, String>,
+    pub snapshot_hash: SnapshotHash,
+}
+
+/// Row to insert into float_metric_feedback
+#[derive(Debug, Serialize)]
+pub struct FloatMetricFeedbackInsert {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub metric_name: String,
+    pub value: f64,
+    pub tags: HashMap<String, String>,
+    pub snapshot_hash: SnapshotHash,
+}
+
+/// Row to insert into comment_feedback
+#[derive(Debug, Serialize)]
+pub struct CommentFeedbackInsert {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub target_type: CommentTargetType,
+    pub value: String,
+    pub tags: HashMap<String, String>,
+    pub snapshot_hash: SnapshotHash,
+}
+
+/// Row to insert into demonstration_feedback
+#[derive(Debug, Serialize)]
+pub struct DemonstrationFeedbackInsert {
+    pub id: Uuid,
+    pub inference_id: Uuid,
+    pub value: String,
+    pub tags: HashMap<String, String>,
+    pub snapshot_hash: SnapshotHash,
+}
+
+/// Row to insert into static_evaluation_human_feedback
+#[derive(Debug, Serialize)]
+pub struct StaticEvaluationHumanFeedbackInsert {
+    pub feedback_id: Uuid,
+    pub metric_name: String,
+    pub datapoint_id: Uuid,
+    pub output: String,
+    pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_inference_id: Option<Uuid>,
+}
 
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -121,10 +179,35 @@ pub trait FeedbackQueries {
         &self,
         params: GetVariantPerformanceParams<'_>,
     ) -> Result<Vec<VariantPerformanceRow>, Error>;
+
+    // ===== Write methods =====
+
+    /// Insert a boolean metric feedback row
+    async fn insert_boolean_feedback(&self, row: &BooleanMetricFeedbackInsert)
+    -> Result<(), Error>;
+
+    /// Insert a float metric feedback row
+    async fn insert_float_feedback(&self, row: &FloatMetricFeedbackInsert) -> Result<(), Error>;
+
+    /// Insert a comment feedback row
+    async fn insert_comment_feedback(&self, row: &CommentFeedbackInsert) -> Result<(), Error>;
+
+    /// Insert a demonstration feedback row
+    async fn insert_demonstration_feedback(
+        &self,
+        row: &DemonstrationFeedbackInsert,
+    ) -> Result<(), Error>;
+
+    /// Insert a static evaluation human feedback row
+    async fn insert_static_eval_feedback(
+        &self,
+        row: &StaticEvaluationHumanFeedbackInsert,
+    ) -> Result<(), Error>;
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FeedbackByVariant {
     pub variant_name: String,
     // Mean of feedback values for the variant
@@ -136,7 +219,8 @@ pub struct FeedbackByVariant {
     pub count: u64,
 }
 
-#[derive(Clone, Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct InternalCumulativeFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
     pub period_end: DateTime<Utc>,
@@ -151,8 +235,9 @@ pub struct InternalCumulativeFeedbackTimeSeriesPoint {
     pub count: u64,
 }
 
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CumulativeFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
     pub period_end: DateTime<Utc>,
@@ -172,8 +257,9 @@ pub struct CumulativeFeedbackTimeSeriesPoint {
 }
 
 // Feedback by target ID types
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct BooleanMetricFeedbackRow {
     pub id: Uuid,
     pub target_id: Uuid,
@@ -183,8 +269,9 @@ pub struct BooleanMetricFeedbackRow {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FloatMetricFeedbackRow {
     pub id: Uuid,
     pub target_id: Uuid,
@@ -194,8 +281,9 @@ pub struct FloatMetricFeedbackRow {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CommentFeedbackRow {
     pub id: Uuid,
     pub target_id: Uuid,
@@ -204,16 +292,18 @@ pub struct CommentFeedbackRow {
     pub tags: std::collections::HashMap<String, String>,
     pub timestamp: DateTime<Utc>,
 }
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum CommentTargetType {
     Inference,
     Episode,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DemonstrationFeedbackRow {
     pub id: Uuid,
     pub inference_id: Uuid,
@@ -222,10 +312,11 @@ pub struct DemonstrationFeedbackRow {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum FeedbackRow {
     Boolean(BooleanMetricFeedbackRow),
     Float(FloatMetricFeedbackRow),
@@ -233,8 +324,9 @@ pub enum FeedbackRow {
     Demonstration(DemonstrationFeedbackRow),
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct FeedbackBounds {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
@@ -243,8 +335,9 @@ pub struct FeedbackBounds {
     pub by_type: FeedbackBoundsByType,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FeedbackBoundsByType {
     pub boolean: TableBounds,
     pub float: TableBounds,
@@ -252,22 +345,24 @@ pub struct FeedbackBoundsByType {
     pub demonstration: TableBounds,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MetricWithFeedback {
     pub function_name: String,
     pub metric_name: String,
     /// The type of metric (boolean, float, demonstration).
     /// None if the metric is not in the current config (e.g., was deleted).
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub metric_type: Option<MetricType>,
     pub feedback_count: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum MetricType {
     Boolean,
     Float,
@@ -299,8 +394,9 @@ pub struct GetVariantPerformanceParams<'a> {
 
 /// Row returned from the variant performance query.
 /// Contains statistics for each (variant, time_period) combination.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, PartialEq)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantPerformanceRow {
     /// Start datetime of the period in RFC 3339 format.
     /// For cumulative time window, this is '1970-01-01T00:00:00Z'.
@@ -312,12 +408,12 @@ pub struct VariantPerformanceRow {
     /// Average metric value
     pub avg_metric: f64,
     /// Sample standard deviation (null if count < 2)
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stdev: Option<f64>,
     /// 95% confidence interval error margin (1.96 * stdev / sqrt(count))
     /// Null if count < 2 (when stdev is null)
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ci_error: Option<f64>,
 }

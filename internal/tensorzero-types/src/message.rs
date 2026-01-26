@@ -5,7 +5,7 @@
 use crate::content::{Arguments, RawText, System, Template, Text, Thought, Unknown};
 use crate::file::File;
 use crate::role::Role;
-use crate::tool::{ToolCallWrapper, ToolResult};
+use crate::tool::{ToolCallWrapper, ToolCallWrapperJsonSchema, ToolResult};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -14,25 +14,31 @@ use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
 }
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[ts(export, tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
 #[export_schema]
 pub enum InputMessageContent {
     #[schemars(title = "InputMessageContentText")]
     Text(Text),
     #[schemars(title = "InputMessageContentTemplate")]
     Template(Template),
-    #[schemars(title = "InputMessageContentToolCall")]
+    // `ToolCallWrapper` is `serde(untagged)` so no need to name it.
+    #[schemars(with = "ToolCallWrapperJsonSchema")]
     ToolCall(ToolCallWrapper),
     #[schemars(title = "InputMessageContentToolResult")]
     ToolResult(ToolResult),
@@ -53,14 +59,15 @@ pub enum InputMessageContent {
 }
 
 /// API representation of an input to a model.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct Input {
     /// System prompt of the input.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub system: Option<System>,
 
     /// Messages in the input.
@@ -72,8 +79,9 @@ pub struct Input {
 // Custom Deserialize for InputMessage (handles legacy formats)
 // =============================================================================
 
-#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(untagged, deny_unknown_fields)]
 pub enum TextKind {
     Text { text: String },
