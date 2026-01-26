@@ -110,21 +110,17 @@ export function getToolCallEventId(event: ToolEvent): string {
 }
 
 function getMessageText(content: InputMessageContent[]) {
-  const textBlock = content.find(
-    (block) => block.type === "text" && "text" in block,
-  );
-  if (textBlock && "text" in textBlock) {
-    return textBlock.text;
+  const textParts: string[] = [];
+
+  for (const block of content) {
+    if (block.type === "text" && "text" in block) {
+      textParts.push(block.text);
+    } else if (block.type === "raw_text" && "value" in block) {
+      textParts.push(block.value);
+    }
   }
 
-  const rawTextBlock = content.find(
-    (block) => block.type === "raw_text" && "value" in block,
-  );
-  if (rawTextBlock && "value" in rawTextBlock) {
-    return rawTextBlock.value;
-  }
-
-  return "Message content";
+  return textParts.length > 0 ? textParts.join("\n\n") : "Message content";
 }
 
 /**
