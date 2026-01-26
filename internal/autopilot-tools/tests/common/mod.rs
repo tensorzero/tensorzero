@@ -11,9 +11,9 @@ use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
-    ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference, StoredInference,
-    UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
+    GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
+    InferenceResponse, ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference,
+    StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
     WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
@@ -66,8 +66,8 @@ mock! {
         async fn action(
             &self,
             snapshot_hash: SnapshotHash,
-            input: tensorzero::ActionInput,
-        ) -> Result<InferenceResponse, TensorZeroClientError>;
+            input: durable_tools::ActionInput,
+        ) -> Result<durable_tools::ActionResponse, TensorZeroClientError>;
 
         async fn get_config_snapshot(
             &self,
@@ -118,6 +118,11 @@ mock! {
         async fn list_inferences(
             &self,
             request: ListInferencesRequest,
+        ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+        async fn get_inferences(
+            &self,
+            request: GetInferencesRequest,
         ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
         async fn launch_optimization_workflow(

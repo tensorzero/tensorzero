@@ -27,6 +27,7 @@ pub use table_name::TableName;
 #[cfg(any(test, feature = "pyo3"))]
 use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
 
+mod batch_inference;
 mod batching;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
 pub mod dataset_queries;

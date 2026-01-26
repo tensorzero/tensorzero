@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 # and update download-small-fixtures.py to use the new filename
 JSONL_FILES=(
     "model_inference_examples.jsonl"
-    "chat_inference_examples.jsonl"
+    "chat_inference_examples_20260123.jsonl"
     "json_inference_examples.jsonl"
     "boolean_metric_feedback_examples.jsonl"
     "float_metric_feedback_examples.jsonl"

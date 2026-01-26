@@ -11,7 +11,7 @@ import type {
   AutopilotStatus,
   Event,
   EventPayload,
-  InputMessageContent,
+  EventPayloadMessageContent,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 
@@ -109,22 +109,8 @@ export function getToolCallEventId(event: ToolEvent): string {
   return payload.tool_call_event_id;
 }
 
-function getMessageText(content: InputMessageContent[]) {
-  const textBlock = content.find(
-    (block) => block.type === "text" && "text" in block,
-  );
-  if (textBlock && "text" in textBlock) {
-    return textBlock.text;
-  }
-
-  const rawTextBlock = content.find(
-    (block) => block.type === "raw_text" && "value" in block,
-  );
-  if (rawTextBlock && "value" in rawTextBlock) {
-    return rawTextBlock.value;
-  }
-
-  return "Message content";
+function getMessageText(content: EventPayloadMessageContent[]) {
+  return content.map((cb) => cb.text).join("\n\n");
 }
 
 /**
@@ -233,6 +219,26 @@ function renderEventTitle(event: Event) {
         case "failure":
           // TODO: need tool name
           return <>Tool Result &middot; Failure</>;
+        case "rejected":
+          // TODO: need tool name
+          return (
+            <span className="inline-flex items-center gap-2">
+              <span>Tool Result &middot; Rejected</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex cursor-help items-center text-yellow-600"
+                    aria-label="Tool rejected"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  {payload.outcome.reason}
+                </TooltipContent>
+              </Tooltip>
+            </span>
+          );
         case "missing":
           // TODO: need tool name
           return (

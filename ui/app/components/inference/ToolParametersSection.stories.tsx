@@ -275,7 +275,7 @@ export const WithMultipleProviderTools: Story = {
         },
       },
       {
-        scope: { model_name: "claude-3-5-sonnet", provider_name: "anthropic" },
+        scope: { model_name: "claude-sonnet-4-5", provider_name: "anthropic" },
         tool: {
           type: "computer_use",
           display_width: 1920,

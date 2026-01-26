@@ -33,18 +33,18 @@ impl ToolMetadata for ListDatapointsTool {
     type Output = GetDatapointsResponse;
     type LlmParams = ListDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("list_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "List datapoints in a dataset with optional filtering and pagination. \
              Can filter by function name, tags, time ranges, and order results.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "List datapoints in a dataset with filtering and pagination.",

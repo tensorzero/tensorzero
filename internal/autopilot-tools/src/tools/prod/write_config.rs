@@ -34,18 +34,18 @@ impl ToolMetadata for WriteConfigTool {
     type Output = WriteConfigResponse;
     type LlmParams = WriteConfigToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("write_config")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Write a config snapshot to storage and return its hash. \
              Autopilot tags are automatically merged into the provided tags.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Write a config snapshot to storage.",
