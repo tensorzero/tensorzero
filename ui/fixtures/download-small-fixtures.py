@@ -3,8 +3,8 @@
 #   "requests",
 # ]
 # ///
+# For local development without R2 credentials, use download-small-fixtures-http.py instead.
 
-import concurrent.futures
 import hashlib
 import os
 import subprocess
@@ -193,69 +193,6 @@ def sync_fixtures_from_r2(retries: int = 3) -> None:
 
 
 # =============================================================================
-# Public HTTP fallback (used locally without R2 credentials)
-# =============================================================================
-
-
-def download_file_http(remote_filename, local_filename, remote_etag):
-    """Download a single file from R2 via public HTTP URL."""
-    RETRIES = 3
-    for i in range(RETRIES):
-        try:
-            url = f"{R2_PUBLIC_BUCKET_URL}/{remote_filename}"
-            response = requests.get(url, stream=True, timeout=300)
-            response.raise_for_status()
-
-            local_file = FIXTURES_DIR / local_filename
-
-            with open(local_file, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            local_etag = calculate_etag(local_file)
-            if local_etag != remote_etag:
-                raise Exception(f"ETag mismatch after downloading: {local_etag} != {remote_etag}")
-            return
-        except Exception as e:
-            print(
-                f"Error downloading `{remote_filename}` (attempt {i + 1} of {RETRIES}): {e}",
-                flush=True,
-            )
-            time.sleep(1)
-    raise Exception(f"Failed to download `{remote_filename}` after {RETRIES} attempts")
-
-
-def download_fixtures_http():
-    """Download all fixtures via public HTTP (fallback when no R2 credentials)."""
-
-    def process_fixture(item):
-        remote_filename, local_filename = item
-        local_file = FIXTURES_DIR / local_filename
-        remote_etag = get_remote_etag(remote_filename)
-
-        if not local_file.exists():
-            print(f"Downloading {remote_filename} (file doesn't exist locally)", flush=True)
-            download_file_http(remote_filename, local_filename, remote_etag)
-            return
-
-        local_etag = calculate_etag(local_file)
-
-        if local_etag != remote_etag:
-            print(f"Downloading {remote_filename} (ETag mismatch)", flush=True)
-            print(f"Local ETag: {local_etag}", flush=True)
-            print(f"Remote ETag: {remote_etag}", flush=True)
-            download_file_http(remote_filename, local_filename, remote_etag)
-        else:
-            print(f"Skipping {remote_filename} (up to date)", flush=True)
-
-    # Use ThreadPoolExecutor to download files in parallel
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Loop over the results to propagate exceptions
-        for result in executor.map(process_fixture, FIXTURES.items()):
-            assert result is None
-
-
-# =============================================================================
 # Main
 # =============================================================================
 
@@ -263,15 +200,14 @@ def download_fixtures_http():
 def main():
     FIXTURES_DIR.mkdir(exist_ok=True)
 
-    if os.environ.get("R2_ACCESS_KEY_ID") and os.environ.get("R2_SECRET_ACCESS_KEY"):
-        print("R2 credentials found, downloading fixtures using `aws s3 sync`", flush=True)
-        sync_fixtures_from_r2()
-    else:
-        print(
-            "WARNING: `R2_ACCESS_KEY_ID` or `R2_SECRET_ACCESS_KEY` not set. Falling back to slow public HTTP downloads.",
-            flush=True,
+    if not os.environ.get("R2_ACCESS_KEY_ID") or not os.environ.get("R2_SECRET_ACCESS_KEY"):
+        raise Exception(
+            "R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must be set. "
+            "For local development without R2 credentials, use download-small-fixtures-http.py instead."
         )
-        download_fixtures_http()
+
+    print("R2 credentials found, downloading fixtures using `aws s3 sync`", flush=True)
+    sync_fixtures_from_r2()
 
 
 if __name__ == "__main__":
