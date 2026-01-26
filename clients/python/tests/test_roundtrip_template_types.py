@@ -151,7 +151,7 @@ async def test_async_template_content_roundtrip_complete_flow(
     assert template_reloaded["arguments"] == {"country": "France"}
 
     # ============================================================================
-    # Step 5: Reuse in follow-up inference with different template arguments
+    # Step 5: Reuse serialized template in follow-up inference
     # ============================================================================
 
     follow_up_result = await async_client.inference(
@@ -161,7 +161,7 @@ async def test_async_template_content_roundtrip_complete_flow(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}],
+                    "content": [template_dict],  # Reuse serialized template
                 }
             ],
         },
@@ -169,7 +169,9 @@ async def test_async_template_content_roundtrip_complete_flow(
     )
 
     assert isinstance(follow_up_result, JsonInferenceResponse), "Follow-up must return JsonInferenceResponse"
-    assert follow_up_result.inference_id is not None, "Follow-up inference must succeed when using template"
+    assert follow_up_result.inference_id is not None, (
+        "Follow-up inference must succeed when reusing serialized template data"
+    )
 
     # ============================================================================
     # Step 6: Verify follow-up stored data
@@ -207,7 +209,7 @@ async def test_async_template_content_roundtrip_complete_flow(
     assert follow_up_template is not None, "Should have template in follow-up"
     assert isinstance(follow_up_template, StoredInputMessageContentTemplate)
     assert follow_up_template.name == "user", "Template name must be preserved"
-    assert follow_up_template.arguments == {"country": "Japan"}, "Template arguments must match follow-up"
+    assert follow_up_template.arguments == {"country": "France"}, "Template arguments must match reused serialized data"
 
     # ============================================================================
     # Step 7: Create datapoint from follow-up inference
@@ -269,7 +271,9 @@ async def test_async_template_content_roundtrip_complete_flow(
         assert hasattr(datapoint_template, "name"), "Datapoint template must have 'name' field"
         assert hasattr(datapoint_template, "arguments"), "Datapoint template must have 'arguments' field"
         assert datapoint_template.name == "user", "Datapoint template name must be preserved"
-        assert datapoint_template.arguments == {"country": "Japan"}, "Datapoint template arguments must be preserved"
+        assert datapoint_template.arguments == {"country": "France"}, (
+            "Datapoint template arguments must match reused serialized data"
+        )
 
         # Verify output is JsonInferenceOutput
         assert isinstance(datapoint.output, JsonInferenceOutput), "Datapoint output must be JsonInferenceOutput"
