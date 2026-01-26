@@ -245,22 +245,21 @@ async def test_async_text_content_roundtrip_complete_flow(
 
     dataset_name = f"test_text_roundtrip_{uuid7()}"
 
-    datapoint_response = await async_client.create_datapoints_from_inferences(
-        dataset_name=dataset_name,
-        params=CreateDatapointsFromInferenceRequestParamsInferenceIds(inference_ids=[follow_up_id]),
-        output_source="inference",
-    )
-
-    assert datapoint_response.ids is not None, "create_datapoints_from_inferences must return IDs"
-    assert len(datapoint_response.ids) == 1, "Should create exactly 1 datapoint"
-
-    datapoint_id = datapoint_response.ids[0]
-
-    # ============================================================================
-    # Step 10: Retrieve datapoint via get_datapoints
-    # ============================================================================
-
     try:
+        datapoint_response = await async_client.create_datapoints_from_inferences(
+            dataset_name=dataset_name,
+            params=CreateDatapointsFromInferenceRequestParamsInferenceIds(inference_ids=[follow_up_id]),
+            output_source="inference",
+        )
+
+        assert datapoint_response.ids is not None, "create_datapoints_from_inferences must return IDs"
+        assert len(datapoint_response.ids) == 1, "Should create exactly 1 datapoint"
+
+        datapoint_id = datapoint_response.ids[0]
+
+        # ============================================================================
+        # Step 10: Retrieve datapoint via get_datapoints
+        # ============================================================================
         datapoint_get_response = await async_client.get_datapoints(dataset_name=dataset_name, ids=[datapoint_id])
 
         assert datapoint_get_response.datapoints is not None, "get_datapoints must return datapoints"
@@ -488,15 +487,14 @@ def test_sync_text_content_roundtrip_complete_flow(sync_client: TensorZeroGatewa
 
     dataset_name = f"test_text_roundtrip_{uuid7()}"
 
-    datapoint_response = sync_client.create_datapoints_from_inferences(
-        dataset_name=dataset_name,
-        params=CreateDatapointsFromInferenceRequestParamsInferenceIds(inference_ids=[follow_up_id]),
-        output_source="inference",
-    )
-
-    datapoint_id = datapoint_response.ids[0]
-
     try:
+        datapoint_response = sync_client.create_datapoints_from_inferences(
+            dataset_name=dataset_name,
+            params=CreateDatapointsFromInferenceRequestParamsInferenceIds(inference_ids=[follow_up_id]),
+            output_source="inference",
+        )
+
+        datapoint_id = datapoint_response.ids[0]
         datapoint_get_response = sync_client.get_datapoints(dataset_name=dataset_name, ids=[datapoint_id])
 
         datapoint = datapoint_get_response.datapoints[0]

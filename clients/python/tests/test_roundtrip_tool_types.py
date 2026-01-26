@@ -336,25 +336,24 @@ async def test_async_tool_call_roundtrip_complete_flow(
 
     dataset_name = f"test_tool_call_roundtrip_{uuid7()}"
 
-    # Use follow_up_id instead of inference_id to get the complete conversation
-    datapoint_response = await async_client.create_datapoints_from_inferences(
-        dataset_name=dataset_name,
-        params=CreateDatapointsFromInferenceRequestParamsInferenceIds(
-            inference_ids=[follow_up_id]  # Use follow-up inference with full conversation
-        ),
-        output_source="inference",
-    )
-
-    assert datapoint_response.ids is not None, "create_datapoints_from_inferences must return IDs"
-    assert len(datapoint_response.ids) == 1, "Should create exactly 1 datapoint"
-
-    datapoint_id = datapoint_response.ids[0]
-
-    # ============================================================================
-    # Step 10: Retrieve datapoint via get_datapoints
-    # ============================================================================
-
     try:
+        # Use follow_up_id instead of inference_id to get the complete conversation
+        datapoint_response = await async_client.create_datapoints_from_inferences(
+            dataset_name=dataset_name,
+            params=CreateDatapointsFromInferenceRequestParamsInferenceIds(
+                inference_ids=[follow_up_id]  # Use follow-up inference with full conversation
+            ),
+            output_source="inference",
+        )
+
+        assert datapoint_response.ids is not None, "create_datapoints_from_inferences must return IDs"
+        assert len(datapoint_response.ids) == 1, "Should create exactly 1 datapoint"
+
+        datapoint_id = datapoint_response.ids[0]
+
+        # ============================================================================
+        # Step 10: Retrieve datapoint via get_datapoints
+        # ============================================================================
         datapoint_get_response = await async_client.get_datapoints(dataset_name=dataset_name, ids=[datapoint_id])
 
         assert datapoint_get_response.datapoints is not None, "get_datapoints must return datapoints"
@@ -765,25 +764,24 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
 
     dataset_name = f"test_tool_call_roundtrip_{uuid7()}"
 
-    # Use follow_up_id instead of inference_id to get the complete conversation
-    datapoint_response = sync_client.create_datapoints_from_inferences(
-        dataset_name=dataset_name,
-        params=CreateDatapointsFromInferenceRequestParamsInferenceIds(
-            inference_ids=[follow_up_id]  # Use follow-up inference with full conversation
-        ),
-        output_source="inference",
-    )
-
-    assert datapoint_response.ids is not None, "create_datapoints_from_inferences must return IDs"
-    assert len(datapoint_response.ids) == 1, "Should create exactly 1 datapoint"
-
-    datapoint_id = datapoint_response.ids[0]
-
-    # ============================================================================
-    # Step 10: Retrieve datapoint via get_datapoints
-    # ============================================================================
-
     try:
+        # Use follow_up_id instead of inference_id to get the complete conversation
+        datapoint_response = sync_client.create_datapoints_from_inferences(
+            dataset_name=dataset_name,
+            params=CreateDatapointsFromInferenceRequestParamsInferenceIds(
+                inference_ids=[follow_up_id]  # Use follow-up inference with full conversation
+            ),
+            output_source="inference",
+        )
+
+        assert datapoint_response.ids is not None, "create_datapoints_from_inferences must return IDs"
+        assert len(datapoint_response.ids) == 1, "Should create exactly 1 datapoint"
+
+        datapoint_id = datapoint_response.ids[0]
+
+        # ============================================================================
+        # Step 10: Retrieve datapoint via get_datapoints
+        # ============================================================================
         datapoint_get_response = sync_client.get_datapoints(dataset_name=dataset_name, ids=[datapoint_id])
 
         assert datapoint_get_response.datapoints is not None, "get_datapoints must return datapoints"
