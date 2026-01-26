@@ -59,6 +59,7 @@ dev = [
     "pytest-rerunfailures",
     "pytest",
     "pytest-httpserver",
+    "pytest-timeout",
     "openai",
     "clickhouse-connect",
     "pandas",
