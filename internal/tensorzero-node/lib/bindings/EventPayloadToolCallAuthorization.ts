@@ -2,7 +2,7 @@
 import type { ToolCallAuthorizationStatus } from "./ToolCallAuthorizationStatus";
 import type { ToolCallDecisionSource } from "./ToolCallDecisionSource";
 
-export type ToolCallAuthorization = {
+export type EventPayloadToolCallAuthorization = {
   source: ToolCallDecisionSource;
   tool_call_event_id: string;
   status: ToolCallAuthorizationStatus;

@@ -76,36 +76,30 @@ pub trait ErasedSimpleTool: ErasedTool {
 }
 
 /// Wrapper that implements [`ErasedTool`] for `TaskTool` types.
-pub struct ErasedTaskToolWrapper<T: TaskTool>(std::marker::PhantomData<T>);
+pub struct ErasedTaskToolWrapper<T: TaskTool>(Arc<T>);
 
 impl<T: TaskTool> ErasedTaskToolWrapper<T> {
-    /// Create a new wrapper.
-    pub fn new() -> Self {
-        Self(std::marker::PhantomData)
-    }
-}
-
-impl<T: TaskTool> Default for ErasedTaskToolWrapper<T> {
-    fn default() -> Self {
-        Self::new()
+    /// Create a new wrapper with the given tool instance.
+    pub fn new(tool: Arc<T>) -> Self {
+        Self(tool)
     }
 }
 
 impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
     fn name(&self) -> Cow<'static, str> {
-        <T as ToolMetadata>::name()
+        self.0.name()
     }
 
     fn description(&self) -> Cow<'static, str> {
-        <T as ToolMetadata>::description()
+        self.0.description()
     }
 
     fn parameters_schema(&self) -> ToolResult<Schema> {
-        <T as ToolMetadata>::parameters_schema()
+        self.0.parameters_schema()
     }
 
     fn timeout(&self) -> Duration {
-        <T as ToolMetadata>::timeout()
+        self.0.timeout()
     }
 
     fn is_durable(&self) -> bool {
@@ -129,19 +123,19 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
 /// Blanket implementation of [`ErasedTool`] for all `SimpleTool` types.
 impl<T: SimpleTool> ErasedTool for T {
     fn name(&self) -> Cow<'static, str> {
-        <T as ToolMetadata>::name()
+        ToolMetadata::name(self)
     }
 
     fn description(&self) -> Cow<'static, str> {
-        <T as ToolMetadata>::description()
+        ToolMetadata::description(self)
     }
 
     fn parameters_schema(&self) -> ToolResult<Schema> {
-        <T as ToolMetadata>::parameters_schema()
+        ToolMetadata::parameters_schema(self)
     }
 
     fn timeout(&self) -> Duration {
-        <T as ToolMetadata>::timeout()
+        ToolMetadata::timeout(self)
     }
 
     fn is_durable(&self) -> bool {
@@ -176,7 +170,7 @@ impl<T: SimpleTool> ErasedSimpleTool for T {
         let typed_llm_params: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params)?;
         let typed_side_info: T::SideInfo = serde_json::from_value(side_info)?;
 
-        // Execute
+        // Execute (static method)
         let result = T::execute(typed_llm_params, typed_side_info, ctx, idempotency_key).await?;
 
         // Serialize output
@@ -209,13 +203,17 @@ impl ToolRegistry {
         }
     }
 
-    /// Register a `TaskTool`.
+    /// Register a `TaskTool` instance.
     ///
     /// # Errors
     ///
     /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
-    pub fn register_task_tool<T: TaskTool>(&mut self) -> Result<&mut Self, ToolError> {
-        let name = <T as ToolMetadata>::name();
+    pub fn register_task_tool_instance<T: TaskTool>(
+        &mut self,
+        tool: T,
+    ) -> Result<Arc<T>, ToolError> {
+        let tool = Arc::new(tool);
+        let name = tool.name();
         if self.tools.contains_key(name.as_ref()) {
             return Err(NonControlToolError::DuplicateToolName {
                 name: name.into_owned(),
@@ -223,20 +221,22 @@ impl ToolRegistry {
             .into());
         }
 
-        let wrapper = Arc::new(ErasedTaskToolWrapper::<T>::new());
+        let wrapper = Arc::new(ErasedTaskToolWrapper::new(tool.clone()));
         self.tools.insert(name.into_owned(), wrapper);
-        Ok(self)
+        Ok(tool)
     }
 
-    /// Register a `SimpleTool`.
+    /// Register a `SimpleTool` instance.
     ///
     /// # Errors
     ///
     /// Returns `NonControlToolError::DuplicateToolName` if a tool with the same name is already registered.
-    pub fn register_simple_tool<T: SimpleTool + Default>(
+    pub fn register_simple_tool_instance<T: SimpleTool>(
         &mut self,
-    ) -> Result<&mut Self, ToolError> {
-        let name = <T as ToolMetadata>::name();
+        tool: T,
+    ) -> Result<Arc<T>, ToolError> {
+        let tool = Arc::new(tool);
+        let name = tool.name();
         if self.tools.contains_key(name.as_ref()) {
             return Err(NonControlToolError::DuplicateToolName {
                 name: name.into_owned(),
@@ -244,11 +244,12 @@ impl ToolRegistry {
             .into());
         }
 
-        let tool = Arc::new(T::default());
+        let name = name.into_owned();
         self.tools
-            .insert(name.to_string(), tool.clone() as Arc<dyn ErasedTool>);
-        self.simple_tools.insert(name.into_owned(), tool);
-        Ok(self)
+            .insert(name.clone(), tool.clone() as Arc<dyn ErasedTool>);
+        self.simple_tools
+            .insert(name, tool.clone() as Arc<dyn ErasedSimpleTool>);
+        Ok(tool)
     }
 
     /// Get a tool by name.

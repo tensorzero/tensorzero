@@ -315,7 +315,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-tools"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-worker"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1805,7 +1805,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=75bde52f2a40d1fabd72443ddcf26e1342e28b56#75bde52f2a40d1fabd72443ddcf26e1342e28b56"
+source = "git+https://github.com/tensorzero/durable?rev=b779f5a3f7e34f4f8a758ec4627d56538945cfeb#b779f5a3f7e34f4f8a758ec4627d56538945cfeb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1826,7 +1826,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1856,7 +1856,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "async-trait",
  "durable",
@@ -1988,7 +1988,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2091,7 +2091,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2337,7 +2337,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "async-stream",
  "autopilot-worker",
@@ -3565,7 +3565,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "minijinja",
  "serde",
@@ -4751,7 +4751,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6206,7 +6206,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "axum",
  "chrono",
@@ -6226,7 +6226,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6251,6 +6251,7 @@ dependencies = [
  "dashmap 6.1.0",
  "derive_builder 0.20.2",
  "durable",
+ "durable-tools",
  "enum-map",
  "eventsource-stream",
  "futures",
@@ -6346,7 +6347,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "napi",
  "napi-build",
@@ -6359,7 +6360,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -6393,7 +6394,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "evaluations",
  "futures",
@@ -6411,7 +6412,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "aws-smithy-types",
  "infer",
@@ -6431,7 +6432,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.1.3"
+version = "2026.1.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -6439,7 +6440,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2026.1.3"
+version = "2026.1.5"
 
 [[package]]
 name = "termcolor"

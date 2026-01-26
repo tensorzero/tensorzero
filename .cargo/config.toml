@@ -129,5 +129,5 @@ tsbuild = [
     "tensorzero-types",
     # TODO(shuyangli): Remove `gateway` when we redesign evaluations crate.
     "-p",
-    "gateway"
+    "gateway",
 ] # Export Typescript bindings for TensorZero
