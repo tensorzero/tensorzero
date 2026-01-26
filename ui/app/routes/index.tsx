@@ -117,8 +117,8 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
       rel="noopener noreferrer"
       target="_blank"
     >
-      <Icon className="text-fg-muted group-hover:text-fg-secondary mr-2 h-4 w-4 transition-colors" />
-      <span className="text-fg-secondary group-hover:text-fg-primary transition-colors">
+      <Icon className="text-fg-muted mr-2 h-4 w-4 transition-colors group-hover:text-orange-600" />
+      <span className="text-fg-secondary text-sm transition-colors group-hover:text-orange-600">
         {children}
       </span>
     </Link>
@@ -335,7 +335,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="https://www.tensorzero.com/docs"
                 icon={Documentation}
               >
-                Documentation
+                Docs
               </FooterLink>
               <FooterLink
                 source="https://github.com/tensorzero/tensorzero"
