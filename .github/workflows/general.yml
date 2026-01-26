@@ -918,8 +918,12 @@ jobs:
     name: "Postgres tests"
     permissions:
       contents: read
+      # Permission to download artifacts and for rust-cache
       actions: read
+      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      id-token: write
     runs-on: ubuntu-latest
+    needs: [build-gateway-container]
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
 
     steps:
@@ -950,7 +954,25 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Set environment variables for Postgres and Valkey
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+
+      - name: Login to Namespace registry
+        run: nsc docker login
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}  
+
+      - name: Download gateway container image
+        run: |
+          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Set TENSORZERO_GATEWAY_TAG
+        run: |
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Set environment variables for Postgres
         run: |
           echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
           echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV

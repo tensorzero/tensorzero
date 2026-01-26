@@ -464,6 +464,8 @@ async fn create_postgres_connection(
     Ok(connection_info)
 }
 
+// TODO(#5764): We should test that on startup we issue the correct SQL for write_retention_config,
+// but this is currently structured that's difficult to swap in a Mock.
 pub async fn setup_postgres(
     config: &Config,
     postgres_url: Option<String>,
@@ -497,6 +499,11 @@ pub async fn setup_postgres(
             create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
         }
     };
+
+    // Write retention config to Postgres (syncs tensorzero.toml -> database)
+    postgres_connection_info
+        .write_retention_config(config.postgres.inference_retention_days)
+        .await?;
 
     Ok(postgres_connection_info)
 }
@@ -923,6 +930,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -941,6 +949,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -964,6 +973,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: None,
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -982,6 +992,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(true),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -1000,6 +1011,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(true),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -1016,6 +1028,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             rate_limiting: Default::default(),
             ..Default::default()
