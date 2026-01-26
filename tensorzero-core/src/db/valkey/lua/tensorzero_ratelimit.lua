@@ -19,6 +19,10 @@
 -- Minimum TTL in seconds to avoid very short expirations
 local MIN_TTL_SECONDS = 3600  -- 1 hour
 
+-- Rate limiting key prefixes
+local RATE_LIMITING_KEY_PREFIX = 'tensorzero_ratelimit:'
+local OLD_RATE_LIMITING_KEY_PREFIX_FOR_MIGRATION = 'ratelimit:'
+
 -- Get current server time in microseconds
 local function get_server_time_micros()
     local time = server.call('TIME')
@@ -97,7 +101,7 @@ local function consume_tickets(keys, args)
         -- HMGET reads multiple fields from the hash in one call, and returns a table with two values:
         -- [balance, last_refilled]
         -- Returns [nil, nil] if the key does not exist.
-        local data = server.call('HMGET', 'tensorzero_ratelimit:' .. key, 'balance', 'last_refilled')
+        local data = server.call('HMGET', RATE_LIMITING_KEY_PREFIX .. key, 'balance', 'last_refilled')
         local balance = tonumber(data[1]) or capacity  -- New bucket starts at capacity
         local last_refilled = tonumber(data[2]) or now
 
@@ -122,7 +126,7 @@ local function consume_tickets(keys, args)
         -- All succeed: deduct from all and persist
         for i = 1, num_keys do
             local key = keys[i]
-            local redis_key = 'tensorzero_ratelimit:' .. key
+            local redis_key = RATE_LIMITING_KEY_PREFIX .. key
             local new_balance = state[i].balance - params[i].requested
 
             -- Store aligned last_refilled, NOT current time
@@ -179,7 +183,7 @@ local function return_tickets(keys, args)
 
     for i = 1, num_keys do
         local key = keys[i]
-        local redis_key = 'tensorzero_ratelimit:' .. key
+        local redis_key = RATE_LIMITING_KEY_PREFIX .. key
         local base_idx = (i - 1) * 4
         local returned = tonumber(args[base_idx + 1])
         local capacity = tonumber(args[base_idx + 2])
@@ -226,13 +230,58 @@ local function get_balance(keys, args)
     local refill_interval = tonumber(args[3])
     local now = get_server_time_micros()
 
-    local data = server.call('HMGET', 'tensorzero_ratelimit:' .. key, 'balance', 'last_refilled')
+    local data = server.call('HMGET', RATE_LIMITING_KEY_PREFIX .. key, 'balance', 'last_refilled')
     local balance = tonumber(data[1]) or capacity
     local last_refilled = tonumber(data[2]) or now
 
     local new_balance, _ = apply_refill(
         balance, last_refilled, now, capacity, refill_amount, refill_interval)
     return cjson.encode({ balance = new_balance })
+end
+
+-- Function 4: migrate_old_keys
+-- Migrates old rate limit keys ('ratelimit:*') to new prefixed keys ('tensorzero_ratelimit:*').
+-- This preserves existing rate limit state during upgrades from older versions.
+-- Keys are only copied if the new key doesn't already exist.
+-- KEYS: (none)
+-- ARGV: (none)
+-- Returns: JSON object {migrated_count}
+local function migrate_old_keys(keys, args)
+    local migrated_count = 0
+    local cursor = '0'
+
+    repeat
+        -- SCAN for old keys
+        local result = server.call('SCAN', cursor, 'MATCH', OLD_RATE_LIMITING_KEY_PREFIX_FOR_MIGRATION .. '*', 'COUNT', 100)
+        cursor = result[1]
+        local found_keys = result[2]
+
+        for _, old_key in ipairs(found_keys) do
+            -- Extract the suffix after the old prefix
+            local suffix = string.sub(old_key, #OLD_RATE_LIMITING_KEY_PREFIX_FOR_MIGRATION + 1)
+            local new_key = RATE_LIMITING_KEY_PREFIX .. suffix
+
+            -- Only migrate if new key doesn't exist
+            local exists = server.call('EXISTS', new_key)
+            if exists == 0 then
+                -- Copy hash data
+                local data = server.call('HGETALL', old_key)
+                if #data > 0 then
+                    server.call('HSET', new_key, unpack(data))
+
+                    -- Copy TTL if present
+                    local ttl = server.call('TTL', old_key)
+                    if ttl > 0 then
+                        server.call('EXPIRE', new_key, ttl)
+                    end
+
+                    migrated_count = migrated_count + 1
+                end
+            end
+        end
+    until cursor == '0'
+
+    return cjson.encode({ migrated_count = migrated_count })
 end
 
 -- Register all functions with version suffix for safe rolling deploys
@@ -243,5 +292,6 @@ server.register_function{
     callback = get_balance,
     flags = { 'no-writes' }  -- Enables FCALL_RO on read replicas
 }
+server.register_function('tensorzero_migrate_old_keys_v1', migrate_old_keys)
 
 -- Lint.ThenEdit(tensorzero-core/src/db/valkey/rate_limiting.rs)
