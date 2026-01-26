@@ -948,12 +948,12 @@ make_rate_limit_tests!(test_rate_limiting_time_intervals);
 
 async fn test_rate_limiting_time_intervals(backend: &str, stream: bool) {
     // Test different time intervals work correctly
-    // We use concurrent requests to avoid flakiness from token refill if the requests are not cached
+    // We use `refill_rate = 0` to avoid flakiness from tokens refilling if requests serialize due to database locking delays
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(
         &[&format!(
             r#"[[rate_limiting.rules]]
-model_inferences_per_second = {{ capacity = 2, refill_rate = 2 }}
+model_inferences_per_second = {{ capacity = 2, refill_rate = 0 }}
 always = true
 scope = [
     {{ tag_key = "test12_user_id_{id}", tag_value = "123" }}
