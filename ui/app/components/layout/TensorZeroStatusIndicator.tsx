@@ -58,7 +58,7 @@ export default function TensorZeroStatusIndicator({
         <div className="ml-6 transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-[10px] text-yellow-600 whitespace-nowrap">
+              <span className="text-[10px] whitespace-nowrap text-yellow-600">
                 Version mismatch: UI {uiVersion}
               </span>
             </TooltipTrigger>
@@ -78,7 +78,9 @@ export default function TensorZeroStatusIndicator({
         <TooltipContent side="right" align="center">
           {statusText}
           {status && !versionsMatch && (
-            <div className="text-yellow-600">Version mismatch: UI {uiVersion}</div>
+            <div className="text-yellow-600">
+              Version mismatch: UI {uiVersion}
+            </div>
           )}
         </TooltipContent>
       </Tooltip>

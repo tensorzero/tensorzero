@@ -50,7 +50,7 @@ function DirectoryCard({
 }: DirectoryCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="border-border group flex w-full flex-row items-center gap-3 rounded-xl border p-4 transition-colors hover:border-card-highlight-border hover:bg-card-highlight">
+      <Card className="border-border group hover:border-card-highlight-border hover:bg-card-highlight flex w-full flex-row items-center gap-3 rounded-xl border p-4 transition-colors">
         <div className="bg-bg-tertiary group-hover:bg-card-highlight-icon-bg h-8 w-8 rounded-lg p-2 transition-colors">
           <Icon
             className="text-fg-secondary group-hover:text-card-highlight-icon transition-colors"
@@ -176,10 +176,6 @@ export async function loader() {
     (datasets) => `${datasets.datasets.length} datasets`,
   );
 
-  const numEvaluationRunsDesc = numEvaluationRunsPromise.then(
-    (runs) => `evaluations, ${runs} runs`,
-  );
-
   const inferenceEvaluationsDesc = Promise.all([
     configPromise,
     numEvaluationRunsPromise,
@@ -203,7 +199,6 @@ export async function loader() {
     numVariantsDesc,
     numEpisodesDesc,
     numDatasetsDesc,
-    numEvaluationRunsDesc,
     inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
     numModelsUsedDesc,
@@ -227,8 +222,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <div className="mx-auto flex w-full max-w-240 flex-col gap-12">
         <h1 className="text-2xl font-medium">Overview</h1>
 
-        {/* Main sections grid */}
-        {/* Row 1: Observability, Evaluations, Optimization */}
         <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
           <div id="observability" className="flex w-full flex-col gap-2">
             <h2 className="text-md text-fg-secondary font-medium">
