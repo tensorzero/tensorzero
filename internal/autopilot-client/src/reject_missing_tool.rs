@@ -16,25 +16,27 @@ use crate::types::{AutopilotSideInfo, EventPayloadToolCall};
 ///
 /// # Duplicate Prevention
 ///
-/// This function does not check for existing tasks. Duplicate spawns are prevented
-/// at a higher level:
-/// - For `list_events`: once rejected, the tool is removed from `pending_tool_calls`,
-///   so subsequent calls won't see it.
-/// - For `stream_events`: once a tool call is streamed and rejected, subsequent
-///   interactions typically use `list_events` instead, which won't return it.
-///
-/// In rare cases, duplicate tasks may be spawned (e.g., if streaming and listing
-/// happen concurrently). The cost is minimal: the duplicate task will fail when
-/// it tries to reject an already-rejected tool call.
+/// This function checks if a rejection task already exists for the tool call
+/// before spawning a new one to prevent duplicate rejections.
 ///
 /// # Errors
 ///
-/// Returns an error if spawning the durable task fails.
+/// Returns an error if checking for existing tasks or spawning the durable task fails.
 pub async fn reject_missing_tool(
     spawn_client: &Arc<SpawnClient>,
     tool_call: &EventPayloadToolCall,
 ) -> Result<(), AutopilotError> {
     let tool_call_event_id = tool_call.side_info.tool_call_event_id;
+
+    // Check if we've already spawned a rejection for this tool call
+    if check_tool_rejection_exists(spawn_client, tool_call_event_id).await? {
+        tracing::debug!(
+            tool_name = %tool_call.name,
+            tool_call_event_id = %tool_call_event_id,
+            "Rejection task already exists, skipping"
+        );
+        return Ok(());
+    }
 
     let side_info = AutopilotSideInfo {
         session_id: tool_call.side_info.session_id,
@@ -62,4 +64,35 @@ pub async fn reject_missing_tool(
     );
 
     Ok(())
+}
+
+/// Check if a rejection task already exists for the given tool call event.
+///
+/// This queries the durable tasks table to see if we've already spawned
+/// a `__auto_reject_tool_call__` task for this specific tool call.
+pub async fn check_tool_rejection_exists(
+    spawn_client: &Arc<SpawnClient>,
+    tool_call_event_id: Uuid,
+) -> Result<bool, AutopilotError> {
+    let queue_name = spawn_client.queue_name();
+
+    // Query for an existing rejection task with matching tool_call_event_id in side_info.
+    // The table name is derived from the queue name, which is defaulted or comes from an env var.
+    let query = format!(
+        r"
+        SELECT EXISTS(
+            SELECT 1
+            FROM durable.t_{queue_name}
+            WHERE task_name = '__auto_reject_tool_call__'
+              AND params->'side_info'->>'tool_call_event_id' = $1
+        )
+        "
+    );
+
+    let exists: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(query))
+        .bind(tool_call_event_id.to_string())
+        .fetch_one(spawn_client.pool())
+        .await?;
+
+    Ok(exists)
 }
