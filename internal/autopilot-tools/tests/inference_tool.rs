@@ -6,11 +6,12 @@ use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use durable::MIGRATOR;
+use durable_tools::{ActionInput, ActionResponse};
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
 use tensorzero::{
-    ActionInput, GetInferencesRequest, GetInferencesResponse, InferenceOutputSource, Input,
-    InputMessage, InputMessageContent, ListInferencesRequest, Role,
+    GetInferencesRequest, GetInferencesResponse, InferenceOutputSource, Input, InputMessage,
+    InputMessageContent, ListInferencesRequest, Role,
 };
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
@@ -81,7 +82,7 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
                 && params.tags.get("tensorzero::autopilot::tool_call_event_id")
                     == Some(&tool_call_event_id.to_string())
         })
-        .returning(move |_, _| Ok(mock_response.clone()));
+        .returning(move |_, _| Ok(ActionResponse::Inference(mock_response.clone())));
 
     // Create the tool and context
     let tool = InferenceTool;
