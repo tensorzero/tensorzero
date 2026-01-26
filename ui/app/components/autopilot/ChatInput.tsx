@@ -94,6 +94,20 @@ export function ChatInput({
     adjustTextareaHeight();
   }, [text, adjustTextareaHeight]);
 
+  // Debounced resize handler for window width changes
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const handleResize = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(adjustTextareaHeight, 100);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [adjustTextareaHeight]);
+
   // Handle fetcher response
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
