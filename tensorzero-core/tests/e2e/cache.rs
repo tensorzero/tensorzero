@@ -3,7 +3,6 @@
 use futures::StreamExt;
 use rand::Rng;
 use reqwest::Client;
-use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use reqwest_eventsource::RequestBuilderExt;
 use serde_json::Value;
