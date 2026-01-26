@@ -16,9 +16,10 @@ use uuid::Uuid;
 use crate::StreamUpdate;
 use crate::error::AutopilotError;
 use crate::types::{
-    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotToolCall, CreateEventRequest,
-    CreateEventResponse, ErrorResponse, Event, EventPayload, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
+    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
+    CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -212,7 +213,7 @@ pub struct AutopilotClient {
     base_url: Url,
     api_key: SecretString,
     spawn_client: SpawnClient,
-    tool_call_cache: Cache<Uuid, AutopilotToolCall>,
+    tool_call_cache: Cache<Uuid, EventPayloadToolCall>,
 }
 
 impl fmt::Debug for AutopilotClient {

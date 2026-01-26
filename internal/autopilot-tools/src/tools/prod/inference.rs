@@ -6,12 +6,12 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
+use durable_tools::{ActionInput, ActionResponse};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{
-    ActionInput, ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse,
-    Input,
+    ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse, Input,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 
@@ -54,17 +54,17 @@ impl ToolMetadata for InferenceTool {
     type Output = InferenceResponse;
     type LlmParams = InferenceToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("inference")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Call TensorZero inference endpoint. Optionally use a config snapshot hash to use historical configuration.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Call TensorZero inference endpoint to get an LLM response.",
@@ -184,6 +184,12 @@ impl SimpleTool for InferenceTool {
             .await
             .map_err(|e| AutopilotToolError::client_error("inference", e))?;
 
-        Ok(response)
+        match response {
+            ActionResponse::Inference(inference_response) => Ok(inference_response),
+            _ => Err(AutopilotToolError::validation(
+                "Unexpected response type from action endpoint",
+            )
+            .into()),
+        }
     }
 }

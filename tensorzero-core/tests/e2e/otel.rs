@@ -16,9 +16,7 @@ use tensorzero::{
 };
 use tensorzero::{
     InferenceParams,
-    test_helpers::{
-        make_embedded_gateway_with_config, make_embedded_gateway_with_config_and_postgres,
-    },
+    test_helpers::{make_embedded_gateway_with_config, make_embedded_gateway_with_rate_limiting},
 };
 use tensorzero_core::observability::{
     enter_fake_http_request_otel, setup_observability_with_exporter_override,
@@ -402,7 +400,7 @@ async fn test_stream_fatal_error_usage() {
 
     let _guard = enter_fake_http_request_otel();
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = make_embedded_gateway_with_rate_limiting(&config).await;
     let model_name = "dummy::fatal_stream_error";
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
@@ -831,7 +829,7 @@ pub async fn test_capture_simple_inference_spans(
     "#
     );
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = make_embedded_gateway_with_rate_limiting(&config).await;
     let _guard = enter_fake_http_request_otel();
     let response_data = if streaming {
         make_streaming_inference(&client).await
@@ -879,8 +877,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     let (exporter, _err) = runtime.block_on(async {
         let exporter = install_capturing_otel_exporter().await;
         let _guard = enter_fake_http_request_otel();
-        let client =
-            tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+        let client = make_embedded_gateway_with_rate_limiting(&config).await;
         let _err = client
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),
@@ -1105,8 +1102,7 @@ pub fn test_capture_rate_limit_error() {
     let (exporter, _res) = runtime.block_on(async {
         let exporter = install_capturing_otel_exporter().await;
         let _guard = enter_fake_http_request_otel();
-        let client =
-            tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+        let client = make_embedded_gateway_with_rate_limiting(&config).await;
         let err = client
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),

@@ -1,7 +1,7 @@
-# This Dockerfile is used to load fixtures into a (separate) ClickHouse server
+# This Dockerfile is used to load fixtures into (separate) ClickHouse and Postgres servers
 FROM clickhouse:lts
 
-RUN apt-get update && apt-get install -y cmake curl
+RUN apt-get update && apt-get install -y cmake curl postgresql-client
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
       AWSCLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"; \

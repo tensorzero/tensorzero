@@ -8,7 +8,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * This extends the interface of a standard tool call with bookkeeping information that
  * allows the caller to send over non-llm generated parameters.
  */
-export type AutopilotToolCall = {
+export type EventPayloadToolCall = {
   /**
    * Name
    */
