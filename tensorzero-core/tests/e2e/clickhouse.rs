@@ -154,8 +154,8 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
 
 async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // Insert data so that we test the migration re-creates the tables properly.
-    let s3_fixtures_path = std::env::var("TENSORZERO_S3_FIXTURES_PATH")
-        .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
+    let s3_fixtures_path = std::env::var("TENSORZERO_LARGE_FIXTURES_PATH")
+        .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/large-fixtures"));
     let s3_fixtures_path = &s3_fixtures_path;
 
     let database_url = clickhouse.database_url();
@@ -233,7 +233,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "run",
                     "--add-host=host.docker.internal:host-gateway",
                     "-v",
-                    &format!("{s3_fixtures_path}:/s3-fixtures"),
+                    &format!("{s3_fixtures_path}:/large-fixtures"),
                     "clickhouse:25.4",
                     "clickhouse-client",
                     "--host",
@@ -247,7 +247,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "--query",
                     &format!(
                         r"
-        INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
+        INSERT INTO {table} FROM INFILE '/large-fixtures/{file}' FORMAT Parquet
     "
                     ),
                 ]);
