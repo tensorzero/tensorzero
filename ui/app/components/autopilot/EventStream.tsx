@@ -199,7 +199,7 @@ function renderEventTitle(event: Event) {
           : payload.role === "assistant"
             ? "Assistant"
             : "Message";
-      return `${roleLabel} Message`;
+      return roleLabel;
     }
     case "status_update":
       return "Status Update";
@@ -445,7 +445,7 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
   return (
     <div className="border-border bg-bg-secondary flex flex-col gap-2 rounded-md border px-4 py-3">
       <div className="flex items-center justify-between gap-4">
-        <span className="text-sm font-medium">User Message</span>
+        <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
       <p className="text-fg-secondary text-sm whitespace-pre-wrap">
