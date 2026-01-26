@@ -20,6 +20,7 @@ use crate::config::snapshot::SnapshotHash;
 use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
+use crate::inference::types::usage::{ApiType, RawResponseEntry};
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
@@ -167,6 +168,71 @@ impl Error {
 
     pub fn is_retryable(&self) -> bool {
         self.0.is_retryable()
+    }
+
+    /// Recursively collects raw response entries from provider errors.
+    ///
+    /// This extracts `raw_response` data from provider errors (`InferenceClient`,
+    /// `InferenceServer`, `FatalStreamError`) and their aggregates (`AllVariantsFailed`,
+    /// `ModelProvidersExhausted`).
+    ///
+    /// Returns an empty Vec if no raw responses are found (e.g., for non-provider errors).
+    pub fn collect_raw_responses(&self) -> Vec<RawResponseEntry> {
+        let mut entries = Vec::new();
+        self.collect_raw_responses_recursive(&mut entries);
+        entries
+    }
+
+    fn collect_raw_responses_recursive(&self, entries: &mut Vec<RawResponseEntry>) {
+        match self.get_details() {
+            ErrorDetails::AllVariantsFailed { errors } => {
+                for error in errors.values() {
+                    error.collect_raw_responses_recursive(entries);
+                }
+            }
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => {
+                for error in provider_errors.values() {
+                    error.collect_raw_responses_recursive(entries);
+                }
+            }
+            ErrorDetails::InferenceClient {
+                raw_response: Some(data),
+                provider_type,
+                ..
+            } => {
+                entries.push(RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: provider_type.clone(),
+                    api_type: ApiType::ChatCompletions,
+                    data: data.clone(),
+                });
+            }
+            ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                provider_type,
+                ..
+            } => {
+                entries.push(RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: provider_type.clone(),
+                    api_type: ApiType::ChatCompletions,
+                    data: data.clone(),
+                });
+            }
+            ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                provider_type,
+                ..
+            } => {
+                entries.push(RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: provider_type.clone(),
+                    api_type: ApiType::ChatCompletions,
+                    data: data.clone(),
+                });
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1693,6 +1759,39 @@ impl IntoResponse for Error {
         // Attach the error to the response, so that we can set a nice message in our
         // `apply_otel_http_trace_layer` middleware
         response.extensions_mut().insert(self);
+        response
+    }
+}
+
+/// An error paired with raw response data for error responses.
+///
+/// This is used to provide `raw_response` in error responses when requested via
+/// the `include_raw_response` parameter. It wraps an error and includes raw response
+/// entries collected from provider errors.
+pub struct ErrorWithRawResponse {
+    pub error: Error,
+    pub raw_responses: Vec<RawResponseEntry>,
+}
+
+impl IntoResponse for ErrorWithRawResponse {
+    fn into_response(self) -> Response {
+        let message = self.error.to_string();
+        let mut body = json!({
+            "error": message,
+        });
+        if !self.raw_responses.is_empty() {
+            body["raw_response"] =
+                serde_json::to_value(&self.raw_responses).unwrap_or_else(|e| json!(e.to_string()));
+        }
+        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
+            body["error_json"] = serde_json::to_value(self.error.get_details())
+                .unwrap_or_else(|e| json!(e.to_string()));
+        }
+        let status_code = self.error.status_code();
+        let mut response = (status_code, Json(body)).into_response();
+        // Attach the error to the response, so that we can set a nice message in our
+        // `apply_otel_http_trace_layer` middleware
+        response.extensions_mut().insert(self.error);
         response
     }
 }

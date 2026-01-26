@@ -32,6 +32,7 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::usage::RawResponseEntry;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -206,6 +207,8 @@ pub struct ModelUsedInfo {
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts before this successful one.
+    pub failed_raw_responses: Vec<RawResponseEntry>,
 }
 
 pub trait Variant {
@@ -815,6 +818,7 @@ async fn infer_model_request_stream<'request>(
                 model_provider_name,
                 cached,
                 model_inference_id,
+                failed_raw_responses,
             },
         messages: input_messages,
     } = retry_config
@@ -836,6 +840,7 @@ async fn infer_model_request_stream<'request>(
         input_messages,
         cached,
         model_inference_id,
+        failed_raw_responses,
     };
     let config_type = function.config_type();
     let stream =
