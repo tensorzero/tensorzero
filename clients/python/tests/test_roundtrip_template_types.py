@@ -173,11 +173,15 @@ async def test_async_template_content_roundtrip_complete_flow(
         "Follow-up inference must succeed when reusing serialized template data"
     )
 
+    follow_up_id = str(follow_up_result.inference_id)
+
+    # Wait for follow-up results to be written to ClickHouse (required for batch writes)
+    await asyncio.sleep(1)
+
     # ============================================================================
     # Step 6: Verify follow-up stored data
     # ============================================================================
 
-    follow_up_id = str(follow_up_result.inference_id)
     follow_up_stored = await async_client.get_inferences(
         ids=[follow_up_id],
         function_name="json_success",
@@ -379,6 +383,9 @@ def test_sync_template_content_roundtrip_complete_flow(sync_client: TensorZeroGa
     assert follow_up_result.inference_id is not None, "Follow-up must have inference_id"
 
     follow_up_id = str(follow_up_result.inference_id)
+
+    # Wait for follow-up results to be written to ClickHouse (required for batch writes)
+    time.sleep(1)
 
     dataset_name = f"test_template_roundtrip_{uuid7()}"
 

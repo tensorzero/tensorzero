@@ -255,6 +255,9 @@ async def test_async_tool_call_roundtrip_complete_flow(
     assert follow_up_result.content is not None, "Follow-up must have content"
     assert len(follow_up_result.content) > 0, "Follow-up must generate content"
 
+    # Wait for follow-up results to be written to ClickHouse (required for batch writes)
+    await asyncio.sleep(1)
+
     # ============================================================================
     # Step 8: Verify follow-up stored data
     # ============================================================================
@@ -680,6 +683,9 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
     # Verify the inference ran (not just that it didn't crash)
     assert follow_up_result.content is not None, "Follow-up must have content"
     assert len(follow_up_result.content) > 0, "Follow-up must generate content"
+
+    # Wait for follow-up results to be written to ClickHouse (required for batch writes)
+    time.sleep(1)
 
     # ============================================================================
     # Step 8: Verify follow-up stored data

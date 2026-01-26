@@ -177,6 +177,9 @@ async def test_async_text_content_roundtrip_complete_flow(
         "Follow-up inference must succeed when reusing serialized text data"
     )
 
+    # Wait for follow-up results to be written to ClickHouse (required for batch writes)
+    await asyncio.sleep(1)
+
     # ============================================================================
     # Step 8: Verify follow-up stored data
     # ============================================================================
@@ -431,6 +434,10 @@ def test_sync_text_content_roundtrip_complete_flow(sync_client: TensorZeroGatewa
     assert follow_up_result.inference_id is not None, "Follow-up must have inference_id"
 
     follow_up_id = str(follow_up_result.inference_id)
+
+    # Wait for follow-up results to be written to ClickHouse (required for batch writes)
+    time.sleep(1)
+
     follow_up_stored = sync_client.get_inferences(
         ids=[follow_up_id],
         function_name="basic_test",
