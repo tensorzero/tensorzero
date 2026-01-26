@@ -78,7 +78,7 @@ export const handle: RouteHandle = {
   ],
 };
 
-interface RunSelectorData {
+interface RunInfoData {
   selected_evaluation_run_infos: EvaluationRunInfo[];
   allowedEvaluationRunInfos: EvaluationRunInfo[];
 }
@@ -88,11 +88,11 @@ interface EvaluationResultsData {
   datapoint_staled_at?: string;
 }
 
-async function fetchRunSelectorData(
+async function fetchRunInfoData(
   datapoint_id: string,
   function_name: string,
   selectedRunIds: string[],
-): Promise<RunSelectorData> {
+): Promise<RunInfoData> {
   const tensorZeroClient = getTensorZeroClient();
 
   const [selected_evaluation_run_infos, allowedEvaluationRunInfos] =
@@ -188,7 +188,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
-  const runSelectorData = fetchRunSelectorData(
+  const runInfoData = fetchRunInfoData(
     datapoint_id,
     function_name,
     selectedRunIds,
@@ -201,7 +201,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   );
 
   return {
-    runSelectorData,
+    runInfoData,
     evaluationResultsData,
     selectedRunIds,
     newFeedbackId,
@@ -391,7 +391,7 @@ function EvalRunSelectorWithData({
   data,
   evaluationName,
 }: {
-  data: RunSelectorData;
+  data: RunInfoData;
   evaluationName: string;
 }) {
   return (
@@ -408,7 +408,7 @@ export default function EvaluationDatapointPage({
   params,
 }: Route.ComponentProps) {
   const {
-    runSelectorData,
+    runInfoData,
     evaluationResultsData,
     selectedRunIds,
     newFeedbackId,
@@ -469,7 +469,7 @@ export default function EvaluationDatapointPage({
           fallback={<EvalRunSelectorSkeleton />}
         >
           <Await
-            resolve={runSelectorData}
+            resolve={runInfoData}
             errorElement={<SectionAsyncErrorState />}
           >
             {(infoData) => (
