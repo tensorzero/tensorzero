@@ -1,4 +1,4 @@
-#!lua name=tensorzero_ratelimit_v1
+#!lua name=tensorzero_ratelimit_v2
 
 -- IMPORTANT: If you change the implementation of any function in a way that affects
 -- its behavior or return format, update the function name version suffix (e.g., v1 -> v2)
@@ -11,10 +11,10 @@
 -- use 1-based indexing. See https://github.com/valkey-io/valkey-doc/blob/main/topics/functions-intro.md
 --
 -- Rate limiting state in Valkey is stored as a Hash:
--- key = 'ratelimit:<key>',
+-- key = 'tensorzero_ratelimit:<key>',
 -- value = { 'balance': balance, 'last_refilled': timestamp at microseconds precision }
 
--- LINT.IfEdited()
+-- Lint.IfEdited()
 
 -- Minimum TTL in seconds to avoid very short expirations
 local MIN_TTL_SECONDS = 3600  -- 1 hour
@@ -97,7 +97,7 @@ local function consume_tickets(keys, args)
         -- HMGET reads multiple fields from the hash in one call, and returns a table with two values:
         -- [balance, last_refilled]
         -- Returns [nil, nil] if the key does not exist.
-        local data = server.call('HMGET', 'ratelimit:' .. key, 'balance', 'last_refilled')
+        local data = server.call('HMGET', 'tensorzero_ratelimit:' .. key, 'balance', 'last_refilled')
         local balance = tonumber(data[1]) or capacity  -- New bucket starts at capacity
         local last_refilled = tonumber(data[2]) or now
 
@@ -122,7 +122,7 @@ local function consume_tickets(keys, args)
         -- All succeed: deduct from all and persist
         for i = 1, num_keys do
             local key = keys[i]
-            local redis_key = 'ratelimit:' .. key
+            local redis_key = 'tensorzero_ratelimit:' .. key
             local new_balance = state[i].balance - params[i].requested
 
             -- Store aligned last_refilled, NOT current time
@@ -179,7 +179,7 @@ local function return_tickets(keys, args)
 
     for i = 1, num_keys do
         local key = keys[i]
-        local redis_key = 'ratelimit:' .. key
+        local redis_key = 'tensorzero_ratelimit:' .. key
         local base_idx = (i - 1) * 4
         local returned = tonumber(args[base_idx + 1])
         local capacity = tonumber(args[base_idx + 2])
@@ -226,7 +226,7 @@ local function get_balance(keys, args)
     local refill_interval = tonumber(args[3])
     local now = get_server_time_micros()
 
-    local data = server.call('HMGET', 'ratelimit:' .. key, 'balance', 'last_refilled')
+    local data = server.call('HMGET', 'tensorzero_ratelimit:' .. key, 'balance', 'last_refilled')
     local balance = tonumber(data[1]) or capacity
     local last_refilled = tonumber(data[2]) or now
 
@@ -244,4 +244,4 @@ server.register_function{
     flags = { 'no-writes' }  -- Enables FCALL_RO on read replicas
 }
 
--- LINT.ThenEdit(tensorzero-core/src/db/valkey/rate_limiting.rs)
+-- Lint.ThenEdit(tensorzero-core/src/db/valkey/rate_limiting.rs)
