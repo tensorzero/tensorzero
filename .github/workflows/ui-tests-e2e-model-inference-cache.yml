@@ -189,7 +189,7 @@ jobs:
         with:
           name: model-inference-cache
           path: |
-            ui/fixtures/model_inference_cache_e2e.jsonl
+            ui/fixtures/small-fixtures/model_inference_cache_e2e.jsonl
 
       - name: Generate API key
         if: matrix.auth_enabled == true
