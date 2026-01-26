@@ -5,7 +5,6 @@ import type { Route } from "./+types/route";
 import {
   Await,
   data,
-  isRouteErrorResponse,
   useAsyncError,
   useNavigate,
   useParams,
@@ -50,6 +49,7 @@ import {
 } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { logger } from "~/utils/logger";
+import { getPageErrorInfo } from "~/utils/tensorzero/errors";
 
 export type InferencesData = {
   inferences: StoredInference[];
@@ -241,7 +241,7 @@ function FeedbackSectionError() {
             <TableCell colSpan={5}>
               <TableErrorNotice
                 icon={AlertCircle}
-                title="Error loading data"
+                title="Error loading feedback"
                 description={message}
               />
             </TableCell>
@@ -475,19 +475,11 @@ export default function EpisodeDetailPage({
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const params = useParams<{ episode_id: string }>();
-  logger.error(error);
+  const { title, message } = getPageErrorInfo(error);
 
-  let message: string;
-  if (isRouteErrorResponse(error)) {
-    message =
-      typeof error.data === "string"
-        ? error.data
-        : `${error.status} ${error.statusText}`;
-  } else if (error instanceof Error) {
-    message = error.message;
-  } else {
-    message = "Failed to load episode";
-  }
+  useEffect(() => {
+    logger.error(error);
+  }, [error]);
 
   return (
     <PageLayout>
@@ -501,7 +493,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       />
       <PageErrorNotice
         icon={AlertTriangle}
-        title="Error loading episode"
+        title={title}
         description={message}
       />
     </PageLayout>
