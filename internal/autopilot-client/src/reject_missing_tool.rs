@@ -14,10 +14,18 @@ use crate::types::{AutopilotSideInfo, EventPayloadToolCall};
 /// to the autopilot API so the session can continue without hanging on an
 /// unknown tool.
 ///
-/// This function is idempotent - it checks if a task already exists for this
-/// tool_call_event_id before spawning a new one. This prevents duplicate tasks
-/// from being created when the function is called multiple times for the same
-/// tool call (e.g., on each poll/SSE event).
+/// # Duplicate Prevention
+///
+/// This function does not check for existing tasks. Duplicate spawns are prevented
+/// at a higher level:
+/// - For `list_events`: once rejected, the tool is removed from `pending_tool_calls`,
+///   so subsequent calls won't see it.
+/// - For `stream_events`: once a tool call is streamed and rejected, subsequent
+///   interactions typically use `list_events` instead, which won't return it.
+///
+/// In rare cases, duplicate tasks may be spawned (e.g., if streaming and listing
+/// happen concurrently). The cost is minimal: the duplicate task will fail when
+/// it tries to reject an already-rejected tool call.
 ///
 /// # Errors
 ///

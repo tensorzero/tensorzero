@@ -57,15 +57,14 @@ pub use visitor::{ToolNameCollector, ToolVisitor};
 ///
 /// This is used by `AutopilotClient` to know which tools are available
 /// for filtering unknown tool calls.
-pub async fn collect_tool_names() -> HashSet<String> {
+///
+/// # Errors
+///
+/// Returns an error if visiting any tool fails (e.g., lock poisoning).
+pub async fn collect_tool_names() -> Result<HashSet<String>, String> {
     let collector = ToolNameCollector::new();
-    // ToolNameCollector uses Infallible error type, so this cannot fail.
-    // We use match to satisfy clippy's expect_used lint.
-    match for_each_tool(&collector).await {
-        Ok(()) => {}
-        Err(infallible) => match infallible {},
-    }
-    collector.into_names()
+    for_each_tool(&collector).await?;
+    Ok(collector.into_names())
 }
 
 /// Iterate over all tools with a visitor.

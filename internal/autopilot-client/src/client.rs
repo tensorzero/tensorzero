@@ -277,12 +277,17 @@ impl AutopilotClient {
     ///
     /// Returns `true` for:
     /// - `ToolCallAuthorization` events with `NotAvailable` status
-    fn should_filter_event(event: &Event) -> bool {
-        matches!(
-            &event.payload,
+    /// - `ToolCall` events for unknown tools (not in `available_tools`)
+    fn should_filter_event(event: &Event, available_tools: &HashSet<String>) -> bool {
+        match &event.payload {
             EventPayload::ToolCallAuthorization(auth)
-                if matches!(auth.status, ToolCallAuthorizationStatus::NotAvailable)
-        )
+                if matches!(auth.status, ToolCallAuthorizationStatus::NotAvailable) =>
+            {
+                true
+            }
+            EventPayload::ToolCall(tool_call) if !available_tools.contains(&tool_call.name) => true,
+            _ => false,
+        }
     }
 
     /// Spawns a durable task to execute an approved tool call.
@@ -428,41 +433,33 @@ impl AutopilotClient {
         // We don't reject unknown tool calls from events - only from pending_tool_calls below.
         let mut filtered_events = Vec::new();
         for event in body.events {
-            if let EventPayload::ToolCall(tool_call) = &event.payload
-                && self.is_unknown_tool(tool_call)
-            {
-                // Filter out unknown tool calls from events, but don't reject them here
+            if Self::should_filter_event(&event, &self.available_tools) {
                 continue;
             }
-            if !Self::should_filter_event(&event) {
-                // Conversion should succeed since we filtered out NotAvailable events
-                let gateway_event = event.try_into().map_err(|e| {
-                    AutopilotError::Internal(format!(
-                        "Event conversion failed after filtering: {e}"
-                    ))
-                })?;
-                filtered_events.push(gateway_event);
-            }
+            // Conversion should succeed since we filtered out NotAvailable events
+            let gateway_event = event.try_into().map_err(|e| {
+                AutopilotError::Internal(format!("Event conversion failed after filtering: {e}"))
+            })?;
+            filtered_events.push(gateway_event);
         }
 
         // Filter pending tool calls and reject unknown ones
         let mut filtered_pending_tool_calls = Vec::new();
         for event in body.pending_tool_calls {
+            // Reject unknown tool calls (but not other filtered events like NotAvailable authorizations)
             if let EventPayload::ToolCall(tool_call) = &event.payload
                 && self.is_unknown_tool(tool_call)
             {
                 reject_missing_tool(&self.spawn_client, tool_call).await?;
+            }
+            if Self::should_filter_event(&event, &self.available_tools) {
                 continue;
             }
-            if !Self::should_filter_event(&event) {
-                // Conversion should succeed since we filtered out NotAvailable events
-                let gateway_event = event.try_into().map_err(|e| {
-                    AutopilotError::Internal(format!(
-                        "Event conversion failed after filtering: {e}"
-                    ))
-                })?;
-                filtered_pending_tool_calls.push(gateway_event);
-            }
+            // Conversion should succeed since we filtered out NotAvailable events
+            let gateway_event = event.try_into().map_err(|e| {
+                AutopilotError::Internal(format!("Event conversion failed after filtering: {e}"))
+            })?;
+            filtered_pending_tool_calls.push(gateway_event);
         }
 
         Ok(GatewayListEventsResponse {
@@ -681,26 +678,23 @@ impl AutopilotClient {
                         if message.event == "event" {
                             match serde_json::from_str::<StreamUpdate>(&message.data) {
                                 Ok(update) => {
-                                    // Filter out NotAvailable authorizations
-                                    if Self::should_filter_event(&update.event) {
-                                        return None;
-                                    }
-
+                                    // Cache tool calls for later lookup
                                     if let EventPayload::ToolCall(tool_call) = &update.event.payload
                                     {
                                         cache.insert(update.event.id, tool_call.clone());
 
-                                        // Check if this is an unknown tool
-                                        if !available_tools.contains(&tool_call.name) {
-                                            // Spawn auto-reject task and filter out this event
-                                            if let Err(e) =
+                                        // Reject unknown tool calls
+                                        if !available_tools.contains(&tool_call.name)
+                                            && let Err(e) =
                                                 reject_missing_tool(&spawn_client, tool_call).await
-                                            {
-                                                return Some(Err(e));
-                                            }
-                                            // Filter out this event
-                                            return None;
+                                        {
+                                            return Some(Err(e));
                                         }
+                                    }
+
+                                    // Filter out NotAvailable authorizations and unknown tool calls
+                                    if Self::should_filter_event(&update.event, &available_tools) {
+                                        return None;
                                     }
 
                                     // Convert to gateway type - should succeed since we filtered NotAvailable above

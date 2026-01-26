@@ -92,7 +92,7 @@ impl Default for ToolNameCollector {
 
 #[async_trait]
 impl ToolVisitor for ToolNameCollector {
-    type Error = std::convert::Infallible;
+    type Error = String;
 
     async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
     where
@@ -100,10 +100,11 @@ impl ToolVisitor for ToolNameCollector {
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
-        // unwrap_or_else handles the (practically impossible) poisoned case
-        if let Ok(mut names) = self.names.lock() {
-            names.insert(tool.name().to_string());
-        }
+        let mut names = self
+            .names
+            .lock()
+            .map_err(|e| format!("Failed to acquire lock: {e}"))?;
+        names.insert(tool.name().to_string());
         Ok(())
     }
 
@@ -113,9 +114,11 @@ impl ToolVisitor for ToolNameCollector {
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
-        if let Ok(mut names) = self.names.lock() {
-            names.insert(T::default().name().to_string());
-        }
+        let mut names = self
+            .names
+            .lock()
+            .map_err(|e| format!("Failed to acquire lock: {e}"))?;
+        names.insert(T::default().name().to_string());
         Ok(())
     }
 }

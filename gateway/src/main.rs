@@ -239,7 +239,9 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     // Collect available tool names for autopilot (single source of truth)
-    let available_tools = autopilot_tools::collect_tool_names().await;
+    let available_tools = autopilot_tools::collect_tool_names()
+        .await
+        .log_err_pretty("Failed to collect autopilot tool names")?;
 
     // Initialize GatewayHandle
     let gateway_handle = gateway::GatewayHandle::new(unwritten_config, available_tools)
