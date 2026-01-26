@@ -34,18 +34,18 @@ impl ToolMetadata for CreateDatapointsTool {
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("create_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Create datapoints in a dataset. Datapoints can be Chat or Json type. \
              Autopilot tags are automatically added for tracking.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Create datapoints in a dataset.",

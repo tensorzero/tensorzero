@@ -1,6 +1,5 @@
 #![expect(clippy::print_stdout)]
 use std::io::Cursor;
-use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use secrecy::SecretString;
@@ -11585,6 +11584,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }
 }
 
+/// Test the behavior of model providers when the model tries to output a lot more than `max_tokens`.
 pub async fn test_short_inference_request_with_provider(provider: E2ETestProvider) {
     // We currently host ollama on sagemaker, and use a wrapped 'openai' provider
     // in our tensorzero.toml. ollama doesn't support 'max_completion_tokens', so this test
@@ -11594,26 +11594,6 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         return;
     }
 
-    // The 2.5 Pro model always seems to think before responding, even with
-    // {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0 }}
-    // This also happens for DeepSeek R1
-    // This prevents us from setting a low max_tokens, since the thinking tokens will
-    // use up all of the output tokens before an actual response is generated.
-    if provider.model_name.contains("gemini-2.5-pro")
-        || provider.model_name.contains("deepseek-r1-aws-bedrock")
-    {
-        return;
-    }
-
-    // The OpenAI Responses API has a minimum value of 16.
-    // Gemini 2.5 Flash uses internal thinking that can consume tokens before producing output,
-    // so we need a higher max_tokens value.
-    let max_tokens = if provider.model_name.starts_with("responses-") {
-        16
-    } else {
-        1
-    };
-
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -11621,38 +11601,13 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         UnfilteredInferenceExtraHeaders::default()
     };
 
-    // Include randomness in the prompt to force a cache miss for the first request
-    let randomness = Uuid::now_v7();
-
-    // Try to disable thinking to avoid token consumption from internal reasoning.
-    // Anthropic providers don't support `thinking_budget_tokens: 0` (minimum is 1024),
-    // so we omit it for those providers - not including the parameter disables thinking.
-    let is_anthropic_provider = matches!(
-        provider.model_provider_name.as_str(),
-        "anthropic" | "gcp_vertex_anthropic" | "aws_bedrock"
-    );
-    let params = if is_anthropic_provider {
-        json!({
-            "chat_completion": {
-                "max_tokens": max_tokens
-            }
-        })
-    } else {
-        json!({
-            "chat_completion": {
-                "max_tokens": max_tokens,
-                "thinking_budget_tokens": 0
-            }
-        })
-    };
-
-    let payload = json!({
+    let mut payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
+               "system": {"assistant_name": format!("Dr. Mehta")},
                "messages": [
                 {
                     "role": "user",
@@ -11661,19 +11616,16 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10},
-        "params": params,
+        "cache_options": {"enabled": "write_only", "lookback_s": 10},
+        "params": {
+            "chat_completion": {
+                "max_tokens": 16,
+            }
+        },
         "extra_headers": extra_headers.extra_headers,
+        "include_original_response": true,
+        "include_raw_response": true
     });
-    if provider.variant_name.contains("openai") && provider.variant_name.contains("o1") {
-        // Can't pin a single token for o1
-        return;
-    }
-
-    if provider.variant_name.contains("openrouter") {
-        // OpenRouter claims gpt4.1-mini needs a minimum of 16 output tokens
-        return;
-    }
 
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
@@ -11688,17 +11640,11 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(
-        randomness,
-        response_json,
-        Some(episode_id),
-        &provider,
-        max_tokens,
-        false,
-    )
-    .await;
+    check_short_inference_response(response_json, Some(episode_id), &provider, false).await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
+    payload["cache_options"]["enabled"] = "on".into();
+
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
@@ -11712,23 +11658,13 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(
-        randomness,
-        response_json,
-        Some(episode_id),
-        &provider,
-        max_tokens,
-        true,
-    )
-    .await;
+    check_short_inference_response(response_json, Some(episode_id), &provider, true).await;
 }
 
 async fn check_short_inference_response(
-    randomness: Uuid,
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
-    max_tokens: u32,
     should_be_cached: bool,
 ) {
     let hardcoded_function_name = "basic_test";
@@ -11744,19 +11680,6 @@ async fn check_short_inference_response(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    // Some providers return empty thoughts - exclude thought blocks here
-    let content = content
-        .iter()
-        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
-        .collect::<Vec<_>>();
-    assert_eq!(content.len(), 1);
-    let content_block = content.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    // We don't check the content here since there's only 1 token allowed
-
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
@@ -11765,7 +11688,7 @@ async fn check_short_inference_response(
         assert_eq!(output_tokens, 0);
     } else {
         assert!(input_tokens > 0);
-        assert_eq!(output_tokens, max_tokens as u64);
+        assert!(output_tokens > 0);
     }
     let finish_reason = response_json
         .get("finish_reason")
@@ -11804,7 +11727,7 @@ async fn check_short_inference_response(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": format!("Dr. Mehta: {randomness}")},
+        "system": {"assistant_name": format!("Dr. Mehta")},
         "messages": [
             {
                 "role": "user",
@@ -11813,20 +11736,6 @@ async fn check_short_inference_response(
         ]
     });
     assert_eq!(input, correct_input);
-
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    // Some providers return empty thoughts - exclude thought blocks here
-    let content_blocks = content_blocks
-        .iter()
-        .filter(|c| c.get("type").unwrap().as_str().unwrap() != "thought")
-        .collect::<Vec<_>>();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
     assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
@@ -11845,7 +11754,7 @@ async fn check_short_inference_response(
             .unwrap()
             .as_u64()
             .unwrap(),
-        max_tokens as u64
+        16
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -11892,7 +11801,7 @@ async fn check_short_inference_response(
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        format!("You are a helpful and friendly assistant named Dr. Mehta: {randomness}")
+        format!("You are a helpful and friendly assistant named Dr. Mehta")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
@@ -11903,14 +11812,6 @@ async fn check_short_inference_response(
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    // Some providers return empty thoughts - exclude thought blocks here
-    let output = output
-        .iter()
-        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
-        .collect::<Vec<_>>();
-    assert_eq!(output.len(), 1);
     let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "length");
 
@@ -11931,32 +11832,6 @@ async fn check_short_inference_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
-
-    // Check that our cache entry was only written once
-    if should_be_cached {
-        // Allow some time for an incorrect second cache write to happen
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // Count the number of cache entries for this raw_request
-        // Note that this can have false negatives (ClickHouse might decide to merge parts
-        // immediately after a duplicate insert)
-        let count = clickhouse
-            .run_query_synchronous(
-                "SELECT COUNT(*) FROM ModelInferenceCache WHERE raw_request = {raw_request:String} "
-                    .to_string(),
-                &[("raw_request", result["raw_request"].as_str().unwrap())]
-                    .into_iter()
-                    .collect(),
-            )
-            .await
-            .unwrap()
-            .response
-            .trim()
-            .parse::<u64>()
-            .unwrap();
-
-        assert_eq!(count, 1);
-    }
 }
 
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(

@@ -519,6 +519,10 @@ pub enum ErrorDetails {
         message: String,
     },
     NoFallbackVariantsRemaining,
+    /// Feature not yet implemented. Used for stubbed functionality during incremental migration.
+    NotImplemented {
+        message: String,
+    },
     Observability {
         message: String,
     },
@@ -544,7 +548,6 @@ pub enum ErrorDetails {
         message: String,
     },
     PostgresQuery {
-        function_name: Option<String>,
         message: String,
     },
     PostgresResult {
@@ -742,6 +745,7 @@ impl ErrorDetails {
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
+            ErrorDetails::NotImplemented { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
@@ -898,6 +902,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
+            ErrorDetails::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1500,6 +1505,9 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::NoFallbackVariantsRemaining => {
                 write!(f, "No fallback variants remaining.")
             }
+            ErrorDetails::NotImplemented { message } => {
+                write!(f, "Not implemented: {message}")
+            }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
             }
@@ -1548,16 +1556,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Unexpected Postgres result of type {result_type}: {message}"
                 )
             }
-            ErrorDetails::PostgresQuery {
-                function_name,
-                message,
-            } => match function_name {
-                Some(function_name) => write!(
-                    f,
-                    "Postgres query failed in function {function_name} with message: {message}"
-                ),
-                None => write!(f, "Postgres query failed: {message}"),
-            },
+            ErrorDetails::PostgresQuery { message } => {
+                write!(f, "Postgres query failed: {message}")
+            }
             ErrorDetails::ValkeyConnection { message } => {
                 write!(f, "Error connecting to Valkey: {message}")
             }
@@ -1727,7 +1728,6 @@ impl From<sqlx::Error> for Error {
     fn from(err: sqlx::Error) -> Self {
         Self::new(ErrorDetails::PostgresQuery {
             message: err.to_string(),
-            function_name: None,
         })
     }
 }

@@ -43,19 +43,29 @@ use durable_tools_spawn::TaskToolParams;
 ///     .build()
 ///     .await?;
 ///
-/// // Register tools
-/// executor.register_task_tool::<ResearchTool>().await;
-/// executor.register_simple_tool::<SearchTool>().await;
+/// // Register tools (pass instances)
+/// executor.register_task_tool_instance(ResearchTool).await?;
+/// executor.register_simple_tool_instance(SearchTool).await?;
 ///
-/// // Spawn a tool execution (without side info)
+/// // Spawn a tool execution by name
 /// let episode_id = Uuid::now_v7();
-/// executor.spawn_tool::<ResearchTool>(params, (), episode_id).await?;
+/// executor.spawn_tool_by_name(
+///     "research",
+///     serde_json::json!({"topic": "rust"}),
+///     serde_json::json!(null),  // No side info
+///     episode_id,
+/// ).await?;
 ///
 /// // Spawn with side info
-/// executor.spawn_tool::<GitHubTool>(params, credentials, episode_id).await?;
+/// executor.spawn_tool_by_name(
+///     "github",
+///     serde_json::to_value(params)?,
+///     serde_json::to_value(credentials)?,
+///     episode_id,
+/// ).await?;
 ///
 /// // Start a worker
-/// let worker = executor.start_worker(WorkerOptions::default()).await;
+/// let worker = executor.start_worker(WorkerOptions::default()).await?;
 /// ```
 pub struct ToolExecutor {
     /// The durable client for task management.
@@ -94,7 +104,7 @@ impl ToolExecutor {
         ToolExecutorBuilder::new()
     }
 
-    /// Register a `TaskTool`.
+    /// Register a `TaskTool` instance.
     ///
     /// This registers the tool with both the tool registry and the durable
     /// client (so it can be executed by workers).
@@ -103,20 +113,23 @@ impl ToolExecutor {
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
     /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    pub async fn register_task_tool<T: TaskTool>(&self) -> Result<&Self, ToolError> {
-        // Register with tool registry
-        {
+    pub async fn register_task_tool_instance<T: TaskTool>(
+        &self,
+        tool: T,
+    ) -> Result<&Self, ToolError> {
+        let tool = {
             let mut registry = self.registry.write().await;
-            registry.register_task_tool::<T>()?;
-        }
+            registry.register_task_tool_instance(tool)?
+        };
 
-        // Register the adapter with durable
-        self.durable.register::<TaskToolAdapter<T>>().await?;
+        self.durable
+            .register_instance(TaskToolAdapter::new(tool))
+            .await?;
 
         Ok(self)
     }
 
-    /// Register a `SimpleTool`.
+    /// Register a `SimpleTool` instance.
     ///
     /// `SimpleTools` don't need to be registered with the durable client
     /// since they run inside `TaskTool` steps.
@@ -125,39 +138,13 @@ impl ToolExecutor {
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
     /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    pub async fn register_simple_tool<T: SimpleTool + Default>(&self) -> Result<&Self, ToolError> {
-        let mut registry = self.registry.write().await;
-        registry.register_simple_tool::<T>()?;
-        Ok(self)
-    }
-
-    /// Spawn a `TaskTool` execution.
-    ///
-    /// # Arguments
-    ///
-    /// * `llm_params` - The LLM-provided parameters
-    /// * `side_info` - Side information (hidden from LLM), use `()` if not needed
-    /// * `episode_id` - The episode ID for this execution
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool<T: TaskTool>(
+    pub async fn register_simple_tool_instance<T: SimpleTool>(
         &self,
-        llm_params: T::LlmParams,
-        side_info: T::SideInfo,
-        episode_id: Uuid,
-        options: SpawnOptions,
-    ) -> anyhow::Result<SpawnResult> {
-        let wrapped = TaskToolParams {
-            llm_params,
-            side_info,
-            episode_id,
-        };
-        self.durable
-            .spawn_with_options::<TaskToolAdapter<T>>(wrapped, options)
-            .await
-            .map_err(Into::into)
+        tool: T,
+    ) -> Result<&Self, ToolError> {
+        let mut registry = self.registry.write().await;
+        registry.register_simple_tool_instance(tool)?;
+        Ok(self)
     }
 
     /// Spawn a tool by name with JSON parameters.
@@ -199,34 +186,6 @@ impl ToolExecutor {
                 serde_json::to_value(wrapped_params)?,
                 SpawnOptions::default(),
             )
-            .await
-            .map_err(Into::into)
-    }
-
-    /// Spawn a `TaskTool` execution with custom spawn options using a custom executor.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if spawning the tool fails.
-    pub async fn spawn_tool_with<'e, T, E>(
-        &self,
-        executor: E,
-        llm_params: T::LlmParams,
-        side_info: T::SideInfo,
-        episode_id: Uuid,
-        options: SpawnOptions,
-    ) -> anyhow::Result<SpawnResult>
-    where
-        T: TaskTool,
-        E: Executor<'e, Database = Postgres>,
-    {
-        let wrapped = TaskToolParams {
-            llm_params,
-            side_info,
-            episode_id,
-        };
-        self.durable
-            .spawn_with_options_with::<TaskToolAdapter<T>, E>(executor, wrapped, options)
             .await
             .map_err(Into::into)
     }

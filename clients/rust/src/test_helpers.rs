@@ -26,6 +26,7 @@ pub async fn make_embedded_gateway() -> Client {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -40,6 +41,7 @@ pub async fn make_embedded_gateway_no_config() -> Client {
         config_file: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -56,6 +58,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -67,7 +70,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
 
 pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Client {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for rate limiting tests");
+        .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
 
     let tmp_config = NamedTempFile::new().unwrap();
     std::fs::write(tmp_config.path(), config).unwrap();
@@ -75,6 +78,33 @@ pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Cli
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: Some(PostgresConfig::Url(postgres_url)),
+        valkey_url: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+/// Creates an embedded gateway with rate limiting backend support.
+/// Reads both TENSORZERO_POSTGRES_URL and TENSORZERO_VALKEY_URL from env vars.
+/// The rate limiting backend selection is determined by the config's `[rate_limiting].backend` field:
+/// - `auto` (default): Valkey if available, otherwise Postgres
+/// - `postgres`: Force Postgres backend
+/// - `valkey`: Force Valkey backend
+pub async fn make_embedded_gateway_with_rate_limiting(config: &str) -> Client {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
+    let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
+
+    let tmp_config = NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(tmp_config.path().to_owned()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        postgres_config: postgres_url.map(PostgresConfig::Url),
+        valkey_url,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -152,6 +182,7 @@ pub async fn make_embedded_gateway_with_unique_db(config: &str, db_prefix: &str)
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(clickhouse_url),
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -171,6 +202,7 @@ pub async fn make_embedded_gateway_e2e_with_unique_db(db_prefix: &str) -> Client
         config_file: Some(config_path),
         clickhouse_url: Some(clickhouse_url),
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -192,7 +224,8 @@ pub async fn start_http_gateway_with_unique_db(
     let (addr, shutdown_handle) = tensorzero_core::utils::gateway::start_openai_compatible_gateway(
         Some(config_path.to_string_lossy().to_string()),
         Some(clickhouse_url),
-        None,
+        None, // postgres_url
+        None, // valkey_url
     )
     .await
     .unwrap();
