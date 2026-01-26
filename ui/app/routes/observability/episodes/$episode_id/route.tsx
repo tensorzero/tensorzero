@@ -6,6 +6,7 @@ import {
   Await,
   data,
   useAsyncError,
+  useLocation,
   useNavigate,
   useParams,
   type RouteHandle,
@@ -45,6 +46,7 @@ import {
 } from "~/components/ui/table";
 import {
   PageErrorNotice,
+  SectionAsyncErrorState,
   TableErrorNotice,
 } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle, AlertTriangle } from "lucide-react";
@@ -345,6 +347,7 @@ export default function EpisodeDetailPage({
     num_feedbacks,
     newFeedbackId,
   } = loaderData;
+  const location = useLocation();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [openSheetInferenceId, setOpenSheetInferenceId] = useState<
@@ -430,10 +433,10 @@ export default function EpisodeDetailPage({
             onCloseSheet={handleCloseSheet}
             openSheetInferenceId={openSheetInferenceId}
           />
-          <Suspense fallback={<PageButtons disabled />}>
+          <Suspense key={location.key} fallback={<PageButtons disabled />}>
             <Await
               resolve={inferencesData}
-              errorElement={<PageButtons disabled />}
+              errorElement={<SectionAsyncErrorState />}
             >
               {(resolvedData) => (
                 <InferencePaginationContent data={resolvedData} />
@@ -453,6 +456,7 @@ export default function EpisodeDetailPage({
             }}
           />
           <Suspense
+            key={location.key}
             fallback={
               <>
                 <FeedbackTableSkeleton />
