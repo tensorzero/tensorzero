@@ -10,6 +10,7 @@ REQUIRED_FREE_GB=25
 
 # Check if we have enough free space and exit early if so
 check_space_and_maybe_exit() {
+    df -h
     local avail_kb
     avail_kb=$(df -k / | tail -1 | awk '{print $4}')
     local avail_gb=$((avail_kb / 1024 / 1024))
@@ -23,7 +24,6 @@ check_space_and_maybe_exit() {
 }
 
 echo "=== Disk usage before cleanup ==="
-df -h
 check_space_and_maybe_exit
 # echo "=== Detailed disk analysis ==="
 # du -sh /usr/share/* 2>/dev/null | sort -hr | head -30 || true
@@ -41,7 +41,6 @@ echo "Phase 1: Removing massive directories in parallel..."
 (sudo rm -rf /opt/ghc &)                # ~1.6GB GHC
 (sudo rm -rf /usr/share/swift &)        # ~2.8GB Swift
 wait
-df -h
 check_space_and_maybe_exit
 
 # Phase 2: Remove ALL hosted toolchains (parallel)
@@ -54,7 +53,6 @@ echo "Phase 2: Removing ALL hosted toolchains..."
 (sudo rm -rf /opt/hostedtoolcache/Java_Temurin-Hotspot &)
 (sudo rm -rf /opt/hostedtoolcache/* &)   # Remove any remaining toolchains
 wait
-df -h
 check_space_and_maybe_exit
 
 # Phase 3: Remove cloud tools and runtimes (parallel)
@@ -66,7 +64,6 @@ echo "Phase 3: Removing cloud tools and additional runtimes..."
 (sudo rm -rf /usr/local/share/powershell &)  # PowerShell
 (sudo rm -rf /opt/microsoft &)           # ~772MB Microsoft tools
 wait
-df -h
 check_space_and_maybe_exit
 
 # Phase 4: EXTREME package removal - CI doesn't need most of these
@@ -82,7 +79,6 @@ echo "Phase 4: Removing unnecessary packages and development tools..."
 (sudo rm -rf /usr/share/icons &)         # ~47MB Icons
 (sudo rm -rf /usr/share/python-babel-localedata &) # ~31MB Python locale
 wait
-df -h
 check_space_and_maybe_exit
 
 # Phase 5: Ultra-aggressive system cleanup
@@ -96,7 +92,6 @@ sudo systemctl stop docker || true
 sudo rm -rf /var/lib/docker/* || true
 sudo rm -rf /var/lib/containerd/* || true
 sudo systemctl start docker || true
-df -h
 check_space_and_maybe_exit
 
 # Phase 6: Snap packages removal (they take significant space)
@@ -104,7 +99,6 @@ echo "Phase 6: Removing snap packages..."
 sudo snap list 2>/dev/null | awk 'NR>1 {print $1}' | xargs -r sudo snap remove || true
 sudo rm -rf /var/lib/snapd/snaps/* || true
 sudo rm -rf /snap/* || true
-df -h
 check_space_and_maybe_exit
 
 # Phase 7: Remove large system components not needed for CI
@@ -117,7 +111,6 @@ echo "Phase 7: Removing large system components..."
 (sudo rm -rf /usr/share/pixmaps/* &)             # Pixmaps
 (sudo rm -rf /usr/share/applications/* &)        # Desktop applications
 wait
-df -h
 check_space_and_maybe_exit
 
 # Phase 8: Aggressive APT cleanup with package removal
@@ -146,7 +139,6 @@ sudo apt-get clean || true
 sudo rm -rf /var/lib/apt/lists/* || true
 sudo rm -rf /var/cache/apt/* || true
 sudo rm -rf /var/lib/dpkg/info/*.list || true
-df -h
 check_space_and_maybe_exit
 
 # Phase 9: Remove all documentation, manuals, and locales
@@ -157,7 +149,6 @@ sudo rm -rf /usr/share/info/* || true
 sudo rm -rf /usr/share/locale/* || true
 sudo rm -rf /usr/share/i18n/locales/* || true
 sudo rm -rf /usr/lib/locale/* || true
-df -h
 check_space_and_maybe_exit
 
 # Phase 10: Clean logs, cache, and temporary files extremely aggressively
@@ -170,7 +161,6 @@ sudo rm -rf /root/.cache/* || true
 sudo rm -rf /home/*/.cache/* || true
 sudo rm -rf /var/cache/* || true
 sudo rm -rf /usr/share/mime/* || true
-df -h
 check_space_and_maybe_exit
 
 # Phase 11: Remove kernel modules and headers we don't need
@@ -179,6 +169,19 @@ sudo rm -rf /lib/modules/*/kernel/sound/* || true
 sudo rm -rf /lib/modules/*/kernel/drivers/media/* || true
 sudo rm -rf /lib/modules/*/kernel/drivers/staging/* || true
 sudo rm -rf /usr/src/linux-headers-* || true
+
+# echo "=== EXTREME cleanup completed - checking results ==="
+# df -h
+# echo "=== Verifying critical tools still work ==="
+# which cargo && echo "✓ Cargo available" || echo "⚠ Cargo not found"
+# which docker && echo "✓ Docker available" || echo "⚠ Docker not found"
+# which curl && echo "✓ Curl available" || echo "⚠ Curl not found"
+# which git && echo "✓ Git available" || echo "⚠ Git not found"
+# which rustc && echo "✓ Rust available" || echo "⚠ Rust not found"
+
+# echo "=== Remaining large directories (>100MB) ==="
+# du -sh /usr/* 2>/dev/null | awk '$1 ~ /[0-9]+[GM]/ && $1+0 >= 100 {print}' | sort -hr | head -20 || true
+# du -sh /opt/* 2>/dev/null | awk '$1 ~ /[0-9]+[GM]/ && $1+0 >= 100 {print}' | sort -hr | head -10 || true
 
 echo "=== EXTREME disk cleanup completed successfully ==="
 df -h
