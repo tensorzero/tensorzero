@@ -164,16 +164,23 @@ impl InferenceProvider for GroqProvider {
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
 
-        let request_body =
-            serde_json::to_value(GroqRequest::new(&self.model_name, request.request).await?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing Groq request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(
+            GroqRequest::new(
+                &self.model_name,
+                request.request,
+                request.model_name,
+                request.provider_name,
+            )
+            .await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Groq request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
 
         let mut request_builder = http_client.post(request_url);
 
@@ -252,7 +259,7 @@ impl InferenceProvider for GroqProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -261,15 +268,17 @@ impl InferenceProvider for GroqProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request).await?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Groq request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            GroqRequest::new(&self.model_name, request, model_name, provider_name).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Groq request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
         let api_key = self
             .credentials
@@ -594,8 +603,15 @@ pub(super) async fn prepare_groq_messages<'a>(
 /// NOTE: parallel tool calls are unreliable, and specific tool choice doesn't work
 pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
+    tensorzero_model_name: &str,
+    tensorzero_provider_name: &str,
 ) -> Result<PreparedToolsResult<'a>, Error> {
-    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true)?;
+    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(
+        request,
+        true,
+        tensorzero_model_name,
+        tensorzero_provider_name,
+    )?;
 
     // Convert from ChatCompletionTool to GroqTool
     let groq_tools = tools.map(|t| t.into_iter().map(GroqTool::from).collect());
@@ -920,15 +936,23 @@ pub(super) struct GroqFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct GroqTool<'a> {
+pub(super) struct GroqFunctionTool<'a> {
     pub(super) r#type: GroqToolType,
     pub(super) function: GroqFunction<'a>,
     pub(super) strict: bool,
 }
 
+/// Enum that can hold either a function tool or an opaque provider tool
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(super) enum GroqTool<'a> {
+    Function(GroqFunctionTool<'a>),
+    ProviderTool(&'a Value),
+}
+
 impl<'a> From<&'a FunctionToolConfig> for GroqTool<'a> {
     fn from(tool: &'a FunctionToolConfig) -> Self {
-        GroqTool {
+        GroqTool::Function(GroqFunctionTool {
             r#type: GroqToolType::Function,
             function: GroqFunction {
                 name: tool.name(),
@@ -936,20 +960,23 @@ impl<'a> From<&'a FunctionToolConfig> for GroqTool<'a> {
                 parameters: tool.parameters(),
             },
             strict: tool.strict(),
-        }
+        })
     }
 }
 
 impl<'a> From<ChatCompletionTool<'a>> for GroqTool<'a> {
     fn from(tool: ChatCompletionTool<'a>) -> Self {
-        GroqTool {
-            r#type: GroqToolType::Function,
-            function: GroqFunction {
-                name: tool.function.name,
-                description: tool.function.description,
-                parameters: tool.function.parameters,
-            },
-            strict: tool.strict,
+        match tool {
+            ChatCompletionTool::Function(t) => GroqTool::Function(GroqFunctionTool {
+                r#type: GroqToolType::Function,
+                function: GroqFunction {
+                    name: t.function.name,
+                    description: t.function.description,
+                    parameters: t.function.parameters,
+                },
+                strict: t.strict,
+            }),
+            ChatCompletionTool::ProviderTool(v) => GroqTool::ProviderTool(v),
         }
     }
 }
@@ -1143,6 +1170,8 @@ impl<'a> GroqRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<GroqRequest<'a>, Error> {
         let response_format = Some(GroqResponseFormat::new(
             request.json_mode,
@@ -1157,7 +1186,8 @@ impl<'a> GroqRequest<'a> {
         };
         let mut messages = prepare_groq_messages(request).await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(request)?;
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_groq_tools(request, tensorzero_model_name, tensorzero_provider_name)?;
 
         if model.to_lowercase().starts_with("o1-mini")
             && let Some(GroqRequestMessage::System(_)) = messages.first()
@@ -1659,10 +1689,14 @@ mod tests {
             ..Default::default()
         };
 
-        let groq_request =
-            GroqRequest::new("meta-llama/llama-4-scout-17b-16e-instruct", &basic_request)
-                .await
-                .unwrap();
+        let groq_request = GroqRequest::new(
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            &basic_request,
+            "test_model",
+            "test_provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             groq_request.model,
@@ -1707,6 +1741,8 @@ mod tests {
         let groq_request = GroqRequest::new(
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
+            "test_model",
+            "test_provider",
         )
         .await
         .unwrap();
@@ -1729,8 +1765,13 @@ mod tests {
         );
         assert!(groq_request.tools.is_some());
         let tools = groq_request.tools.as_ref().unwrap();
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            GroqTool::Function(t) => {
+                assert_eq!(t.function.name, WEATHER_TOOL.name());
+                assert_eq!(t.function.parameters, WEATHER_TOOL.parameters());
+            }
+            GroqTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         assert_eq!(
             groq_request.tool_choice,
             Some(GroqToolChoice::Specific(SpecificToolChoice {
@@ -1767,6 +1808,8 @@ mod tests {
         let groq_request = GroqRequest::new(
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
+            "test_model",
+            "test_provider",
         )
         .await
         .unwrap();
@@ -1816,6 +1859,8 @@ mod tests {
         let groq_request = GroqRequest::new(
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
+            "test_model",
+            "test_provider",
         )
         .await
         .unwrap();
@@ -2175,13 +2220,23 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_groq_tools(&request_with_tools).unwrap();
+            prepare_groq_tools(&request_with_tools, "test_model", "test_provider").unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
-        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
+        match &tools[0] {
+            GroqTool::Function(t) => {
+                assert_eq!(t.function.name, WEATHER_TOOL.name());
+                assert_eq!(t.function.parameters, WEATHER_TOOL.parameters());
+            }
+            GroqTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
+        match &tools[1] {
+            GroqTool::Function(t) => {
+                assert_eq!(t.function.name, QUERY_TOOL.name());
+                assert_eq!(t.function.parameters, QUERY_TOOL.parameters());
+            }
+            GroqTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
@@ -2218,7 +2273,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_groq_tools(&request_without_tools).unwrap();
+            prepare_groq_tools(&request_without_tools, "test_model", "test_provider").unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
@@ -2264,7 +2319,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request).unwrap();
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_groq_tools(&request, "test_model", "test_provider").unwrap();
 
         // Verify tools are returned
         let tools = tools.unwrap();

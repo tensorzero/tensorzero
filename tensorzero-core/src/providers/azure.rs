@@ -208,7 +208,7 @@ impl InferenceProvider for AzureProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -218,14 +218,15 @@ impl InferenceProvider for AzureProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body =
-            serde_json::to_value(AzureRequest::new(request).await?).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Azure request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+            serde_json::to_value(AzureRequest::new(request, model_name, provider_name).await?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Azure request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let endpoint = self.endpoint.get_endpoint(api_key)?;
         let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
@@ -306,7 +307,7 @@ impl InferenceProvider for AzureProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -316,14 +317,15 @@ impl InferenceProvider for AzureProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body =
-            serde_json::to_value(AzureRequest::new(request).await?).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Azure request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+            serde_json::to_value(AzureRequest::new(request, model_name, provider_name).await?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Azure request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
         let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let api_key = self
@@ -702,7 +704,11 @@ fn apply_inference_params(
 }
 
 impl<'a> AzureRequest<'a> {
-    pub async fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
+    pub async fn new(
+        request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
+    ) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
             request
@@ -718,7 +724,12 @@ impl<'a> AzureRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, true)?;
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(
+            request,
+            true,
+            tensorzero_model_name,
+            tensorzero_provider_name,
+        )?;
         let stream_options = if request.stream {
             Some(StreamOptions {
                 include_usage: true,
@@ -920,7 +931,7 @@ mod tests {
     };
     use crate::model::EndpointLocation;
     use crate::providers::chat_completions::{
-        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction, ChatCompletionTool,
         ChatCompletionToolChoice, ChatCompletionToolChoiceString, ChatCompletionToolType,
     };
     use crate::providers::openai::{
@@ -952,7 +963,9 @@ mod tests {
             ..Default::default()
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools).await.unwrap();
+        let azure_request = AzureRequest::new(&request_with_tools, "test_model", "test_provider")
+            .await
+            .unwrap();
 
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -964,8 +977,13 @@ mod tests {
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            ChatCompletionTool::Function(t) => {
+                assert_eq!(t.function.name, WEATHER_TOOL.name());
+                assert_eq!(t.function.parameters, WEATHER_TOOL.parameters());
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         assert_eq!(
             azure_request.tool_choice,
             Some(AzureToolChoice::Specific(
@@ -1000,7 +1018,9 @@ mod tests {
             ..Default::default()
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools).await.unwrap();
+        let azure_request = AzureRequest::new(&request_with_tools, "test_model", "test_provider")
+            .await
+            .unwrap();
 
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -1018,8 +1038,13 @@ mod tests {
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            ChatCompletionTool::Function(t) => {
+                assert_eq!(t.function.name, WEATHER_TOOL.name());
+                assert_eq!(t.function.parameters, WEATHER_TOOL.parameters());
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         assert_eq!(
             azure_request.tool_choice,
             Some(AzureToolChoice::Specific(
@@ -1153,8 +1178,12 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            raw_request: serde_json::to_string(&AzureRequest::new(&generic_request).await.unwrap())
-                .unwrap(),
+            raw_request: serde_json::to_string(
+                &AzureRequest::new(&generic_request, "test_model", "test_provider")
+                    .await
+                    .unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
         };

@@ -818,8 +818,8 @@ mod tests {
         },
         providers::{
             openai::{
-                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
-                OpenAIToolChoiceString, OpenAIUsage,
+                OpenAIFinishReason, OpenAIFunctionTool, OpenAIResponseChoice,
+                OpenAIResponseMessage, OpenAIToolChoiceString, OpenAIUsage,
             },
             test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
@@ -1109,18 +1109,18 @@ mod tests {
         let tools = sglang_request.tools.unwrap();
         assert_eq!(tools.len(), 2);
         match &tools[0] {
-            OpenAITool::Function { function, .. } => {
+            OpenAITool::Function(OpenAIFunctionTool { function, .. }) => {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            _ => panic!("Expected Function tool"),
         }
         match &tools[1] {
-            OpenAITool::Function { function, .. } => {
+            OpenAITool::Function(OpenAIFunctionTool { function, .. }) => {
                 assert_eq!(function.name, QUERY_TOOL.name());
                 assert_eq!(function.parameters, QUERY_TOOL.parameters());
             }
-            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            _ => panic!("Expected Function tool"),
         }
         let tool_choice = sglang_request.tool_choice.unwrap();
         assert_eq!(

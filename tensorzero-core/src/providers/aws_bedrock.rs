@@ -43,10 +43,9 @@ use crate::tool::{
 use tensorzero_types_providers::aws_bedrock::{
     self as types, AdditionalModelRequestFields, ContentBlock as BedrockContentBlock,
     ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStart, ContentBlockStartEvent,
-    ConverseRequest, ConverseResponse, InferenceConfig, Message, MessageStopEvent, MetadataEvent,
+    ConverseResponse, InferenceConfig, Message, MessageStopEvent, MetadataEvent,
     ResponseContentBlock, ResponseReasoningContent, Role, StopReason, SystemContentBlock,
-    ThinkingConfig, ThinkingType, Tool, ToolChoice, ToolConfig, ToolInputSchema, ToolResultContent,
-    ToolSpec,
+    ThinkingConfig, ThinkingType, Tool, ToolChoice, ToolInputSchema, ToolResultContent, ToolSpec,
 };
 use uuid::Uuid;
 
@@ -93,7 +92,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -107,7 +106,14 @@ impl InferenceProvider for AWSBedrockProvider {
             raw_request,
             body_bytes,
             http_extra_headers,
-        } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
+        } = prepare_request_body(
+            &self.model_id,
+            request,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .await?;
 
         // Build URL
         let base_url =
@@ -176,7 +182,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -190,7 +196,14 @@ impl InferenceProvider for AWSBedrockProvider {
             raw_request,
             body_bytes,
             http_extra_headers,
-        } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
+        } = prepare_request_body(
+            &self.model_id,
+            request,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .await?;
 
         // Build URL for streaming endpoint
         let base_url =
@@ -319,10 +332,16 @@ async fn prepare_request_body(
     request: &ModelInferenceRequest<'_>,
     model_provider: &ModelProvider,
     model_name: &str,
+    provider_name: &str,
 ) -> Result<PreparedRequestBody, Error> {
     // Build the request body
-    let mut converse_request =
-        build_converse_request(request, &request.inference_params_v2).await?;
+    let mut converse_request = build_converse_request(
+        request,
+        &request.inference_params_v2,
+        model_name,
+        provider_name,
+    )
+    .await?;
 
     // Add JSON prefill for Claude models in JSON mode
     if needs_json_prefill(model_id, request) {
@@ -366,10 +385,12 @@ async fn prepare_request_body(
 }
 
 /// Build a ConverseRequest from a ModelInferenceRequest
-async fn build_converse_request(
-    request: &ModelInferenceRequest<'_>,
+async fn build_converse_request<'a>(
+    request: &'a ModelInferenceRequest<'_>,
     inference_params: &ChatCompletionInferenceParamsV2,
-) -> Result<ConverseRequest, Error> {
+    model_name: &str,
+    provider_name: &str,
+) -> Result<ConverseRequestWithProviderTools<'a>, Error> {
     // Convert messages
     let messages: Vec<Message> = try_join_all(request.messages.iter().map(convert_request_message))
         .await?
@@ -400,14 +421,28 @@ async fn build_converse_request(
         if matches!(tc.tool_choice, TensorZeroToolChoice::None) {
             None
         } else {
-            let tools: Vec<Tool> = tc.strict_tools_available()?.map(convert_tool).collect();
+            // Build function tools
+            let mut tools: Vec<BedrockToolOrProviderTool<'a>> =
+                tc.strict_tools_available()?.map(convert_tool).collect();
 
-            let tool_choice = convert_tool_choice(tc.tool_choice.clone());
+            // Add provider tools (e.g., web_search, computer_use)
+            let provider_tools = tc.get_scoped_provider_tools(model_name, provider_name);
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| BedrockToolOrProviderTool::ProviderTool(&t.tool)),
+            );
 
-            Some(ToolConfig {
-                tools,
-                tool_choice: Some(tool_choice),
-            })
+            if tools.is_empty() {
+                None
+            } else {
+                let tool_choice = convert_tool_choice(tc.tool_choice.clone());
+
+                Some(ToolConfigWithProviderTools {
+                    tools,
+                    tool_choice: Some(tool_choice),
+                })
+            }
         }
     } else {
         None
@@ -416,7 +451,7 @@ async fn build_converse_request(
     // Build additional model request fields (for thinking, etc.) and warn about unsupported params
     let additional_model_request_fields = apply_inference_params(inference_params);
 
-    Ok(ConverseRequest {
+    Ok(ConverseRequestWithProviderTools {
         messages,
         system,
         inference_config,
@@ -492,7 +527,7 @@ fn apply_inference_params(
 }
 
 /// Add JSON prefill message to the request
-fn prefill_json_converse_request(request: &mut ConverseRequest) {
+fn prefill_json_converse_request(request: &mut ConverseRequestWithProviderTools) {
     request.messages.push(Message {
         role: Role::Assistant,
         content: vec![BedrockContentBlock::Text(types::TextBlock {
@@ -627,9 +662,17 @@ async fn convert_content_block_to_bedrock(
     }
 }
 
+/// Represents either a function tool or a provider-specific tool (opaque JSON value)
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum BedrockToolOrProviderTool<'a> {
+    Function(Tool),
+    ProviderTool(&'a serde_json::Value),
+}
+
 /// Convert a FunctionToolConfig to a Bedrock Tool
-fn convert_tool(tool_config: &FunctionToolConfig) -> Tool {
-    Tool {
+fn convert_tool(tool_config: &FunctionToolConfig) -> BedrockToolOrProviderTool<'static> {
+    BedrockToolOrProviderTool::Function(Tool {
         tool_spec: ToolSpec {
             name: tool_config.name().to_string(),
             description: tool_config.description().to_string(),
@@ -637,7 +680,36 @@ fn convert_tool(tool_config: &FunctionToolConfig) -> Tool {
                 json: tool_config.parameters().clone(),
             },
         },
-    }
+    })
+}
+
+/// Tool configuration that supports both function tools and provider tools
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolConfigWithProviderTools<'a> {
+    tools: Vec<BedrockToolOrProviderTool<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<ToolChoice>,
+}
+
+/// Request body for the Bedrock Converse API that supports provider tools
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConverseRequestWithProviderTools<'a> {
+    /// The conversation messages
+    messages: Vec<Message>,
+    /// System prompts
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system: Option<Vec<SystemContentBlock>>,
+    /// Inference configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    inference_config: Option<InferenceConfig>,
+    /// Tool configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_config: Option<ToolConfigWithProviderTools<'a>>,
+    /// Additional model-specific fields (e.g., thinking configuration)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    additional_model_request_fields: Option<AdditionalModelRequestFields>,
 }
 
 /// Convert a TensorZero ToolChoice to a Bedrock ToolChoice.

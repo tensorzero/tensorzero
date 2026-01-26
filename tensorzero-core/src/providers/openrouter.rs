@@ -192,7 +192,13 @@ impl InferenceProvider for OpenRouterProvider {
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request).await?;
+        let request_body_obj = OpenRouterRequest::new(
+            &self.model_name,
+            request.request,
+            request.model_name,
+            request.provider_name,
+        )
+        .await?;
         let request_body = serde_json::to_value(request_body_obj).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
@@ -282,7 +288,7 @@ impl InferenceProvider for OpenRouterProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -291,16 +297,17 @@ impl InferenceProvider for OpenRouterProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body =
-            serde_json::to_value(OpenRouterRequest::new(&self.model_name, request).await?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing OpenRouter request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(
+            OpenRouterRequest::new(&self.model_name, request, model_name, provider_name).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing OpenRouter request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self
             .credentials
@@ -922,8 +929,15 @@ pub(super) async fn prepare_openrouter_messages<'a>(
 /// Otherwise convert the tool choice and tools to OpenRouter format
 pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
+    tensorzero_model_name: &str,
+    tensorzero_provider_name: &str,
 ) -> Result<PreparedOpenRouterToolsResult<'a>, Error> {
-    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true)?;
+    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(
+        request,
+        true,
+        tensorzero_model_name,
+        tensorzero_provider_name,
+    )?;
 
     // Convert from ChatCompletionTool to OpenRouterTool
     let openrouter_tools = tools.map(|t| t.into_iter().map(OpenRouterTool::from).collect());
@@ -1290,15 +1304,23 @@ pub(super) struct OpenRouterFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct OpenRouterTool<'a> {
+pub(super) struct OpenRouterFunctionTool<'a> {
     pub(super) r#type: OpenRouterToolType,
     pub(super) function: OpenRouterFunction<'a>,
     pub(super) strict: bool,
 }
 
+/// Enum that can hold either a function tool or an opaque provider tool
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(super) enum OpenRouterTool<'a> {
+    Function(OpenRouterFunctionTool<'a>),
+    ProviderTool(&'a Value),
+}
+
 impl<'a> From<&'a FunctionToolConfig> for OpenRouterTool<'a> {
     fn from(tool: &'a FunctionToolConfig) -> Self {
-        OpenRouterTool {
+        OpenRouterTool::Function(OpenRouterFunctionTool {
             r#type: OpenRouterToolType::Function,
             function: OpenRouterFunction {
                 name: tool.name(),
@@ -1306,20 +1328,23 @@ impl<'a> From<&'a FunctionToolConfig> for OpenRouterTool<'a> {
                 parameters: tool.parameters(),
             },
             strict: tool.strict(),
-        }
+        })
     }
 }
 
 impl<'a> From<ChatCompletionTool<'a>> for OpenRouterTool<'a> {
     fn from(tool: ChatCompletionTool<'a>) -> Self {
-        OpenRouterTool {
-            r#type: OpenRouterToolType::Function,
-            function: OpenRouterFunction {
-                name: tool.function.name,
-                description: tool.function.description,
-                parameters: tool.function.parameters,
-            },
-            strict: tool.strict,
+        match tool {
+            ChatCompletionTool::Function(t) => OpenRouterTool::Function(OpenRouterFunctionTool {
+                r#type: OpenRouterToolType::Function,
+                function: OpenRouterFunction {
+                    name: t.function.name,
+                    description: t.function.description,
+                    parameters: t.function.parameters,
+                },
+                strict: t.strict,
+            }),
+            ChatCompletionTool::ProviderTool(v) => OpenRouterTool::ProviderTool(v),
         }
     }
 }
@@ -1501,6 +1526,8 @@ impl<'a> OpenRouterRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<OpenRouterRequest<'a>, Error> {
         let response_format =
             OpenRouterResponseFormat::new(request.json_mode, request.output_schema, model);
@@ -1513,7 +1540,8 @@ impl<'a> OpenRouterRequest<'a> {
         };
         let mut messages = prepare_openrouter_messages(request).await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request)?;
+        let (tools, tool_choice, mut parallel_tool_calls) =
+            prepare_openrouter_tools(request, tensorzero_model_name, tensorzero_provider_name)?;
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -2229,9 +2257,14 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4.1-mini", &basic_request)
-            .await
-            .unwrap();
+        let openrouter_request = OpenRouterRequest::new(
+            "gpt-4.1-mini",
+            &basic_request,
+            "test_model",
+            "test_provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(openrouter_request.model, "gpt-4.1-mini");
         assert_eq!(openrouter_request.messages.len(), 2);
@@ -2270,9 +2303,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools)
-            .await
-            .unwrap();
+        let openrouter_request =
+            OpenRouterRequest::new("gpt-4", &request_with_tools, "test_model", "test_provider")
+                .await
+                .unwrap();
 
         assert_eq!(openrouter_request.model, "gpt-4");
         assert_eq!(openrouter_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenRouter requirements
@@ -2289,8 +2323,13 @@ mod tests {
         );
         assert!(openrouter_request.tools.is_some());
         let tools = openrouter_request.tools.as_ref().unwrap();
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            OpenRouterTool::Function(t) => {
+                assert_eq!(t.function.name, WEATHER_TOOL.name());
+                assert_eq!(t.function.parameters, WEATHER_TOOL.parameters());
+            }
+            OpenRouterTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         assert_eq!(
             openrouter_request.tool_choice,
             Some(OpenRouterToolChoice::Specific(SpecificToolChoice {
@@ -2324,9 +2363,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools)
-            .await
-            .unwrap();
+        let openrouter_request =
+            OpenRouterRequest::new("gpt-4", &request_with_tools, "test_model", "test_provider")
+                .await
+                .unwrap();
 
         assert_eq!(openrouter_request.model, "gpt-4");
         assert_eq!(openrouter_request.messages.len(), 1);
@@ -2367,9 +2407,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("gpt-4", &request_with_tools)
-            .await
-            .unwrap();
+        let openrouter_request =
+            OpenRouterRequest::new("gpt-4", &request_with_tools, "test_model", "test_provider")
+                .await
+                .unwrap();
 
         assert_eq!(openrouter_request.model, "gpt-4");
         assert_eq!(openrouter_request.messages.len(), 1);
@@ -2413,9 +2454,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request = OpenRouterRequest::new("o1-preview", &request)
-            .await
-            .unwrap();
+        let openrouter_request =
+            OpenRouterRequest::new("o1-preview", &request, "test_model", "test_provider")
+                .await
+                .unwrap();
 
         assert_eq!(openrouter_request.model, "o1-preview");
         assert_eq!(openrouter_request.messages.len(), 1);
@@ -2452,10 +2494,14 @@ mod tests {
             ..Default::default()
         };
 
-        let openrouter_request_with_system =
-            OpenRouterRequest::new("o1-mini", &request_with_system)
-                .await
-                .unwrap();
+        let openrouter_request_with_system = OpenRouterRequest::new(
+            "o1-mini",
+            &request_with_system,
+            "test_model",
+            "test_provider",
+        )
+        .await
+        .unwrap();
 
         // Check that the system message was converted to a user message
         assert_eq!(openrouter_request_with_system.messages.len(), 2);
@@ -2815,13 +2861,23 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openrouter_tools(&request_with_tools).unwrap();
+            prepare_openrouter_tools(&request_with_tools, "test_model", "test_provider").unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
-        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
+        match &tools[0] {
+            OpenRouterTool::Function(t) => {
+                assert_eq!(t.function.name, WEATHER_TOOL.name());
+                assert_eq!(t.function.parameters, WEATHER_TOOL.parameters());
+            }
+            OpenRouterTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
+        match &tools[1] {
+            OpenRouterTool::Function(t) => {
+                assert_eq!(t.function.name, QUERY_TOOL.name());
+                assert_eq!(t.function.parameters, QUERY_TOOL.parameters());
+            }
+            OpenRouterTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
@@ -2858,7 +2914,8 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openrouter_tools(&request_without_tools).unwrap();
+            prepare_openrouter_tools(&request_without_tools, "test_model", "test_provider")
+                .unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());

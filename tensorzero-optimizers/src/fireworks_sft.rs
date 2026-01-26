@@ -42,7 +42,9 @@ use tensorzero_core::{
         fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
     },
     providers::{
-        fireworks::{FIREWORKS_API_BASE, FireworksTool, PROVIDER_TYPE, prepare_fireworks_messages},
+        fireworks::{
+            FIREWORKS_API_BASE, FireworksFunctionTool, PROVIDER_TYPE, prepare_fireworks_messages,
+        },
         helpers::UrlParseErrExt,
         openai::{
             OpenAIMessagesConfig, OpenAIRequestMessage, tensorzero_to_openai_assistant_message,
@@ -362,7 +364,7 @@ pub struct FireworksFineTuningRequest {
 struct FireworksSupervisedRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<FireworksTool<'a>>,
+    tools: Vec<FireworksFunctionTool<'a>>,
 }
 
 impl<'a> FireworksSupervisedRow<'a> {

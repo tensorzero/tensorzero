@@ -158,15 +158,18 @@ impl WrappedProvider for TGIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
-            model_name: _,
+            provider_name,
+            model_name,
             otlp_config: _,
             model_inference_id: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
 
-        serde_json::to_value(TGIRequest::new(PROVIDER_TYPE, request).await?).map_err(|e| {
+        serde_json::to_value(
+            TGIRequest::new(PROVIDER_TYPE, request, model_name, provider_name).await?,
+        )
+        .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing TGI request: {}",
@@ -302,7 +305,7 @@ impl InferenceProvider for TGIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -311,15 +314,17 @@ impl InferenceProvider for TGIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request).await?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing TGI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            TGIRequest::new(PROVIDER_NAME, request, model_name, provider_name).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing TGI request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
 
         // TGI integration does not support tools in streaming mode
         if request_body.get("tools").is_some() {
@@ -502,6 +507,8 @@ impl<'a> TGIRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<TGIRequest<'a>, Error> {
         // TGI doesn't support JSON mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
         // So we log a warning and ignore the JSON mode
@@ -535,8 +542,12 @@ impl<'a> TGIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) =
-            prepare_chat_completion_tools(request, false)?;
+        let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(
+            request,
+            false,
+            tensorzero_model_name,
+            tensorzero_provider_name,
+        )?;
 
         let mut tgi_request = TGIRequest {
             messages,
@@ -913,7 +924,10 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let tgi_request = TGIRequest::new(&model_name, &basic_request).await.unwrap();
+        let tgi_request =
+            TGIRequest::new(&model_name, &basic_request, "test-model", "test-provider")
+                .await
+                .unwrap();
 
         assert_eq!(tgi_request.model, &model_name);
         assert_eq!(tgi_request.messages.len(), 2);
@@ -951,9 +965,14 @@ mod tests {
             ..Default::default()
         };
 
-        let tgi_request = TGIRequest::new(&model_name, &request_with_tools)
-            .await
-            .unwrap();
+        let tgi_request = TGIRequest::new(
+            &model_name,
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(tgi_request.model, &model_name);
         assert_eq!(tgi_request.messages.len(), 2);
@@ -967,8 +986,13 @@ mod tests {
         assert!(tgi_request.tools.is_some());
         let tools = tgi_request.tools.as_ref().unwrap();
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        match tool {
+            ChatCompletionTool::Function(t) => {
+                assert_eq!(t.function.name, WEATHER_TOOL.name());
+                assert_eq!(t.function.parameters, WEATHER_TOOL.parameters());
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         assert_eq!(
             tgi_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
@@ -1004,9 +1028,14 @@ mod tests {
             ..Default::default()
         };
 
-        let tgi_request = TGIRequest::new(&model_name, &request_with_tools)
-            .await
-            .unwrap();
+        let tgi_request = TGIRequest::new(
+            &model_name,
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(tgi_request.model, &model_name);
         assert_eq!(tgi_request.messages.len(), 1);
@@ -1042,9 +1071,14 @@ mod tests {
             ..Default::default()
         };
 
-        let tgi_request = TGIRequest::new(&model_name, &request_with_tools)
-            .await
-            .unwrap();
+        let tgi_request = TGIRequest::new(
+            &model_name,
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(tgi_request.model, &model_name);
         assert_eq!(tgi_request.messages.len(), 1);
@@ -1129,9 +1163,14 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_value(
-                TGIRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
+                TGIRequest::new(
+                    "test-model",
+                    &generic_request,
+                    "test-model",
+                    "test-provider",
+                )
+                .await
+                .unwrap(),
             )
             .unwrap()
             .to_string(),

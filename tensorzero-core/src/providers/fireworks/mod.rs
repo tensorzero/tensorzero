@@ -180,7 +180,7 @@ impl InferenceProvider for FireworksProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -190,7 +190,7 @@ impl InferenceProvider for FireworksProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
-            FireworksRequest::new(&self.model_name, request).await?,
+            FireworksRequest::new(&self.model_name, request, model_name, provider_name).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -276,7 +276,7 @@ impl InferenceProvider for FireworksProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -286,7 +286,7 @@ impl InferenceProvider for FireworksProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            FireworksRequest::new(&self.model_name, request).await?,
+            FireworksRequest::new(&self.model_name, request, model_name, provider_name).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -404,6 +404,8 @@ type PreparedFireworksToolsResult<'a> = (
 /// Otherwise convert the tool choice and tools to Fireworks format
 pub(super) fn prepare_fireworks_tools<'a>(
     request: &'a ModelInferenceRequest,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<PreparedFireworksToolsResult<'a>, Error> {
     match &request.tool_config {
         None => Ok((None, None, None)),
@@ -411,17 +413,27 @@ pub(super) fn prepare_fireworks_tools<'a>(
             if !tool_config.any_tools_available() {
                 return Ok((None, None, None));
             }
-            let tools = Some(
-                tool_config
-                    .strict_tools_available()?
-                    .map(Into::into)
-                    .collect(),
+            // Build function tools
+            let mut tools: Vec<FireworksTool> = tool_config
+                .strict_tools_available()?
+                .map(|tool| FireworksTool::Function(tool.into()))
+                .collect();
+            // Add provider tools (opaque JSON)
+            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| FireworksTool::ProviderTool(&t.tool)),
             );
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             // Fireworks does not support allowed_tools constraint, use regular tool_choice
             let tool_choice = Some((&tool_config.tool_choice).into());
-            Ok((tools, tool_choice, parallel_tool_calls))
+            if tools.is_empty() {
+                Ok((None, None, parallel_tool_calls))
+            } else {
+                Ok((Some(tools), tool_choice, parallel_tool_calls))
+            }
         }
     }
 }
@@ -462,6 +474,8 @@ impl<'a> FireworksRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<FireworksRequest<'a>, Error> {
         // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
         // So we just don't include it as Text is the same as None anyway.
@@ -484,7 +498,8 @@ impl<'a> FireworksRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_fireworks_tools(request)?;
+        let (tools, tool_choice, _) =
+            prepare_fireworks_tools(request, tensorzero_model_name, tensorzero_provider_name)?;
 
         let mut fireworks_request = FireworksRequest {
             messages,
@@ -534,14 +549,14 @@ fn tensorzero_to_fireworks_system_message(
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub struct FireworksTool<'a> {
+pub struct FireworksFunctionTool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
+impl<'a> From<&'a FunctionTool> for FireworksFunctionTool<'a> {
     fn from(tool: &'a FunctionTool) -> Self {
-        FireworksTool {
+        FireworksFunctionTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
                 name: &tool.name,
@@ -552,9 +567,9 @@ impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
     }
 }
 
-impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
+impl<'a> From<&'a FunctionToolConfig> for FireworksFunctionTool<'a> {
     fn from(tool: &'a FunctionToolConfig) -> Self {
-        FireworksTool {
+        FireworksFunctionTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
                 name: tool.name(),
@@ -563,6 +578,14 @@ impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
             },
         }
     }
+}
+
+/// Represents either a function tool or a provider-specific tool (opaque JSON)
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(super) enum FireworksTool<'a> {
+    Function(FireworksFunctionTool<'a>),
+    ProviderTool(&'a Value),
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
@@ -1040,9 +1063,14 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &FireworksRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
+                &FireworksRequest::new(
+                    "test-model",
+                    &generic_request,
+                    "test-model",
+                    "test-provider",
+                )
+                .await
+                .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1081,9 +1109,14 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &FireworksRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
+                &FireworksRequest::new(
+                    "test-model",
+                    &generic_request,
+                    "test-model",
+                    "test-provider",
+                )
+                .await
+                .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,
@@ -1130,10 +1163,14 @@ mod tests {
             ..Default::default()
         };
 
-        let fireworks_request =
-            FireworksRequest::new("accounts/fireworks/models/llama-v3-8b", &request_with_tools)
-                .await
-                .unwrap();
+        let fireworks_request = FireworksRequest::new(
+            "accounts/fireworks/models/llama-v3-8b",
+            &request_with_tools,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             fireworks_request.model,
@@ -1155,8 +1192,13 @@ mod tests {
         assert!(fireworks_request.tools.is_some());
         let tools = fireworks_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            FireworksTool::Function(func_tool) => {
+                assert_eq!(func_tool.function.name, WEATHER_TOOL.name());
+                assert_eq!(func_tool.function.parameters, WEATHER_TOOL.parameters());
+            }
+            FireworksTool::ProviderTool(_) => panic!("Expected a function tool"),
+        }
         assert_eq!(
             fireworks_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
@@ -1248,9 +1290,14 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &FireworksRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
+                &FireworksRequest::new(
+                    "test-model",
+                    &generic_request,
+                    "test-model",
+                    "test-provider",
+                )
+                .await
+                .unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,

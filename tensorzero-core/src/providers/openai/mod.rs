@@ -284,7 +284,7 @@ impl WrappedProvider for OpenAIProvider {
                 })
             })?),
             OpenAIAPIType::ChatCompletions => Ok(serde_json::to_value(
-                OpenAIRequest::new(&self.model_name, request).await?,
+                OpenAIRequest::new(&self.model_name, request, model_name, provider_name).await?,
             )
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -616,16 +616,18 @@ impl InferenceProvider for OpenAIProvider {
                 let request_url =
                     get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
 
-                let request_body =
-                    serde_json::to_value(OpenAIRequest::new(&self.model_name, request).await?)
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Error serializing OpenAI request: {}",
-                                    DisplayOrDebugGateway::new(e)
-                                ),
-                            })
-                        })?;
+                let request_body = serde_json::to_value(
+                    OpenAIRequest::new(&self.model_name, request, model_name, provider_name)
+                        .await?,
+                )
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing OpenAI request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
 
                 let mut request_builder = http_client.post(request_url);
                 if let Some(api_key) = api_key {
@@ -681,8 +683,10 @@ impl InferenceProvider for OpenAIProvider {
             .map_err(|e| e.log())?;
         let mut batch_requests = Vec::with_capacity(requests.len());
         for request in requests {
+            // Batch inference doesn't support provider tools (no model_name/provider_name context)
             batch_requests.push(
-                OpenAIBatchFileInput::new(request.inference_id, &self.model_name, request).await?,
+                OpenAIBatchFileInput::new(request.inference_id, &self.model_name, request, "", "")
+                    .await?,
             );
         }
         let raw_requests: Result<Vec<String>, serde_json::Error> = batch_requests
@@ -1732,23 +1736,41 @@ pub(crate) fn prepare_allowed_tools_constraint<'a>(
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to OpenAI format
-fn prepare_openai_tools<'a>(request: &'a ModelInferenceRequest) -> PreparedOpenAIToolsResult<'a> {
+fn prepare_openai_tools<'a>(
+    request: &'a ModelInferenceRequest,
+    model_name: &str,
+    provider_name: &str,
+) -> PreparedOpenAIToolsResult<'a> {
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {
             if !tool_config.any_tools_available() && tool_config.openai_custom_tools.is_empty() {
-                return (None, None, None);
+                // Check if there are provider tools before returning early
+                let provider_tools =
+                    tool_config.get_scoped_provider_tools(model_name, provider_name);
+                if provider_tools.is_empty() {
+                    return (None, None, None);
+                }
             }
             // This is the only place where we add OpenAI custom tools
-            let tools = Some(
-                tool_config
-                    .tools_available_with_openai_custom()
-                    .map(|tool_ref| match tool_ref {
-                        ToolConfigRef::Function(func) => func.into(),
-                        ToolConfigRef::OpenAICustom(custom) => OpenAITool::Custom { custom },
-                    })
-                    .collect(),
+            let mut tools: Vec<OpenAITool<'a>> = tool_config
+                .tools_available_with_openai_custom()
+                .map(|tool_ref| match tool_ref {
+                    ToolConfigRef::Function(func) => func.into(),
+                    ToolConfigRef::OpenAICustom(custom) => {
+                        OpenAITool::Custom(OpenAICustomToolWrapper::new(custom))
+                    }
+                })
+                .collect();
+
+            // Add provider tools (e.g., web_search, code_interpreter)
+            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| OpenAITool::ProviderTool(&t.tool)),
             );
+
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             let tool_choice =
@@ -1759,7 +1781,11 @@ fn prepare_openai_tools<'a>(request: &'a ModelInferenceRequest) -> PreparedOpenA
                     Some((&tool_config.tool_choice).into())
                 };
 
-            (tools, tool_choice, parallel_tool_calls)
+            if tools.is_empty() {
+                (None, None, None)
+            } else {
+                (Some(tools), tool_choice, parallel_tool_calls)
+            }
         }
     }
 }
@@ -2189,27 +2215,55 @@ pub struct OpenAIFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(untagged)]
 pub enum OpenAITool<'a> {
-    Function {
-        function: OpenAIFunction<'a>,
-        strict: bool,
-    },
-    Custom {
-        custom: &'a OpenAICustomTool,
-    },
+    Function(OpenAIFunctionTool<'a>),
+    Custom(OpenAICustomToolWrapper<'a>),
+    ProviderTool(&'a Value),
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct OpenAIFunctionTool<'a> {
+    r#type: &'static str,
+    pub function: OpenAIFunction<'a>,
+    pub strict: bool,
+}
+
+impl<'a> OpenAIFunctionTool<'a> {
+    pub fn new(function: OpenAIFunction<'a>, strict: bool) -> Self {
+        Self {
+            r#type: "function",
+            function,
+            strict,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct OpenAICustomToolWrapper<'a> {
+    r#type: &'static str,
+    pub custom: &'a OpenAICustomTool,
+}
+
+impl<'a> OpenAICustomToolWrapper<'a> {
+    pub fn new(custom: &'a OpenAICustomTool) -> Self {
+        Self {
+            r#type: "custom",
+            custom,
+        }
+    }
 }
 
 impl<'a> From<&'a FunctionToolConfig> for OpenAITool<'a> {
     fn from(tool: &'a FunctionToolConfig) -> Self {
-        OpenAITool::Function {
-            function: OpenAIFunction {
+        OpenAITool::Function(OpenAIFunctionTool::new(
+            OpenAIFunction {
                 name: tool.name(),
                 description: Some(tool.description()),
                 parameters: tool.parameters(),
             },
-            strict: tool.strict(),
-        }
+            tool.strict(),
+        ))
     }
 }
 
@@ -2234,14 +2288,14 @@ impl<'a> From<&'a FunctionTool> for OpenAISFTTool<'a> {
 
 impl<'a> From<&'a FunctionTool> for OpenAITool<'a> {
     fn from(tool: &'a FunctionTool) -> Self {
-        OpenAITool::Function {
-            function: OpenAIFunction {
+        OpenAITool::Function(OpenAIFunctionTool::new(
+            OpenAIFunction {
                 name: &tool.name,
                 description: Some(&tool.description),
                 parameters: &tool.parameters,
             },
-            strict: tool.strict,
-        }
+            tool.strict,
+        ))
     }
 }
 
@@ -2434,6 +2488,8 @@ impl<'a> OpenAIRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<OpenAIRequest<'a>, Error> {
         let response_format =
             OpenAIResponseFormat::new(request.json_mode, request.output_schema, model);
@@ -2459,7 +2515,8 @@ impl<'a> OpenAIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) =
+            prepare_openai_tools(request, tensorzero_model_name, tensorzero_provider_name);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -2517,8 +2574,16 @@ impl<'a> OpenAIBatchFileInput<'a> {
         inference_id: Uuid,
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<Self, Error> {
-        let body = OpenAIRequest::new(model, request).await?;
+        let body = OpenAIRequest::new(
+            model,
+            request,
+            tensorzero_model_name,
+            tensorzero_provider_name,
+        )
+        .await?;
         Ok(Self {
             custom_id: inference_id.to_string(),
             method: "POST".to_string(),
@@ -3369,9 +3434,14 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4.1-mini", &basic_request)
-            .await
-            .unwrap();
+        let openai_request = OpenAIRequest::new(
+            "gpt-4.1-mini",
+            &basic_request,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(openai_request.model, "gpt-4.1-mini");
         assert_eq!(openai_request.messages.len(), 2);
@@ -3410,9 +3480,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools)
-            .await
-            .unwrap();
+        let openai_request =
+            OpenAIRequest::new("gpt-4", &request_with_tools, "test-model", "test-provider")
+                .await
+                .unwrap();
 
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenAI requirements
@@ -3430,11 +3501,11 @@ mod tests {
         assert!(openai_request.tools.is_some());
         let tools = openai_request.tools.as_ref().unwrap();
         match &tools[0] {
-            OpenAITool::Function { function, .. } => {
+            OpenAITool::Function(OpenAIFunctionTool { function, .. }) => {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            _ => panic!("Expected Function tool"),
         }
         assert_eq!(
             openai_request.tool_choice,
@@ -3469,9 +3540,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools)
-            .await
-            .unwrap();
+        let openai_request =
+            OpenAIRequest::new("gpt-4", &request_with_tools, "test-model", "test-provider")
+                .await
+                .unwrap();
 
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 1);
@@ -3512,9 +3584,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools)
-            .await
-            .unwrap();
+        let openai_request =
+            OpenAIRequest::new("gpt-4", &request_with_tools, "test-model", "test-provider")
+                .await
+                .unwrap();
 
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 1);
@@ -3558,7 +3631,10 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("o1-preview", &request).await.unwrap();
+        let openai_request =
+            OpenAIRequest::new("o1-preview", &request, "test-model", "test-provider")
+                .await
+                .unwrap();
 
         assert_eq!(openai_request.model, "o1-preview");
         assert_eq!(openai_request.messages.len(), 1);
@@ -3595,9 +3671,14 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request_with_system = OpenAIRequest::new("o1-mini", &request_with_system)
-            .await
-            .unwrap();
+        let openai_request_with_system = OpenAIRequest::new(
+            "o1-mini",
+            &request_with_system,
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .unwrap();
 
         // Check that the system message was converted to a user message
         assert_eq!(openai_request_with_system.messages.len(), 2);
@@ -3924,22 +4005,23 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openai_tools(&request_with_tools, "test-model", "test-provider");
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         match &tools[0] {
-            OpenAITool::Function { function, .. } => {
+            OpenAITool::Function(OpenAIFunctionTool { function, .. }) => {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            _ => panic!("Expected Function tool"),
         }
         match &tools[1] {
-            OpenAITool::Function { function, .. } => {
+            OpenAITool::Function(OpenAIFunctionTool { function, .. }) => {
                 assert_eq!(function.name, QUERY_TOOL.name());
                 assert_eq!(function.parameters, QUERY_TOOL.parameters());
             }
-            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            _ => panic!("Expected Function tool"),
         }
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
@@ -3977,7 +4059,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openai_tools(&request_without_tools);
+            prepare_openai_tools(&request_without_tools, "test-model", "test-provider");
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
@@ -5134,7 +5216,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4o", &request)
+        let openai_request = OpenAIRequest::new("gpt-4o", &request, "test-model", "test-provider")
             .await
             .expect("Failed to create OpenAI request");
 
@@ -5382,7 +5464,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openai_tools(&request, "test-model", "test-provider");
 
         assert_eq!(tools, None);
         assert_eq!(tool_choice, None);
@@ -5407,7 +5490,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openai_tools(&request, "test-model", "test-provider");
 
         // Verify tools are present
         assert!(tools.is_some());
@@ -5456,7 +5540,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+        let (tools, tool_choice, _parallel_tool_calls) =
+            prepare_openai_tools(&request, "test-model", "test-provider");
 
         // Verify tools are present
         assert!(tools.is_some());
@@ -5508,7 +5593,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+        let (_tools, tool_choice, _parallel_tool_calls) =
+            prepare_openai_tools(&request, "test-model", "test-provider");
 
         assert!(tool_choice.is_some());
         let tool_choice = tool_choice.unwrap();
@@ -5537,7 +5623,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+        let (_tools, tool_choice, _parallel_tool_calls) =
+            prepare_openai_tools(&request, "test-model", "test-provider");
 
         assert!(tool_choice.is_some());
         let tool_choice = tool_choice.unwrap();
@@ -5567,7 +5654,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+        let (_tools, tool_choice, _parallel_tool_calls) =
+            prepare_openai_tools(&request, "test-model", "test-provider");
 
         assert!(tool_choice.is_some());
         let tool_choice = tool_choice.unwrap();
@@ -5593,7 +5681,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+        let (_tools, tool_choice, _parallel_tool_calls) =
+            prepare_openai_tools(&request, "test-model", "test-provider");
 
         assert!(tool_choice.is_some());
         let tool_choice = tool_choice.unwrap();
@@ -5624,7 +5713,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+        let (_tools, tool_choice, _parallel_tool_calls) =
+            prepare_openai_tools(&request, "test-model", "test-provider");
 
         assert!(tool_choice.is_some());
         let tool_choice = tool_choice.unwrap();

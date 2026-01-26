@@ -243,7 +243,7 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name: tensorzero_provider_name,
             model_name: tensorzero_model_name,
             otlp_config: _,
             model_inference_id,
@@ -253,8 +253,14 @@ impl InferenceProvider for AnthropicProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
-            AnthropicRequestBody::new(&self.model_name, request, self.beta_structured_outputs)
-                .await?,
+            AnthropicRequestBody::new(
+                &self.model_name,
+                request,
+                self.beta_structured_outputs,
+                tensorzero_model_name,
+                tensorzero_provider_name,
+            )
+            .await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -361,8 +367,14 @@ impl InferenceProvider for AnthropicProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            AnthropicRequestBody::new(&self.model_name, request, self.beta_structured_outputs)
-                .await?,
+            AnthropicRequestBody::new(
+                &self.model_name,
+                request,
+                self.beta_structured_outputs,
+                model_name,
+                provider_name,
+            )
+            .await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -572,7 +584,7 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct AnthropicTool<'a> {
+pub(super) struct AnthropicFunctionTool<'a> {
     pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) description: Option<&'a str>,
@@ -581,7 +593,7 @@ pub(super) struct AnthropicTool<'a> {
     pub(super) strict: Option<bool>,
 }
 
-impl<'a> AnthropicTool<'a> {
+impl<'a> AnthropicFunctionTool<'a> {
     pub fn new(tool: &'a FunctionToolConfig, beta_structured_outputs: bool) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
         Self {
@@ -591,6 +603,14 @@ impl<'a> AnthropicTool<'a> {
             strict: beta_structured_outputs.then_some(tool.strict()),
         }
     }
+}
+
+/// Represents either a function tool or a provider-specific tool (e.g., web_search, computer_use)
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(super) enum AnthropicTool<'a> {
+    Function(AnthropicFunctionTool<'a>),
+    ProviderTool(&'a Value),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -869,6 +889,8 @@ impl<'a> AnthropicRequestBody<'a> {
         model_name: &'a str,
         request: &'a ModelInferenceRequest<'_>,
         beta_structured_outputs: bool,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<AnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -901,11 +923,27 @@ impl<'a> AnthropicRequestBody<'a> {
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
         let tools = match &request.tool_config {
-            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
-                c.strict_tools_available()?
-                    .map(|tool| AnthropicTool::new(tool, beta_structured_outputs))
-                    .collect::<Vec<_>>(),
-            ),
+            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => {
+                // Build function tools
+                let mut tools: Vec<AnthropicTool> = c
+                    .strict_tools_available()?
+                    .map(|tool| {
+                        AnthropicTool::Function(AnthropicFunctionTool::new(
+                            tool,
+                            beta_structured_outputs,
+                        ))
+                    })
+                    .collect();
+                // Add provider tools (e.g., web_search, computer_use)
+                let provider_tools =
+                    c.get_scoped_provider_tools(tensorzero_model_name, tensorzero_provider_name);
+                tools.extend(
+                    provider_tools
+                        .iter()
+                        .map(|t| AnthropicTool::ProviderTool(&t.tool)),
+                );
+                if tools.is_empty() { None } else { Some(tools) }
+            }
             _ => None,
         };
 
@@ -1784,10 +1822,10 @@ mod tests {
             parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
+        let anthropic_tool = AnthropicFunctionTool::new(&tool, false);
         assert_eq!(
             anthropic_tool,
-            AnthropicTool {
+            AnthropicFunctionTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
@@ -1945,8 +1983,14 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+        let anthropic_request_body = AnthropicRequestBody::new(
+            &model,
+            &inference_request,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         let error = anthropic_request_body.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -1979,8 +2023,14 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+        let anthropic_request_body = AnthropicRequestBody::new(
+            &model,
+            &inference_request,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -2035,8 +2085,14 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+        let anthropic_request_body = AnthropicRequestBody::new(
+            &model,
+            &inference_request,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -2105,8 +2161,14 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+        let anthropic_request_body = AnthropicRequestBody::new(
+            &model,
+            &inference_request,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert!(anthropic_request_body.is_ok());
         // Convert messages asynchronously
         let expected_messages = try_join_all(inference_request.messages.iter().map(|m| {
@@ -2165,8 +2227,14 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+        let anthropic_request_body = AnthropicRequestBody::new(
+            &model,
+            &inference_request,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert!(anthropic_request_body.is_ok());
         let result = anthropic_request_body.unwrap();
         assert_eq!(result.messages.len(), 3); // Original 2 messages + JSON prefill
@@ -2224,105 +2292,241 @@ mod tests {
         };
 
         let model = "claude-opus-4-1-20250805".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-20250219".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-1".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku-20240307".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-haiku-4-5-20251001".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-5-20250929".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-ballad-latest".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-4-5-haiku-20260101".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body =
+            AnthropicRequestBody::new(&model, &request, false, "test-model", "test-provider").await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            false,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
     }
 
@@ -3598,10 +3802,10 @@ mod tests {
         };
 
         // Convert to Anthropic tools
-        let tools: Vec<AnthropicTool> = tool_config
+        let tools: Vec<AnthropicFunctionTool> = tool_config
             .strict_tools_available()
             .unwrap()
-            .map(|tool| AnthropicTool::new(tool, false))
+            .map(|tool| AnthropicFunctionTool::new(tool, false))
             .collect();
 
         // Verify only the allowed tool is included

@@ -22,6 +22,7 @@ use tensorzero_core::{
         get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
     },
     inference::types::{ContentBlockChatOutput, Text},
+    tool::{ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider},
 };
 
 use super::common::ModelTestProvider;
@@ -1346,5 +1347,131 @@ async fn test_forward_file_url() {
     assert!(
         text.text.to_lowercase().contains("deepseek"),
         "Content should contain 'deepseek': {text:?}"
+    );
+}
+
+/// E2E test for Anthropic provider tools (web search)
+/// This test verifies that:
+/// 1. Unscoped provider tools are passed to Anthropic API
+/// 2. Scoped provider tools are filtered correctly
+/// 3. Web search results are returned in the response
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_anthropic_web_search_provider_tool() {
+    // Create a config WITHOUT provider_tools in the model config
+    // We'll pass the provider_tools dynamically at inference time
+    let config = r#"
+gateway.debug = true
+
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "anthropic"
+model_name = "claude-sonnet-4-20250514"
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    // Create an embedded gateway with this config
+    let client = make_embedded_gateway_with_config(config).await;
+
+    // Make a simple inference request with dynamic provider_tools
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "What are the latest news about TensorZero? Search the web for current information.".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            dynamic_tool_params: tensorzero_core::tool::DynamicToolParams {
+                allowed_tools: None,
+                additional_tools: None,
+                tool_choice: None,
+                parallel_tool_calls: None,
+                provider_tools: vec![
+                    // This should be passed to Anthropic
+                    ProviderTool {
+                        scope: ProviderToolScope::Unscoped,
+                        tool: json!({
+                            "type": "web_search_20250305",
+                            "name": "web_search"
+                        }),
+                    },
+                    // This should be filtered out (wrong model name)
+                    ProviderTool {
+                        scope: ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
+                            model_name: "garbage-model".to_string(),
+                            provider_name: Some("garbage-provider".to_string()),
+                        }),
+                        tool: json!({
+                            "type": "garbage_tool",
+                            "name": "garbage"
+                        }),
+                    },
+                ],
+            },
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the inference succeeded
+    let response = result.expect("Inference should succeed");
+    println!("response: {response:?}");
+
+    // Extract the chat response
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let InferenceResponse::Chat(chat_response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    // Anthropic's web search returns server_tool_use and web_search_tool_result blocks
+    // These are returned as Unknown content blocks since they're provider-specific
+    let has_web_search_activity = chat_response.content.iter().any(|block| {
+        if let ContentBlockChatOutput::Unknown(unknown) = block {
+            let block_type = unknown.data.get("type").and_then(|t| t.as_str());
+            matches!(
+                block_type,
+                Some("server_tool_use") | Some("web_search_tool_result")
+            )
+        } else {
+            false
+        }
+    });
+
+    // Verify we got web search results
+    assert!(
+        has_web_search_activity,
+        "Expected at least one web search-related content block (server_tool_use or web_search_tool_result), but found none. Content blocks: {:#?}",
+        chat_response.content
+    );
+
+    // Assert that we have at least one Text content block with the answer
+    let text_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter(|block| matches!(block, ContentBlockChatOutput::Text(_)))
+        .collect();
+
+    assert!(
+        !text_blocks.is_empty(),
+        "Expected at least one Text content block, but found none. Content blocks: {:#?}",
+        chat_response.content
     );
 }

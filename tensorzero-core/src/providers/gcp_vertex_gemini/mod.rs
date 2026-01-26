@@ -1090,6 +1090,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             GCPVertexGeminiRequest::new(
                 provider_request.request,
                 self.model_or_endpoint_id(),
+                provider_request.provider_name,
                 false,
             )
             .await?,
@@ -1199,7 +1200,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id(), false).await?,
+            GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id(), provider_name, false)
+                .await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -1272,8 +1274,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let mut raw_requests = Vec::with_capacity(requests.len());
         let mut jsonl_data = Vec::new();
         for request in requests {
+            // Note: provider_name is not available in batch inference, so we use an empty string
+            // This means provider tools won't match for batch requests
             let body =
-                GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id(), true).await?;
+                GCPVertexGeminiRequest::new(request, self.model_or_endpoint_id(), "", true).await?;
             let line =
                 serde_json::to_string(&GCPVertexBatchLine { request: body }).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
@@ -1729,6 +1733,14 @@ pub enum GCPVertexGeminiTool<'a> {
     FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
 }
 
+/// Represents either a function tool or a provider-specific tool (e.g., google_search, code_execution)
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+enum GCPVertexGeminiToolEntry<'a> {
+    Function(GCPVertexGeminiTool<'a>),
+    ProviderTool(&'a Value),
+}
+
 impl<'a> From<&'a FunctionToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
     fn from(tool: &'a FunctionToolConfig) -> Self {
         GCPVertexGeminiFunctionDeclaration {
@@ -1942,7 +1954,7 @@ struct GCPVertexGeminiGenerationConfig<'a> {
 struct GCPVertexGeminiRequest<'a> {
     contents: Vec<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<GCPVertexGeminiTool<'a>>>,
+    tools: Option<Vec<GCPVertexGeminiToolEntry<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2001,6 +2013,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
     pub async fn new(
         request: &'a ModelInferenceRequest<'a>,
         model_name: &'a str,
+        provider_name: &'a str,
         attach_label: bool,
     ) -> Result<Self, Error> {
         if request.messages.is_empty() {
@@ -2030,7 +2043,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         .into_iter()
         .filter(|m| !m.parts.is_empty())
         .collect();
-        let (tools, tool_config) = prepare_tools(request, model_name)?;
+        let (tools, tool_config) = prepare_tools(request, model_name, provider_name)?;
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
@@ -2102,9 +2115,10 @@ pub async fn prepare_gcp_vertex_gemini_messages<'a>(
 fn prepare_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
     model_name: &'a str,
+    provider_name: &'a str,
 ) -> Result<
     (
-        Option<Vec<GCPVertexGeminiTool<'a>>>,
+        Option<Vec<GCPVertexGeminiToolEntry<'a>>>,
         Option<GCPVertexGeminiToolConfig<'a>>,
     ),
     Error,
@@ -2114,17 +2128,28 @@ fn prepare_tools<'a>(
             if !tool_config.any_tools_available() {
                 return Ok((None, None));
             }
-            let tools = Some(vec![GCPVertexGeminiTool::FunctionDeclarations(
-                tool_config
-                    .tools_available()?
-                    .map(GCPVertexGeminiFunctionDeclaration::from)
-                    .collect(),
-            )]);
-            let tool_config = Some(GCPVertexGeminiToolConfig::from_tool_config(
+            // Build function tools
+            let mut tools: Vec<GCPVertexGeminiToolEntry> =
+                vec![GCPVertexGeminiToolEntry::Function(
+                    GCPVertexGeminiTool::FunctionDeclarations(
+                        tool_config
+                            .tools_available()?
+                            .map(GCPVertexGeminiFunctionDeclaration::from)
+                            .collect(),
+                    ),
+                )];
+            // Add provider tools (e.g., google_search, code_execution)
+            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| GCPVertexGeminiToolEntry::ProviderTool(&t.tool)),
+            );
+            let tool_config_converted = Some(GCPVertexGeminiToolConfig::from_tool_config(
                 tool_config,
                 model_name,
             ));
-            Ok((tools, tool_config))
+            Ok((Some(tools), tool_config_converted))
         }
         None => Ok((None, None)),
     }
@@ -3483,7 +3508,9 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false).await;
+        let result =
+            GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", "test-provider", false)
+                .await;
         let error = result.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -3522,7 +3549,9 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", false).await;
+        let result =
+            GCPVertexGeminiRequest::new(&inference_request, "gemini-pro", "test-provider", false)
+                .await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 2);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -3576,7 +3605,13 @@ mod tests {
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro", false).await;
+        let result = GCPVertexGeminiRequest::new(
+            &inference_request,
+            "gemini-2.5-pro",
+            "test-provider",
+            false,
+        )
+        .await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -3648,7 +3683,9 @@ mod tests {
             ..Default::default()
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash", false).await;
+        let result =
+            GCPVertexGeminiRequest::new(&inference_request, "gemini-flash", "test-provider", false)
+                .await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -4071,7 +4108,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.5-pro").unwrap();
+        let (tools, tool_choice) =
+            prepare_tools(&request_with_tools, "gemini-2.5-pro", "test-provider").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4080,7 +4118,9 @@ mod tests {
         );
         assert_eq!(tools.len(), 1);
         match &tools[0] {
-            GCPVertexGeminiTool::FunctionDeclarations(function_declarations) => {
+            GCPVertexGeminiToolEntry::Function(GCPVertexGeminiTool::FunctionDeclarations(
+                function_declarations,
+            )) => {
                 assert_eq!(function_declarations.len(), 2);
                 assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
                 assert_eq!(
@@ -4093,6 +4133,7 @@ mod tests {
                     Some(QUERY_TOOL.parameters().clone())
                 );
             }
+            GCPVertexGeminiToolEntry::ProviderTool(_) => panic!("Expected a function tool"),
         }
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -4115,8 +4156,12 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.5-flash-lite").unwrap();
+        let (tools, tool_choice) = prepare_tools(
+            &request_with_tools,
+            "gemini-2.5-flash-lite",
+            "test-provider",
+        )
+        .unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4125,7 +4170,9 @@ mod tests {
         );
         assert_eq!(tools.len(), 1);
         match &tools[0] {
-            GCPVertexGeminiTool::FunctionDeclarations(function_declarations) => {
+            GCPVertexGeminiToolEntry::Function(GCPVertexGeminiTool::FunctionDeclarations(
+                function_declarations,
+            )) => {
                 assert_eq!(function_declarations.len(), 2);
                 assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
                 assert_eq!(
@@ -4138,6 +4185,7 @@ mod tests {
                     Some(QUERY_TOOL.parameters().clone())
                 );
             }
+            GCPVertexGeminiToolEntry::ProviderTool(_) => panic!("Expected a function tool"),
         }
     }
 

@@ -27,10 +27,18 @@ pub struct ChatCompletionFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub struct ChatCompletionTool<'a> {
+pub struct ChatCompletionFunctionTool<'a> {
     pub r#type: ChatCompletionToolType,
     pub function: ChatCompletionFunction<'a>,
     pub strict: bool,
+}
+
+/// Enum that can hold either a function tool or an opaque provider tool
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum ChatCompletionTool<'a> {
+    Function(ChatCompletionFunctionTool<'a>),
+    ProviderTool(&'a Value),
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -94,7 +102,7 @@ type PreparedChatCompletionToolsResult<'a> = (
 
 impl<'a> From<&'a FunctionToolConfig> for ChatCompletionTool<'a> {
     fn from(tool: &'a FunctionToolConfig) -> Self {
-        ChatCompletionTool {
+        ChatCompletionTool::Function(ChatCompletionFunctionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
                 name: tool.name(),
@@ -102,13 +110,13 @@ impl<'a> From<&'a FunctionToolConfig> for ChatCompletionTool<'a> {
                 parameters: tool.parameters(),
             },
             strict: tool.strict(),
-        }
+        })
     }
 }
 
 impl<'a> From<&'a FunctionTool> for ChatCompletionTool<'a> {
     fn from(tool: &'a FunctionTool) -> Self {
-        ChatCompletionTool {
+        ChatCompletionTool::Function(ChatCompletionFunctionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
                 name: &tool.name,
@@ -116,7 +124,7 @@ impl<'a> From<&'a FunctionTool> for ChatCompletionTool<'a> {
                 parameters: &tool.parameters,
             },
             strict: tool.strict,
-        }
+        })
     }
 }
 
@@ -191,11 +199,17 @@ fn prepare_chat_completion_allowed_tools_constraint<'a>(
 pub fn prepare_chat_completion_tools<'a>(
     request: &'a ModelInferenceRequest,
     supports_allowed_tools: bool,
+    tensorzero_model_name: &str,
+    tensorzero_provider_name: &str,
 ) -> Result<PreparedChatCompletionToolsResult<'a>, Error> {
     match &request.tool_config {
         None => Ok((None, None, None)),
         Some(tool_config) => {
-            if !tool_config.any_tools_available() {
+            // Get scoped provider tools
+            let provider_tools = tool_config
+                .get_scoped_provider_tools(tensorzero_model_name, tensorzero_provider_name);
+
+            if !tool_config.any_tools_available() && provider_tools.is_empty() {
                 return Ok((None, None, None));
             }
 
@@ -204,7 +218,15 @@ pub fn prepare_chat_completion_tools<'a>(
             if supports_allowed_tools {
                 // Provider supports OpenAI's allowed_tools constraint
                 // Send all tools and use allowed_tools in tool_choice if needed
-                let tools = Some(tool_config.tools_available()?.map(Into::into).collect());
+                let mut tools: Vec<ChatCompletionTool<'a>> =
+                    tool_config.tools_available()?.map(Into::into).collect();
+
+                // Extend with provider tools
+                tools.extend(
+                    provider_tools
+                        .iter()
+                        .map(|t| ChatCompletionTool::ProviderTool(&t.tool)),
+                );
 
                 let tool_choice = if let Some(allowed_tools_choice) =
                     prepare_chat_completion_allowed_tools_constraint(tool_config)
@@ -215,20 +237,25 @@ pub fn prepare_chat_completion_tools<'a>(
                     Some((&tool_config.tool_choice).into())
                 };
 
-                Ok((tools, tool_choice, parallel_tool_calls))
+                Ok((Some(tools), tool_choice, parallel_tool_calls))
             } else {
                 // Provider doesn't support allowed_tools constraint
                 // Filter tools using strict_tools_available and use regular tool_choice
-                let tools = Some(
-                    tool_config
-                        .strict_tools_available()?
-                        .map(Into::into)
-                        .collect(),
+                let mut tools: Vec<ChatCompletionTool<'a>> = tool_config
+                    .strict_tools_available()?
+                    .map(Into::into)
+                    .collect();
+
+                // Extend with provider tools
+                tools.extend(
+                    provider_tools
+                        .iter()
+                        .map(|t| ChatCompletionTool::ProviderTool(&t.tool)),
                 );
 
                 let tool_choice = Some((&tool_config.tool_choice).into());
 
-                Ok((tools, tool_choice, parallel_tool_calls))
+                Ok((Some(tools), tool_choice, parallel_tool_calls))
             }
         }
     }
@@ -318,7 +345,7 @@ mod tests {
     #[test]
     fn test_chat_completion_tool_strict_true() {
         let params = json!({"type": "object"});
-        let tool = ChatCompletionTool {
+        let tool = ChatCompletionTool::Function(ChatCompletionFunctionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
                 name: "test",
@@ -326,7 +353,7 @@ mod tests {
                 parameters: &params,
             },
             strict: true,
-        };
+        });
         let serialized = serde_json::to_value(&tool).unwrap();
         assert_eq!(serialized["strict"], true);
         assert_eq!(serialized["type"], "function");
@@ -335,7 +362,7 @@ mod tests {
     #[test]
     fn test_chat_completion_tool_strict_false() {
         let params = json!({"type": "object"});
-        let tool = ChatCompletionTool {
+        let tool = ChatCompletionTool::Function(ChatCompletionFunctionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
                 name: "test",
@@ -343,7 +370,7 @@ mod tests {
                 parameters: &params,
             },
             strict: false,
-        };
+        });
         let serialized = serde_json::to_value(&tool).unwrap();
         assert_eq!(serialized["strict"], false);
     }
@@ -409,10 +436,15 @@ mod tests {
         let tool_config = create_static_tool_config();
         let chat_tool: ChatCompletionTool = (&tool_config).into();
 
-        assert_eq!(chat_tool.function.name, "test_tool");
-        assert_eq!(chat_tool.function.description, Some("A test tool"));
-        assert!(chat_tool.strict);
-        assert!(matches!(chat_tool.r#type, ChatCompletionToolType::Function));
+        match chat_tool {
+            ChatCompletionTool::Function(t) => {
+                assert_eq!(t.function.name, "test_tool");
+                assert_eq!(t.function.description, Some("A test tool"));
+                assert!(t.strict);
+                assert!(matches!(t.r#type, ChatCompletionToolType::Function));
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
     }
 
     #[tokio::test]
@@ -420,8 +452,13 @@ mod tests {
         let tool_config = create_dynamic_tool_config();
         let chat_tool: ChatCompletionTool = (&tool_config).into();
 
-        assert_eq!(chat_tool.function.name, "dynamic_tool");
-        assert!(matches!(chat_tool.r#type, ChatCompletionToolType::Function));
+        match chat_tool {
+            ChatCompletionTool::Function(t) => {
+                assert_eq!(t.function.name, "dynamic_tool");
+                assert!(matches!(t.r#type, ChatCompletionToolType::Function));
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
     }
 
     #[test]
@@ -434,9 +471,14 @@ mod tests {
         };
         let chat_tool: ChatCompletionTool = (&tool).into();
 
-        assert_eq!(chat_tool.function.name, "direct_tool");
-        assert_eq!(chat_tool.function.description, Some("Direct tool"));
-        assert!(!chat_tool.strict);
+        match chat_tool {
+            ChatCompletionTool::Function(t) => {
+                assert_eq!(t.function.name, "direct_tool");
+                assert_eq!(t.function.description, Some("Direct tool"));
+                assert!(!t.strict);
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
     }
 
     #[test]
@@ -613,7 +655,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, true, "test_model", "test_provider").unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel.is_none());
@@ -639,7 +682,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, true, "test_model", "test_provider").unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel.is_none());
@@ -665,7 +709,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, true, "test_model", "test_provider").unwrap();
         assert!(tools.is_some());
         assert_eq!(tools.unwrap().len(), 1);
         assert!(tool_choice.is_some());
@@ -698,7 +743,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, true, "test_model", "test_provider").unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert_eq!(parallel, Some(false));
@@ -737,7 +783,7 @@ mod tests {
         };
 
         let (tools, tool_choice, parallel) =
-            prepare_chat_completion_tools(&request, false).unwrap();
+            prepare_chat_completion_tools(&request, false, "test_model", "test_provider").unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert!(parallel.is_none());
@@ -770,7 +816,7 @@ mod tests {
         };
 
         let (tools, tool_choice, parallel) =
-            prepare_chat_completion_tools(&request, false).unwrap();
+            prepare_chat_completion_tools(&request, false, "test_model", "test_provider").unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert_eq!(parallel, Some(true));
@@ -822,13 +868,24 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, _) =
+            prepare_chat_completion_tools(&request, true, "test_model", "test_provider").unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0].function.name, "tool1");
-        assert!(tools[0].strict);
-        assert_eq!(tools[1].function.name, "tool2");
-        assert!(!tools[1].strict);
+        match &tools[0] {
+            ChatCompletionTool::Function(t) => {
+                assert_eq!(t.function.name, "tool1");
+                assert!(t.strict);
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
+        match &tools[1] {
+            ChatCompletionTool::Function(t) => {
+                assert_eq!(t.function.name, "tool2");
+                assert!(!t.strict);
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         assert!(tool_choice.is_some());
     }
 
@@ -852,7 +909,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, _) =
+            prepare_chat_completion_tools(&request, true, "test_model", "test_provider").unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
 

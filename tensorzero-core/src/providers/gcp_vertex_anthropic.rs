@@ -45,9 +45,9 @@ use crate::tool::{ToolCall, ToolChoice};
 use uuid::Uuid;
 
 use super::anthropic::{
-    AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole,
-    AnthropicStopReason, AnthropicSystemBlock, AnthropicTool, prefill_json_chunk_response,
-    prefill_json_response,
+    AnthropicFunctionTool, AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig,
+    AnthropicRole, AnthropicStopReason, AnthropicSystemBlock, AnthropicTool,
+    prefill_json_chunk_response, prefill_json_response,
 };
 use super::gcp_vertex_gemini::{GCPVertexCredentials, ShorthandUrl, parse_shorthand_url};
 use super::helpers::{convert_stream_error, peek_first_chunk};
@@ -204,7 +204,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
-            GCPVertexAnthropicRequestBody::new(self.model_id(), request).await?,
+            GCPVertexAnthropicRequestBody::new(self.model_id(), request, model_name, provider_name)
+                .await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -294,7 +295,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            GCPVertexAnthropicRequestBody::new(self.model_id(), request).await?,
+            GCPVertexAnthropicRequestBody::new(self.model_id(), request, model_name, provider_name)
+                .await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -509,6 +511,8 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
     async fn new(
         model_id: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        tensorzero_model_name: &str,
+        tensorzero_provider_name: &str,
     ) -> Result<GCPVertexAnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -547,12 +551,22 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
         let tools = match request.tool_config.as_ref() {
-            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
-                c.strict_tools_available()?
-                    // GCP Vertex Anthropic does not support structured outputs
-                    .map(|tool| AnthropicTool::new(tool, false))
-                    .collect::<Vec<_>>(),
-            ),
+            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => {
+                // Build function tools (GCP Vertex Anthropic does not support structured outputs)
+                let mut tools: Vec<AnthropicTool> = c
+                    .strict_tools_available()?
+                    .map(|tool| AnthropicTool::Function(AnthropicFunctionTool::new(tool, false)))
+                    .collect();
+                // Add provider tools (e.g., web_search, computer_use)
+                let provider_tools =
+                    c.get_scoped_provider_tools(tensorzero_model_name, tensorzero_provider_name);
+                tools.extend(
+                    provider_tools
+                        .iter()
+                        .map(|t| AnthropicTool::ProviderTool(&t.tool)),
+                );
+                if tools.is_empty() { None } else { Some(tools) }
+            }
             _ => None,
         };
         // `tool_choice` should only be set if tools are set and non-empty
@@ -891,10 +905,10 @@ mod tests {
             parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
+        let anthropic_tool = AnthropicFunctionTool::new(&tool, false);
         assert_eq!(
             anthropic_tool,
-            AnthropicTool {
+            AnthropicFunctionTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
@@ -966,8 +980,13 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body =
-            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request).await;
+        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(
+            "claude-opus-4@20250514",
+            &inference_request,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         let error = anthropic_request_body.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -1009,8 +1028,13 @@ mod tests {
         let message_config = AnthropicMessagesConfig {
             fetch_and_encode_input_files_before_inference: false,
         };
-        let anthropic_request_body =
-            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request).await;
+        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(
+            "claude-opus-4@20250514",
+            &inference_request,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1075,8 +1099,13 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body =
-            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request).await;
+        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(
+            "claude-opus-4@20250514",
+            &inference_request,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         let message_config = AnthropicMessagesConfig {
             fetch_and_encode_input_files_before_inference: false,
         };
@@ -1158,8 +1187,13 @@ mod tests {
             ..Default::default()
         };
 
-        let anthropic_request_body =
-            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request).await;
+        let anthropic_request_body = GCPVertexAnthropicRequestBody::new(
+            "claude-opus-4@20250514",
+            &inference_request,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         let message_config = AnthropicMessagesConfig {
             fetch_and_encode_input_files_before_inference: false,
         };
@@ -1202,12 +1236,12 @@ mod tests {
                     name: "get_temperature",
                     disable_parallel_tool_use: Some(false),
                 }),
-                tools: Some(vec![AnthropicTool {
+                tools: Some(vec![AnthropicTool::Function(AnthropicFunctionTool {
                     name: WEATHER_TOOL.name(),
                     description: Some(WEATHER_TOOL.description()),
                     input_schema: WEATHER_TOOL.parameters(),
                     strict: None,
-                }]),
+                })]),
                 ..Default::default()
             }
         );
@@ -1232,75 +1266,171 @@ mod tests {
         };
 
         let model = "claude-opus-4-1@20250805".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4@20250514".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4@20250514".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet@20250219".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-v2@20240222".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet@20240229".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku@20240307".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku@20240307".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-haiku-4-5@20251001".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-5@20250929".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4".to_string(); // fake model
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert!(body.is_err());
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-4-5-ballad@20260101".to_string(); // fake model
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body =
+            GCPVertexAnthropicRequestBody::new(&model, &request, "test-model", "test-provider")
+                .await;
         assert!(body.is_err());
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(
+            &model,
+            &request_with_max_tokens,
+            "test-model",
+            "test-provider",
+        )
+        .await;
         assert_eq!(body.unwrap().max_tokens, 100);
     }
 

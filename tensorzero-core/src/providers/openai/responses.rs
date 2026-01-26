@@ -32,8 +32,9 @@ use crate::{
         TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
     },
     providers::openai::{
-        OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
-        SystemOrDeveloper, prepare_file_message, prepare_system_or_developer_message_helper,
+        OpenAIContentBlock, OpenAICustomToolWrapper, OpenAIFile, OpenAIFunctionTool,
+        OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE, SystemOrDeveloper, prepare_file_message,
+        prepare_system_or_developer_message_helper,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
@@ -294,17 +295,19 @@ pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
 impl<'a> OpenAITool<'a> {
     pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
         match self {
-            OpenAITool::Function { function, strict } => {
-                OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
-                    name: function.name,
-                    description: function.description,
-                    parameters: function.parameters,
-                    strict,
-                })
-            }
-            OpenAITool::Custom {
+            OpenAITool::Function(OpenAIFunctionTool {
+                function, strict, ..
+            }) => OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
+                name: function.name,
+                description: function.description,
+                parameters: function.parameters,
+                strict,
+            }),
+            OpenAITool::Custom(OpenAICustomToolWrapper {
                 custom: custom_tool,
-            } => OpenAIResponsesTool::Custom(custom_tool.into()),
+                ..
+            }) => OpenAIResponsesTool::Custom(custom_tool.into()),
+            OpenAITool::ProviderTool(value) => OpenAIResponsesTool::BuiltIn(value),
         }
     }
 }
