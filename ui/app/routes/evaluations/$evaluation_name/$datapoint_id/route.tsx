@@ -78,50 +78,60 @@ export const handle: RouteHandle = {
   ],
 };
 
-interface EvaluationDatapointData {
-  consolidatedEvaluationResults: ConsolidatedEvaluationResult[];
+interface RunInfoData {
   selected_evaluation_run_infos: EvaluationRunInfo[];
   allowedEvaluationRunInfos: EvaluationRunInfo[];
+}
+
+interface EvaluationResultsData {
+  consolidatedEvaluationResults: ConsolidatedEvaluationResult[];
   datapoint_staled_at?: string;
 }
 
-async function fetchEvaluationData(
-  evaluation_name: string,
+async function fetchRunInfoData(
   datapoint_id: string,
   function_name: string,
   selectedRunIds: string[],
-  newFeedbackId: string | null,
-): Promise<EvaluationDatapointData> {
+): Promise<RunInfoData> {
   const tensorZeroClient = getTensorZeroClient();
 
-  const selectedEvaluationRunInfosPromise = tensorZeroClient
-    .getEvaluationRunInfos(selectedRunIds, function_name)
-    .then((response) => response.run_infos);
-  const allowedEvaluationRunInfosPromise = tensorZeroClient
-    .getEvaluationRunInfosForDatapoint(datapoint_id, function_name)
-    .then((response) => response.run_infos);
+  const [selected_evaluation_run_infos, allowedEvaluationRunInfos] =
+    await Promise.all([
+      tensorZeroClient
+        .getEvaluationRunInfos(selectedRunIds, function_name)
+        .then((response) => response.run_infos),
+      tensorZeroClient
+        .getEvaluationRunInfosForDatapoint(datapoint_id, function_name)
+        .then((response) => response.run_infos),
+    ]);
 
+  return {
+    selected_evaluation_run_infos,
+    allowedEvaluationRunInfos,
+  };
+}
+
+async function fetchEvaluationResultsData(
+  evaluation_name: string,
+  datapoint_id: string,
+  selectedRunIds: string[],
+  newFeedbackId: string | null,
+): Promise<EvaluationResultsData> {
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the evaluation results as it is eventually consistent.
   // In this case, we poll for the evaluation results until the feedback is found.
-  const evaluationResultsPromise = newFeedbackId
-    ? pollForEvaluations(
+  const evaluationResults = newFeedbackId
+    ? await pollForEvaluations(
         evaluation_name,
         datapoint_id,
         selectedRunIds,
         newFeedbackId,
       )
-    : getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds);
-
-  const [
-    selected_evaluation_run_infos,
-    allowedEvaluationRunInfos,
-    evaluationResults,
-  ] = await Promise.all([
-    selectedEvaluationRunInfosPromise,
-    allowedEvaluationRunInfosPromise,
-    evaluationResultsPromise,
-  ]);
+    : await getEvaluationsForDatapoint(
+        evaluation_name,
+        datapoint_id,
+        selectedRunIds,
+      );
 
   const consolidatedEvaluationResults =
     consolidateEvaluationResults(evaluationResults);
@@ -141,8 +151,6 @@ async function fetchEvaluationData(
 
   return {
     consolidatedEvaluationResults,
-    selected_evaluation_run_infos,
-    allowedEvaluationRunInfos,
     datapoint_staled_at: consolidatedEvaluationResults[0].staled_at,
   };
 }
@@ -171,7 +179,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     return redirect(toEvaluationUrl(evaluation_name));
   }
 
-  // Validate datapoint exists using v1 API
   const tensorZeroClient = getTensorZeroClient();
   const tensorZeroDatapoint = await tensorZeroClient.getDatapoint(datapoint_id);
   if (!tensorZeroDatapoint) {
@@ -180,17 +187,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
-  // Return promise for streaming
-  const evaluationDataPromise = fetchEvaluationData(
-    evaluation_name,
+  const runInfoData = fetchRunInfoData(
     datapoint_id,
     function_name,
+    selectedRunIds,
+  );
+  const evaluationResultsData = fetchEvaluationResultsData(
+    evaluation_name,
+    datapoint_id,
     selectedRunIds,
     newFeedbackId,
   );
 
   return {
-    evaluationData: evaluationDataPromise,
+    runInfoData,
+    evaluationResultsData,
     selectedRunIds,
     newFeedbackId,
   };
@@ -230,7 +241,6 @@ export async function action({ request }: Route.ActionArgs) {
       await renameDatapoint({
         datasetName: dataset_name,
         datapointId: datapoint_id,
-        // Explicitly set to null to unset the name
         name: newName ?? null,
       });
 
@@ -274,112 +284,68 @@ function OutputsSkeleton() {
   );
 }
 
-function EvaluationDatapointContentSkeleton({
-  datapointId,
-  evaluationName,
-}: {
-  datapointId?: string;
-  evaluationName?: string;
-}) {
-  return (
-    <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Evaluations", href: "/evaluations" },
-              ...(evaluationName
-                ? [
-                    {
-                      label: evaluationName,
-                      href: toEvaluationUrl(evaluationName),
-                      isIdentifier: true,
-                    },
-                  ]
-                : []),
-              { label: "Results" },
-            ]}
-          />
-        }
-        name={datapointId}
-      >
-        <BasicInfoLayoutSkeleton rows={5} />
-        <EvalRunSelectorSkeleton />
-      </PageHeader>
-
-      <SectionsGroup>
-        <SectionLayout>
-          <SectionHeader heading="Input" />
-          <InputSkeleton />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Output" />
-          <OutputsSkeleton />
-        </SectionLayout>
-      </SectionsGroup>
-    </>
-  );
-}
-
-function EvaluationDatapointErrorState({
-  datapointId,
-  evaluationName,
-}: {
-  datapointId?: string;
-  evaluationName?: string;
-}) {
-  return (
-    <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Evaluations", href: "/evaluations" },
-              ...(evaluationName
-                ? [
-                    {
-                      label: evaluationName,
-                      href: toEvaluationUrl(evaluationName),
-                      isIdentifier: true,
-                    },
-                  ]
-                : []),
-              { label: "Results" },
-            ]}
-          />
-        }
-        name={datapointId}
-      />
-      <SectionAsyncErrorState />
-    </>
-  );
-}
-
-function EvaluationDatapointContent({
-  data: evaluationData,
+function BasicInfoWithData({
+  data,
   evaluation_name,
   datapoint_id,
 }: {
-  data: EvaluationDatapointData;
+  data: EvaluationResultsData;
   evaluation_name: string;
   datapoint_id: string;
 }) {
-  const {
-    consolidatedEvaluationResults,
-    selected_evaluation_run_infos,
-    allowedEvaluationRunInfos,
-    datapoint_staled_at,
-  } = evaluationData;
+  const { consolidatedEvaluationResults, datapoint_staled_at } = data;
   const fetcher = useFetcher();
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
   if (!evaluation_config) {
-    throw data(
+    throw new Error(
       `Evaluation config not found for evaluation ${evaluation_name}`,
-      { status: 404 },
     );
   }
+
+  const handleRenameDatapoint = async (newName: string) => {
+    const formData = new FormData();
+    formData.append("_action", "renameDatapoint");
+    formData.append("datapoint_id", datapoint_id);
+    formData.append(
+      "dataset_name",
+      consolidatedEvaluationResults[0].dataset_name,
+    );
+    formData.append("newName", newName);
+    await fetcher.submit(formData, { method: "post", action: "." });
+  };
+
+  return (
+    <BasicInfo
+      evaluation_name={evaluation_name}
+      evaluation_config={evaluation_config}
+      dataset_name={consolidatedEvaluationResults[0].dataset_name}
+      datapoint_id={datapoint_id}
+      datapoint_name={consolidatedEvaluationResults[0].name}
+      datapoint_staled_at={datapoint_staled_at}
+      onRenameDatapoint={handleRenameDatapoint}
+    />
+  );
+}
+
+function MainContent({
+  data,
+  evaluation_name,
+  datapoint_id,
+}: {
+  data: EvaluationResultsData;
+  evaluation_name: string;
+  datapoint_id: string;
+}) {
+  const { consolidatedEvaluationResults } = data;
+  const config = useConfig();
+  const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw new Error(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+    );
+  }
+
   const outputsToDisplay = [
     ...(consolidatedEvaluationResults[0].reference_output != null
       ? [
@@ -403,65 +369,35 @@ function EvaluationDatapointContent({
     })),
   ];
 
-  const handleRenameDatapoint = async (newName: string) => {
-    const formData = new FormData();
-    formData.append("_action", "renameDatapoint");
-    formData.append("datapoint_id", datapoint_id);
-    formData.append(
-      "dataset_name",
-      consolidatedEvaluationResults[0].dataset_name,
-    );
-    formData.append("newName", newName);
-    await fetcher.submit(formData, { method: "post", action: "." });
-  };
-
   return (
-    <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Evaluations", href: "/evaluations" },
-              {
-                label: evaluation_name,
-                href: toEvaluationUrl(evaluation_name),
-                isIdentifier: true,
-              },
-              { label: "Results" },
-            ]}
-          />
-        }
-        name={datapoint_id}
-      >
-        <BasicInfo
-          evaluation_name={evaluation_name}
-          evaluation_config={evaluation_config}
-          dataset_name={consolidatedEvaluationResults[0].dataset_name}
-          datapoint_id={datapoint_id}
-          datapoint_name={consolidatedEvaluationResults[0].name}
-          datapoint_staled_at={datapoint_staled_at}
-          onRenameDatapoint={handleRenameDatapoint}
-        />
-        <EvalRunSelector
-          evaluationName={evaluation_name}
-          selectedRunIdInfos={selected_evaluation_run_infos}
-          allowedRunInfos={allowedEvaluationRunInfos}
-        />
-      </PageHeader>
+    <SectionsGroup>
+      <SectionLayout>
+        <SectionHeader heading="Input" />
+        <InputElement input={consolidatedEvaluationResults[0].input} />
+      </SectionLayout>
+      <OutputsSection
+        outputsToDisplay={outputsToDisplay}
+        evaluation_name={evaluation_name}
+        evaluation_config={evaluation_config}
+        datapointId={datapoint_id}
+      />
+    </SectionsGroup>
+  );
+}
 
-      <SectionsGroup>
-        <SectionLayout>
-          <SectionHeader heading="Input" />
-          <InputElement input={consolidatedEvaluationResults[0].input} />
-        </SectionLayout>
-        <OutputsSection
-          outputsToDisplay={outputsToDisplay}
-          evaluation_name={evaluation_name}
-          evaluation_config={evaluation_config}
-          datapointId={datapoint_id}
-        />
-      </SectionsGroup>
-    </>
+function EvalRunSelectorWithData({
+  data,
+  evaluationName,
+}: {
+  data: RunInfoData;
+  evaluationName: string;
+}) {
+  return (
+    <EvalRunSelector
+      evaluationName={evaluationName}
+      selectedRunIdInfos={data.selected_evaluation_run_infos}
+      allowedRunInfos={data.allowedEvaluationRunInfos}
+    />
   );
 }
 
@@ -469,7 +405,8 @@ export default function EvaluationDatapointPage({
   loaderData,
   params,
 }: Route.ComponentProps) {
-  const { evaluationData, selectedRunIds, newFeedbackId } = loaderData;
+  const { runInfoData, evaluationResultsData, selectedRunIds, newFeedbackId } =
+    loaderData;
   const location = useLocation();
   const { toast } = useToast();
 
@@ -485,27 +422,83 @@ export default function EvaluationDatapointPage({
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
-        <Suspense
-          key={location.key}
-          fallback={
-            <EvaluationDatapointContentSkeleton
-              datapointId={params.datapoint_id}
-              evaluationName={params.evaluation_name}
+        <PageHeader
+          eyebrow={
+            <Breadcrumbs
+              segments={[
+                { label: "Evaluations", href: "/evaluations" },
+                {
+                  label: params.evaluation_name,
+                  href: toEvaluationUrl(params.evaluation_name),
+                  isIdentifier: true,
+                },
+                { label: "Results" },
+              ]}
             />
+          }
+          name={params.datapoint_id}
+        >
+          {/* BasicInfo - depends on evaluation results */}
+          <Suspense
+            key={`${location.key}-basicinfo`}
+            fallback={<BasicInfoLayoutSkeleton rows={5} />}
+          >
+            <Await
+              resolve={evaluationResultsData}
+              errorElement={<SectionAsyncErrorState />}
+            >
+              {(resultsData) => (
+                <BasicInfoWithData
+                  data={resultsData}
+                  evaluation_name={params.evaluation_name}
+                  datapoint_id={params.datapoint_id}
+                />
+              )}
+            </Await>
+          </Suspense>
+
+          {/* EvalRunSelector - depends on run info only */}
+          <Suspense
+            key={`${location.key}-selector`}
+            fallback={<EvalRunSelectorSkeleton />}
+          >
+            <Await
+              resolve={runInfoData}
+              errorElement={<SectionAsyncErrorState />}
+            >
+              {(infoData) => (
+                <EvalRunSelectorWithData
+                  data={infoData}
+                  evaluationName={params.evaluation_name}
+                />
+              )}
+            </Await>
+          </Suspense>
+        </PageHeader>
+
+        {/* Main content - depends on evaluation results */}
+        <Suspense
+          key={`${location.key}-content`}
+          fallback={
+            <SectionsGroup>
+              <SectionLayout>
+                <SectionHeader heading="Input" />
+                <InputSkeleton />
+              </SectionLayout>
+              <SectionLayout>
+                <SectionHeader heading="Output" />
+                <OutputsSkeleton />
+              </SectionLayout>
+            </SectionsGroup>
           }
         >
           <Await
-            resolve={evaluationData}
-            errorElement={
-              <EvaluationDatapointErrorState
-                datapointId={params.datapoint_id}
-                evaluationName={params.evaluation_name}
-              />
-            }
+            resolve={evaluationResultsData}
+            errorElement={<SectionAsyncErrorState />}
           >
-            {(resolvedData) => (
-              <EvaluationDatapointContent
-                data={resolvedData}
+            {(resultsData) => (
+              <MainContent
+                data={resultsData}
                 evaluation_name={params.evaluation_name}
                 datapoint_id={params.datapoint_id}
               />
@@ -736,7 +729,6 @@ function OutputsSection({
                       evaluation_run_id: result.id,
                       variant_name: result.variant_name,
                     }}
-                    // Use the getColor obtained from the correct context
                     getColor={getColor}
                   />
                   {result.inferenceId && (
