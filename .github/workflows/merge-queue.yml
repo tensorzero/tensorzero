@@ -397,10 +397,11 @@ jobs:
           docker run -d --name gateway-e2e --network host \
             --env-file gateway.env \
             -v ${{ github.workspace }}/gcp_jwt_key.json:/app/gcp_jwt_key.json:ro \
-            -v ${{ github.workspace }}/tensorzero-core/tests/e2e/config:/app/config:ro \
+            -v ${{ github.workspace }}/tensorzero-core/tests/e2e/config:/app/tensorzero-core/tests/e2e/config:ro \
             -v ${{ github.workspace }}/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
+            -v ${{ github.workspace }}/ui/fixtures:/app/ui/fixtures:ro \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
-            --config-file '/app/config/tensorzero.*.toml'
+            --config-file '/app/tensorzero-core/tests/e2e/config/tensorzero.*.toml'
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
