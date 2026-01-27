@@ -197,8 +197,18 @@ To set it up, follow these steps from the repository's root directory:
 2. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings`.
 3. Create a `ui/fixtures/.env` following the `ui/fixtures/.env.example`.
 4. Create a `ui/.env` following the `ui/.env.example`, or set the environment variables from that file in your shell before running the dev script.
-5. Launch the dependencies: `docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate`.
-   You can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway.
+5. Launch the dependencies:
+
+   ```bash
+   # For local development without R2 credentials (downloads via public HTTP):
+   TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS=1 docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate
+
+   # With R2 credentials (faster S3 sync, used in CI):
+   docker compose -f ui/fixtures/docker-compose.yml up --build --force-recreate
+   ```
+
+   You can omit the `--build --force-recreate` flags to skip the build step, but they ensure you're using the latest gateway.
+
 6. Launch the development server: `pnpm ui:dev`
 
 Separately, you can run headless tests with `pnpm ui:test` and Playwright tests with `pnpm ui:test:e2e` (the latter will require a `pnpm exec playwright install`).

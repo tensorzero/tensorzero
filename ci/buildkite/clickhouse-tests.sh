@@ -54,7 +54,7 @@ docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml pull
 echo "For test purposes: let's make sure the fixtures dir is populated"
 pwd
 ls ui/fixtures
-ls ui/fixtures/s3-fixtures
+ls ui/fixtures/large-fixtures
 
 # ------------------------------------------------------------------------------
 # Run ClickHouse tests container via Docker Compose and capture exit code

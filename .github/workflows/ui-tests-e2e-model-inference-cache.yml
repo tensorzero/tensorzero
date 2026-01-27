@@ -8,9 +8,9 @@ on:
       S3_SECRET_ACCESS_KEY:
         required: true
       R2_ACCESS_KEY_ID:
-        required: false
+        required: true
       R2_SECRET_ACCESS_KEY:
-        required: false
+        required: true
       OPENAI_API_KEY:
         required: false
       FIREWORKS_ACCOUNT_ID:
@@ -148,6 +148,8 @@ jobs:
         if: inputs.regen_cache == true
         env:
           TENSORZERO_CI: 1
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
@@ -157,7 +159,7 @@ jobs:
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env-gateway
           echo "TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY }}" >> fixtures/.env-gateway
           # Save the old cache file for comparison
-          cp ./fixtures/model_inference_cache_e2e.jsonl ./fixtures/model_inference_cache_e2e.jsonl.old
+          cp ./fixtures/small-fixtures/model_inference_cache_e2e.jsonl ./fixtures/small-fixtures/model_inference_cache_e2e.jsonl.old
           # Run up to 3 times if it fails. We need to retry *outside* of playwright, so that we wipe the
           # model inference cache each time. Retrying an individual playwright test without wiping the database
           # will pollute the cache with duplicate entries.
@@ -172,8 +174,8 @@ jobs:
             fi
           done
           # Check that the old and new cache files have the same number of rows
-          OLD_ROWS=$(wc -l < ./fixtures/model_inference_cache_e2e.jsonl.old)
-          NEW_ROWS=$(wc -l < ./fixtures/model_inference_cache_e2e.jsonl)
+          OLD_ROWS=$(wc -l < ./fixtures/small-fixtures/model_inference_cache_e2e.jsonl.old)
+          NEW_ROWS=$(wc -l < ./fixtures/small-fixtures/model_inference_cache_e2e.jsonl)
           echo "Old cache file has $OLD_ROWS rows, new cache file has $NEW_ROWS rows"
           if [ "$OLD_ROWS" != "$NEW_ROWS" ]; then
             echo "ERROR: Row count mismatch between old and new cache files"
@@ -198,7 +200,7 @@ jobs:
         with:
           name: model-inference-cache
           path: |
-            ui/fixtures/model_inference_cache_e2e.jsonl
+            ui/fixtures/small-fixtures/model_inference_cache_e2e.jsonl
 
       - name: Generate API key
         if: matrix.auth_enabled == true
