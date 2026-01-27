@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AutopilotStatus, Event, StreamUpdate } from "~/types/tensorzero";
+import type {
+  AutopilotStatus,
+  GatewayEvent,
+  GatewayStreamUpdate,
+} from "~/types/tensorzero";
 
 interface UseAutopilotEventStreamOptions {
   sessionId: string;
-  initialEvents: Event[];
-  initialPendingToolCalls: Event[];
+  initialEvents: GatewayEvent[];
+  initialPendingToolCalls: GatewayEvent[];
   initialStatus: AutopilotStatus;
   enabled?: boolean;
 }
 
 interface UseAutopilotEventStreamResult {
-  events: Event[];
-  pendingToolCalls: Event[];
+  events: GatewayEvent[];
+  pendingToolCalls: GatewayEvent[];
   status: AutopilotStatus;
   isConnected: boolean;
   error: string | null;
   isRetrying: boolean;
-  prependEvents: (newEvents: Event[]) => void;
+  prependEvents: (newEvents: GatewayEvent[]) => void;
 }
 
 const RETRY_DELAY_MS = 5000;
@@ -32,8 +36,8 @@ export function useAutopilotEventStream({
   initialStatus,
   enabled = true,
 }: UseAutopilotEventStreamOptions): UseAutopilotEventStreamResult {
-  const [events, setEvents] = useState<Event[]>(initialEvents);
-  const [pendingToolCalls, setPendingToolCalls] = useState<Event[]>(
+  const [events, setEvents] = useState<GatewayEvent[]>(initialEvents);
+  const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>(
     initialPendingToolCalls,
   );
   const [status, setStatus] = useState<AutopilotStatus>(initialStatus);
@@ -122,7 +126,7 @@ export function useAutopilotEventStream({
               const data = line.slice(6).trim();
               if (data) {
                 try {
-                  const streamUpdate = JSON.parse(data) as StreamUpdate;
+                  const streamUpdate = JSON.parse(data) as GatewayStreamUpdate;
                   const event = streamUpdate.event;
                   lastEventIdRef.current = event.id;
 
@@ -243,7 +247,7 @@ export function useAutopilotEventStream({
   }, [initialEvents, initialPendingToolCalls, initialStatus]);
 
   // Allow prepending older events (for reverse infinite scroll)
-  const prependEvents = useCallback((newEvents: Event[]) => {
+  const prependEvents = useCallback((newEvents: GatewayEvent[]) => {
     setEvents((prev) => {
       // Create a set of existing event IDs for deduplication
       const existingIds = new Set(prev.map((e) => e.id));

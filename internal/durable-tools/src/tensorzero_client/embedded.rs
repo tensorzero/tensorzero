@@ -4,6 +4,7 @@
 //! and wants to call inference and autopilot endpoints without HTTP overhead.
 
 use async_trait::async_trait;
+use autopilot_client::GatewayListEventsResponse;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
@@ -32,9 +33,9 @@ use uuid::Uuid;
 use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse,
-    TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListSessionsParams,
+    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, TensorZeroClient,
+    TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -140,7 +141,7 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         session_id: Uuid,
         params: ListEventsParams,
-    ) -> Result<ListEventsResponse, TensorZeroClientError> {
+    ) -> Result<GatewayListEventsResponse, TensorZeroClientError> {
         let autopilot_client = self
             .app_state
             .autopilot_client

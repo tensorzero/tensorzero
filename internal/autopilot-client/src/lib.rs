@@ -23,8 +23,9 @@
 //! let response = client.create_event(
 //!     Uuid::nil(),
 //!     CreateEventRequest {
-//!         deployment_id: Uuid::now_v7(),
+//!         deployment_id: Uuid::now_v7().to_string(),
 //!         tensorzero_version: "2025.1.0".to_string(),
+//!         config_snapshot_hash: Some("abc123".to_string()),
 //!         payload: EventPayload::Message(EventPayloadMessage {
 //!             role: Role::User,
 //!             content: vec![EventPayloadMessageContent::Text(Text {
@@ -42,20 +43,24 @@
 
 mod client;
 mod error;
+mod reject_missing_tool;
 mod types;
 
 pub use client::{
     AutopilotClient, AutopilotClientBuilder, DEFAULT_BASE_URL, DEFAULT_SPAWN_QUEUE_NAME,
 };
 pub use error::AutopilotError;
+pub use reject_missing_tool::reject_missing_tool;
 pub use types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotSideInfo, AutopilotStatus,
     AutopilotToolResult, Base64File, CreateEventRequest, CreateEventResponse, ErrorDetail,
     ErrorResponse, Event, EventPayload, EventPayloadError, EventPayloadMessage,
     EventPayloadMessageContent, EventPayloadStatusUpdate, EventPayloadToolCall,
-    EventPayloadToolCallAuthorization, EventPayloadToolResult, File, ListEventsParams,
-    ListEventsResponse, ListSessionsParams, ListSessionsResponse, ObjectStoragePointer,
-    OptimizationWorkflowSideInfo, RawText, Role, Session, StatusUpdate, StreamEventsParams,
-    StreamUpdate, Template, Text, Thought, ToolCallAuthorizationStatus, ToolCallDecisionSource,
-    ToolCallWrapper, ToolOutcome, Unknown, UrlFile,
+    EventPayloadToolCallAuthorization, EventPayloadToolResult, File, GatewayEvent,
+    GatewayEventPayload, GatewayEventPayloadToolCallAuthorization, GatewayListEventsResponse,
+    GatewayStreamUpdate, GatewayToolCallAuthorizationStatus, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, ObjectStoragePointer, OptimizationWorkflowSideInfo,
+    RawText, Role, Session, StatusUpdate, StreamEventsParams, StreamUpdate, Template, Text,
+    Thought, ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper, ToolOutcome,
+    Unknown, UrlFile,
 };

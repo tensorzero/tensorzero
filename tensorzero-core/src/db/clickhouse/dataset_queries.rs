@@ -502,6 +502,139 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         written_rows += json_written_rows?;
         Ok(written_rows)
     }
+
+    async fn clone_datapoints(
+        &self,
+        target_dataset_name: &str,
+        source_datapoint_ids: &[Uuid],
+    ) -> Result<Vec<Option<Uuid>>, Error> {
+        if source_datapoint_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Generate all mappings from source to target IDs
+        let mappings: Vec<(Uuid, Uuid)> = source_datapoint_ids
+            .iter()
+            .map(|id| (*id, Uuid::now_v7()))
+            .collect();
+
+        // Build the mappings array string for ClickHouse
+        let mappings_str = format!(
+            "[{}]",
+            mappings
+                .iter()
+                .map(|(old, new)| format!("('{old}', '{new}')"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+
+        // Clone queries using CTE + EXCEPT pattern
+        let chat_clone_query = r"
+            INSERT INTO ChatInferenceDatapoint
+            WITH source AS (
+                SELECT ChatInferenceDatapoint.*, mapping.new_id
+                FROM ChatInferenceDatapoint FINAL
+                INNER JOIN (
+                    SELECT
+                        tupleElement(pair, 1) as old_id,
+                        tupleElement(pair, 2) as new_id
+                    FROM (
+                        SELECT arrayJoin({mappings: Array(Tuple(UUID, UUID))}) as pair
+                    )
+                ) AS mapping ON ChatInferenceDatapoint.id = mapping.old_id
+                WHERE ChatInferenceDatapoint.staled_at IS NULL
+            )
+            SELECT * EXCEPT(new_id) REPLACE(
+                new_id AS id,
+                {target_dataset_name: String} AS dataset_name,
+                now64() AS updated_at
+            )
+            FROM source
+        ";
+
+        let json_clone_query = r"
+            INSERT INTO JsonInferenceDatapoint
+            WITH source AS (
+                SELECT JsonInferenceDatapoint.*, mapping.new_id
+                FROM JsonInferenceDatapoint FINAL
+                INNER JOIN (
+                    SELECT
+                        tupleElement(pair, 1) as old_id,
+                        tupleElement(pair, 2) as new_id
+                    FROM (
+                        SELECT arrayJoin({mappings: Array(Tuple(UUID, UUID))}) as pair
+                    )
+                ) AS mapping ON JsonInferenceDatapoint.id = mapping.old_id
+                WHERE JsonInferenceDatapoint.staled_at IS NULL
+            )
+            SELECT * EXCEPT(new_id) REPLACE(
+                new_id AS id,
+                {target_dataset_name: String} AS dataset_name,
+                now64() AS updated_at
+            )
+            FROM source
+        ";
+
+        let insert_params = HashMap::from([
+            ("target_dataset_name", target_dataset_name),
+            ("mappings", mappings_str.as_str()),
+        ]);
+
+        // Execute both inserts in parallel
+        let (chat_result, json_result) = try_join!(
+            self.run_query_synchronous(chat_clone_query.to_string(), &insert_params),
+            self.run_query_synchronous(json_clone_query.to_string(), &insert_params)
+        )?;
+        drop(chat_result);
+        drop(json_result);
+
+        // Verify which new_ids were actually created
+        let new_ids_str = format!(
+            "[{}]",
+            mappings
+                .iter()
+                .map(|(_, new)| format!("'{new}'"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+
+        let verify_query = r"
+            SELECT id FROM (
+                SELECT id FROM ChatInferenceDatapoint FINAL
+                WHERE id IN ({new_ids: Array(UUID)}) AND staled_at IS NULL
+                UNION ALL
+                SELECT id FROM JsonInferenceDatapoint FINAL
+                WHERE id IN ({new_ids: Array(UUID)}) AND staled_at IS NULL
+            )
+        ";
+        let verify_params = HashMap::from([("new_ids", new_ids_str.as_str())]);
+        let verify_result = self
+            .run_query_synchronous(verify_query.to_string(), &verify_params)
+            .await?;
+
+        let created_ids: std::collections::HashSet<Uuid> = verify_result
+            .response
+            .lines()
+            .filter_map(|line| Uuid::parse_str(line.trim()).ok())
+            .collect();
+
+        // Map results based on which new_ids were created
+        let results: Vec<Option<Uuid>> = mappings
+            .iter()
+            .map(|(source_id, new_id)| {
+                if created_ids.contains(new_id) {
+                    Some(*new_id)
+                } else {
+                    tracing::warn!(
+                        "Failed to clone datapoint (likely does not exist): {source_id}"
+                    );
+                    None
+                }
+            })
+            .collect();
+
+        Ok(results)
+    }
 }
 
 /// Converts a vec of OrderBy terms to the correct ClickHouse ORDER BY clauses.

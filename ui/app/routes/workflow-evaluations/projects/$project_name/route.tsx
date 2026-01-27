@@ -5,7 +5,7 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
-import { WorkflowEvalRunSelector } from "~/routes/workflow_evaluations/projects/$project_name/WorkflowEvalRunSelector";
+import { WorkflowEvalRunSelector } from "~/routes/workflow-evaluations/projects/$project_name/WorkflowEvalRunSelector";
 import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
@@ -112,7 +112,7 @@ export default function WorkflowEvaluationProjectPage({
               segments={[
                 {
                   label: "Workflow Evaluations",
-                  href: "/workflow_evaluations",
+                  href: "/workflow-evaluations",
                 },
                 { label: "Projects" },
               ]}

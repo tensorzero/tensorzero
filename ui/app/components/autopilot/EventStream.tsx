@@ -9,9 +9,9 @@ import {
 } from "~/components/ui/tooltip";
 import type {
   AutopilotStatus,
-  Event,
-  EventPayload,
   EventPayloadMessageContent,
+  GatewayEvent,
+  GatewayEventPayload,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 
@@ -39,7 +39,7 @@ type EventSummary = {
 };
 
 type EventStreamProps = {
-  events: Event[];
+  events: GatewayEvent[];
   className?: string;
   isLoadingOlder?: boolean;
   hasReachedStart?: boolean;
@@ -76,19 +76,19 @@ export function ToolEventId({ id }: { id: string }) {
  * Tool event payload types - events related to tool calls.
  */
 export type ToolEventPayload = Extract<
-  EventPayload,
+  GatewayEventPayload,
   { type: "tool_call" | "tool_call_authorization" | "tool_result" }
 >;
 
 /**
  * An event with a tool-related payload.
  */
-export type ToolEvent = Event & { payload: ToolEventPayload };
+export type ToolEvent = GatewayEvent & { payload: ToolEventPayload };
 
 /**
  * Type guard to check if an event is a tool event.
  */
-export function isToolEvent(event: Event): event is ToolEvent {
+export function isToolEvent(event: GatewayEvent): event is ToolEvent {
   return (
     event.payload.type === "tool_call" ||
     event.payload.type === "tool_call_authorization" ||
@@ -129,7 +129,7 @@ function formatToolError(error: unknown): string {
   return JSON.stringify(error);
 }
 
-function summarizeEvent(event: Event): EventSummary {
+function summarizeEvent(event: GatewayEvent): EventSummary {
   const { payload } = event;
 
   switch (payload.type) {
@@ -174,7 +174,7 @@ function summarizeEvent(event: Event): EventSummary {
   }
 }
 
-function renderEventTitle(event: Event) {
+function renderEventTitle(event: GatewayEvent) {
   const { payload } = event;
 
   switch (payload.type) {
@@ -321,7 +321,7 @@ function EventItem({
   event,
   isPending = false,
 }: {
-  event: Event;
+  event: GatewayEvent;
   isPending?: boolean;
 }) {
   const summary = summarizeEvent(event);

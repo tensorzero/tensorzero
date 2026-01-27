@@ -211,7 +211,8 @@ pub use tensorzero_client::MockTensorZeroClient;
 // Re-export autopilot types for use by tools
 pub use tensorzero_client::{
     CreateEventGatewayRequest, CreateEventResponse, EventPayload, EventPayloadToolResult,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    GatewayListEventsResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
+    ToolOutcome,
 };
 
 // Re-export datapoint types for CRUD operations
