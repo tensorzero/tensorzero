@@ -470,9 +470,9 @@ function StatusIndicator({ status }: { status: AutopilotStatus }) {
   return (
     <div className="flex items-center gap-4 py-2">
       <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted flex items-center text-xs">
+      <span className="text-fg-muted relative text-xs">
         {text}
-        {showEllipsis && <AnimatedEllipsis />}
+        {showEllipsis && <AnimatedEllipsis absolute />}
       </span>
       <div className="border-border flex-1 border-t" />
     </div>
