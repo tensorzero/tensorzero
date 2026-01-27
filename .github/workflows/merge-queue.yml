@@ -385,6 +385,7 @@ jobs:
           echo "TENSORZERO_POSTGRES_URL=${TENSORZERO_POSTGRES_URL}" >> gateway.env
           echo "TENSORZERO_VALKEY_URL=${TENSORZERO_VALKEY_URL}" >> gateway.env
           echo "TENSORZERO_E2E_PROXY=${TENSORZERO_E2E_PROXY}" >> gateway.env
+          echo "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}" >> gateway.env
           echo "GCP_VERTEX_CREDENTIALS_PATH=/app/gcp_jwt_key.json" >> gateway.env
           echo "GOOGLE_APPLICATION_CREDENTIALS=/app/gcp_jwt_key.json" >> gateway.env
           # Provider API keys
