@@ -43,7 +43,6 @@ jobs:
             fi
             sleep $((10 * attempt))
           done
-        shell: bash
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
       - name: Setup Playwright
@@ -58,7 +57,6 @@ jobs:
             fi
             sleep $((10 * attempt))
           done
-        shell: bash
       - name: Regenerate fixtures
         id: e2e_tests
         run: |
