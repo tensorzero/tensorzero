@@ -55,7 +55,11 @@ clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --pass
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "TRUNCATE TABLE ModelInferenceCache"
 
 # Download JSONL fixtures from R2
-uv run ./download-small-fixtures.py
+if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
+    uv run ./download-small-fixtures-http.py
+else
+    uv run ./download-small-fixtures.py
+fi
 
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO JsonInference FORMAT JSONEachRow" < ./small-fixtures/json_inference_examples.jsonl
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ChatInference FORMAT JSONEachRow" < ./small-fixtures/chat_inference_examples.jsonl
@@ -80,7 +84,11 @@ if [ "${TENSORZERO_SKIP_LARGE_FIXTURES:-}" = "1" ]; then
 fi
 
 uv run python --version
-uv run ./download-large-fixtures.py
+if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
+    uv run ./download-large-fixtures-http.py
+else
+    uv run ./download-large-fixtures.py
+fi
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ChatInference FROM INFILE './large-fixtures/large_chat_inference_v2.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO JsonInference FROM INFILE './large-fixtures/large_json_inference_v2.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"
 clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './large-fixtures/large_chat_model_inference_v2.parquet' SETTINGS input_format_parquet_use_native_reader_v3=0 FORMAT Parquet"

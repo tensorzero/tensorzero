@@ -29,6 +29,7 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - TENSORZERO_SKIP_LARGE_FIXTURES
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
@@ -62,6 +63,7 @@ services:
       - ~/.aws:/root/.aws
     environment:
       - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
     depends_on:
