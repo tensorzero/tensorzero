@@ -1,12 +1,12 @@
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { TableItemTime } from "~/components/ui/TableItems";
-import type { Event } from "~/types/tensorzero";
+import type { GatewayEvent } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 import { getToolCallEventId, isToolEvent, ToolEventId } from "./EventStream";
 
 type PendingToolCallCardProps = {
-  event: Event;
+  event: GatewayEvent;
   isLoading: boolean;
   loadingAction?: "approving" | "rejecting";
   onAuthorize: (approved: boolean) => void;

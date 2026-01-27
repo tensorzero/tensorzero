@@ -15,7 +15,9 @@ export R2_SECRET_ACCESS_KEY=$(buildkite-agent secret get R2_SECRET_ACCESS_KEY)
 # We concatenate our clickhouse instance prefix, along with our chosen clickhouse id (e.g. 'dev-tensorzero-e2e-tests-instance-' and '0'), to form the instance name
 # Then, we look up the instance url for this name, and add basic-auth credentials to the url to get our full TENSORZERO_CLICKHOUSE_URL
 # The 'export' statements go on separate lines to prevent the return code from the $() command from being ignored
-CURL_OUTPUT=$(curl --retry 3 --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services)
+CURL_OUTPUT=$(curl \
+    --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 30 \
+    --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services)
 echo "ClickHouse API response: $CURL_OUTPUT"
 TENSORZERO_CLICKHOUSE_URL=$(echo "$CURL_OUTPUT" | jq -r ".result[] | select(.name == \"${CLICKHOUSE_PREFIX}${CLICKHOUSE_ID}\") | .endpoints[] | select(.protocol == \"https\") | \"https://$CLICKHOUSE_USERNAME:$CLICKHOUSE_PASSWORD@\" + .host + \":\" + (.port | tostring)")
 export TENSORZERO_CLICKHOUSE_URL
@@ -42,7 +44,9 @@ cleanup_database() {
             echo "Cleaning up database: $DB_NAME"
             # Remove the database path from URL for the cleanup call
             BASE_URL=$(echo "$TENSORZERO_CLICKHOUSE_URL" | sed 's|/[^/]*$||')
-            curl -X POST "${BASE_URL%/}/?param_target=$DB_NAME" \
+            curl -X POST \
+                --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 30 \
+                "${BASE_URL%/}/?param_target=$DB_NAME" \
                 --data-binary "DROP DATABASE IF EXISTS {target:Identifier}" || true
             echo "Cleanup completed for database: $DB_NAME"
         fi
@@ -74,7 +78,9 @@ echo "deb https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/s
 sudo apt-get update
 sudo apt-get install -y clickhouse-client
 
-curl "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
+curl \
+    --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 30 \
+    "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
 . "$HOME/.cargo/env"
 curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
@@ -85,20 +91,17 @@ uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
 
 # Start postgres service for migrations
-# Also start Valkey
-# TODO(#5744): refactor so Clickhouse tests don't require Valkey
-docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres valkey
+# `cargo test-clickhouse` should not include any Postgres tests, but we're including it here to be safe.
+docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
 export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-export TENSORZERO_VALKEY_URL=redis://localhost:6379
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
 SQLX_OFFLINE=1 cargo build-e2e
 cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
 
-
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
-    max_attempts=90
+    max_attempts=180
     while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
         echo "Waiting for gateway to be healthy..."
         sleep 1
@@ -115,7 +118,18 @@ export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
 export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
 export SQLX_OFFLINE=1
 cd ui/fixtures
-./load_fixtures.sh $DATABASE_NAME
+max_retries=3
+for attempt in $(seq 1 $max_retries); do
+    if ./load_fixtures.sh $DATABASE_NAME; then
+        break
+    fi
+    if [ $attempt -eq $max_retries ]; then
+        echo "load_fixtures.sh failed after $max_retries attempts"
+        exit 1
+    fi
+    echo "load_fixtures.sh failed (attempt $attempt/$max_retries), retrying..."
+    sleep 5
+done
 cd ../..
 sleep 2
 

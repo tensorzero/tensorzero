@@ -9,14 +9,73 @@ use serde::{Deserialize, Serialize};
 // Re-export types from tensorzero-types that InputMessage depends on
 use schemars::JsonSchema;
 pub use tensorzero_types::{
-    Base64File, File, InputMessage, InputMessageContent, ObjectStoragePointer, RawText, Role,
-    Template, Text, Thought, ToolCallWrapper, Unknown, UrlFile,
+    Base64File, File, ObjectStoragePointer, RawText, Role, Template, Text, Thought,
+    ToolCallWrapper, Unknown, UrlFile,
 };
+use tensorzero_types::{InputMessage, InputMessageContent};
 use uuid::Uuid;
 
 // =============================================================================
 // Core Types
 // =============================================================================
+
+/// Content block types allowed in autopilot event messages.
+/// Restricted to only Text blocks (no ToolCall, File, Template, etc.).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
+pub enum EventPayloadMessageContent {
+    Text(Text),
+}
+
+/// A message payload specific to autopilot events.
+/// Content is restricted to Text blocks only.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadMessage {
+    pub role: Role,
+    pub content: Vec<EventPayloadMessageContent>,
+}
+
+impl TryFrom<InputMessage> for EventPayloadMessage {
+    type Error = &'static str;
+
+    fn try_from(msg: InputMessage) -> Result<Self, Self::Error> {
+        let content = msg
+            .content
+            .into_iter()
+            .map(|c| match c {
+                InputMessageContent::Text(text) => Ok(EventPayloadMessageContent::Text(text)),
+                _ => Err("EventPayloadMessage only supports Text content blocks"),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(EventPayloadMessage {
+            role: msg.role,
+            content,
+        })
+    }
+}
+
+impl From<EventPayloadMessage> for InputMessage {
+    fn from(msg: EventPayloadMessage) -> Self {
+        InputMessage {
+            role: msg.role,
+            content: msg
+                .content
+                .into_iter()
+                .map(|c| match c {
+                    EventPayloadMessageContent::Text(text) => InputMessageContent::Text(text),
+                })
+                .collect(),
+        }
+    }
+}
 
 /// A session representing an autopilot conversation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -31,15 +90,42 @@ pub struct Session {
     pub created_at: DateTime<Utc>,
 }
 
-/// An event within a session.
+/// Internal event type - consumers should use `GatewayEvent` instead.
+///
+/// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct Event {
     pub id: Uuid,
     pub payload: EventPayload,
     pub session_id: Uuid,
     pub created_at: DateTime<Utc>,
+}
+
+/// An event as seen by gateway consumers.
+///
+/// Uses `GatewayEventPayload` which excludes `NotAvailable` authorization status.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GatewayEvent {
+    pub id: Uuid,
+    pub payload: GatewayEventPayload,
+    pub session_id: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+impl TryFrom<Event> for GatewayEvent {
+    type Error = &'static str;
+
+    fn try_from(event: Event) -> Result<Self, Self::Error> {
+        Ok(GatewayEvent {
+            id: event.id,
+            payload: event.payload.try_into()?,
+            session_id: event.session_id,
+            created_at: event.created_at,
+        })
+    }
 }
 
 /// The UX-relevant status of the Autopilot.
@@ -56,36 +142,74 @@ pub enum AutopilotStatus {
     Failed,
 }
 
+/// Internal stream update type - consumers should use `GatewayStreamUpdate` instead.
+///
+/// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StreamUpdate {
     pub event: Event,
     pub status: AutopilotStatus,
 }
 
-/// The payload of an event.
+/// Stream update as seen by gateway consumers.
+///
+/// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GatewayStreamUpdate {
+    pub event: GatewayEvent,
+    pub status: AutopilotStatus,
+}
+
+impl TryFrom<StreamUpdate> for GatewayStreamUpdate {
+    type Error = &'static str;
+
+    fn try_from(update: StreamUpdate) -> Result<Self, Self::Error> {
+        Ok(GatewayStreamUpdate {
+            event: update.event.try_into()?,
+            status: update.status,
+        })
+    }
+}
+
+/// Error payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventPayloadError {
+    pub message: String,
+}
+
+/// Status update payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventPayloadStatusUpdate {
+    pub status_update: StatusUpdate,
+}
+
+/// Tool result payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventPayloadToolResult {
+    pub tool_call_event_id: Uuid,
+    pub outcome: ToolOutcome,
+}
+
+/// Internal event payload type - consumers should use `GatewayEventPayload` instead.
+///
+/// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export, tag = "type", rename_all = "snake_case")
-)]
+#[cfg_attr(feature = "ts-bindings", ts(tag = "type", rename_all = "snake_case"))]
 pub enum EventPayload {
-    Message(InputMessage),
-    Error {
-        message: String,
-    },
-    StatusUpdate {
-        status_update: StatusUpdate,
-    },
-    ToolCall(AutopilotToolCall),
-    ToolCallAuthorization(ToolCallAuthorization),
-    ToolResult {
-        tool_call_event_id: Uuid,
-        outcome: ToolOutcome,
-    },
+    Message(EventPayloadMessage),
+    Error(EventPayloadError),
+    StatusUpdate(EventPayloadStatusUpdate),
+    ToolCall(EventPayloadToolCall),
+    ToolCallAuthorization(EventPayloadToolCallAuthorization),
+    ToolResult(EventPayloadToolResult),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -93,13 +217,53 @@ pub enum EventPayload {
 
 impl EventPayload {
     /// Returns true if this payload type can be written by API clients.
-    /// System-generated types (StatusUpdate, ToolCall) return false.
+    /// System-generated types (e.g. AutopilotEventPayloadStatusUpdate) return false.
     pub fn is_client_writable(&self) -> bool {
         matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
             || matches!(
                 self,
-                EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult { .. }
+                EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult(_)
             )
+    }
+}
+
+/// Event payload as seen by gateway consumers.
+///
+/// Uses `GatewayEventPayloadToolCallAuthorization` which excludes `NotAvailable` status.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
+pub enum GatewayEventPayload {
+    Message(EventPayloadMessage),
+    Error(EventPayloadError),
+    StatusUpdate(EventPayloadStatusUpdate),
+    ToolCall(EventPayloadToolCall),
+    ToolCallAuthorization(GatewayEventPayloadToolCallAuthorization),
+    ToolResult(EventPayloadToolResult),
+    #[serde(other)]
+    #[serde(alias = "other")] // legacy name
+    Unknown,
+}
+
+impl TryFrom<EventPayload> for GatewayEventPayload {
+    type Error = &'static str;
+
+    fn try_from(payload: EventPayload) -> Result<Self, <Self as TryFrom<EventPayload>>::Error> {
+        match payload {
+            EventPayload::Message(m) => Ok(GatewayEventPayload::Message(m)),
+            EventPayload::Error(e) => Ok(GatewayEventPayload::Error(e)),
+            EventPayload::StatusUpdate(s) => Ok(GatewayEventPayload::StatusUpdate(s)),
+            EventPayload::ToolCall(t) => Ok(GatewayEventPayload::ToolCall(t)),
+            EventPayload::ToolCallAuthorization(auth) => {
+                Ok(GatewayEventPayload::ToolCallAuthorization(auth.try_into()?))
+            }
+            EventPayload::ToolResult(r) => Ok(GatewayEventPayload::ToolResult(r)),
+            EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
+        }
     }
 }
 
@@ -125,7 +289,7 @@ pub enum StatusUpdate {
 /// allows the caller to send over non-llm generated parameters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutopilotToolCall {
+pub struct EventPayloadToolCall {
     /// Name
     pub name: String,
     /// Arguments
@@ -210,6 +374,7 @@ impl AutopilotSideInfo {
             "tensorzero::autopilot::config_snapshot_hash".to_string(),
             self.config_snapshot_hash.clone(),
         );
+        tags.insert("tensorzero::autopilot".to_string(), String::new());
         tags
     }
 }
@@ -230,14 +395,38 @@ pub struct AutopilotToolResult {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
     Ui,
+    Automatic,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallAuthorization {
+pub struct EventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
     pub status: ToolCallAuthorizationStatus,
+}
+
+/// Tool call authorization payload as seen by gateway consumers.
+///
+/// Uses `GatewayToolCallAuthorizationStatus` which excludes `NotAvailable`.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayEventPayloadToolCallAuthorization {
+    pub source: ToolCallDecisionSource,
+    pub tool_call_event_id: Uuid,
+    pub status: GatewayToolCallAuthorizationStatus,
+}
+
+impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallAuthorization {
+    type Error = &'static str;
+
+    fn try_from(auth: EventPayloadToolCallAuthorization) -> Result<Self, Self::Error> {
+        Ok(GatewayEventPayloadToolCallAuthorization {
+            source: auth.source,
+            tool_call_event_id: auth.tool_call_event_id,
+            status: auth.status.try_into()?,
+        })
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -246,6 +435,37 @@ pub struct ToolCallAuthorization {
 pub enum ToolCallAuthorizationStatus {
     Approved,
     Rejected { reason: String },
+    NotAvailable,
+}
+
+/// Authorization status for tool calls as seen by gateway consumers.
+///
+/// This is a narrower type than `ToolCallAuthorizationStatus` that excludes
+/// `NotAvailable` since that status is filtered out before reaching consumers.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GatewayToolCallAuthorizationStatus {
+    Approved,
+    Rejected { reason: String },
+}
+
+impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus {
+    type Error = &'static str;
+
+    fn try_from(status: ToolCallAuthorizationStatus) -> Result<Self, Self::Error> {
+        match status {
+            ToolCallAuthorizationStatus::Approved => {
+                Ok(GatewayToolCallAuthorizationStatus::Approved)
+            }
+            ToolCallAuthorizationStatus::Rejected { reason } => {
+                Ok(GatewayToolCallAuthorizationStatus::Rejected { reason })
+            }
+            ToolCallAuthorizationStatus::NotAvailable => {
+                Err("NotAvailable status should be filtered before conversion")
+            }
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -359,10 +579,11 @@ pub struct CreateEventResponse {
     pub session_id: Uuid,
 }
 
-/// Response from listing events.
+/// Internal response type - consumers should use `GatewayListEventsResponse` instead.
+///
+/// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
     /// The most recent `message` event with role `user` in this session.
@@ -375,6 +596,26 @@ pub struct ListEventsResponse {
     /// All EventPayloads in these Events should be of type ToolCall.
     #[serde(default)]
     pub pending_tool_calls: Vec<Event>,
+}
+
+/// Response from listing events as seen by gateway consumers.
+///
+/// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GatewayListEventsResponse {
+    pub events: Vec<GatewayEvent>,
+    /// The most recent `message` event with role `user` in this session.
+    pub previous_user_message_event_id: Uuid,
+    /// The current status of the Autopilot in this session.
+    /// Ignores pagination parameters.
+    pub status: AutopilotStatus,
+    /// All tool calls in Event history that do not have responses.
+    /// These may be duplicates of some of the values in events.
+    /// All EventPayloads in these Events should be of type ToolCall.
+    #[serde(default)]
+    pub pending_tool_calls: Vec<GatewayEvent>,
 }
 
 /// Response from listing sessions.

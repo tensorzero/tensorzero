@@ -1,6 +1,9 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
     db::{
@@ -9,6 +12,7 @@ use tensorzero_core::{
             select_feedback_tags_clickhouse_with_feedback_id,
         },
         postgres::PostgresConnectionInfo,
+        valkey::ValkeyConnectionInfo,
     },
     endpoints::feedback::{Params, feedback},
     http::TensorzeroHttpClient,
@@ -252,8 +256,10 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         Arc::new(config),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();
@@ -1557,8 +1563,10 @@ async fn e2e_test_float_feedback_validation_disabled() {
         Arc::new(config),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();
@@ -1897,8 +1905,10 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         Arc::new(config),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();

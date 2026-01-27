@@ -149,4 +149,18 @@ pub trait DatasetQueries {
         dataset_name: &str,
         datapoint_ids: Option<&[Uuid]>,
     ) -> Result<u64, Error>;
+
+    /// Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
+    ///
+    /// For each source datapoint ID, generates a new UUID and attempts to clone the datapoint
+    /// to the target dataset. The operation handles both Chat and Json datapoints.
+    ///
+    /// Returns a Vec with the same length as `source_datapoint_ids`, where each element is:
+    /// - `Some(new_id)` if the source datapoint was found and cloned successfully
+    /// - `None` if the source datapoint doesn't exist
+    async fn clone_datapoints(
+        &self,
+        target_dataset_name: &str,
+        source_datapoint_ids: &[Uuid],
+    ) -> Result<Vec<Option<Uuid>>, Error>;
 }

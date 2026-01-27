@@ -68,6 +68,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+
+      - name: Configure Namespace-powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+        with:
+          wait-for-builder: true
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -89,6 +97,10 @@ jobs:
           tags: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
+          # Use debug builds for dev images
+          build-args: |
+            PROFILE=${{ inputs.is_dev && 'dev' || 'performance' }}
+            DEBUG_BUILD=${{ inputs.is_dev && '1' || '0' }}
 
       - name: Export digest
         run: |
@@ -143,7 +155,7 @@ jobs:
             latest=false
           tags: |
             type=ref,event=tag,
-            type=sha,format=long,enable=${{ inputs.is_dev }}
+            type=sha,format=long,enable=${{ inputs.is_dev && 'true' || 'false' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
 
       - name: Create manifest list and push

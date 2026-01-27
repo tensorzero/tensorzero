@@ -1,4 +1,5 @@
-use super::{FunctionInfo, throttled_get_function_info};
+use super::throttled_get_function_info;
+use crate::db::inferences::FunctionInfo;
 use crate::{
     config::MetricConfigLevel,
     db::clickhouse::{ClickHouseConnectionInfo, TableName},
@@ -108,7 +109,7 @@ async fn get_output(
     let FunctionInfo {
         function_type,
         episode_id,
-        name,
+        function_name,
         variant_name,
     } = function_info;
     let table_name = function_type.inference_table_name();
@@ -119,7 +120,7 @@ async fn get_output(
     WHERE
         id = '{inference_id}' AND
         episode_id = '{episode_id}' AND
-        function_name = '{name}' AND
+        function_name = '{function_name}' AND
         variant_name = '{variant_name}'
     LIMIT 1
     FORMAT JSONEachRow

@@ -18,12 +18,12 @@ use uuid::Uuid;
 
 use autopilot_client::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
-    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
-    ListSessionsResponse, StreamEventsParams, StreamUpdate,
+    CreateEventResponse, EventPayload, GatewayListEventsResponse, GatewayStreamUpdate,
+    ListEventsParams, ListSessionsParams, ListSessionsResponse, StreamEventsParams,
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// HTTP request body for creating an event.
@@ -52,6 +52,17 @@ pub struct ApproveAllToolCallsGatewayRequest {
     /// Only approve tool calls with event IDs <= this value.
     /// Prevents race condition where new tool calls arrive after client fetched the list.
     pub last_tool_call_event_id: Uuid,
+}
+
+/// Response for the autopilot status endpoint.
+///
+/// Indicates whether the autopilot client is configured (i.e., whether
+/// `TENSORZERO_AUTOPILOT_API_KEY` is set).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutopilotStatusResponse {
+    pub enabled: bool,
 }
 
 // =============================================================================
@@ -84,11 +95,13 @@ pub async fn list_sessions(
 /// List events for a session from the Autopilot API.
 ///
 /// This is the core function called by both the HTTP handler and embedded client.
+/// Returns `GatewayListEventsResponse` which uses narrower types that exclude
+/// `NotAvailable` authorization status.
 pub async fn list_events(
     autopilot_client: &AutopilotClient,
     session_id: Uuid,
     params: ListEventsParams,
-) -> Result<ListEventsResponse, Error> {
+) -> Result<GatewayListEventsResponse, Error> {
     autopilot_client
         .list_events(session_id, params)
         .await
@@ -150,7 +163,7 @@ pub async fn list_events_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
     Query(params): Query<ListEventsParams>,
-) -> Result<Json<ListEventsResponse>, Error> {
+) -> Result<Json<GatewayListEventsResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
     let response = list_events(&client, session_id, params).await?;
     Ok(Json(response))
@@ -222,6 +235,17 @@ pub async fn approve_all_tool_calls_handler(
     Ok(Json(response))
 }
 
+/// Handler for `GET /internal/autopilot/status`
+///
+/// Returns whether autopilot is configured (i.e., whether `TENSORZERO_AUTOPILOT_API_KEY` is set).
+/// This endpoint does not require authentication and does not make any external calls.
+#[instrument(name = "autopilot.status", skip_all)]
+pub async fn autopilot_status_handler(State(app_state): AppState) -> Json<AutopilotStatusResponse> {
+    Json(AutopilotStatusResponse {
+        enabled: app_state.autopilot_client.is_some(),
+    })
+}
+
 /// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events/stream`
 ///
 /// Streams events for a session via SSE from the Autopilot API.
@@ -238,18 +262,21 @@ pub async fn stream_events_handler(
 
     // Convert the autopilot event stream to SSE events
     let sse_stream = stream.map(
-        |result: Result<StreamUpdate, autopilot_client::AutopilotError>| match result {
+        |result: Result<GatewayStreamUpdate, autopilot_client::AutopilotError>| match result {
             Ok(event) => match serde_json::to_string(&event) {
                 Ok(data) => Ok(SseEvent::default().event("event").data(data)),
                 Err(e) => {
-                    tracing::error!("Failed to serialize autopilot event: {}", e);
+                    tracing::error!(
+                        "Failed to serialize autopilot event: {}",
+                        DisplayOrDebugGateway::new(&e)
+                    );
                     Err(Error::new(ErrorDetails::Serialization {
                         message: e.to_string(),
                     }))
                 }
             },
             Err(e) => {
-                tracing::error!("Autopilot stream error: {}", e);
+                tracing::error!("Autopilot stream error: {}", DisplayOrDebugGateway::new(&e));
                 Err(Error::from(e))
             }
         },
@@ -264,6 +291,7 @@ mod tests {
     use crate::config::Config;
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::db::postgres::PostgresConnectionInfo;
+    use crate::db::valkey::ValkeyConnectionInfo;
     use crate::http::TensorzeroHttpClient;
     use tokio_util::task::TaskTracker;
 
@@ -278,8 +306,10 @@ mod tests {
             http_client,
             clickhouse_connection_info,
             postgres_connection_info,
+            ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
         )
+        .unwrap()
     }
 
     #[test]
@@ -287,5 +317,15 @@ mod tests {
         let app_state = make_test_app_state_without_autopilot();
         let error = get_autopilot_client(&app_state).unwrap_err();
         assert_eq!(error.to_string(), "Autopilot credentials unavailable");
+    }
+
+    #[tokio::test]
+    async fn test_autopilot_status_handler_returns_false_when_not_configured() {
+        let app_state = make_test_app_state_without_autopilot();
+        let response = autopilot_status_handler(State(app_state)).await;
+        assert!(
+            !response.enabled,
+            "Expected enabled to be false when autopilot is not configured"
+        );
     }
 }

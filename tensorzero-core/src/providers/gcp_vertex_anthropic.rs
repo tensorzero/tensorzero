@@ -313,6 +313,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let builder = http_client
             .post(&self.streaming_request_url)
             .headers(auth_headers);
+
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             &request.extra_body,
@@ -334,6 +335,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
+        // Handle JSON prefill for streaming.
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -531,11 +533,13 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .await?
             .into_iter()
             .collect::<Vec<_>>();
+        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
+            warn_gcp_vertex_anthropic_strict_json_mode(request.json_mode);
             prefill_json_message(&mut messages);
         }
 
@@ -632,6 +636,17 @@ fn prefill_json_message(messages: &mut Vec<AnthropicMessage>) {
             text: "Here is the JSON requested:\n{",
         })],
     });
+}
+
+/// Warn if json_mode=strict is used since GCP Vertex Anthropic doesn't support structured outputs
+fn warn_gcp_vertex_anthropic_strict_json_mode(json_mode: ModelInferenceRequestJsonMode) {
+    if matches!(json_mode, ModelInferenceRequestJsonMode::Strict) {
+        tracing::warn!(
+            "GCP Vertex Anthropic does not support Anthropic's structured outputs feature. \
+            `json_mode = \"strict\"` will use prefill fallback instead of guaranteed schema compliance. \
+            For strict JSON schema enforcement, use direct Anthropic."
+        );
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
@@ -792,6 +807,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
 
+        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
         let content = if matches!(
             json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict

@@ -8,7 +8,7 @@ import type { Route } from "./+types/layout";
 import { AutopilotUnavailableState } from "~/components/ui/error/AutopilotUnavailableState";
 import { LayoutErrorBoundary } from "~/components/ui/error";
 import { isAutopilotUnavailableError } from "~/utils/tensorzero/errors";
-import { getAutopilotClient } from "~/utils/tensorzero.server";
+import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
 
 export const handle: RouteHandle = {
   crumb: () => [{ label: "Autopilot", noLink: true }],
@@ -17,18 +17,13 @@ export const handle: RouteHandle = {
 const AUTOPILOT_UNAVAILABLE_ERROR = "Autopilot Unavailable";
 
 export async function loader() {
-  // Check if autopilot is available by making a minimal request
-  const client = getAutopilotClient();
-  try {
-    // TODO: Use dedicated endpoint (#5489)
-    await client.listAutopilotSessions({ limit: 1 });
-    return null;
-  } catch (error) {
-    if (isAutopilotUnavailableError(error)) {
-      throw data({ errorType: AUTOPILOT_UNAVAILABLE_ERROR }, { status: 501 });
-    }
-    throw error;
+  // Check if autopilot is configured on the gateway
+  const client = getTensorZeroClient();
+  const status = await client.getAutopilotStatus();
+  if (!status.enabled) {
+    throw data({ errorType: AUTOPILOT_UNAVAILABLE_ERROR }, { status: 501 });
   }
+  return null;
 }
 
 export default function AutopilotLayout() {

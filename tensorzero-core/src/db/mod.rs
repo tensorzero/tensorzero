@@ -13,6 +13,7 @@ use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
+pub mod batch_inference;
 pub mod clickhouse;
 pub mod datasets;
 pub mod evaluation_queries;
@@ -94,6 +95,18 @@ impl TimeWindow {
             TimeWindow::Week => "week",
             TimeWindow::Month => "month",
             TimeWindow::Cumulative => "year", // Cumulative uses a full year as fallback
+        }
+    }
+
+    /// Converts the time window to the PostgreSQL date_trunc time unit.
+    pub fn to_postgres_time_unit(&self) -> &'static str {
+        match self {
+            TimeWindow::Minute => "minute",
+            TimeWindow::Hour => "hour",
+            TimeWindow::Day => "day",
+            TimeWindow::Week => "week",
+            TimeWindow::Month => "month",
+            TimeWindow::Cumulative => "year", // Not used, but uses a full year as fallback
         }
     }
 }

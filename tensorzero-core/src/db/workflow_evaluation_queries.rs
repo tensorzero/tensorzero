@@ -13,7 +13,15 @@ use uuid::Uuid;
 #[cfg(feature = "ts-bindings")]
 use ts_rs::TS;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::error::Error;
+
+/// Info returned when looking up a workflow evaluation run by episode ID.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WorkflowEvaluationRunInfo {
+    pub variant_pins: HashMap<String, String>,
+    pub tags: HashMap<String, String>,
+}
 
 /// Database struct for deserializing workflow evaluation project info from ClickHouse.
 #[derive(Debug, Deserialize)]
@@ -158,6 +166,44 @@ pub trait WorkflowEvaluationQueries {
 
     /// Counts the total number of episodes for a specific workflow evaluation run.
     async fn count_workflow_evaluation_run_episodes(&self, run_id: Uuid) -> Result<u32, Error>;
+
+    /// Inserts a new workflow evaluation run.
+    ///
+    /// Note: The table is named `DynamicEvaluationRun` for historical reasons,
+    /// but this feature is now called "Workflow Evaluations".
+    async fn insert_workflow_evaluation_run(
+        &self,
+        run_id: Uuid,
+        variant_pins: &HashMap<String, String>,
+        tags: &HashMap<String, String>,
+        project_name: Option<&str>,
+        run_display_name: Option<&str>,
+        snapshot_hash: &SnapshotHash,
+    ) -> Result<(), Error>;
+
+    /// Inserts a new workflow evaluation run episode.
+    ///
+    /// This copies variant_pins from the parent run and merges the provided tags
+    /// on top of the run's tags.
+    ///
+    /// Note: The table is named `DynamicEvaluationRunEpisode` for historical reasons,
+    /// but this feature is now called "Workflow Evaluations".
+    async fn insert_workflow_evaluation_run_episode(
+        &self,
+        run_id: Uuid,
+        episode_id: Uuid,
+        task_name: Option<&str>,
+        tags: &HashMap<String, String>,
+        snapshot_hash: &SnapshotHash,
+    ) -> Result<(), Error>;
+
+    /// Looks up a workflow evaluation run by episode ID.
+    ///
+    /// Returns the variant_pins and tags for the run associated with the given episode.
+    async fn get_workflow_evaluation_run_by_episode_id(
+        &self,
+        episode_id: Uuid,
+    ) -> Result<Option<WorkflowEvaluationRunInfo>, Error>;
 }
 
 /// A single workflow evaluation run episode with its associated feedback.
