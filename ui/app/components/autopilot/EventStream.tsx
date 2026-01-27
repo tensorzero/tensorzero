@@ -175,8 +175,9 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       }
       return {};
     case "error":
-      // TODO: handle errors
-      return {};
+      return {
+        description: payload.message,
+      };
     case "unknown":
       return {};
     default:
@@ -339,6 +340,7 @@ function EventItem({
   const eventIsToolEvent = isToolEvent(event);
   const isExpandable =
     event.payload.type === "tool_call" ||
+    event.payload.type === "error" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -400,7 +402,9 @@ function EventItem({
             <p
               className={cn(
                 "text-fg-secondary text-sm whitespace-pre-wrap",
-                event.payload.type === "tool_result" && "font-mono",
+                (event.payload.type === "tool_result" ||
+                  event.payload.type === "error") &&
+                  "font-mono",
               )}
             >
               {summary.description}
