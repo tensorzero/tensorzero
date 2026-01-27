@@ -68,7 +68,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if curl -fsSL https://get.pnpm.io/install.sh | sh - ; then
               break
             fi
             if [ $attempt -eq 3 ]; then
