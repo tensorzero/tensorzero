@@ -21,7 +21,7 @@ import EventStream, {
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
 import { ChatInput } from "~/components/autopilot/ChatInput";
-import { cn } from "~/utils/common";
+import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
 import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
@@ -580,10 +580,14 @@ export default function AutopilotSessionEventsPage({
   const footerRef = useRef<HTMLDivElement | null>(null);
   const [footerHeight, setFooterHeight] = useState(120);
 
-  // State for top fade overlay
+  // State for fade overlays
   const [showTopFade, setShowTopFade] = useState(false);
+  const [showBottomFade, setShowBottomFade] = useState(true);
 
-  // Measure footer height on resize (minimal debounce for responsiveness)
+  // Track previous footer height for scroll adjustment
+  const prevFooterHeightRef = useRef(footerHeight);
+
+  // Measure footer height on resize
   useEffect(() => {
     const footer = footerRef.current;
     if (!footer) return;
@@ -604,6 +608,18 @@ export default function AutopilotSessionEventsPage({
 
     return () => resizeObserver.disconnect();
   }, []);
+
+  // Adjust scroll position when footer height changes (after DOM update)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const prevHeight = prevFooterHeightRef.current;
+    prevFooterHeightRef.current = footerHeight;
+
+    if (container && footerHeight !== prevHeight) {
+      const delta = footerHeight - prevHeight;
+      container.scrollTop += delta;
+    }
+  }, [footerHeight]);
 
   const handleNavigateToSession = useCallback(
     (newSessionId: string) => {
@@ -676,14 +692,10 @@ export default function AutopilotSessionEventsPage({
               />
             </div>
           </div>
-          {/* Top fade gradient - matches header width */}
-          <div
-            className={cn(
-              "-mx-2 h-16",
-              "from-bg-secondary bg-gradient-to-b to-transparent",
-              "transition-opacity duration-75",
-              showTopFade ? "opacity-100" : "opacity-0",
-            )}
+          <FadeGradient
+            direction={FadeDirection.Top}
+            visible={showTopFade}
+            className="-mx-2"
           />
         </div>
       </div>
@@ -695,6 +707,9 @@ export default function AutopilotSessionEventsPage({
         onScroll={(e) => {
           const target = e.currentTarget;
           setShowTopFade(target.scrollTop > 20);
+          const distanceFromBottom =
+            target.scrollHeight - target.scrollTop - target.clientHeight;
+          setShowBottomFade(distanceFromBottom > 20);
         }}
       >
         <div className="container mx-auto px-8">
@@ -722,34 +737,41 @@ export default function AutopilotSessionEventsPage({
       </div>
 
       {/* Fixed footer with tool approval card and chat input */}
-      <div
-        ref={footerRef}
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-20"
-      >
-        <div className="container mx-auto flex flex-col gap-4 px-8 pt-4 pb-8">
-          {oldestPendingToolCall && (
-            <PendingToolCallCard
-              key={oldestPendingToolCall.id}
-              event={oldestPendingToolCall}
-              isLoading={authLoadingStates.has(oldestPendingToolCall.id)}
-              loadingAction={authLoadingStates.get(oldestPendingToolCall.id)}
-              onAuthorize={(approved) =>
-                handleAuthorize(oldestPendingToolCall.id, approved)
-              }
-              additionalCount={pendingToolCalls.length - 1}
-              isInCooldown={isInCooldown}
-              className="pointer-events-auto"
-            />
-          )}
-          <ChatInput
-            sessionId={isNewSession ? NIL_UUID : sessionId}
-            onMessageSent={handleMessageSent}
-            onMessageFailed={handleMessageFailed}
-            isNewSession={isNewSession}
-            disabled={isEventsLoading}
-            submitDisabled={submitDisabled}
-            className="pointer-events-auto"
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+        <div className="container mx-auto px-8">
+          <FadeGradient
+            direction={FadeDirection.Bottom}
+            visible={showBottomFade}
+            className="-mx-2"
           />
+          {/* Footer background - matches message width with slight outset */}
+          <div ref={footerRef} className="bg-bg-secondary -mx-2 px-2">
+            <div className="pointer-events-auto flex flex-col gap-4 pt-4 pb-8">
+              {oldestPendingToolCall && (
+                <PendingToolCallCard
+                  key={oldestPendingToolCall.id}
+                  event={oldestPendingToolCall}
+                  isLoading={authLoadingStates.has(oldestPendingToolCall.id)}
+                  loadingAction={authLoadingStates.get(
+                    oldestPendingToolCall.id,
+                  )}
+                  onAuthorize={(approved) =>
+                    handleAuthorize(oldestPendingToolCall.id, approved)
+                  }
+                  additionalCount={pendingToolCalls.length - 1}
+                  isInCooldown={isInCooldown}
+                />
+              )}
+              <ChatInput
+                sessionId={isNewSession ? NIL_UUID : sessionId}
+                onMessageSent={handleMessageSent}
+                onMessageFailed={handleMessageFailed}
+                isNewSession={isNewSession}
+                disabled={isEventsLoading}
+                submitDisabled={submitDisabled}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
