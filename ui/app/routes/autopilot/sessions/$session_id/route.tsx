@@ -25,6 +25,7 @@ import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
 import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
+import { useElementHeight } from "~/hooks/useElementHeight";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 
@@ -40,9 +41,6 @@ export const handle: RouteHandle = {
 };
 
 const EVENTS_PER_PAGE = 20;
-
-// Fixed header height: pt-4 (16px) + breadcrumbs (~20px) + pb-5 (20px) = ~56px
-const HEADER_HEIGHT = 60;
 
 export type EventsData = {
   events: GatewayEvent[];
@@ -440,31 +438,16 @@ export default function AutopilotSessionEventsPage({
     OptimisticMessage[]
   >([]);
 
-  // Clear optimistic messages when session changes to prevent cross-session leakage
-  useEffect(() => {
-    setOptimisticMessages([]);
-  }, [sessionId]);
-
   // Track if events are still loading (for disabling chat input)
   // New sessions have direct data (not a promise), so they're not loading
   const [isEventsLoading, setIsEventsLoading] = useState(
     !isNewSession && eventsData instanceof Promise,
   );
 
-  // Reset loading state when session changes (useState initial value only applies on first mount)
-  useEffect(() => {
-    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
-  }, [sessionId, isNewSession, eventsData]);
-
   // Track autopilot status for disabling submit
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
     status: "idle",
   });
-
-  // Reset status when session changes
-  useEffect(() => {
-    setAutopilotStatus({ status: "idle" });
-  }, [sessionId]);
 
   const handleStatusChange = useCallback((status: AutopilotStatus) => {
     setAutopilotStatus(status);
@@ -472,11 +455,6 @@ export default function AutopilotSessionEventsPage({
 
   // Pending tool calls state - lifted from EventStreamContent for footer rendering
   const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>([]);
-
-  // Reset pending tool calls when session changes
-  useEffect(() => {
-    setPendingToolCalls([]);
-  }, [sessionId]);
 
   const handlePendingToolCallsChange = useCallback(
     (toolCalls: GatewayEvent[]) => {
@@ -493,10 +471,14 @@ export default function AutopilotSessionEventsPage({
     Map<string, "approving" | "rejecting">
   >(new Map());
 
-  // Reset auth loading states when session changes
+  // Reset all session-specific state when session changes
   useEffect(() => {
+    setOptimisticMessages([]);
+    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
+    setAutopilotStatus({ status: "idle" });
+    setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
-  }, [sessionId]);
+  }, [sessionId, isNewSession, eventsData]);
 
   // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
   // Covers both directions: new item jumping to top, or top item removed by external approval.
@@ -576,50 +558,46 @@ export default function AutopilotSessionEventsPage({
   // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Ref for footer container to measure its height dynamically
-  const footerRef = useRef<HTMLDivElement | null>(null);
-  const [footerHeight, setFooterHeight] = useState(120);
+  // Measure header/footer heights dynamically
+  const [headerRef, headerHeight] = useElementHeight(56);
+  const [footerRef, footerHeight] = useElementHeight(120);
 
   // State for fade overlays
   const [showTopFade, setShowTopFade] = useState(false);
   const [showBottomFade, setShowBottomFade] = useState(true);
 
-  // Track previous footer height for scroll adjustment
-  const prevFooterHeightRef = useRef(footerHeight);
+  // Track previous footer height for scroll adjustment (null = initial mount)
+  const prevFooterHeightRef = useRef<number | null>(null);
 
-  // Measure footer height on resize
-  useEffect(() => {
-    const footer = footerRef.current;
-    if (!footer) return;
-
-    const measureHeight = () => {
-      const height = footer.offsetHeight;
-      if (height > 0) {
-        setFooterHeight((prev) => (prev !== height ? height : prev));
-      }
-    };
-
-    measureHeight();
-
-    // Use ResizeObserver with minimal debounce for smooth updates
-    const debouncedMeasure = debounce(measureHeight, 16);
-    const resizeObserver = new ResizeObserver(debouncedMeasure);
-    resizeObserver.observe(footer);
-
-    return () => resizeObserver.disconnect();
-  }, []);
-
-  // Adjust scroll position when footer height changes (after DOM update)
+  // Adjust scroll position when footer height changes (e.g., tool card appears)
   useEffect(() => {
     const container = scrollContainerRef.current;
-    const prevHeight = prevFooterHeightRef.current;
+
+    // Skip initial mount - just record the value
+    if (prevFooterHeightRef.current === null) {
+      prevFooterHeightRef.current = footerHeight;
+      return;
+    }
+
+    const delta = footerHeight - prevFooterHeightRef.current;
     prevFooterHeightRef.current = footerHeight;
 
-    if (container && footerHeight !== prevHeight) {
-      const delta = footerHeight - prevHeight;
+    if (container && delta !== 0) {
       container.scrollTop += delta;
     }
   }, [footerHeight]);
+
+  // Update fade overlay visibility based on scroll position
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const target = e.currentTarget;
+      setShowTopFade(target.scrollTop > 20);
+      const distanceFromBottom =
+        target.scrollHeight - target.scrollTop - target.clientHeight;
+      setShowBottomFade(distanceFromBottom > 20);
+    },
+    [],
+  );
 
   const handleNavigateToSession = useCallback(
     (newSessionId: string) => {
@@ -675,7 +653,7 @@ export default function AutopilotSessionEventsPage({
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
         <div className="container mx-auto px-8">
           {/* Header background - matches message width with slight outset */}
-          <div className="bg-bg-secondary -mx-2 px-2">
+          <div ref={headerRef} className="bg-bg-secondary -mx-2 px-2">
             <div className="pointer-events-auto pt-4 pb-5">
               <Breadcrumbs
                 segments={
@@ -704,18 +682,12 @@ export default function AutopilotSessionEventsPage({
       <div
         ref={scrollContainerRef}
         className="h-full overflow-y-auto"
-        onScroll={(e) => {
-          const target = e.currentTarget;
-          setShowTopFade(target.scrollTop > 20);
-          const distanceFromBottom =
-            target.scrollHeight - target.scrollTop - target.clientHeight;
-          setShowBottomFade(distanceFromBottom > 20);
-        }}
+        onScroll={handleScroll}
       >
-        <div className="container mx-auto px-8">
-          {/* Spacer for fixed header */}
-          <div style={{ height: HEADER_HEIGHT }} />
-
+        <div
+          className="container mx-auto px-8"
+          style={{ paddingTop: headerHeight, paddingBottom: footerHeight }}
+        >
           <Suspense fallback={<EventStreamSkeleton />}>
             <EventStreamContent
               key={sessionId}
@@ -730,9 +702,6 @@ export default function AutopilotSessionEventsPage({
               onPendingToolCallsChange={handlePendingToolCallsChange}
             />
           </Suspense>
-
-          {/* Spacer for fixed footer */}
-          <div style={{ height: footerHeight }} />
         </div>
       </div>
 
