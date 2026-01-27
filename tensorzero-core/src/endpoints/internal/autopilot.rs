@@ -158,14 +158,28 @@ pub async fn list_sessions_handler(
 ///
 /// Lists events for a session from the Autopilot API.
 #[axum::debug_handler(state = AppStateData)]
-#[instrument(name = "autopilot.list_events", skip_all, fields(session_id = %session_id))]
+#[instrument(
+    name = "autopilot.list_events",
+    skip_all,
+    fields(session_id = %session_id, limit = ?params.limit, before = ?params.before)
+)]
 pub async fn list_events_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
     Query(params): Query<ListEventsParams>,
 ) -> Result<Json<GatewayListEventsResponse>, Error> {
+    tracing::debug!("Listing events for session");
+
     let client = get_autopilot_client(&app_state)?;
     let response = list_events(&client, session_id, params).await?;
+
+    tracing::debug!(
+        event_count = response.events.len(),
+        pending_tool_calls_count = response.pending_tool_calls.len(),
+        status = ?response.status,
+        "List events response"
+    );
+
     Ok(Json(response))
 }
 
@@ -256,27 +270,45 @@ pub async fn stream_events_handler(
     Path(session_id): Path<Uuid>,
     Query(params): Query<StreamEventsParams>,
 ) -> Result<impl IntoResponse, Error> {
-    tracing::info!(session_id = %session_id, "autopilot.stream_events");
+    tracing::info!(session_id = %session_id, last_event_id = ?params.last_event_id, "autopilot.stream_events");
+    tracing::debug!(session_id = %session_id, "Opening SSE stream for session");
+
     let client = get_autopilot_client(&app_state)?;
     let stream = client.stream_events(session_id, params).await?;
 
+    tracing::debug!(session_id = %session_id, "SSE stream connection established");
+
     // Convert the autopilot event stream to SSE events
+    let stream_session_id = session_id;
     let sse_stream = stream.map(
-        |result: Result<GatewayStreamUpdate, autopilot_client::AutopilotError>| match result {
-            Ok(event) => match serde_json::to_string(&event) {
-                Ok(data) => Ok(SseEvent::default().event("event").data(data)),
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to serialize autopilot event: {}",
-                        DisplayOrDebugGateway::new(&e)
-                    );
-                    Err(Error::new(ErrorDetails::Serialization {
-                        message: e.to_string(),
-                    }))
+        move |result: Result<GatewayStreamUpdate, autopilot_client::AutopilotError>| match result {
+            Ok(event) => {
+                tracing::debug!(
+                    session_id = %stream_session_id,
+                    event_id = %event.event.id,
+                    event_type = ?std::mem::discriminant(&event.event.payload),
+                    status = ?event.status,
+                    "Streaming event to client"
+                );
+                match serde_json::to_string(&event) {
+                    Ok(data) => Ok(SseEvent::default().event("event").data(data)),
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to serialize autopilot event: {}",
+                            DisplayOrDebugGateway::new(&e)
+                        );
+                        Err(Error::new(ErrorDetails::Serialization {
+                            message: e.to_string(),
+                        }))
+                    }
                 }
-            },
+            }
             Err(e) => {
-                tracing::error!("Autopilot stream error: {}", DisplayOrDebugGateway::new(&e));
+                tracing::error!(
+                    session_id = %stream_session_id,
+                    error = %DisplayOrDebugGateway::new(&e),
+                    "Autopilot stream error"
+                );
                 Err(Error::from(e))
             }
         },

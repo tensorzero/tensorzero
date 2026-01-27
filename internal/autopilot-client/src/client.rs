@@ -417,6 +417,14 @@ impl AutopilotClient {
         let url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events"))?;
+
+        tracing::debug!(
+            session_id = %session_id,
+            limit = ?params.limit,
+            before = ?params.before,
+            "Fetching events from Autopilot API"
+        );
+
         let response = self
             .http_client
             .get(url)
@@ -426,6 +434,15 @@ impl AutopilotClient {
             .await?;
         let response = self.check_response(response).await?;
         let body: ListEventsResponse = response.json().await?;
+
+        tracing::debug!(
+            session_id = %session_id,
+            raw_event_count = body.events.len(),
+            raw_pending_tool_calls_count = body.pending_tool_calls.len(),
+            status = ?body.status,
+            "Received events from Autopilot API"
+        );
+
         self.cache_tool_call_events(&body.events);
         self.cache_tool_call_events(&body.pending_tool_calls);
 
@@ -434,6 +451,7 @@ impl AutopilotClient {
         let mut filtered_events = Vec::new();
         for event in body.events {
             if Self::should_filter_event(&event, &self.available_tools) {
+                tracing::debug!(event_id = %event.id, "Filtering event from list response");
                 continue;
             }
             // Conversion should succeed since we filtered out NotAvailable events
@@ -450,9 +468,15 @@ impl AutopilotClient {
             if let EventPayload::ToolCall(tool_call) = &event.payload
                 && self.is_unknown_tool(tool_call)
             {
+                tracing::debug!(
+                    event_id = %event.id,
+                    tool_name = %tool_call.name,
+                    "Rejecting unknown tool call"
+                );
                 reject_missing_tool(&self.spawn_client, tool_call).await?;
             }
             if Self::should_filter_event(&event, &self.available_tools) {
+                tracing::debug!(event_id = %event.id, "Filtering event from list response");
                 continue;
             }
             // Conversion should succeed since we filtered out NotAvailable events
@@ -461,6 +485,13 @@ impl AutopilotClient {
             })?;
             filtered_pending_tool_calls.push(gateway_event);
         }
+
+        tracing::debug!(
+            session_id = %session_id,
+            filtered_event_count = filtered_events.len(),
+            filtered_pending_tool_calls_count = filtered_pending_tool_calls.len(),
+            "Returning filtered events"
+        );
 
         Ok(GatewayListEventsResponse {
             events: filtered_events,
@@ -635,6 +666,13 @@ impl AutopilotClient {
                 .append_pair("last_event_id", &last_event_id.to_string());
         }
 
+        tracing::debug!(
+            session_id = %session_id,
+            last_event_id = ?params.last_event_id,
+            url = %url,
+            "Opening SSE connection to Autopilot API"
+        );
+
         let request = self.sse_http_client.get(url).headers(self.auth_headers());
 
         let mut event_source =
@@ -644,18 +682,20 @@ impl AutopilotClient {
         // The first event should be Open on success, or an error on failure.
         match event_source.next().await {
             Some(Ok(SseEvent::Open)) => {
-                // Connection established successfully
+                tracing::debug!(session_id = %session_id, "SSE connection opened successfully");
             }
             Some(Err(e)) => {
-                // Convert SSE error to appropriate AutopilotError
+                tracing::debug!(session_id = %session_id, error = ?e, "SSE connection failed to open");
                 return Err(Self::convert_sse_error(e));
             }
             Some(Ok(SseEvent::Message(_))) => {
+                tracing::debug!(session_id = %session_id, "Received message before connection open");
                 return Err(AutopilotError::Sse(
                     "Received message before connection was established".to_string(),
                 ));
             }
             None => {
+                tracing::debug!(session_id = %session_id, "SSE connection closed during handshake");
                 return Err(AutopilotError::Sse(
                     "Connection closed unexpectedly".to_string(),
                 ));
@@ -673,27 +713,60 @@ impl AutopilotClient {
             let spawn_client = spawn_client.clone();
             async move {
                 match result {
-                    Ok(SseEvent::Open) => None,
+                    Ok(SseEvent::Open) => {
+                        tracing::debug!(session_id = %session_id, "Received additional SSE Open event");
+                        None
+                    }
                     Ok(SseEvent::Message(message)) => {
                         if message.event == "event" {
+                            tracing::debug!(
+                                session_id = %session_id,
+                                data_len = message.data.len(),
+                                "Received SSE event message"
+                            );
+
                             match serde_json::from_str::<StreamUpdate>(&message.data) {
                                 Ok(update) => {
+                                    tracing::debug!(
+                                        session_id = %session_id,
+                                        event_id = %update.event.id,
+                                        event_type = ?std::mem::discriminant(&update.event.payload),
+                                        status = ?update.status,
+                                        "Parsed stream event"
+                                    );
+
                                     // Cache tool calls for later lookup
                                     if let EventPayload::ToolCall(tool_call) = &update.event.payload
                                     {
+                                        tracing::debug!(
+                                            event_id = %update.event.id,
+                                            tool_name = %tool_call.name,
+                                            "Cached tool call"
+                                        );
                                         cache.insert(update.event.id, tool_call.clone());
 
                                         // Reject unknown tool calls
-                                        if !available_tools.contains(&tool_call.name)
-                                            && let Err(e) =
+                                        if !available_tools.contains(&tool_call.name) {
+                                            tracing::debug!(
+                                                event_id = %update.event.id,
+                                                tool_name = %tool_call.name,
+                                                "Rejecting unknown tool call in stream"
+                                            );
+                                            if let Err(e) =
                                                 reject_missing_tool(&spawn_client, tool_call).await
-                                        {
-                                            return Some(Err(e));
+                                            {
+                                                return Some(Err(e));
+                                            }
                                         }
                                     }
 
                                     // Filter out NotAvailable authorizations and unknown tool calls
                                     if Self::should_filter_event(&update.event, &available_tools) {
+                                        tracing::debug!(
+                                            session_id = %session_id,
+                                            event_id = %update.event.id,
+                                            "Filtering event from stream"
+                                        );
                                         return None;
                                     }
 
@@ -705,13 +778,33 @@ impl AutopilotClient {
                                         )))),
                                     }
                                 }
-                                Err(e) => Some(Err(AutopilotError::Json(e))),
+                                Err(e) => {
+                                    tracing::debug!(
+                                        session_id = %session_id,
+                                        error = %e,
+                                        data_preview = %message.data.chars().take(200).collect::<String>(),
+                                        "Failed to parse SSE event JSON"
+                                    );
+                                    Some(Err(AutopilotError::Json(e)))
+                                }
                             }
                         } else {
+                            tracing::debug!(
+                                session_id = %session_id,
+                                event_name = %message.event,
+                                "Ignoring non-event SSE message"
+                            );
                             None
                         }
                     }
-                    Err(e) => Some(Err(AutopilotError::Sse(e.to_string()))),
+                    Err(e) => {
+                        tracing::debug!(
+                            session_id = %session_id,
+                            error = %e,
+                            "SSE stream error (connection drop or network issue)"
+                        );
+                        Some(Err(AutopilotError::Sse(e.to_string())))
+                    }
                 }
             }
         });
