@@ -228,6 +228,10 @@ pub fn prepare_chat_completion_tools<'a>(
                         .map(|t| ChatCompletionTool::ProviderTool(&t.tool)),
                 );
 
+                if tools.is_empty() {
+                    return Ok((None, None, parallel_tool_calls));
+                }
+
                 let tool_choice = if let Some(allowed_tools_choice) =
                     prepare_chat_completion_allowed_tools_constraint(tool_config)
                 {
@@ -252,6 +256,10 @@ pub fn prepare_chat_completion_tools<'a>(
                         .iter()
                         .map(|t| ChatCompletionTool::ProviderTool(&t.tool)),
                 );
+
+                if tools.is_empty() {
+                    return Ok((None, None, parallel_tool_calls));
+                }
 
                 let tool_choice = Some((&tool_config.tool_choice).into());
 

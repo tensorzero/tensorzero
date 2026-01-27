@@ -1357,36 +1357,27 @@ async fn test_forward_file_url() {
 /// 3. Web search results are returned in the response
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_anthropic_web_search_provider_tool() {
-    // Create a config WITHOUT provider_tools in the model config
+    // Create a minimal config using the shorthand model syntax
     // We'll pass the provider_tools dynamically at inference time
     let config = r#"
 gateway.debug = true
-
-[models."test-model"]
-routing = ["test-provider"]
-
-[models."test-model".providers.test-provider]
-type = "anthropic"
-model_name = "claude-sonnet-4-20250514"
 
 [functions.basic_test]
 type = "chat"
 
 [functions.basic_test.variants.default]
 type = "chat_completion"
-model = "test-model"
+model = "anthropic::claude-sonnet-4-20250514"
 "#;
 
     // Create an embedded gateway with this config
     let client = make_embedded_gateway_with_config(config).await;
 
     // Make a simple inference request with dynamic provider_tools
-    let episode_id = Uuid::now_v7();
     let result = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
             variant_name: Some("default".to_string()),
-            episode_id: Some(episode_id),
             input: Input {
                 system: None,
                 messages: vec![InputMessage {
