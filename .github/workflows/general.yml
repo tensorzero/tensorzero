@@ -1284,7 +1284,7 @@ jobs:
         check-python-client-build,
         check-node-bindings,
         check-python-schemas,
-        # TODO (#5873): Add build-windows back when re-enabled
+        build-windows,
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
