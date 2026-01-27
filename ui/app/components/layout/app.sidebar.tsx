@@ -208,7 +208,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           {section.title === "Autopilot" && (
                             <button
                               type="button"
-                              className="text-fg-tertiary hover:text-fg-secondary rounded p-0.5 transition-colors"
+                              className="text-fg-muted hover:text-fg-primary cursor-pointer rounded p-0.5 transition-colors"
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
