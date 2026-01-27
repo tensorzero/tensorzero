@@ -171,9 +171,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 >
                   <Link to="/autopilot" className="flex items-center gap-2">
                     <Chat className="h-4 w-4" />
-                    <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                      Autopilot
-                    </span>
+                    {state === "expanded" && (
+                      <>
+                        <span className="flex-1">Autopilot</span>
+                        <button
+                          type="button"
+                          className="text-fg-muted hover:text-fg-primary cursor-pointer rounded p-0.5 transition-colors"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            navigate("/autopilot/sessions/new");
+                          }}
+                          aria-label="New session"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+                    {state === "collapsed" && (
+                      <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                        Autopilot
+                      </span>
+                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -191,31 +210,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     tooltip={state === "collapsed" ? item.title : undefined}
                     isActive={activePathUtils.isActive(item.url)}
                   >
-                    <Link
-                      to={item.url}
-                      className="flex items-center gap-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <Link to={item.url} className="flex items-center gap-2">
                       <item.icon className="h-4 w-4" />
-                      {state === "expanded" && (
-                        <>
-                          <span className="flex-1">{item.title}</span>
-                          {section.title === "Autopilot" && (
-                            <button
-                              type="button"
-                              className="text-fg-muted hover:text-fg-primary cursor-pointer rounded p-0.5 transition-colors"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                navigate("/autopilot/sessions/new");
-                              }}
-                              aria-label="New session"
-                            >
-                              <Plus className="h-4 w-4" />
-                            </button>
-                          )}
-                        </>
-                      )}
+                      <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                        {item.title}
+                      </span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
