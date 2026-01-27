@@ -135,10 +135,15 @@ function EventStreamSkeleton() {
  * Error state shown when initial event stream load fails.
  * Preserves the chat container layout so the page doesn't completely break.
  */
-function EventStreamLoadError() {
+function EventStreamLoadError({ onError }: { onError: () => void }) {
   const error = useAsyncError();
   const message =
     error instanceof Error ? error.message : "Failed to load session events";
+
+  // Notify parent that we're in error state (disables ChatInput)
+  useEffect(() => {
+    onError();
+  }, [onError]);
 
   return (
     <div className="border-border mt-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
@@ -567,6 +572,18 @@ export default function AutopilotSessionEventsPage({
   const submitDisabled =
     autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
 
+  // Track if initial load failed (disables ChatInput to avoid confusing UX)
+  const [hasLoadError, setHasLoadError] = useState(false);
+
+  // Reset error state when session changes
+  useEffect(() => {
+    setHasLoadError(false);
+  }, [sessionId]);
+
+  const handleLoadError = useCallback(() => {
+    setHasLoadError(true);
+  }, []);
+
   // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -643,7 +660,10 @@ export default function AutopilotSessionEventsPage({
       />
 
       <Suspense key={sessionId} fallback={<EventStreamSkeleton />}>
-        <Await resolve={eventsData} errorElement={<EventStreamLoadError />}>
+        <Await
+          resolve={eventsData}
+          errorElement={<EventStreamLoadError onError={handleLoadError} />}
+        >
           {(resolvedData) => (
             <EventStreamContentWrapper
               sessionId={sessionId}
@@ -658,13 +678,14 @@ export default function AutopilotSessionEventsPage({
         </Await>
       </Suspense>
 
-      {/* Chat input - always visible outside Suspense */}
+      {/* Chat input - always visible outside Suspense, disabled on load error */}
       <ChatInput
         sessionId={isNewSession ? NIL_UUID : sessionId}
         onMessageSent={handleMessageSent}
         onMessageFailed={handleMessageFailed}
         className="mt-4"
         isNewSession={isNewSession}
+        disabled={hasLoadError}
         submitDisabled={submitDisabled}
       />
     </div>
