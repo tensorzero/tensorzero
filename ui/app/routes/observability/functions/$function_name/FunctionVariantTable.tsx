@@ -21,10 +21,15 @@ import {
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
-import type { InferenceCountByVariant } from "~/types/tensorzero";
 import { Input } from "~/components/ui/input";
 
-type VariantCountsWithMetadata = InferenceCountByVariant & {
+// Using explicit type instead of InferenceCountByVariant because:
+// 1. last_used_at needs to be nullable for variants without inferences
+// 2. inference_count is number at runtime (JSON.parse), not bigint as the binding suggests
+type VariantCountsWithMetadata = {
+  variant_name: string;
+  inference_count: number;
+  last_used_at: string | null;
   type: string;
 };
 
@@ -65,7 +70,14 @@ export default function FunctionVariantTable({
       }),
       columnHelper.accessor("last_used_at", {
         header: "Last Used",
-        cell: (info) => <TableItemTime timestamp={info.getValue()} />,
+        cell: (info) => {
+          const value = info.getValue();
+          return value ? (
+            <TableItemTime timestamp={value} />
+          ) : (
+            <span className="text-fg-muted">—</span>
+          );
+        },
       }),
     ],
     [function_name],
