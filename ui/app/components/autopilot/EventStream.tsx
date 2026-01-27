@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
 import { type RefObject, useState } from "react";
+import { Markdown } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
@@ -380,17 +381,24 @@ function EventItem({
         </div>
       </div>
       {shouldShowDetails && summary.description && (
-        <p
-          className={cn(
-            "text-fg-secondary whitespace-pre-wrap",
-            event.payload.type === "tool_call" ||
-              event.payload.type === "tool_result"
-              ? "font-mono text-sm"
-              : "text-sm",
+        <>
+          {event.payload.type === "message" &&
+          event.payload.role === "assistant" ? (
+            <Markdown>{summary.description}</Markdown>
+          ) : (
+            <p
+              className={cn(
+                "text-fg-secondary whitespace-pre-wrap",
+                event.payload.type === "tool_call" ||
+                  event.payload.type === "tool_result"
+                  ? "font-mono text-sm"
+                  : "text-sm",
+              )}
+            >
+              {summary.description}
+            </p>
           )}
-        >
-          {summary.description}
-        </p>
+        </>
       )}
     </div>
   );
