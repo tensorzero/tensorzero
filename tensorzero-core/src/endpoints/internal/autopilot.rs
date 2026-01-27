@@ -282,7 +282,14 @@ pub async fn stream_events_handler(
         },
     );
 
-    Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))
+    // Close the stream when the server shuts down
+    // We do *not* want to wait for the stream to finish when the gateway shuts down,
+    // as it may stay open indefinitely (on either end - a browser ui ta might be holding open a connection)
+    // Clients using the endpoint should be able to auto-reconnect, so this is fine.
+    Ok(
+        Sse::new(sse_stream.take_until(app_state.shutdown_token.clone().cancelled_owned()))
+            .keep_alive(KeepAlive::new()),
+    )
 }
 
 #[cfg(test)]
@@ -293,6 +300,7 @@ mod tests {
     use crate::db::postgres::PostgresConnectionInfo;
     use crate::db::valkey::ValkeyConnectionInfo;
     use crate::http::TensorzeroHttpClient;
+    use tokio_util::sync::CancellationToken;
     use tokio_util::task::TaskTracker;
 
     fn make_test_app_state_without_autopilot() -> AppStateData {
@@ -308,6 +316,7 @@ mod tests {
             postgres_connection_info,
             ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
+            CancellationToken::new(),
         )
         .unwrap()
     }
