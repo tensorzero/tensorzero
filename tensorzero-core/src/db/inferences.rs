@@ -12,12 +12,13 @@ use uuid::Uuid;
 use mockall::automock;
 
 use crate::config::{Config, MetricConfigLevel};
-use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
+use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy, OrderByTerm};
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::{
-    ContentBlockChatOutput, FunctionType, JsonInferenceOutput, StoredInput,
+    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FunctionType, JsonInferenceDatabaseInsert,
+    JsonInferenceOutput, StoredInput,
 };
 use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::stored_inference::{
@@ -238,6 +239,51 @@ pub struct ListInferencesParams<'a> {
     pub search_query_experimental: Option<&'a str>,
 }
 
+impl ListInferencesParams<'_> {
+    /// Validates that before/after pagination works with the rest of the request:
+    /// - If order_by is provided, only timestamp ordering is supported.
+    /// - Offset must not be provided.
+    ///
+    /// Returns an error if the request is invalid.
+    pub fn validate_pagination(&self) -> Result<(), Error> {
+        if self.pagination.is_none() {
+            return Ok(());
+        };
+        let Some(order_by) = self.order_by else {
+            return Ok(());
+        };
+
+        for order in order_by {
+            match &order.term {
+                OrderByTerm::Timestamp => {
+                    // Timestamp ordering is compatible with before/after pagination (UUIDv7 is time-ordered)
+                    continue;
+                }
+                OrderByTerm::Metric { name } => {
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "Cannot order by metric '{name}'; only ordering by timestamp is supported with before/after pagination.",
+                        ),
+                    }));
+                }
+                OrderByTerm::SearchRelevance => {
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: "Cannot order by search relevance; only ordering by timestamp is supported with before/after pagination.".to_string(),
+                    }));
+                }
+            }
+        }
+
+        if self.offset != 0 {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "OFFSET is not supported when using before/after pagination".to_string(),
+            }));
+        }
+
+        Ok(())
+    }
+}
+
 impl Default for ListInferencesParams<'_> {
     fn default() -> Self {
         Self {
@@ -393,4 +439,18 @@ pub trait InferenceQueries {
         function_info: &FunctionInfo,
         inference_id: Uuid,
     ) -> Result<Option<String>, Error>;
+
+    // ===== Write methods =====
+
+    /// Insert chat inference records.
+    async fn insert_chat_inferences(
+        &self,
+        rows: &[ChatInferenceDatabaseInsert],
+    ) -> Result<(), Error>;
+
+    /// Insert JSON inference records.
+    async fn insert_json_inferences(
+        &self,
+        rows: &[JsonInferenceDatabaseInsert],
+    ) -> Result<(), Error>;
 }
