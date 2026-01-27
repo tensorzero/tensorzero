@@ -136,6 +136,19 @@ pub async fn approve_all_tool_calls(
         .map_err(Error::from)
 }
 
+/// Cancel an autopilot session via the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn cancel_session(
+    autopilot_client: &AutopilotClient,
+    session_id: Uuid,
+) -> Result<(), Error> {
+    autopilot_client
+        .cancel_session(session_id)
+        .await
+        .map_err(Error::from)
+}
+
 // =============================================================================
 // HTTP Handlers
 // =============================================================================
@@ -233,6 +246,19 @@ pub async fn approve_all_tool_calls_handler(
 
     let response = approve_all_tool_calls(&client, session_id, request).await?;
     Ok(Json(response))
+}
+
+/// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/cancel`
+///
+/// Cancels an autopilot session via the Autopilot API.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "autopilot.cancel_session", skip_all, fields(session_id = %session_id))]
+pub async fn cancel_session_handler(
+    State(app_state): AppState,
+    Path(session_id): Path<Uuid>,
+) -> Result<(), Error> {
+    let client = get_autopilot_client(&app_state)?;
+    cancel_session(&client, session_id).await
 }
 
 /// Handler for `GET /internal/autopilot/status`

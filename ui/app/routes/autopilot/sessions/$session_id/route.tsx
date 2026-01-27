@@ -572,14 +572,19 @@ export default function AutopilotSessionEventsPage({
   // Show toast on interrupt result
   useEffect(() => {
     if (cancelFetcher.state === "idle" && cancelFetcher.data) {
-      if (
-        typeof cancelFetcher.data === "object" &&
-        "success" in cancelFetcher.data &&
-        cancelFetcher.data.success
-      ) {
+      const data = cancelFetcher.data as {
+        success: boolean;
+        error?: string;
+      };
+      if (data.success) {
         toast.success({
           title: "Session interrupted",
           description: "The autopilot session has been cancelled.",
+        });
+      } else if (data.error) {
+        toast.error({
+          title: "Failed to interrupt session",
+          description: data.error,
         });
       }
     }

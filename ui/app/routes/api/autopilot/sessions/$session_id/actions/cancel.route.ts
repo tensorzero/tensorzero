@@ -24,6 +24,8 @@ export async function action({ params, request }: ActionFunctionArgs) {
     return Response.json({ success: true });
   } catch (error) {
     logger.error("Failed to cancel session:", error);
-    return new Response("Failed to cancel session", { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Failed to cancel session";
+    return Response.json({ success: false, error: message }, { status: 500 });
   }
 }
