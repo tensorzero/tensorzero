@@ -111,7 +111,18 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup Playwright
-        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Playwright after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
@@ -226,7 +237,18 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup Playwright
-        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Playwright after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
@@ -314,7 +336,18 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup Playwright
-        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Playwright after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53

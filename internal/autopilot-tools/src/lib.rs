@@ -14,6 +14,7 @@
 //! - `FeedbackTool` - Submits feedback for inferences or episodes (comments, demonstrations, metrics)
 //! - `CreateDatapointsTool` - Creates datapoints in a dataset
 //! - `CreateDatapointsFromInferencesTool` - Creates datapoints from existing inferences
+//! - `ListDatasetsTool` - Lists available datasets with metadata
 //! - `ListDatapointsTool` - Lists datapoints with filtering and pagination
 //! - `GetDatapointsTool` - Gets specific datapoints by ID
 //! - `UpdateDatapointsTool` - Updates existing datapoints
@@ -40,13 +41,32 @@
 //! - `ErrorSimpleTool` - Always returns an error
 //! - `SlowSimpleTool` - Sleeps for configurable duration
 
+use std::collections::HashSet;
+
 pub mod error;
 pub mod tools;
 mod visitor;
 
 pub use error::{AutopilotToolError, AutopilotToolResult};
 
-pub use visitor::ToolVisitor;
+pub use visitor::{ToolNameCollector, ToolVisitor};
+
+/// Collect all available tool names.
+///
+/// This uses the visitor pattern with `for_each_tool` to derive the set of
+/// tool names from the single source of truth.
+///
+/// This is used by `AutopilotClient` to know which tools are available
+/// for filtering unknown tool calls.
+///
+/// # Errors
+///
+/// Returns an error if visiting any tool fails (e.g., lock poisoning).
+pub async fn collect_tool_names() -> Result<HashSet<String>, String> {
+    let collector = ToolNameCollector::new();
+    for_each_tool(&collector).await?;
+    Ok(collector.into_names())
+}
 
 /// Iterate over all tools with a visitor.
 ///
@@ -67,8 +87,8 @@ pub use visitor::ToolVisitor;
 /// impl ToolVisitor for LocalVisitor<'_> {
 ///     type Error = ToolError;
 ///
-///     async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError> {
-///         self.0.register_task_tool::<T>().await?;
+///     async fn visit_task_tool<T: TaskTool>(&self, tool: T) -> Result<(), ToolError> {
+///         self.0.register_task_tool_instance(tool).await?;
 ///         Ok(())
 ///     }
 ///
@@ -92,8 +112,8 @@ pub use visitor::ToolVisitor;
 /// impl ToolVisitor for RemoteVisitor<'_> {
 ///     type Error = ToolError;
 ///
-///     async fn visit_task_tool<T: TaskTool + Default>(&self) -> Result<(), ToolError> {
-///         self.0.register_client_tool::<T>().await?;
+///     async fn visit_task_tool<T: TaskTool>(&self, tool: T) -> Result<(), ToolError> {
+///         self.0.register_client_tool_instance(tool).await?;
 ///         Ok(())
 ///     }
 ///
@@ -127,6 +147,9 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .visit_simple_tool::<tools::CreateDatapointsFromInferencesTool>()
         .await?;
     visitor
+        .visit_simple_tool::<tools::ListDatasetsTool>()
+        .await?;
+    visitor
         .visit_simple_tool::<tools::ListDatapointsTool>()
         .await?;
     visitor
@@ -139,7 +162,7 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .visit_simple_tool::<tools::DeleteDatapointsTool>()
         .await?;
     visitor
-        .visit_task_tool::<tools::LaunchOptimizationWorkflowTool>()
+        .visit_task_tool(tools::LaunchOptimizationWorkflowTool)
         .await?;
     visitor
         .visit_simple_tool::<tools::GetLatestFeedbackByMetricTool>()
@@ -172,11 +195,11 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
     #[cfg(feature = "e2e_tests")]
     {
         // TaskTools
-        visitor.visit_task_tool::<tools::EchoTool>().await?;
-        visitor.visit_task_tool::<tools::SlowTool>().await?;
-        visitor.visit_task_tool::<tools::FailingTool>().await?;
-        visitor.visit_task_tool::<tools::FlakyTool>().await?;
-        visitor.visit_task_tool::<tools::PanicTool>().await?;
+        visitor.visit_task_tool(tools::EchoTool).await?;
+        visitor.visit_task_tool(tools::SlowTool).await?;
+        visitor.visit_task_tool(tools::FailingTool).await?;
+        visitor.visit_task_tool(tools::FlakyTool).await?;
+        visitor.visit_task_tool(tools::PanicTool).await?;
 
         // SimpleTools
         visitor.visit_simple_tool::<tools::GoodSimpleTool>().await?;

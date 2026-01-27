@@ -4,13 +4,14 @@
 //! and wants to call inference and autopilot endpoints without HTTP overhead.
 
 use async_trait::async_trait;
+use autopilot_client::GatewayListEventsResponse;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
-    InferenceOutput, InferenceResponse, ListDatapointsRequest, ListInferencesRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
-    WriteConfigResponse,
+    InferenceOutput, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
+    ListDatasetsResponse, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::write_config_snapshot;
@@ -32,9 +33,9 @@ use uuid::Uuid;
 use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse,
-    TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListSessionsParams,
+    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, TensorZeroClient,
+    TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -140,7 +141,7 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         session_id: Uuid,
         params: ListEventsParams,
-    ) -> Result<ListEventsResponse, TensorZeroClientError> {
+    ) -> Result<GatewayListEventsResponse, TensorZeroClientError> {
         let autopilot_client = self
             .app_state
             .autopilot_client
@@ -271,6 +272,18 @@ impl TensorZeroClient for EmbeddedClient {
             &self.app_state.config,
             &self.app_state.clickhouse_connection_info,
             dataset_name,
+            request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn list_datasets(
+        &self,
+        request: ListDatasetsRequest,
+    ) -> Result<ListDatasetsResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::datasets::v1::list_datasets(
+            &self.app_state.clickhouse_connection_info,
             request,
         )
         .await

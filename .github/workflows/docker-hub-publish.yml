@@ -97,6 +97,10 @@ jobs:
           tags: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
+          # Use debug builds for dev images
+          build-args: |
+            PROFILE=${{ inputs.is_dev && 'dev' || 'performance' }}
+            DEBUG_BUILD=${{ inputs.is_dev && '1' || '0' }}
 
       - name: Export digest
         run: |

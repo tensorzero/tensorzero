@@ -83,7 +83,18 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup Playwright
-        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Playwright after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
@@ -256,6 +267,9 @@ jobs:
 
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           # Environment variables only used by the gateway container
           # We deliberately leave these unset when starting the UI container, to ensure

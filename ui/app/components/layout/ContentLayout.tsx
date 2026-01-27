@@ -5,7 +5,7 @@ export function ContentLayout({ children }: React.PropsWithChildren) {
   const pageTitle =
     segments.length > 0
       ? [...segments.map((b) => b.label), "TensorZero"].join(" • ")
-      : "Dashboard • TensorZero";
+      : "Overview • TensorZero";
 
   return (
     <>

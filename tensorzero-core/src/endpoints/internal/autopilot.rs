@@ -18,8 +18,8 @@ use uuid::Uuid;
 
 use autopilot_client::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
-    CreateEventResponse, EventPayload, ListEventsParams, ListEventsResponse, ListSessionsParams,
-    ListSessionsResponse, StreamEventsParams, StreamUpdate,
+    CreateEventResponse, EventPayload, GatewayListEventsResponse, GatewayStreamUpdate,
+    ListEventsParams, ListSessionsParams, ListSessionsResponse, StreamEventsParams,
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -95,11 +95,13 @@ pub async fn list_sessions(
 /// List events for a session from the Autopilot API.
 ///
 /// This is the core function called by both the HTTP handler and embedded client.
+/// Returns `GatewayListEventsResponse` which uses narrower types that exclude
+/// `NotAvailable` authorization status.
 pub async fn list_events(
     autopilot_client: &AutopilotClient,
     session_id: Uuid,
     params: ListEventsParams,
-) -> Result<ListEventsResponse, Error> {
+) -> Result<GatewayListEventsResponse, Error> {
     autopilot_client
         .list_events(session_id, params)
         .await
@@ -161,7 +163,7 @@ pub async fn list_events_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
     Query(params): Query<ListEventsParams>,
-) -> Result<Json<ListEventsResponse>, Error> {
+) -> Result<Json<GatewayListEventsResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
     let response = list_events(&client, session_id, params).await?;
     Ok(Json(response))
@@ -260,7 +262,7 @@ pub async fn stream_events_handler(
 
     // Convert the autopilot event stream to SSE events
     let sse_stream = stream.map(
-        |result: Result<StreamUpdate, autopilot_client::AutopilotError>| match result {
+        |result: Result<GatewayStreamUpdate, autopilot_client::AutopilotError>| match result {
             Ok(event) => match serde_json::to_string(&event) {
                 Ok(data) => Ok(SseEvent::default().event("event").data(data)),
                 Err(e) => {
@@ -280,7 +282,14 @@ pub async fn stream_events_handler(
         },
     );
 
-    Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))
+    // Close the stream when the server shuts down
+    // We do *not* want to wait for the stream to finish when the gateway shuts down,
+    // as it may stay open indefinitely (on either end - a browser ui ta might be holding open a connection)
+    // Clients using the endpoint should be able to auto-reconnect, so this is fine.
+    Ok(
+        Sse::new(sse_stream.take_until(app_state.shutdown_token.clone().cancelled_owned()))
+            .keep_alive(KeepAlive::new()),
+    )
 }
 
 #[cfg(test)]
@@ -291,6 +300,7 @@ mod tests {
     use crate::db::postgres::PostgresConnectionInfo;
     use crate::db::valkey::ValkeyConnectionInfo;
     use crate::http::TensorzeroHttpClient;
+    use tokio_util::sync::CancellationToken;
     use tokio_util::task::TaskTracker;
 
     fn make_test_app_state_without_autopilot() -> AppStateData {
@@ -306,6 +316,7 @@ mod tests {
             postgres_connection_info,
             ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
+            CancellationToken::new(),
         )
         .unwrap()
     }

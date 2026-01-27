@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
@@ -236,8 +238,13 @@ async fn run() -> Result<(), ExitCode> {
         );
     }
 
+    // Collect available tool names for autopilot (single source of truth)
+    let available_tools = autopilot_tools::collect_tool_names()
+        .await
+        .log_err_pretty("Failed to collect autopilot tool names")?;
+
     // Initialize GatewayHandle
-    let gateway_handle = gateway::GatewayHandle::new(unwritten_config)
+    let gateway_handle = gateway::GatewayHandle::new(unwritten_config, available_tools)
         .await
         .log_err_pretty("Failed to initialize AppState")?;
 
@@ -372,10 +379,17 @@ async fn run() -> Result<(), ExitCode> {
         tracing::info!("└ OpenTelemetry: disabled");
     }
 
-    let shutdown_signal = shutdown_signal().shared();
+    let shutdown_token = gateway_handle.app_state.shutdown_token.clone();
+    let shutdown_token_clone = shutdown_token.clone();
+    // This is responsible for starting the shutdown
+    #[expect(clippy::disallowed_methods)]
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        shutdown_token_clone.cancel();
+    });
 
     let server_fut = axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal.clone())
+        .with_graceful_shutdown(shutdown_token.clone().cancelled_owned())
         .into_future()
         .map(|r| {
             let _ = r.log_err_pretty("Failed to start server");
@@ -385,7 +399,7 @@ async fn run() -> Result<(), ExitCode> {
     // This is a purely informational logging task, so we don't need to wait for it to finish.
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(monitor_server_shutdown(
-        shutdown_signal,
+        shutdown_token.clone().cancelled_owned(),
         server_fut.clone(),
         in_flight_requests_data,
     ));
@@ -555,7 +569,7 @@ async fn spawn_autopilot_worker_if_configured(
     Ok(Some(
         spawn_autopilot_worker(
             &gateway_handle.app_state.deferred_tasks,
-            gateway_handle.cancel_token.clone(),
+            gateway_handle.app_state.shutdown_token.clone(),
             config,
         )
         .await

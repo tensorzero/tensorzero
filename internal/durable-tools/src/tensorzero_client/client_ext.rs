@@ -6,13 +6,15 @@
 
 use async_trait::async_trait;
 use autopilot_client::AutopilotError;
+use autopilot_client::GatewayListEventsResponse;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
     FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
     GetInferencesRequest, GetInferencesResponse, InferenceOutput, InferenceResponse,
-    ListDatapointsRequest, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
-    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+    ListDatapointsRequest, ListDatasetsRequest, ListDatasetsResponse, ListInferencesRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -30,9 +32,9 @@ use uuid::Uuid;
 use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse,
-    TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListSessionsParams,
+    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, TensorZeroClient,
+    TensorZeroClientError,
 };
 
 /// Implementation of `TensorZeroClient` for the TensorZero SDK `Client`.
@@ -150,7 +152,7 @@ impl TensorZeroClient for Client {
         &self,
         session_id: Uuid,
         params: ListEventsParams,
-    ) -> Result<ListEventsResponse, TensorZeroClientError> {
+    ) -> Result<GatewayListEventsResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let mut url = http
@@ -363,6 +365,15 @@ impl TensorZeroClient for Client {
         params: CreateDatapointsFromInferenceRequestParams,
     ) -> Result<CreateDatapointsResponse, TensorZeroClientError> {
         ClientExt::create_datapoints_from_inferences(self, dataset_name, params)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn list_datasets(
+        &self,
+        request: ListDatasetsRequest,
+    ) -> Result<ListDatasetsResponse, TensorZeroClientError> {
+        ClientExt::list_datasets(self, request)
             .await
             .map_err(TensorZeroClientError::TensorZero)
     }
