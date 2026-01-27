@@ -46,7 +46,10 @@ RUN pnpm install --frozen-lockfile --prod
 FROM rust:1.88.0 AS tensorzero-node-build-env
 ARG DEBUG_BUILD
 
-RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
+# Install Node.js 24 (required by @napi-rs/cli v3)
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
 
 COPY . /build

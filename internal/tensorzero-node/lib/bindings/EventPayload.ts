@@ -7,7 +7,9 @@ import type { EventPayloadToolCallAuthorization } from "./EventPayloadToolCallAu
 import type { EventPayloadToolResult } from "./EventPayloadToolResult";
 
 /**
- * The payload of an event.
+ * Internal event payload type - consumers should use `GatewayEventPayload` instead.
+ *
+ * Note: TS derive is needed for types that reference this, but we don't export it.
  */
 export type EventPayload =
   | ({ type: "message" } & EventPayloadMessage)

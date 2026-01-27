@@ -89,7 +89,7 @@ export default function WorkflowEvaluationRunSummaryPage({
         eyebrow={
           <Breadcrumbs
             segments={[
-              { label: "Workflow Evaluations", href: "/workflow_evaluations" },
+              { label: "Workflow Evaluations", href: "/workflow-evaluations" },
               { label: "Runs" },
             ]}
           />

@@ -8,10 +8,11 @@ steps:
     concurrency: 1
     concurrency_group: "clickhouse-cloud-normal-${CLICKHOUSE_ID}"
     command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-instance-" ./ci/buildkite/test-clickhouse-cloud.sh
-  - label: "Clickhouse Cloud tests - fast release channel"
-    concurrency: 1
-    concurrency_group: "clickhouse-cloud-fast-${CLICKHOUSE_ID}"
-    command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-fast-instance-" TENSORZERO_CLICKHOUSE_FAST_CHANNEL=1 ./ci/buildkite/test-clickhouse-cloud.sh
+  # Temporarily disabled - see https://github.com/tensorzero/tensorzero/issues/5887
+  # - label: "Clickhouse Cloud tests - fast release channel"
+  #   concurrency: 1
+  #   concurrency_group: "clickhouse-cloud-fast-${CLICKHOUSE_ID}"
+  #   command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-fast-instance-" TENSORZERO_CLICKHOUSE_FAST_CHANNEL=1 ./ci/buildkite/test-clickhouse-cloud.sh
 
 notify:
   - github_commit_status:

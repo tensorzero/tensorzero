@@ -159,6 +159,16 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
             .delete_datapoints(dataset_name, datapoint_ids)
             .await
     }
+
+    async fn clone_datapoints(
+        &self,
+        target_dataset_name: &str,
+        source_datapoint_ids: &[Uuid],
+    ) -> Result<Vec<Option<Uuid>>, Error> {
+        self.dataset_queries
+            .clone_datapoints(target_dataset_name, source_datapoint_ids)
+            .await
+    }
 }
 
 impl ConfigQueries for MockClickHouseConnectionInfo {
