@@ -39,6 +39,9 @@ impl ValkeyConnectionInfo {
         // When creating the connection, load the function library into Valkey.
         Self::load_function_library(&mut connection).await?;
 
+        // Migrate old rate limit keys to new prefixed keys for backwards compatibility.
+        Self::migrate_old_ratelimit_keys(&mut connection).await?;
+
         Ok(Self::Enabled {
             connection: Box::new(connection),
         })
@@ -72,6 +75,26 @@ impl ValkeyConnectionInfo {
                 message: format!("Failed to load function library: {e}"),
             })
         })
+    }
+
+    /// Migrate old rate limit keys (`ratelimit:*`) to new prefixed keys (`tensorzero_ratelimit:*`).
+    /// This preserves existing rate limit state during upgrades from older versions.
+    /// Keys are only copied if the new key doesn't already exist.
+    /// The migration runs entirely in Lua for efficiency (single round-trip).
+    async fn migrate_old_ratelimit_keys(connection: &mut ConnectionManager) -> Result<(), Error> {
+        // Call the Lua function to perform the migration atomically on the server
+        let _result: String = redis::cmd("FCALL")
+            .arg("tensorzero_migrate_old_keys_v1")
+            .arg(0) // No keys passed
+            .query_async(connection)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::ValkeyQuery {
+                    message: format!("Failed to migrate old rate limit keys: {e}"),
+                })
+            })?;
+
+        Ok(())
     }
 }
 

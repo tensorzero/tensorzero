@@ -155,9 +155,9 @@ slow-timeout = { period = "30s", terminate-after = 3 }
 filter = 'test(websearch)'
 slow-timeout = { period = "120s", terminate-after = 2 }
 
-# Image inference seems to be slow on GCP Vertex Gemini, so we give it a longer timeout
+# Image inference seems to be slow on many providers, so we give it a longer timeout
 [[profile.default.overrides]]
-filter = 'test(providers::gcp_vertex_gemini::test_image_inference)'
+filter = 'test(test_image_inference)'
 slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
