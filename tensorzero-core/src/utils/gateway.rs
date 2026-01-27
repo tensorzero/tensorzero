@@ -610,6 +610,41 @@ async fn setup_autopilot_client(
 /// and instead simply assume that the request body is a JSON object.
 pub struct StructuredJson<T>(pub T);
 
+/// Shared JSON deserialization logic used by both `StructuredJson` and `OpenAIStructuredJson`.
+///
+/// Parses the request body as JSON and deserializes it into the target type `T`,
+/// using `serde_path_to_error` for detailed error messages.
+pub(crate) async fn deserialize_json_request<S, T>(req: Request, state: &S) -> Result<T, Error>
+where
+    S: Send + Sync,
+    T: DeserializeOwned,
+{
+    // Retrieve the request body as Bytes before deserializing it
+    let bytes = bytes::Bytes::from_request(req, state).await.map_err(|e| {
+        Error::new(ErrorDetails::JsonRequest {
+            message: format!("{} ({})", e, e.status()),
+        })
+    })?;
+
+    // Convert the entire body into `serde_json::Value`
+    let value = Json::<serde_json::Value>::from_bytes(&bytes)
+        .map_err(|e| {
+            Error::new(ErrorDetails::JsonRequest {
+                message: format!("{} ({})", e, e.status()),
+            })
+        })?
+        .0;
+
+    // Now use `serde_path_to_error::deserialize` to attempt deserialization into `T`
+    let deserialized: T = serde_path_to_error::deserialize(&value).map_err(|e| {
+        Error::new(ErrorDetails::JsonRequest {
+            message: e.to_string(),
+        })
+    })?;
+
+    Ok(deserialized)
+}
+
 impl<S, T> FromRequest<S> for StructuredJson<T>
 where
     Json<T>: FromRequest<S, Rejection = JsonRejection>,
@@ -620,30 +655,9 @@ where
 
     #[instrument(skip_all, level = "trace", name = "StructuredJson::from_request")]
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        // Retrieve the request body as Bytes before deserializing it
-        let bytes = bytes::Bytes::from_request(req, state).await.map_err(|e| {
-            Error::new(ErrorDetails::JsonRequest {
-                message: format!("{} ({})", e, e.status()),
-            })
-        })?;
-
-        // Convert the entire body into `serde_json::Value`
-        let value = Json::<serde_json::Value>::from_bytes(&bytes)
-            .map_err(|e| {
-                Error::new(ErrorDetails::JsonRequest {
-                    message: format!("{} ({})", e, e.status()),
-                })
-            })?
-            .0;
-
-        // Now use `serde_path_to_error::deserialize` to attempt deserialization into `T`
-        let deserialized: T = serde_path_to_error::deserialize(&value).map_err(|e| {
-            Error::new(ErrorDetails::JsonRequest {
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(StructuredJson(deserialized))
+        deserialize_json_request(req, state)
+            .await
+            .map(StructuredJson)
     }
 }
 
