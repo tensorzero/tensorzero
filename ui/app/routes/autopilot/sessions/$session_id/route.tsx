@@ -202,6 +202,10 @@ function EventStreamContent({
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
 
+  // Track in-flight authorization requests synchronously to prevent duplicate submissions
+  // (React state updates are async, so rapid clicks could slip through before button is disabled)
+  const inFlightAuthRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const currentTopId = oldestPendingToolCall?.id ?? null;
     const prevTopId = prevQueueTopRef.current;
@@ -221,6 +225,12 @@ function EventStreamContent({
   // Handle tool call authorization
   const handleAuthorize = useCallback(
     async (eventId: string, approved: boolean) => {
+      // Synchronous guard to prevent duplicate submissions from rapid clicks
+      if (inFlightAuthRef.current.has(eventId)) {
+        return;
+      }
+      inFlightAuthRef.current.add(eventId);
+
       userActionRef.current = true;
 
       setAuthLoadingStates((prev) =>
@@ -249,6 +259,8 @@ function EventStreamContent({
           throw new Error("Authorization failed");
         }
       } catch (err) {
+        // Error: remove from inFlightAuthRef so user can retry
+        inFlightAuthRef.current.delete(eventId);
         logger.error("Failed to authorize tool call:", err);
         toast.error({
           title: "Authorization failed",
