@@ -71,6 +71,26 @@ class DatapointMetadataUpdate:
 
 
 @dataclass(kw_only=True)
+class DatasetMetadata:
+    """
+    Metadata for a single dataset.
+    """
+
+    datapoint_count: int
+    """
+    The total number of datapoints in the dataset.
+    """
+    dataset_name: str
+    """
+    The name of the dataset.
+    """
+    last_updated: str
+    """
+    The timestamp of the last update (ISO 8601 format).
+    """
+
+
+@dataclass(kw_only=True)
 class DeleteDatapointsRequest:
     """
     Request to delete datapoints from a dataset.
@@ -584,6 +604,42 @@ class JsonInferenceOutput:
 
 
 JsonMode = Literal["off", "on", "strict", "tool"]
+
+
+@dataclass(kw_only=True)
+class ListDatasetsRequest:
+    """
+    Request to list datasets with optional filtering and pagination.
+    Used by the `GET /internal/datasets` endpoint.
+    """
+
+    function_name: str | None = None
+    """
+    Optional function name to filter datasets by.
+    If provided, only datasets with datapoints for this function will be returned.
+    """
+    limit: int | None = None
+    """
+    The maximum number of datasets to return.
+    Defaults to 100.
+    """
+    offset: int | None = None
+    """
+    The number of datasets to skip before starting to return results.
+    Defaults to 0.
+    """
+
+
+@dataclass(kw_only=True)
+class ListDatasetsResponse:
+    """
+    Response containing a list of datasets.
+    """
+
+    datasets: list[DatasetMetadata]
+    """
+    List of dataset metadata.
+    """
 
 
 @dataclass(kw_only=True)
