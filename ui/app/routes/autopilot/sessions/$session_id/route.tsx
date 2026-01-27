@@ -586,9 +586,13 @@ export default function AutopilotSessionEventsPage({
     if (container && delta !== 0) {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
-      const isNearBottom = distanceFromBottom < 100;
+      // When footer grows, distanceFromBottom increases by delta, so we need to
+      // subtract it to get the user's original position before the change
+      const originalDistance =
+        delta > 0 ? distanceFromBottom - delta : distanceFromBottom;
+      const wasNearBottom = originalDistance < 100;
 
-      if (isNearBottom) {
+      if (wasNearBottom) {
         container.scrollTop += delta;
       }
     }
