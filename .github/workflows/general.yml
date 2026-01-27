@@ -1275,7 +1275,8 @@ jobs:
   check-all-general-jobs-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
-    needs: [
+    needs:
+      [
         check-version-consistency,
         check-production-deployment-docker-compose,
         check-if-edited-then-edit,
