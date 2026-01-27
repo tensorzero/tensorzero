@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::ConfigFileGlob;
@@ -632,6 +633,7 @@ impl ClientBuilder {
                                 valkey_connection_info,
                                 http_client,
                                 self.drop_wrapper,
+                                HashSet::new(), // available_tools not needed for embedded client
                             )
                             .await
                             .map_err(|e| {
@@ -677,6 +679,7 @@ impl ClientBuilder {
                                 valkey_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
+                                HashSet::new(), // available_tools not needed for embedded client
                             )
                             .await
                             .map_err(|e| {

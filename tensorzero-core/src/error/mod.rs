@@ -1757,6 +1757,10 @@ impl From<autopilot_client::AutopilotError> for Error {
                 message: format!("Spawn error: {e}"),
                 status_code: None,
             }),
+            autopilot_client::AutopilotError::Database(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Database error: {e}"),
+                status_code: None,
+            }),
             autopilot_client::AutopilotError::MissingConfig(field) => {
                 Self::new(ErrorDetails::Autopilot {
                     message: format!("Missing config: {field}"),
@@ -1777,6 +1781,12 @@ impl From<autopilot_client::AutopilotError> for Error {
                         errors.len(),
                         failed_ids.join(", ")
                     ),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::Internal(message) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Internal error: {message}"),
                     status_code: None,
                 })
             }

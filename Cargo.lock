@@ -2340,6 +2340,7 @@ name = "gateway"
 version = "2026.1.5"
 dependencies = [
  "async-stream",
+ "autopilot-tools",
  "autopilot-worker",
  "axum",
  "brotli",

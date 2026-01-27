@@ -3,19 +3,21 @@ import type { EventPayloadError } from "./EventPayloadError";
 import type { EventPayloadMessage } from "./EventPayloadMessage";
 import type { EventPayloadStatusUpdate } from "./EventPayloadStatusUpdate";
 import type { EventPayloadToolCall } from "./EventPayloadToolCall";
-import type { EventPayloadToolCallAuthorization } from "./EventPayloadToolCallAuthorization";
 import type { EventPayloadToolResult } from "./EventPayloadToolResult";
+import type { GatewayEventPayloadToolCallAuthorization } from "./GatewayEventPayloadToolCallAuthorization";
 
 /**
- * Internal event payload type - consumers should use `GatewayEventPayload` instead.
+ * Event payload as seen by gateway consumers.
  *
- * Note: TS derive is needed for types that reference this, but we don't export it.
+ * Uses `GatewayEventPayloadToolCallAuthorization` which excludes `NotAvailable` status.
  */
-export type EventPayload =
+export type GatewayEventPayload =
   | ({ type: "message" } & EventPayloadMessage)
   | ({ type: "error" } & EventPayloadError)
   | ({ type: "status_update" } & EventPayloadStatusUpdate)
   | ({ type: "tool_call" } & EventPayloadToolCall)
-  | ({ type: "tool_call_authorization" } & EventPayloadToolCallAuthorization)
+  | ({
+      type: "tool_call_authorization";
+    } & GatewayEventPayloadToolCallAuthorization)
   | ({ type: "tool_result" } & EventPayloadToolResult)
   | { type: "unknown" };

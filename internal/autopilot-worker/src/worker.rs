@@ -6,6 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use autopilot_client::AutopilotSideInfo;
 use autopilot_tools::ToolVisitor;
+use autopilot_tools::tools::AutoRejectToolCallTool;
 use durable_tools::{
     SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };
@@ -92,6 +93,14 @@ impl AutopilotWorker {
             executor: &self.executor,
         };
         autopilot_tools::for_each_tool(&visitor).await?;
+
+        // Register internal tools directly without the ClientTaskToolWrapper.
+        // AutoRejectToolCallTool only writes a NotAvailable authorization -
+        // it doesn't need the wrapper to publish a tool_result.
+        self.executor
+            .register_task_tool_instance(AutoRejectToolCallTool)
+            .await?;
+
         Ok(())
     }
 
@@ -146,14 +155,14 @@ struct LocalToolVisitor<'a> {
 impl ToolVisitor for LocalToolVisitor<'_> {
     type Error = ToolError;
 
-    async fn visit_task_tool<T>(&self) -> Result<(), ToolError>
+    async fn visit_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
     where
-        T: TaskTool + Default,
+        T: TaskTool,
         T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
         <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
     {
         self.executor
-            .register_task_tool_instance(ClientTaskToolWrapper::<T>::default())
+            .register_task_tool_instance(ClientTaskToolWrapper::new(tool))
             .await?;
         Ok(())
     }

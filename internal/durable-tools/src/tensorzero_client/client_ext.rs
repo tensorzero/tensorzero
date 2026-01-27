@@ -6,6 +6,7 @@
 
 use async_trait::async_trait;
 use autopilot_client::AutopilotError;
+use autopilot_client::GatewayListEventsResponse;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
@@ -30,9 +31,9 @@ use uuid::Uuid;
 use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
-    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse,
-    TensorZeroClient, TensorZeroClientError,
+    CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListSessionsParams,
+    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, TensorZeroClient,
+    TensorZeroClientError,
 };
 
 /// Implementation of `TensorZeroClient` for the TensorZero SDK `Client`.
@@ -150,7 +151,7 @@ impl TensorZeroClient for Client {
         &self,
         session_id: Uuid,
         params: ListEventsParams,
-    ) -> Result<ListEventsResponse, TensorZeroClientError> {
+    ) -> Result<GatewayListEventsResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let mut url = http

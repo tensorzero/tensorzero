@@ -1,6 +1,9 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
     db::{
@@ -256,6 +259,7 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();
@@ -1562,6 +1566,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
         ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();
@@ -1903,6 +1908,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();
