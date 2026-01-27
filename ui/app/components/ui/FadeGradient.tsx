@@ -41,7 +41,7 @@ export function FadeGradient({
   return (
     <div
       className={cn(
-        "h-16",
+        "h-10",
         surfaceColorClasses[color],
         "to-transparent",
         direction === FadeDirection.Top
