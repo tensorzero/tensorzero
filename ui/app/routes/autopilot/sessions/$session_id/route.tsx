@@ -11,11 +11,10 @@ import {
 import {
   data,
   isRouteErrorResponse,
-  Link,
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
@@ -123,7 +122,7 @@ function debounce<T extends (...args: Parameters<T>) => void>(
 // Skeleton shown while events are loading
 function EventStreamSkeleton() {
   return (
-    <div className="border-border mt-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
+    <div className="border-border mt-4 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
       <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
     </div>
   );
@@ -481,7 +480,7 @@ function EventStreamContent({
           }
         }}
         onScroll={handleScroll}
-        className="border-border mt-8 min-h-0 flex-1 overflow-y-auto rounded-lg border p-4"
+        className="border-border mt-4 min-h-0 flex-1 overflow-y-auto rounded-lg border p-4"
       >
         <EventStream
           events={events}
@@ -616,23 +615,17 @@ export default function AutopilotSessionEventsPage({
       <PageHeader
         eyebrow={
           <Breadcrumbs
-            segments={[
-              { label: "Autopilot Sessions", href: "/autopilot/sessions" },
-            ]}
+            segments={
+              isNewSession
+                ? [{ label: "Autopilot", href: "/autopilot/sessions" }]
+                : [
+                    { label: "Autopilot", href: "/autopilot/sessions" },
+                    { label: sessionId, isIdentifier: true },
+                  ]
+            }
           />
         }
-        name={isNewSession ? "New Session" : sessionId}
-        tag={
-          !isNewSession ? (
-            <Link
-              to="/autopilot/sessions/new"
-              className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              New Session
-            </Link>
-          ) : undefined
-        }
+        name={isNewSession ? "New Session" : undefined}
       />
 
       <Suspense fallback={<EventStreamSkeleton />}>

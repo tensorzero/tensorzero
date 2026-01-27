@@ -14,7 +14,7 @@ import {
   Model,
   Chat,
 } from "~/components/icons/Icons";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Plus } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
@@ -201,7 +201,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <item.icon className="h-4 w-4" />
-                      {state === "expanded" && <span>{item.title}</span>}
+                      {state === "expanded" && (
+                        <>
+                          <span className="flex-1">{item.title}</span>
+                          {section.title === "Autopilot" && (
+                            <Link
+                              to="/autopilot/sessions/new"
+                              className="text-fg-tertiary hover:text-fg-secondary rounded p-0.5 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label="New session"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Link>
+                          )}
+                        </>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
