@@ -12,9 +12,9 @@ use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
-    InferenceResponse, ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference,
-    StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
-    WriteConfigResponse,
+    InferenceResponse, ListDatapointsRequest, ListDatapointsResponse, ListInferencesRequest,
+    ListInferencesResponse, Role, StoredChatInference, StoredInference, UpdateDatapointRequest,
+    UpdateDatapointsResponse, Usage, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -95,7 +95,7 @@ mock! {
             &self,
             dataset_name: String,
             request: ListDatapointsRequest,
-        ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+        ) -> Result<ListDatapointsResponse, TensorZeroClientError>;
 
         async fn get_datapoints(
             &self,
@@ -118,7 +118,7 @@ mock! {
         async fn list_inferences(
             &self,
             request: ListInferencesRequest,
-        ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+        ) -> Result<ListInferencesResponse, TensorZeroClientError>;
 
         async fn get_inferences(
             &self,
@@ -189,6 +189,21 @@ pub fn create_mock_create_datapoints_response(ids: Vec<Uuid>) -> CreateDatapoint
 /// Create a mock GetDatapointsResponse with the given datapoints.
 pub fn create_mock_get_datapoints_response(datapoints: Vec<Datapoint>) -> GetDatapointsResponse {
     GetDatapointsResponse { datapoints }
+}
+
+/// Create a mock ListDatapointsResponse with the given datapoints.
+pub fn create_mock_list_datapoints_response(datapoints: Vec<Datapoint>) -> ListDatapointsResponse {
+    ListDatapointsResponse::Datapoints(GetDatapointsResponse { datapoints })
+}
+
+/// Create a mock ListDatapointsResponse with only IDs (for response_format: id).
+pub fn create_mock_list_datapoints_ids_response(ids: Vec<Uuid>) -> ListDatapointsResponse {
+    ListDatapointsResponse::Ids { ids }
+}
+
+/// Create a mock ListInferencesResponse with only IDs (for response_format: id).
+pub fn create_mock_list_inferences_ids_response(ids: Vec<Uuid>) -> ListInferencesResponse {
+    ListInferencesResponse::Ids { ids }
 }
 
 /// Create a mock UpdateDatapointsResponse with the given IDs.

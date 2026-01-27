@@ -61,9 +61,9 @@ pub use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, CreateDatapointsResponse,
     CreateJsonDatapointRequest, DeleteDatapointsRequest, DeleteDatapointsResponse,
     GetDatapointsRequest, GetDatapointsResponse, JsonDatapointOutputUpdate, ListDatapointsRequest,
-    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
-    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
-    UpdateJsonDatapointRequest,
+    ListDatapointsResponse, UpdateChatDatapointRequest, UpdateDatapointMetadataRequest,
+    UpdateDatapointRequest, UpdateDatapointsMetadataRequest, UpdateDatapointsRequest,
+    UpdateDatapointsResponse, UpdateJsonDatapointRequest,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
@@ -79,7 +79,7 @@ pub use tensorzero_core::endpoints::internal::config::{
 };
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::endpoints::stored_inferences::v1::types::{
-    GetInferencesRequest, GetInferencesResponse, ListInferencesRequest,
+    GetInferencesRequest, GetInferencesResponse, ListInferencesRequest, ListInferencesResponse,
 };
 pub use tensorzero_core::endpoints::variant_probabilities::{
     GetVariantSamplingProbabilitiesParams, GetVariantSamplingProbabilitiesResponse,
@@ -229,7 +229,7 @@ pub trait ClientExt {
     ///
     /// # Returns
     ///
-    /// A `GetDatapointsResponse` containing the datapoints.
+    /// A `ListDatapointsResponse` containing the datapoints or IDs depending on `response_format`.
     ///
     /// # Errors
     ///
@@ -238,7 +238,7 @@ pub trait ClientExt {
         &self,
         dataset_name: String,
         request: ListDatapointsRequest,
-    ) -> Result<GetDatapointsResponse, TensorZeroError>;
+    ) -> Result<ListDatapointsResponse, TensorZeroError>;
 
     /// Updates datapoints in the dataset.
     ///
@@ -423,7 +423,7 @@ pub trait ClientExt {
     ///
     /// # Returns
     ///
-    /// A `GetInferencesResponse` containing the inferences that match the criteria.
+    /// A `ListInferencesResponse` containing the inferences or IDs depending on `response_format`.
     ///
     /// # Errors
     ///
@@ -431,7 +431,7 @@ pub trait ClientExt {
     async fn list_inferences(
         &self,
         request: ListInferencesRequest,
-    ) -> Result<GetInferencesResponse, TensorZeroError>;
+    ) -> Result<ListInferencesResponse, TensorZeroError>;
 
     // ================================================================
     // Optimization operations
@@ -733,7 +733,18 @@ impl ClientExt for Client {
                 },
             )
             .await?;
-        Ok(response.datapoints)
+        match response {
+            ListDatapointsResponse::Datapoints(resp) => Ok(resp.datapoints),
+            ListDatapointsResponse::Ids { .. } => {
+                // This should never happen with default response_format
+                Err(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidRequest {
+                        message: "Expected datapoints response, got IDs response".to_string(),
+                    })
+                    .into(),
+                })
+            }
+        }
     }
 
     /// DEPRECATED: Use `delete_datapoints` instead.
@@ -947,7 +958,7 @@ impl ClientExt for Client {
         &self,
         dataset_name: String,
         request: ListDatapointsRequest,
-    ) -> Result<GetDatapointsResponse, TensorZeroError> {
+    ) -> Result<ListDatapointsResponse, TensorZeroError> {
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/list_datapoints")).map_err(|e| TensorZeroError::Other {
@@ -1184,7 +1195,7 @@ impl ClientExt for Client {
     async fn list_inferences(
         &self,
         request: ListInferencesRequest,
-    ) -> Result<GetInferencesResponse, TensorZeroError> {
+    ) -> Result<ListInferencesResponse, TensorZeroError> {
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("v1/inferences/list_inferences").map_err(|e| TensorZeroError::Other {

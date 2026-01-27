@@ -8,7 +8,10 @@ use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
-use super::types::{GetDatapointsRequest, GetDatapointsResponse, ListDatapointsRequest};
+use super::types::{
+    GetDatapointsRequest, GetDatapointsResponse, ListDatapointsRequest, ListDatapointsResponse,
+    ListDatapointsResponseFormat,
+};
 
 const DEFAULT_LIMIT: u32 = 20;
 const DEFAULT_OFFSET: u32 = 0;
@@ -22,7 +25,7 @@ pub async fn list_datapoints_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<ListDatapointsRequest>,
-) -> Result<Json<GetDatapointsResponse>, Error> {
+) -> Result<Json<ListDatapointsResponse>, Error> {
     let response =
         list_datapoints(&app_state.clickhouse_connection_info, dataset_name, request).await?;
 
@@ -77,7 +80,7 @@ pub async fn list_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     dataset_name: String,
     request: ListDatapointsRequest,
-) -> Result<GetDatapointsResponse, Error> {
+) -> Result<ListDatapointsResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
     #[expect(deprecated)]
@@ -90,6 +93,7 @@ pub async fn list_datapoints(
         DEFAULT_LIMIT
     };
 
+    let response_format = request.response_format;
     let params = GetDatapointsParams {
         dataset_name: Some(dataset_name),
         function_name: request.function_name,
@@ -102,13 +106,23 @@ pub async fn list_datapoints(
         search_query_experimental: request.search_query_experimental,
     };
 
-    let datapoints = clickhouse.get_datapoints(&params).await?;
-    let datapoints = datapoints
-        .into_iter()
-        .map(|dp| dp.into_datapoint())
-        .collect::<Result<Vec<_>, _>>()?;
+    let stored_datapoints = clickhouse.get_datapoints(&params).await?;
 
-    Ok(GetDatapointsResponse { datapoints })
+    match response_format {
+        ListDatapointsResponseFormat::Datapoint => {
+            let datapoints = stored_datapoints
+                .into_iter()
+                .map(|dp| dp.into_datapoint())
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(ListDatapointsResponse::Datapoints(GetDatapointsResponse {
+                datapoints,
+            }))
+        }
+        ListDatapointsResponseFormat::Id => {
+            let ids = stored_datapoints.into_iter().map(|dp| dp.id()).collect();
+            Ok(ListDatapointsResponse::Ids { ids })
+        }
+    }
 }
 
 pub async fn get_datapoints(

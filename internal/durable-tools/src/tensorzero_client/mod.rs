@@ -15,11 +15,13 @@ pub use tensorzero::{
     Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, ClientInferenceParams,
     CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
     DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
-    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, PostgresConfig,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
-    WriteConfigResponse,
+    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, ListDatapointsResponse,
+    PostgresConfig, TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse,
+    WriteConfigRequest, WriteConfigResponse,
 };
-use tensorzero::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
+use tensorzero::{
+    GetInferencesRequest, GetInferencesResponse, ListInferencesRequest, ListInferencesResponse,
+};
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -199,7 +201,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         dataset_name: String,
         request: ListDatapointsRequest,
-    ) -> Result<GetDatapointsResponse, TensorZeroClientError>;
+    ) -> Result<ListDatapointsResponse, TensorZeroClientError>;
 
     /// Get specific datapoints by their IDs.
     async fn get_datapoints(
@@ -228,7 +230,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn list_inferences(
         &self,
         request: ListInferencesRequest,
-    ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+    ) -> Result<ListInferencesResponse, TensorZeroClientError>;
 
     /// Get specific inferences by their IDs.
     async fn get_inferences(

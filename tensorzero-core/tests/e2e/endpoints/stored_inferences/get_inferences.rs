@@ -3,7 +3,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use tensorzero::{
     ChatCompletionInferenceParams, GetInferencesResponse, InferenceOutputSource, InferenceParams,
-    InferenceResponse, StoredInference,
+    InferenceResponse, ListInferencesResponse, StoredInference,
 };
 use tensorzero_core::inference::types::extra_body::DynamicExtraBody;
 use uuid::Uuid;
@@ -1533,4 +1533,176 @@ async fn test_list_inferences_rejects_output_source_none() {
         error_message.contains("none"),
         "Error message should mention 'none': {error_message}"
     );
+}
+
+// Tests for response_format parameter
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inferences_response_format_id() {
+    let http_client = Client::new();
+
+    // First, get inferences with default response_format to know how many we have
+    let default_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5
+    });
+
+    let default_resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&default_request)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(default_resp.status().is_success());
+    let default_json: Value = default_resp.json().await.unwrap();
+    let expected_ids: Vec<String> = default_json["inferences"]
+        .as_array()
+        .expect("Expected 'inferences' array")
+        .iter()
+        .map(|inf| inf["inference_id"].as_str().unwrap().to_string())
+        .collect();
+
+    // Now request with response_format: "id"
+    let id_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "response_format": "id"
+    });
+
+    let id_resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&id_request)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        id_resp.status().is_success(),
+        "list_inferences with response_format: id should succeed"
+    );
+
+    let id_json: ListInferencesResponse = id_resp.json().await.unwrap();
+
+    // Should return IDs variant
+    let ListInferencesResponse::Ids { ids } = id_json else {
+        panic!("Expected Ids variant, got Inferences");
+    };
+
+    assert_eq!(
+        ids.len(),
+        expected_ids.len(),
+        "Should return same number of IDs as inferences"
+    );
+
+    // Verify all returned IDs are valid UUIDs and match the expected IDs
+    for id in &ids {
+        assert!(
+            expected_ids.contains(&id.to_string()),
+            "Returned ID {id} should be in expected IDs"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inferences_response_format_inference_explicit() {
+    let http_client = Client::new();
+
+    // Request with explicit response_format: "inference" (default behavior)
+    let request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 3,
+        "response_format": "inference"
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "list_inferences with response_format: inference should succeed"
+    );
+
+    let json: ListInferencesResponse = resp.json().await.unwrap();
+
+    // Should return Inferences variant
+    let ListInferencesResponse::Inferences(get_response) = json else {
+        panic!("Expected Inferences variant, got Ids");
+    };
+
+    assert_eq!(
+        get_response.inferences.len(),
+        3,
+        "Should return 3 inferences"
+    );
+
+    // Verify each inference has full data
+    for inference in &get_response.inferences {
+        match inference {
+            StoredInference::Chat(chat) => {
+                assert_eq!(chat.function_name, "write_haiku");
+                assert!(!chat.output.is_empty(), "Output should not be empty");
+            }
+            StoredInference::Json(_) => {
+                panic!("Expected Chat inference for write_haiku function")
+            }
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inferences_response_format_id_with_filters() {
+    let http_client = Client::new();
+
+    // Test that response_format: "id" works with filters
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "limit": 5,
+        "filter": {
+            "type": "boolean_metric",
+            "metric_name": "exact_match",
+            "value": true
+        },
+        "response_format": "id"
+    });
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "list_inferences with response_format: id and filters should succeed"
+    );
+
+    let json: ListInferencesResponse = resp.json().await.unwrap();
+
+    let ListInferencesResponse::Ids { ids } = json else {
+        panic!("Expected Ids variant");
+    };
+
+    assert!(
+        !ids.is_empty(),
+        "Should return at least one ID with the filter"
+    );
+
+    // Verify all returned IDs are valid UUIDs
+    for id in &ids {
+        // Just verify it's a valid UUID by trying to parse it back
+        assert!(
+            uuid::Uuid::parse_str(&id.to_string()).is_ok(),
+            "ID should be a valid UUID"
+        );
+    }
 }

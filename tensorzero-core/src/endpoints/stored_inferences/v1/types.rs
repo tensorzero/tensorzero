@@ -262,6 +262,12 @@ pub struct ListInferencesRequest {
     ///   filters, it will perform a full table scan, which may be extremely slow depending
     ///   on the data volume.
     pub search_query_experimental: Option<String>,
+
+    /// Response format for the list_inferences endpoint.
+    /// If `inference` (default), returns full inference objects.
+    /// If `id`, returns only inference IDs.
+    #[serde(default)]
+    pub response_format: ListInferencesResponseFormat,
 }
 
 impl ListInferencesRequest {
@@ -352,4 +358,34 @@ pub struct GetInferencesRequest {
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,
+}
+
+/// Response format for the list_inferences endpoint.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum ListInferencesResponseFormat {
+    /// Return full inference objects (default).
+    #[default]
+    Inference,
+    /// Return only inference IDs.
+    Id,
+}
+
+/// Response for the list_inferences endpoint.
+/// Can return either full inference objects or just IDs depending on the request's `response_format`.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(untagged)]
+#[export_schema]
+pub enum ListInferencesResponse {
+    /// Full inference objects (when response_format is "inference" or not specified).
+    Inferences(GetInferencesResponse),
+    /// Only inference IDs (when response_format is "id").
+    Ids {
+        /// The inference IDs.
+        ids: Vec<Uuid>,
+    },
 }

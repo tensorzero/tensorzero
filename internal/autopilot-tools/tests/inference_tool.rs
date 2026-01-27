@@ -11,7 +11,7 @@ use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
 use tensorzero::{
     GetInferencesRequest, GetInferencesResponse, InferenceOutputSource, Input, InputMessage,
-    InputMessageContent, ListInferencesRequest, Role,
+    InputMessageContent, ListInferencesRequest, ListInferencesResponse, Role,
 };
 use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
@@ -20,7 +20,9 @@ use autopilot_tools::tools::{
     GetInferencesTool, GetInferencesToolParams, InferenceTool, InferenceToolParams,
     ListInferencesTool, ListInferencesToolParams,
 };
-use common::{MockTensorZeroClient, create_mock_chat_response};
+use common::{
+    MockTensorZeroClient, create_mock_chat_response, create_mock_list_inferences_ids_response,
+};
 
 use crate::common::create_mock_stored_chat_inference;
 
@@ -111,9 +113,9 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
     let inference_id = Uuid::now_v7();
     let inference =
         create_mock_stored_chat_inference(inference_id, "test_function", "test_variant");
-    let mock_response = GetInferencesResponse {
+    let mock_response = ListInferencesResponse::Inferences(GetInferencesResponse {
         inferences: vec![inference],
-    };
+    });
 
     let llm_params = ListInferencesToolParams {
         request: ListInferencesRequest::default(),
@@ -150,7 +152,8 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_list_inferences_tool_with_filters(pool: PgPool) {
-    let mock_response = GetInferencesResponse { inferences: vec![] };
+    let mock_response =
+        ListInferencesResponse::Inferences(GetInferencesResponse { inferences: vec![] });
 
     let llm_params = ListInferencesToolParams {
         request: ListInferencesRequest {
@@ -201,7 +204,8 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
-    let mock_response = GetInferencesResponse { inferences: vec![] };
+    let mock_response =
+        ListInferencesResponse::Inferences(GetInferencesResponse { inferences: vec![] });
     let cursor_id = Uuid::now_v7();
 
     let llm_params = ListInferencesToolParams {
@@ -274,6 +278,53 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
         .await;
 
     assert!(result.is_err(), "Should return error when client fails");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_inferences_tool_with_response_format_id(pool: PgPool) {
+    let id1 = Uuid::now_v7();
+    let id2 = Uuid::now_v7();
+    let mock_response = create_mock_list_inferences_ids_response(vec![id1, id2]);
+
+    let llm_params = ListInferencesToolParams {
+        request: ListInferencesRequest::default(),
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_inferences()
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListInferencesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListInferencesTool execution should succeed with ID response format");
+
+    // When response_format is "id", the result should contain only IDs
+    assert!(result.is_object(), "Result should be a JSON object");
+    let obj = result.as_object().unwrap();
+    assert!(
+        obj.contains_key("ids"),
+        "Response should contain 'ids' field"
+    );
+    let ids = obj.get("ids").unwrap().as_array().unwrap();
+    assert_eq!(ids.len(), 2, "Should contain 2 IDs");
 }
 
 // ===== GetInferencesTool Tests =====

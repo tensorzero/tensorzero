@@ -69,8 +69,9 @@ use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
     InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ListDatapointsResponse, ListInferencesParams, OptimizationJobHandle, PostgresConfig,
+    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1124,9 +1125,16 @@ impl TensorZeroGateway {
         let fut = client.list_datapoints(dataset_name, request);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
-            Ok(datapoints) => {
+            Ok(response) => {
+                let datapoints = match response {
+                    ListDatapointsResponse::Datapoints(resp) => resp.datapoints,
+                    ListDatapointsResponse::Ids { .. } => {
+                        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                            "Expected datapoints response, got IDs response",
+                        ));
+                    }
+                };
                 let py_datapoints = datapoints
-                    .datapoints
                     .into_iter()
                     .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -2371,7 +2379,17 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.list_datapoints(dataset_name, request).await;
             Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
+                Ok(response) => {
+                    let datapoints = match response {
+                        ListDatapointsResponse::Datapoints(resp) => resp.datapoints,
+                        ListDatapointsResponse::Ids { .. } => {
+                            return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                                "Expected datapoints response, got IDs response",
+                            ));
+                        }
+                    };
+                    Ok(PyList::new(py, datapoints)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
