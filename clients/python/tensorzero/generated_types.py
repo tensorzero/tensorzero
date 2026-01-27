@@ -587,6 +587,36 @@ JsonMode = Literal["off", "on", "strict", "tool"]
 
 
 @dataclass(kw_only=True)
+class ListDatapointsResponse1:
+    """
+    Only datapoint IDs (when response_format is "id").
+    """
+
+    ids: list[str]
+    """
+    The datapoint IDs.
+    """
+
+
+ListDatapointsResponseFormat = str
+
+
+@dataclass(kw_only=True)
+class ListInferencesResponse1:
+    """
+    Only inference IDs (when response_format is "id").
+    """
+
+    ids: list[str]
+    """
+    The inference IDs.
+    """
+
+
+ListInferencesResponseFormat = str
+
+
+@dataclass(kw_only=True)
 class OpenAICustomToolFormatText:
     type: Literal["text"] = "text"
 
@@ -1960,6 +1990,9 @@ class GetDatapointsResponse:
     """
 
 
+ListDatapointsResponse = GetDatapointsResponse | ListDatapointsResponse1
+
+
 @dataclass(kw_only=True)
 class StoredChatInference:
     """
@@ -2089,6 +2122,9 @@ class GetInferencesResponse:
     """
 
 
+ListInferencesResponse = GetInferencesResponse | ListInferencesResponse1
+
+
 @dataclass(kw_only=True)
 class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
     """
@@ -2147,6 +2183,12 @@ class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
     Source of the inference output. Determines whether to return the original
     inference output or demonstration feedback (manually-curated output) if available.
     Defaults to `Inference` if not specified.
+    """
+    response_format: ListInferencesResponseFormat | None = "inference"
+    """
+    Response format for the list_inferences endpoint.
+    If `inference` (default), returns full inference objects.
+    If `id`, returns only inference IDs.
     """
     search_query_experimental: str | None = None
     """
@@ -2287,6 +2329,12 @@ class ListDatapointsRequest:
     The maximum number of datapoints to return. Defaults to 20.
     Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
     """
+    response_format: ListDatapointsResponseFormat | None = "datapoint"
+    """
+    Response format for the list_datapoints endpoint.
+    If `datapoint` (default), returns full datapoint objects.
+    If `id`, returns only datapoint IDs.
+    """
     search_query_experimental: str | None = None
     """
     Text query to filter. Case-insensitive substring search over the datapoints' input and output.
@@ -2362,6 +2410,12 @@ class ListInferencesRequest:
     Source of the inference output. Determines whether to return the original
     inference output or demonstration feedback (manually-curated output) if available.
     Defaults to `Inference` if not specified.
+    """
+    response_format: ListInferencesResponseFormat | None = "inference"
+    """
+    Response format for the list_inferences endpoint.
+    If `inference` (default), returns full inference objects.
+    If `id`, returns only inference IDs.
     """
     search_query_experimental: str | None = None
     """
