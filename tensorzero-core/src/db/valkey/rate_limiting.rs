@@ -16,7 +16,7 @@ use super::ValkeyConnectionInfo;
 // Important: these types must match the response types for the Lua functions in tensorzero-core/src/db/valkey/lua/tensorzero_ratelimit.lua.
 // Lint.IfEdited()
 
-/// Response from t0_consume_tickets_v1 Lua function
+/// Response from tensorzero_consume_tickets_v2 Lua function
 #[derive(Debug, Deserialize)]
 struct ConsumeTicketsResponse {
     key: String,
@@ -25,14 +25,14 @@ struct ConsumeTicketsResponse {
     consumed: i64,
 }
 
-/// Response from t0_return_tickets_v1 Lua function
+/// Response from tensorzero_return_tickets_v2 Lua function
 #[derive(Debug, Deserialize)]
 struct ReturnTicketsResponse {
     key: String,
     balance: i64,
 }
 
-/// Response from t0_get_balance_v1 Lua function
+/// Response from tensorzero_get_balance_v2 Lua function
 #[derive(Debug, Deserialize)]
 struct GetBalanceResponse {
     balance: i64,
@@ -59,7 +59,7 @@ async fn execute_consume_tickets<C: ConnectionLike>(
 
     // Call the versioned Valkey function
     let mut cmd = redis::cmd("FCALL");
-    cmd.arg("t0_consume_tickets_v1").arg(keys.len());
+    cmd.arg("tensorzero_consume_tickets_v2").arg(keys.len());
     for key in &keys {
         cmd.arg(*key);
     }
@@ -109,7 +109,7 @@ async fn execute_return_tickets<C: ConnectionLike>(
 
     // Call the versioned Valkey function
     let mut cmd = redis::cmd("FCALL");
-    cmd.arg("t0_return_tickets_v1").arg(keys.len());
+    cmd.arg("tensorzero_return_tickets_v2").arg(keys.len());
     for key in &keys {
         cmd.arg(*key);
     }
@@ -148,7 +148,7 @@ async fn execute_get_balance<C: ConnectionLike>(
 ) -> Result<u64, Error> {
     // Use FCALL_RO for read-only operations (works with replicas)
     let result: String = redis::cmd("FCALL_RO")
-        .arg("t0_get_balance_v1")
+        .arg("tensorzero_get_balance_v2")
         .arg(1) // number of keys
         .arg(key)
         .arg(capacity as i64)
@@ -312,12 +312,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_consume_tickets_sends_correct_command() {
-        // Expected command: FCALL t0_consume_tickets_v1 1 test_key 10 100 5 1000000
+        // Expected command: FCALL tensorzero_consume_tickets_v2 1 test_key 10 100 5 1000000
         let expected_response =
             r#"[{"key":"test_key","success":true,"remaining":90,"consumed":10}]"#;
         let mut mock = MockRedisConnection::new(vec![MockCmd::new(
             redis::cmd("FCALL")
-                .arg("t0_consume_tickets_v1")
+                .arg("tensorzero_consume_tickets_v2")
                 .arg(1) // numkeys
                 .arg("test_key")
                 .arg(10i64) // requested
@@ -348,11 +348,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_consume_tickets_multiple_keys_sends_correct_command() {
-        // Expected: FCALL t0_consume_tickets_v1 2 key1 key2 10 100 5 1000000 20 200 10 60000000
+        // Expected: FCALL tensorzero_consume_tickets_v2 2 key1 key2 10 100 5 1000000 20 200 10 60000000
         let expected_response = r#"[{"key":"key1","success":true,"remaining":90,"consumed":10},{"key":"key2","success":true,"remaining":180,"consumed":20}]"#;
         let mut mock = MockRedisConnection::new(vec![MockCmd::new(
             redis::cmd("FCALL")
-                .arg("t0_consume_tickets_v1")
+                .arg("tensorzero_consume_tickets_v2")
                 .arg(2) // numkeys
                 .arg("key1")
                 .arg("key2")
@@ -399,7 +399,7 @@ mod tests {
             r#"[{"key":"test_key","success":false,"remaining":5,"consumed":0}]"#;
         let mut mock = MockRedisConnection::new(vec![MockCmd::new(
             redis::cmd("FCALL")
-                .arg("t0_consume_tickets_v1")
+                .arg("tensorzero_consume_tickets_v2")
                 .arg(1)
                 .arg("test_key")
                 .arg(100i64) // requesting more than available
@@ -431,7 +431,7 @@ mod tests {
         let expected_response = r#"[{"key":"test_key","balance":60}]"#;
         let mut mock = MockRedisConnection::new(vec![MockCmd::new(
             redis::cmd("FCALL")
-                .arg("t0_return_tickets_v1")
+                .arg("tensorzero_return_tickets_v2")
                 .arg(1) // numkeys
                 .arg("test_key")
                 .arg(10i64) // returned
@@ -460,7 +460,7 @@ mod tests {
         let expected_response = r#"{"balance":75}"#;
         let mut mock = MockRedisConnection::new(vec![MockCmd::new(
             redis::cmd("FCALL_RO")
-                .arg("t0_get_balance_v1")
+                .arg("tensorzero_get_balance_v2")
                 .arg(1) // numkeys
                 .arg("test_key")
                 .arg(100i64) // capacity
@@ -490,7 +490,7 @@ mod tests {
             let expected_response = r#"{"balance":100}"#;
             let mut mock = MockRedisConnection::new(vec![MockCmd::new(
                 redis::cmd("FCALL_RO")
-                    .arg("t0_get_balance_v1")
+                    .arg("tensorzero_get_balance_v2")
                     .arg(1)
                     .arg("test_key")
                     .arg(100i64)

@@ -56,7 +56,7 @@ mock! {
             &self,
             session_id: Uuid,
             params: durable_tools::ListEventsParams,
-        ) -> Result<durable_tools::ListEventsResponse, TensorZeroClientError>;
+        ) -> Result<durable_tools::GatewayListEventsResponse, TensorZeroClientError>;
 
         async fn list_autopilot_sessions(
             &self,

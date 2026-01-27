@@ -21,6 +21,7 @@ use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
+use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
@@ -766,6 +767,9 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             let clickhouse_connection_info = clickhouse_connection_info.clone();
             let config = config.clone();
             let resolved_input = resolved_input.clone();
+            // Capture the parent span (function_inference) so we can use it as the parent
+            // for write_inference, even if the task is spawned.
+            let parent_span = tracing::Span::current();
             // Always spawn a tokio task here. This ensures that 'write_inference' will
             // not be cancelled partway through execution if the outer '/inference' request
             // is cancelled. This reduces the chances that we only write to some tables and not others
@@ -780,7 +784,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 )
                 .await;
                 Ok::<_, Error>(())
-            });
+            }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = false, inference_id = %inference_id, async_writes = async_writes)));
             if !async_writes {
                 write_future.await.map_err(|e| {
                     Error::new(ErrorDetails::InternalError {
@@ -1000,6 +1004,10 @@ fn create_stream(
     clickhouse_connection_info: ClickHouseConnectionInfo,
     deferred_tasks: TaskTracker,
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
+    // Capture the parent span (function_inference) so we can use it as the parent
+    // for write_inference later, even after function_inference has completed.
+    let parent_span = tracing::Span::current();
+
     async_stream::stream! {
         let mut buffer = vec![];
 
@@ -1124,7 +1132,7 @@ fn create_stream(
             } = metadata;
 
             let config = config.clone();
-            let async_write = config.gateway.observability.async_writes;
+            let async_writes = config.gateway.observability.async_writes;
             let write_future = async move {
                 let templates = Arc::clone(&config.templates);
                 let collect_chunks_args = CollectChunksArgs {
@@ -1195,8 +1203,8 @@ fn create_stream(
 
                 }
                 drop(clickhouse_connection_info);
-            };
-            if async_write {
+            }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = true, inference_id = %inference_id, async_writes = async_writes));
+            if async_writes {
                 deferred_tasks.spawn(write_future);
             } else {
                 write_future.await;

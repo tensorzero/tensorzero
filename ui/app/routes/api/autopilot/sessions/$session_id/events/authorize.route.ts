@@ -1,11 +1,11 @@
 import type { ActionFunctionArgs } from "react-router";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
-import type { ToolCallAuthorizationStatus } from "~/types/tensorzero";
+import type { GatewayToolCallAuthorizationStatus } from "~/types/tensorzero";
 import { logger } from "~/utils/logger";
 
 type AuthorizeRequest = {
   tool_call_event_id: string;
-  status: ToolCallAuthorizationStatus;
+  status: GatewayToolCallAuthorizationStatus;
 };
 
 /**

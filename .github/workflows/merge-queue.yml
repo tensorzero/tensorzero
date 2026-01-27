@@ -89,6 +89,14 @@ jobs:
       - name: Cleanup disk space
         run: ./ci/free-disk-space.sh
 
+      - name: Restore provider-proxy cache
+        if: github.event_name != 'schedule'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ./ci/provider-proxy-cache/
+          key: provider-proxy-cache-${{ github.run_id }}
+          restore-keys: provider-proxy-cache-
+
       - name: Download provider-proxy cache
         # When running as a cron job, don't use the provider-proxy cache.
         # The cron job is used to gather information about provider flakiness.
@@ -180,6 +188,14 @@ jobs:
 
       - name: Cleanup disk space
         run: ./ci/free-disk-space.sh
+
+      - name: Restore client-tests provider-proxy cache
+        if: github.event_name != 'schedule'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ./ci/provider-proxy-cache/
+          key: provider-proxy-cache-client-tests-${{ github.run_id }}
+          restore-keys: provider-proxy-cache-client-tests-
 
       - name: Download client-tests provider-proxy cache
         # When running as a cron job, don't use the provider-proxy cache.

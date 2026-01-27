@@ -106,12 +106,12 @@ export default [
   ]),
 
   // Workflow Evaluations (formerly Dynamic Evaluations)
-  route("workflow_evaluations", "routes/workflow_evaluations/layout.tsx", [
-    index("routes/workflow_evaluations/route.tsx"),
-    route("runs/:run_id", "routes/workflow_evaluations/runs/$run_id/route.tsx"),
+  route("workflow-evaluations", "routes/workflow-evaluations/layout.tsx", [
+    index("routes/workflow-evaluations/route.tsx"),
+    route("runs/:run_id", "routes/workflow-evaluations/runs/$run_id/route.tsx"),
     route(
       "projects/:project_name",
-      "routes/workflow_evaluations/projects/$project_name/route.tsx",
+      "routes/workflow-evaluations/projects/$project_name/route.tsx",
     ),
   ]),
 
