@@ -178,7 +178,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {state === "expanded" && (
                   <Link
                     to="/autopilot/sessions/new"
-                    className="text-fg-muted hover:text-fg-primary absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded p-0.5 transition-colors"
+                    className="text-fg-muted hover:text-fg-primary absolute top-1/2 right-2 z-10 -translate-y-1/2 rounded p-0.5 transition-colors"
                     aria-label="New session"
                   >
                     <Plus className="h-4 w-4" />
