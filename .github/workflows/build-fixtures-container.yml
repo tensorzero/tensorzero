@@ -2,6 +2,9 @@ name: Build Fixtures Container
 
 on:
   workflow_call:
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
 
 jobs:
   build-fixtures-container:
@@ -16,6 +19,12 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
@@ -45,6 +54,9 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           overwrite: false
+
+      - name: Push `fixtures` container to Docker Hub
+        run: docker push tensorzero/fixtures:sha-${{ github.sha }}
 
       - name: Login to Namespace registry
         run: nsc docker login

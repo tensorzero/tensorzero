@@ -94,6 +94,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   live-tests:
     needs: [build-gateway-e2e-container]
@@ -121,14 +123,6 @@ jobs:
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
         with:
           wait-for-builder: true
-
-      - name: Login to Namespace registry
-        run: nsc docker login
-
-      - name: Pull pre-built fixtures container from Namespace registry
-        run: |
-          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
 
       - name: Cleanup disk space
         run: ./ci/free-disk-space.sh
@@ -164,7 +158,7 @@ jobs:
 
       - name: Run live tests container via Docker Compose
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --no-build --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
 
       - name: Print live tests logs
         if: always()
