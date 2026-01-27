@@ -2,8 +2,8 @@ use axum::Json;
 use axum::extract::{Path, State};
 use tracing::instrument;
 
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -23,8 +23,11 @@ pub async fn list_datapoints_handler(
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<ListDatapointsRequest>,
 ) -> Result<Json<GetDatapointsResponse>, Error> {
-    let response =
-        list_datapoints(&app_state.clickhouse_connection_info, dataset_name, request).await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = list_datapoints(&database, dataset_name, request).await?;
 
     Ok(Json(response))
 }
@@ -41,12 +44,11 @@ pub async fn get_datapoints_handler(
         "`Please use `/v1/datasets/{{dataset_name}}/get_datapoints` instead for better performance."
     );
 
-    let response = get_datapoints(
-        &app_state.clickhouse_connection_info,
-        /*dataset_name=*/ None,
-        request,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = get_datapoints(&database, /*dataset_name=*/ None, request).await?;
     Ok(Json(response))
 }
 
@@ -64,17 +66,16 @@ pub async fn get_datapoints_by_dataset_handler(
 ) -> Result<Json<GetDatapointsResponse>, Error> {
     validate_dataset_name(&dataset_name)?;
 
-    let response = get_datapoints(
-        &app_state.clickhouse_connection_info,
-        Some(dataset_name),
-        request,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = get_datapoints(&database, Some(dataset_name), request).await?;
     Ok(Json(response))
 }
 
 pub async fn list_datapoints(
-    clickhouse: &ClickHouseConnectionInfo,
+    database: &(dyn DatasetQueries + Sync),
     dataset_name: String,
     request: ListDatapointsRequest,
 ) -> Result<GetDatapointsResponse, Error> {
@@ -102,7 +103,7 @@ pub async fn list_datapoints(
         search_query_experimental: request.search_query_experimental,
     };
 
-    let datapoints = clickhouse.get_datapoints(&params).await?;
+    let datapoints = database.get_datapoints(&params).await?;
     let datapoints = datapoints
         .into_iter()
         .map(|dp| dp.into_datapoint())
@@ -112,7 +113,7 @@ pub async fn list_datapoints(
 }
 
 pub async fn get_datapoints(
-    clickhouse: &ClickHouseConnectionInfo,
+    database: &(dyn DatasetQueries + Sync),
     dataset_name: Option<String>,
     request: GetDatapointsRequest,
 ) -> Result<GetDatapointsResponse, Error> {
@@ -135,7 +136,7 @@ pub async fn get_datapoints(
         search_query_experimental: None,
     };
 
-    let datapoints = clickhouse.get_datapoints(&params).await?;
+    let datapoints = database.get_datapoints(&params).await?;
     let datapoints = datapoints
         .into_iter()
         .map(|dp| dp.into_datapoint())
