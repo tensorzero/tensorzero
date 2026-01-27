@@ -1122,6 +1122,11 @@ impl ClientExt for Client {
     ) -> Result<ListDatasetsResponse, TensorZeroError> {
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
+                let ListDatasetsRequest {
+                    function_name,
+                    limit,
+                    offset,
+                } = &request;
                 let mut url = client.base_url.join("internal/datasets").map_err(|e| {
                     TensorZeroError::Other {
                         source: Error::new(ErrorDetails::InvalidBaseUrl {
@@ -1133,15 +1138,15 @@ impl ClientExt for Client {
                     }
                 })?;
                 // Add query params
-                if let Some(function_name) = &request.function_name {
+                if let Some(function_name) = function_name {
                     url.query_pairs_mut()
                         .append_pair("function_name", function_name);
                 }
-                if let Some(limit) = request.limit {
+                if let Some(limit) = limit {
                     url.query_pairs_mut()
                         .append_pair("limit", &limit.to_string());
                 }
-                if let Some(offset) = request.offset {
+                if let Some(offset) = offset {
                     url.query_pairs_mut()
                         .append_pair("offset", &offset.to_string());
                 }
