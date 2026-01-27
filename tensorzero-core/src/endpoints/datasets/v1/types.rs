@@ -695,10 +695,31 @@ pub struct DeleteDatapointsResponse {
     pub num_deleted_datapoints: u64,
 }
 
+/// Request to list datasets with optional filtering and pagination.
+/// Used by the `GET /internal/datasets` endpoint.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[export_schema]
+pub struct ListDatasetsRequest {
+    /// Optional function name to filter datasets by.
+    /// If provided, only datasets with datapoints for this function will be returned.
+    pub function_name: Option<String>,
+
+    /// The maximum number of datasets to return.
+    /// Defaults to 100.
+    pub limit: Option<u32>,
+
+    /// The number of datasets to skip before starting to return results.
+    /// Defaults to 0.
+    pub offset: Option<u32>,
+}
+
 /// Metadata for a single dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
 pub struct DatasetMetadata {
     /// The name of the dataset.
     pub dataset_name: String,
@@ -710,8 +731,9 @@ pub struct DatasetMetadata {
 
 /// Response containing a list of datasets.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
 pub struct ListDatasetsResponse {
     /// List of dataset metadata.
     pub datasets: Vec<DatasetMetadata>,
