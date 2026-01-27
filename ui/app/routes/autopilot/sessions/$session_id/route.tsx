@@ -156,6 +156,7 @@ function EventStreamLoadError({ onError }: { onError: () => void }) {
   );
 }
 
+// Main content component that renders the event stream with SSE
 function EventStreamContent({
   sessionId,
   eventsData,
@@ -182,9 +183,12 @@ function EventStreamContent({
     status: initialStatus,
   } = eventsData;
 
+  // Signal that loading is complete (this runs after promise resolves)
   useEffect(() => {
     onLoaded();
   }, [onLoaded]);
+
+  // Now that we have resolved events, start SSE with the correct lastEventId
   const { events, pendingToolCalls, status, error, isRetrying, prependEvents } =
     useAutopilotEventStream({
       sessionId: isNewSession ? NIL_UUID : sessionId,
@@ -545,18 +549,22 @@ export default function AutopilotSessionEventsPage({
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Lift optimistic messages state to parent so ChatInput can work outside Suspense
   const [optimisticMessages, setOptimisticMessages] = useState<
     OptimisticMessage[]
   >([]);
 
+  // Clear optimistic messages when session changes to prevent cross-session leakage
   useEffect(() => {
     setOptimisticMessages([]);
   }, [sessionId]);
 
+  // Track autopilot status for disabling submit
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
     status: "idle",
   });
 
+  // Reset status when session changes
   useEffect(() => {
     setAutopilotStatus({ status: "idle" });
   }, [sessionId]);
@@ -565,6 +573,7 @@ export default function AutopilotSessionEventsPage({
     setAutopilotStatus(status);
   }, []);
 
+  // Disable submit unless status is idle or failed
   const submitDisabled =
     autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
 
@@ -588,6 +597,7 @@ export default function AutopilotSessionEventsPage({
     setHasLoadError(true);
   }, []);
 
+  // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const handleNavigateToSession = useCallback(
@@ -682,6 +692,7 @@ export default function AutopilotSessionEventsPage({
         </Await>
       </Suspense>
 
+      {/* Chat input - always visible outside Suspense, disabled while loading */}
       <ChatInput
         sessionId={isNewSession ? NIL_UUID : sessionId}
         onMessageSent={handleMessageSent}
@@ -695,6 +706,7 @@ export default function AutopilotSessionEventsPage({
   );
 }
 
+// Wrapper that passes the scroll container ref back to parent
 function EventStreamContentWrapper({
   sessionId,
   eventsData,
