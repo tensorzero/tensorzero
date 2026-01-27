@@ -94,7 +94,7 @@ const CUSTOM_EDITOR_THEME = EditorView.theme({
   },
 });
 
-// Pre-computed theme variants (only 2 needed: mono vs sans font)
+// Editor theme with monospace font
 const THEME_MONO = githubLightInit({
   settings: {
     fontFamily: "var(--font-mono)",
