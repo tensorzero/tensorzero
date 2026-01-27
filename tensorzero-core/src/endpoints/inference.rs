@@ -29,6 +29,8 @@ use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::inferences::InferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -493,6 +495,7 @@ pub async fn inference(
             output_schema: &output_schema,
             config: &config,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &postgres_connection_info,
             tags: &params.tags,
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
@@ -551,6 +554,7 @@ pub async fn inference(
             output_schema: &output_schema,
             config: &config,
             clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &postgres_connection_info,
             tags: &params.tags,
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
@@ -610,6 +614,7 @@ struct InferVariantArgs<'a> {
     output_schema: &'a Option<JSONSchema>,
     config: &'a Arc<Config>,
     clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+    postgres_connection_info: &'a PostgresConnectionInfo,
     tags: &'a HashMap<String, String>,
     extra_body: &'a UnfilteredInferenceExtraBody,
     extra_headers: &'a UnfilteredInferenceExtraHeaders,
@@ -638,6 +643,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         output_schema,
         config,
         clickhouse_connection_info,
+        postgres_connection_info,
         tags,
         extra_body,
         extra_headers,
@@ -726,6 +732,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             inference_metadata,
             stream,
             clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
             deferred_tasks.clone(),
         );
 
@@ -765,6 +772,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 
             let async_writes = config.gateway.observability.async_writes;
             let clickhouse_connection_info = clickhouse_connection_info.clone();
+            let postgres_connection_info = postgres_connection_info.clone();
             let config = config.clone();
             let resolved_input = resolved_input.clone();
             // Capture the parent span (function_inference) so we can use it as the parent
@@ -775,8 +783,13 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // is cancelled. This reduces the chances that we only write to some tables and not others
             // (but this is inherently best-effort due to ClickHouse's lack of transactions).
             let write_future = deferred_tasks.spawn(async move {
+                let inference_database = DelegatingDatabaseConnection::new(
+                    clickhouse_connection_info.clone(),
+                    postgres_connection_info,
+                );
                 let _: () = write_inference(
                     &clickhouse_connection_info,
+                    &inference_database,
                     &config,
                     Arc::unwrap_or_clone(resolved_input).resolve().await?,
                     result_to_write,
@@ -1002,6 +1015,7 @@ fn create_stream(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     // Capture the parent span (function_inference) so we can use it as the parent
@@ -1186,8 +1200,13 @@ fn create_stream(
                         match Arc::unwrap_or_clone(input).resolve().await {
                             Ok(input) => {
                                 let clickhouse_connection_info = clickhouse_connection_info.clone();
+                                let inference_database = DelegatingDatabaseConnection::new(
+                                    clickhouse_connection_info.clone(),
+                                    postgres_connection_info.clone(),
+                                );
                                 write_inference(
                                     &clickhouse_connection_info,
+                                    &inference_database,
                                     &config,
                                     input,
                                     inference_response,
@@ -1203,6 +1222,7 @@ fn create_stream(
 
                 }
                 drop(clickhouse_connection_info);
+                drop(postgres_connection_info);
             }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = true, inference_id = %inference_id, async_writes = async_writes));
             if async_writes {
                 deferred_tasks.spawn(write_future);
@@ -1355,8 +1375,9 @@ pub struct InferenceDatabaseInsertMetadata {
     pub snapshot_hash: SnapshotHash,
 }
 
-async fn write_inference(
+async fn write_inference<T: InferenceQueries + Send + Sync>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
+    inference_database: &T,
     config: &Config,
     input: ResolvedInput,
     result: InferenceResult,
@@ -1368,6 +1389,7 @@ async fn write_inference(
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);
     // Write the model responses to the ModelInference table
+    // Note: model_inferences dual-write deferred to step 1-1
     futures.push(
         async {
             let _ = clickhouse_connection_info
@@ -1376,27 +1398,23 @@ async fn write_inference(
         }
         .boxed(),
     );
-    futures.push(Box::pin(async {
-        // Write the inference to the Inference table
-        match result {
-            InferenceResult::Chat(result) => {
-                let stored_input = input.clone().into_stored_input();
-                let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
-                let _ = clickhouse_connection_info
-                    .write_batched(&[chat_inference], TableName::ChatInference)
-                    .await;
-            }
-            InferenceResult::Json(result) => {
-                let stored_input = input.clone().into_stored_input();
-                let json_inference =
-                    JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
-                let _ = clickhouse_connection_info
-                    .write_batched(&[json_inference], TableName::JsonInference)
-                    .await;
-            }
+    // Write the inference to the Inference table (dual-write via InferenceQueries trait)
+    match result {
+        InferenceResult::Chat(result) => {
+            let stored_input = input.clone().into_stored_input();
+            let chat_inference = ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
+            let _ = inference_database
+                .insert_chat_inferences(&[chat_inference])
+                .await;
         }
-    }));
+        InferenceResult::Json(result) => {
+            let stored_input = input.clone().into_stored_input();
+            let json_inference = JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
+            let _ = inference_database
+                .insert_json_inferences(&[json_inference])
+                .await;
+        }
+    }
     futures::future::join_all(futures).await;
 }
 
@@ -2874,6 +2892,7 @@ mod tests {
             metadata,
             input_stream,
             clickhouse,
+            PostgresConnectionInfo::new_disabled(),
             deferred_tasks,
         ));
 
@@ -2970,6 +2989,7 @@ mod tests {
             metadata,
             input_stream,
             clickhouse,
+            PostgresConnectionInfo::new_disabled(),
             deferred_tasks,
         ));
 
@@ -3049,6 +3069,7 @@ mod tests {
             metadata,
             input_stream,
             clickhouse,
+            PostgresConnectionInfo::new_disabled(),
             deferred_tasks,
         ));
 

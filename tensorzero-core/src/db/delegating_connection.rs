@@ -5,8 +5,10 @@
 //! feature flags.
 
 use async_trait::async_trait;
+use serde_json::Value;
 use uuid::Uuid;
 
+use crate::config::{Config, MetricConfigLevel};
 use crate::db::TimeWindow;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::feedback::{
@@ -16,10 +18,17 @@ use crate::db::feedback::{
     LatestFeedbackRow, MetricWithFeedback, StaticEvaluationHumanFeedbackInsert,
     VariantPerformanceRow,
 };
+use crate::db::inferences::{
+    CountInferencesParams, FunctionInfo, InferenceMetadata, InferenceQueries,
+    ListInferenceMetadataParams, ListInferencesParams,
+};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
+use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
+use crate::stored_inference::StoredInferenceDatabase;
+use crate::tool::ToolCallConfigDatabaseInsert;
 
 /// A delegating database implementation that wraps both ClickHouse and Postgres.
 ///
@@ -41,6 +50,11 @@ pub struct DelegatingDatabaseConnection {
     pub clickhouse: ClickHouseConnectionInfo,
     pub postgres: PostgresConnectionInfo,
 }
+/// A trait that allows us to express "The returned database supports all these queries"
+/// via &(dyn DelegatingDatabaseQueries).
+pub trait DelegatingDatabaseQueries: FeedbackQueries + InferenceQueries {}
+impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
+impl DelegatingDatabaseQueries for PostgresConnectionInfo {}
 
 impl DelegatingDatabaseConnection {
     pub fn new(clickhouse: ClickHouseConnectionInfo, postgres: PostgresConnectionInfo) -> Self {
@@ -50,7 +64,7 @@ impl DelegatingDatabaseConnection {
         }
     }
 
-    fn get_read_database(&self) -> &(dyn FeedbackQueries + Sync) {
+    fn get_read_database(&self) -> &(dyn DelegatingDatabaseQueries + Sync) {
         if ENABLE_POSTGRES_READ.get() {
             &self.postgres
         } else {
@@ -227,6 +241,115 @@ impl FeedbackQueries for DelegatingDatabaseConnection {
             && let Err(e) = self.postgres.insert_static_eval_feedback(row).await
         {
             tracing::error!("Error writing static eval feedback to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl InferenceQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+    // Note: Currently all read methods delegate to ClickHouse since Postgres
+    // read implementations are not yet complete. This will change when Postgres
+    // read support is added.
+
+    async fn list_inferences(
+        &self,
+        config: &Config,
+        params: &ListInferencesParams<'_>,
+    ) -> Result<Vec<StoredInferenceDatabase>, Error> {
+        self.get_read_database()
+            .list_inferences(config, params)
+            .await
+    }
+
+    async fn list_inference_metadata(
+        &self,
+        params: &ListInferenceMetadataParams,
+    ) -> Result<Vec<InferenceMetadata>, Error> {
+        self.get_read_database()
+            .list_inference_metadata(params)
+            .await
+    }
+
+    async fn count_inferences(
+        &self,
+        config: &Config,
+        params: &CountInferencesParams<'_>,
+    ) -> Result<u64, Error> {
+        self.get_read_database()
+            .count_inferences(config, params)
+            .await
+    }
+
+    async fn get_function_info(
+        &self,
+        target_id: &Uuid,
+        level: MetricConfigLevel,
+    ) -> Result<Option<FunctionInfo>, Error> {
+        self.get_read_database()
+            .get_function_info(target_id, level)
+            .await
+    }
+
+    async fn get_chat_inference_tool_params(
+        &self,
+        function_name: &str,
+        inference_id: Uuid,
+    ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
+        self.get_read_database()
+            .get_chat_inference_tool_params(function_name, inference_id)
+            .await
+    }
+
+    async fn get_json_inference_output_schema(
+        &self,
+        function_name: &str,
+        inference_id: Uuid,
+    ) -> Result<Option<Value>, Error> {
+        self.get_read_database()
+            .get_json_inference_output_schema(function_name, inference_id)
+            .await
+    }
+
+    async fn get_inference_output(
+        &self,
+        function_info: &FunctionInfo,
+        inference_id: Uuid,
+    ) -> Result<Option<String>, Error> {
+        self.get_read_database()
+            .get_inference_output(function_info, inference_id)
+            .await
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn insert_chat_inferences(
+        &self,
+        rows: &[ChatInferenceDatabaseInsert],
+    ) -> Result<(), Error> {
+        self.clickhouse.insert_chat_inferences(rows).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_chat_inferences(rows).await
+        {
+            tracing::error!("Error writing chat inferences to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    async fn insert_json_inferences(
+        &self,
+        rows: &[JsonInferenceDatabaseInsert],
+    ) -> Result<(), Error> {
+        self.clickhouse.insert_json_inferences(rows).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_json_inferences(rows).await
+        {
+            tracing::error!("Error writing json inferences to Postgres: {e}");
         }
 
         Ok(())

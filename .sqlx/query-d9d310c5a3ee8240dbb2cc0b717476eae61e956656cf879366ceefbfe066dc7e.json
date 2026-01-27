@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT function_name, variant_name, episode_id\n                    FROM tensorzero.json_inferences\n                    WHERE id = $1\n                    LIMIT 1\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "function_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.json_inferences",
+            "name": "function_name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "variant_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.json_inferences",
+            "name": "variant_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "episode_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.json_inferences",
+            "name": "episode_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d9d310c5a3ee8240dbb2cc0b717476eae61e956656cf879366ceefbfe066dc7e"
+}

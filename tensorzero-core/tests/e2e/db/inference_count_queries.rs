@@ -286,8 +286,7 @@ async fn test_count_feedbacks_for_float_metric(conn: impl InferenceCountQueries)
         "Should have feedbacks for haiku_rating metric on write_haiku"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_feedbacks_for_float_metric);
+make_db_test!(test_count_feedbacks_for_float_metric);
 
 async fn test_count_feedbacks_for_boolean_metric(conn: impl InferenceCountQueries) {
     let metric_config = MetricConfig {
@@ -312,8 +311,7 @@ async fn test_count_feedbacks_for_boolean_metric(conn: impl InferenceCountQuerie
         "Should have feedbacks for exact_match metric on extract_entities"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_feedbacks_for_boolean_metric);
+make_db_test!(test_count_feedbacks_for_boolean_metric);
 
 async fn test_count_inferences_with_threshold_float_metric(conn: impl InferenceCountQueries) {
     let metric_config = MetricConfig {
@@ -353,12 +351,15 @@ async fn test_count_inferences_with_threshold_float_metric(conn: impl InferenceC
 
     // Threshold count should be <= total feedbacks
     assert!(
+        threshold_count > 0,
+        "Should have at least one inference with feedback > 0.5"
+    );
+    assert!(
         threshold_count < total_feedbacks,
         "Threshold count should be < total feedbacks"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_inferences_with_threshold_float_metric);
+make_db_test!(test_count_inferences_with_threshold_float_metric);
 
 async fn test_count_inferences_with_threshold_boolean_metric_max(conn: impl InferenceCountQueries) {
     let metric_config = MetricConfig {
@@ -398,12 +399,15 @@ async fn test_count_inferences_with_threshold_boolean_metric_max(conn: impl Infe
 
     // Threshold count should be <= total feedbacks
     assert!(
+        threshold_count > 0,
+        "Should have at least one inference with feedback = true"
+    );
+    assert!(
         threshold_count < total_feedbacks,
         "Threshold count should be < total feedbacks"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_inferences_with_threshold_boolean_metric_max);
+make_db_test!(test_count_inferences_with_threshold_boolean_metric_max);
 
 async fn test_count_demonstration_feedbacks(conn: impl InferenceCountQueries) {
     let params = CountInferencesWithDemonstrationFeedbacksParams {
@@ -418,8 +422,7 @@ async fn test_count_demonstration_feedbacks(conn: impl InferenceCountQueries) {
 
     assert!(count > 0, "Should have demonstrations for extract_entities");
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_demonstration_feedbacks);
+make_db_test!(test_count_demonstration_feedbacks);
 
 async fn test_count_feedbacks_for_episode_level_boolean_metric(conn: impl InferenceCountQueries) {
     let metric_config = MetricConfig {
@@ -445,8 +448,7 @@ async fn test_count_feedbacks_for_episode_level_boolean_metric(conn: impl Infere
         "Should have feedbacks for boolean metric exact_match_episode on extract_entities"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_feedbacks_for_episode_level_boolean_metric);
+make_db_test!(test_count_feedbacks_for_episode_level_boolean_metric);
 
 async fn test_count_feedbacks_for_episode_level_float_metric(conn: impl InferenceCountQueries) {
     let metric_config = MetricConfig {
@@ -472,5 +474,4 @@ async fn test_count_feedbacks_for_episode_level_float_metric(conn: impl Inferenc
         "Should have feedbacks for float metric jaccard_similarity_episode on extract_entities"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_feedbacks_for_episode_level_float_metric);
+make_db_test!(test_count_feedbacks_for_episode_level_float_metric);

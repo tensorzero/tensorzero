@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                tool_params,\n                dynamic_tools,\n                dynamic_provider_tools,\n                allowed_tools,\n                tool_choice,\n                parallel_tool_calls\n            FROM tensorzero.chat_inferences\n            WHERE function_name = $1 AND id = $2\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tool_params",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "tool_params"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "dynamic_tools",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "dynamic_tools"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "dynamic_provider_tools",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "dynamic_provider_tools"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "allowed_tools",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "allowed_tools"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tool_choice",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "tool_choice"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "parallel_tool_calls",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "parallel_tool_calls"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "36ba803c4d1bd9f87339e5c3d42edf052fb3a3f14179a6f821da53d69ed24205"
+}

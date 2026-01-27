@@ -13,6 +13,7 @@ use super::HealthCheckable;
 pub mod experimentation;
 pub mod feedback;
 pub mod inference_count;
+pub mod inference_queries;
 pub mod rate_limiting;
 
 #[cfg(any(test, feature = "e2e_tests"))]

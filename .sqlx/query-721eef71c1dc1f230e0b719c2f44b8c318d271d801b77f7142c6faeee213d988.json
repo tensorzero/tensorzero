@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO tensorzero.chat_inferences (\n                id, function_name, variant_name, episode_id, input, output,\n                tool_params, inference_params, processing_time_ms, ttft_ms,\n                tags, extra_body, dynamic_tools, dynamic_provider_tools,\n                allowed_tools, tool_choice, parallel_tool_calls, snapshot_hash, created_at\n            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Int4",
+        "Int4",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Text",
+        "Bool",
+        "Bytea",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "721eef71c1dc1f230e0b719c2f44b8c318d271d801b77f7142c6faeee213d988"
+}
