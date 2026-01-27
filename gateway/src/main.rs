@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
@@ -236,8 +238,13 @@ async fn run() -> Result<(), ExitCode> {
         );
     }
 
+    // Collect available tool names for autopilot (single source of truth)
+    let available_tools = autopilot_tools::collect_tool_names()
+        .await
+        .log_err_pretty("Failed to collect autopilot tool names")?;
+
     // Initialize GatewayHandle
-    let gateway_handle = gateway::GatewayHandle::new(unwritten_config)
+    let gateway_handle = gateway::GatewayHandle::new(unwritten_config, available_tools)
         .await
         .log_err_pretty("Failed to initialize AppState")?;
 
