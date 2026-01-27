@@ -14,15 +14,9 @@ ARG CARGO_BUILD_FLAGS=""
 RUN cargo build -p provider-proxy $CARGO_BUILD_FLAGS && \
     mkdir -p /release && cp -r /src/target/debug/provider-proxy /release/provider-proxy
 
-# ========== base ==========
-
-FROM debian:trixie-slim AS base
-
-RUN apt-get update && apt-get install -y ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
-
 # ========== provider-proxy ==========
 
-FROM base AS provider-proxy
+FROM gcr.io/distroless/cc-debian13 AS provider-proxy
 
 COPY --from=builder /release/provider-proxy /usr/local/bin/provider-proxy
 
