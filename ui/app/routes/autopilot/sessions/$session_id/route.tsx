@@ -319,23 +319,6 @@ function EventStreamContent({
       onApproveAll: handleApproveAll,
     });
 
-  // Keyboard shortcut for yolo mode: Cmd/Ctrl+Shift+Y
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key.toLowerCase() === "y" &&
-        event.shiftKey &&
-        (event.metaKey || event.ctrlKey)
-      ) {
-        event.preventDefault();
-        setYoloEnabled(!isYoloEnabled);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setYoloEnabled, isYoloEnabled]);
-
   /*
    * SCROLL BEHAVIOR SPEC:
    * 1. Submit message → Scroll to bottom (after optimistic message appears)
