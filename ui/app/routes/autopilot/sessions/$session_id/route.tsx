@@ -135,15 +135,10 @@ function EventStreamSkeleton() {
  * Error state shown when initial event stream load fails.
  * Preserves the chat container layout so the page doesn't completely break.
  */
-function EventStreamLoadError({ onError }: { onError?: () => void }) {
+function EventStreamLoadError() {
   const error = useAsyncError();
   const message =
     error instanceof Error ? error.message : "Failed to load session events";
-
-  // Signal that loading is complete (even though it failed)
-  useEffect(() => {
-    onError?.();
-  }, [onError]);
 
   return (
     <div className="border-border mt-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
@@ -165,7 +160,6 @@ function EventStreamContent({
   optimisticMessages,
   onOptimisticMessagesChange,
   scrollContainerRef,
-  onLoaded,
   onStatusChange,
 }: {
   sessionId: string;
@@ -174,7 +168,6 @@ function EventStreamContent({
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
-  onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
 }) {
   // Data is already resolved by <Await> in parent
@@ -184,11 +177,6 @@ function EventStreamContent({
     pendingToolCalls: initialPendingToolCalls,
     status: initialStatus,
   } = eventsData;
-
-  // Signal that loading is complete (this runs after promise resolves)
-  useEffect(() => {
-    onLoaded();
-  }, [onLoaded]);
 
   // Now that we have resolved events, start SSE with the correct lastEventId
   const { events, pendingToolCalls, status, error, isRetrying, prependEvents } =
@@ -561,17 +549,6 @@ export default function AutopilotSessionEventsPage({
     setOptimisticMessages([]);
   }, [sessionId]);
 
-  // Track if events are still loading (for disabling chat input)
-  // New sessions have direct data (not a promise), so they're not loading
-  const [isEventsLoading, setIsEventsLoading] = useState(
-    !isNewSession && eventsData instanceof Promise,
-  );
-
-  // Reset loading state when session changes (useState initial value only applies on first mount)
-  useEffect(() => {
-    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
-  }, [sessionId, isNewSession, eventsData]);
-
   // Track autopilot status for disabling submit
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
     status: "idle",
@@ -666,12 +643,7 @@ export default function AutopilotSessionEventsPage({
       />
 
       <Suspense key={sessionId} fallback={<EventStreamSkeleton />}>
-        <Await
-          resolve={eventsData}
-          errorElement={
-            <EventStreamLoadError onError={() => setIsEventsLoading(false)} />
-          }
-        >
+        <Await resolve={eventsData} errorElement={<EventStreamLoadError />}>
           {(resolvedData) => (
             <EventStreamContentWrapper
               sessionId={sessionId}
@@ -680,21 +652,19 @@ export default function AutopilotSessionEventsPage({
               optimisticMessages={optimisticMessages}
               onOptimisticMessagesChange={setOptimisticMessages}
               scrollContainerRef={scrollContainerRef}
-              onLoaded={() => setIsEventsLoading(false)}
               onStatusChange={handleStatusChange}
             />
           )}
         </Await>
       </Suspense>
 
-      {/* Chat input - always visible outside Suspense, disabled while loading */}
+      {/* Chat input - always visible outside Suspense */}
       <ChatInput
         sessionId={isNewSession ? NIL_UUID : sessionId}
         onMessageSent={handleMessageSent}
         onMessageFailed={handleMessageFailed}
         className="mt-4"
         isNewSession={isNewSession}
-        disabled={isEventsLoading}
         submitDisabled={submitDisabled}
       />
     </div>
@@ -709,7 +679,6 @@ function EventStreamContentWrapper({
   optimisticMessages,
   onOptimisticMessagesChange,
   scrollContainerRef,
-  onLoaded,
   onStatusChange,
 }: {
   sessionId: string;
@@ -718,7 +687,6 @@ function EventStreamContentWrapper({
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
-  onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
 }) {
   return (
@@ -730,7 +698,6 @@ function EventStreamContentWrapper({
         optimisticMessages={optimisticMessages}
         onOptimisticMessagesChange={onOptimisticMessagesChange}
         scrollContainerRef={scrollContainerRef}
-        onLoaded={onLoaded}
         onStatusChange={onStatusChange}
       />
     </div>
