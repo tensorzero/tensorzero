@@ -43,6 +43,7 @@ pub fn build_axum_router(
             auth_cache: app_state.auth_cache.clone(),
             pool: app_state.postgres_connection_info.get_pool().cloned(),
             error_json: app_state.config.gateway.unstable_error_json,
+            base_path: (!base_path.is_empty()).then(|| base_path.to_string()),
         });
         router = router.layer(middleware::from_fn_with_state(
             state,

@@ -155,9 +155,9 @@ pub struct UninitializedGatewayConfig {
     // If set to `true`, disables validation on feedback queries (read from ClickHouse to check that the target is valid)
     #[serde(default)]
     pub unstable_disable_feedback_target_validation: bool,
-    /// If enabled, adds an `unstable_error_json` field alongside the human-readable `error` field
+    /// If enabled, adds an `error_json` field alongside the human-readable `error` field
     /// in HTTP error responses. This contains a JSON-serialized version of the error.
-    /// While `unstable_error_json` will always be valid JSON when present, the exact contents is unstable,
+    /// While `error_json` will always be valid JSON when present, the exact contents is unstable,
     /// and may change at any time without warning.
     /// For now, this is only supported in the standalone gateway, and not in the embedded gateway.
     #[serde(default)]

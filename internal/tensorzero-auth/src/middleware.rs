@@ -43,15 +43,11 @@ fn build_error_response_body(
     body
 }
 
-fn is_openai_compatible_route(route: &str) -> bool {
-    let mut previous_segment = None;
-    for segment in route.split('/').filter(|segment| !segment.is_empty()) {
-        if matches!(previous_segment, Some("openai")) && segment == "v1" {
-            return true;
-        }
-        previous_segment = Some(segment);
-    }
-    false
+fn is_openai_compatible_route(matched_path: Option<&MatchedPath>, base_path: Option<&str>) -> bool {
+    matched_path.is_some_and(|p| match base_path {
+        Some(base) => p.as_str().starts_with(&format!("{base}/openai/v1")),
+        None => p.as_str().starts_with("/openai/v1"),
+    })
 }
 
 #[derive(Clone)]
@@ -72,6 +68,8 @@ pub struct TensorzeroAuthMiddlewareStateInner {
     pub auth_cache: Option<Cache<String, AuthResult>>,
     pub pool: Option<sqlx::PgPool>,
     pub error_json: bool,
+    /// Optional base path prefix for all routes (e.g., "/custom/prefix")
+    pub base_path: Option<String>,
 }
 
 #[axum::debug_middleware]
@@ -199,9 +197,9 @@ pub async fn tensorzero_auth_middleware(
                 auth_span.record("key.workspace", &key_info.workspace);
             }
             let message = format!("TensorZero authentication error: {e}");
-            let is_openai_format = route
-                .map(is_openai_compatible_route)
-                .unwrap_or_else(|| is_openai_compatible_route(request.uri().path()));
+            let matched_path = request.extensions().get::<MatchedPath>();
+            let is_openai_format =
+                is_openai_compatible_route(matched_path, state.base_path.as_deref());
             let error_json = state.error_json.then(|| json!(e.to_string()));
             let body = build_error_response_body(&message, is_openai_format, error_json);
             let mut response = (StatusCode::UNAUTHORIZED, Json(body)).into_response();
