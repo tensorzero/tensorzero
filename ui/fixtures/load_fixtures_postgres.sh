@@ -63,7 +63,11 @@ fi
 # Download JSONL fixtures from R2 if not present
 if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_examples.jsonl" ]; then
     echo "Downloading small fixtures..."
-    uv run ./download-small-fixtures.py
+    if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
+        uv run ./download-small-fixtures-http.py
+    else
+        uv run ./download-small-fixtures.py
+    fi
 fi
 
 # Chat Inferences
