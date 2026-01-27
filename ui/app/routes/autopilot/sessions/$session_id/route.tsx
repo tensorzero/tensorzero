@@ -126,7 +126,7 @@ function debounce<T extends (...args: Parameters<T>) => void>(
 // Skeleton shown while events are loading
 function EventStreamSkeleton() {
   return (
-    <div className="-mx-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-8">
+    <div className="flex min-h-[50vh] items-center justify-center">
       <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
     </div>
   );
@@ -142,6 +142,7 @@ function EventStreamContent({
   scrollContainerRef,
   onLoaded,
   onStatusChange,
+  onPendingToolCallsChange,
 }: {
   sessionId: string;
   eventsData: EventsData | Promise<EventsData>;
@@ -151,6 +152,7 @@ function EventStreamContent({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
+  onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
 }) {
   // Resolve promise (or use direct data for new session)
   const {
@@ -180,93 +182,19 @@ function EventStreamContent({
     onStatusChange(status);
   }, [status, onStatusChange]);
 
+  // Notify parent of pending tool calls changes
+  useEffect(() => {
+    onPendingToolCallsChange(pendingToolCalls);
+  }, [pendingToolCalls, onPendingToolCallsChange]);
+
   // State for pagination
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [hasReachedStart, setHasReachedStart] = useState(!initialHasMore);
 
-  // State for tool call authorization loading
-  const [authLoadingStates, setAuthLoadingStates] = useState<
-    Map<string, "approving" | "rejecting">
-  >(new Map());
-
-  const { toast } = useToast();
-
-  // Derive values for queue-based approval UI
+  // Derive pending tool call IDs for highlighting in the event stream
   const pendingToolCallIds = useMemo(
     () => new Set(pendingToolCalls.map((e) => e.id)),
     [pendingToolCalls],
-  );
-  const oldestPendingToolCall = pendingToolCalls[0] ?? null;
-
-  // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
-  // Covers both directions: new item jumping to top, or top item removed by external approval.
-  // Does NOT trigger when queue was empty and first item arrives (no accidental click risk).
-  const prevQueueTopRef = useRef<string | null>(null);
-  const userActionRef = useRef(false);
-  const [isInCooldown, setIsInCooldown] = useState(false);
-
-  useEffect(() => {
-    const currentTopId = oldestPendingToolCall?.id ?? null;
-    const prevTopId = prevQueueTopRef.current;
-
-    prevQueueTopRef.current = currentTopId;
-    const wasUserAction = userActionRef.current;
-    userActionRef.current = false;
-
-    if (currentTopId !== prevTopId && prevTopId !== null && !wasUserAction) {
-      setIsInCooldown(true);
-      const timer = setTimeout(() => setIsInCooldown(false), 1000);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [oldestPendingToolCall?.id]);
-
-  // Handle tool call authorization
-  const handleAuthorize = useCallback(
-    async (eventId: string, approved: boolean) => {
-      userActionRef.current = true;
-
-      setAuthLoadingStates((prev) =>
-        new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
-      );
-
-      try {
-        const response = await fetch(
-          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/authorize`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tool_call_event_id: eventId,
-              status: approved
-                ? { type: "approved" }
-                : {
-                    type: "rejected",
-                    reason: "The user rejected the tool call.",
-                  },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error("Authorization failed");
-        }
-      } catch (err) {
-        logger.error("Failed to authorize tool call:", err);
-        toast.error({
-          title: "Authorization failed",
-          description:
-            "Failed to submit tool call authorization. Please try again.",
-        });
-      } finally {
-        setAuthLoadingStates((prev) => {
-          const next = new Map(prev);
-          next.delete(eventId);
-          return next;
-        });
-      }
-    },
-    [sessionId, toast],
   );
 
   /*
@@ -496,23 +424,6 @@ function EventStreamContent({
         optimisticMessages={visibleOptimisticMessages}
         status={isNewSession ? undefined : status}
       />
-
-      {/* Pinned approval card */}
-      {oldestPendingToolCall && (
-        <div className="mt-4">
-          <PendingToolCallCard
-            key={oldestPendingToolCall.id}
-            event={oldestPendingToolCall}
-            isLoading={authLoadingStates.has(oldestPendingToolCall.id)}
-            loadingAction={authLoadingStates.get(oldestPendingToolCall.id)}
-            onAuthorize={(approved) =>
-              handleAuthorize(oldestPendingToolCall.id, approved)
-            }
-            additionalCount={pendingToolCalls.length - 1}
-            isInCooldown={isInCooldown}
-          />
-        </div>
-      )}
     </>
   );
 }
@@ -558,6 +469,105 @@ export default function AutopilotSessionEventsPage({
   const handleStatusChange = useCallback((status: AutopilotStatus) => {
     setAutopilotStatus(status);
   }, []);
+
+  // Pending tool calls state - lifted from EventStreamContent for footer rendering
+  const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>([]);
+
+  // Reset pending tool calls when session changes
+  useEffect(() => {
+    setPendingToolCalls([]);
+  }, [sessionId]);
+
+  const handlePendingToolCallsChange = useCallback(
+    (toolCalls: GatewayEvent[]) => {
+      setPendingToolCalls(toolCalls);
+    },
+    [],
+  );
+
+  // Derived values for queue-based approval UI
+  const oldestPendingToolCall = pendingToolCalls[0] ?? null;
+
+  // State for tool call authorization loading
+  const [authLoadingStates, setAuthLoadingStates] = useState<
+    Map<string, "approving" | "rejecting">
+  >(new Map());
+
+  // Reset auth loading states when session changes
+  useEffect(() => {
+    setAuthLoadingStates(new Map());
+  }, [sessionId]);
+
+  // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
+  // Covers both directions: new item jumping to top, or top item removed by external approval.
+  // Does NOT trigger when queue was empty and first item arrives (no accidental click risk).
+  const prevQueueTopRef = useRef<string | null>(null);
+  const userActionRef = useRef(false);
+  const [isInCooldown, setIsInCooldown] = useState(false);
+
+  useEffect(() => {
+    const currentTopId = oldestPendingToolCall?.id ?? null;
+    const prevTopId = prevQueueTopRef.current;
+
+    prevQueueTopRef.current = currentTopId;
+    const wasUserAction = userActionRef.current;
+    userActionRef.current = false;
+
+    if (currentTopId !== prevTopId && prevTopId !== null && !wasUserAction) {
+      setIsInCooldown(true);
+      const timer = setTimeout(() => setIsInCooldown(false), 1000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [oldestPendingToolCall?.id]);
+
+  // Handle tool call authorization
+  const handleAuthorize = useCallback(
+    async (eventId: string, approved: boolean) => {
+      userActionRef.current = true;
+
+      setAuthLoadingStates((prev) =>
+        new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
+      );
+
+      try {
+        const response = await fetch(
+          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/authorize`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tool_call_event_id: eventId,
+              status: approved
+                ? { type: "approved" }
+                : {
+                    type: "rejected",
+                    reason: "The user rejected the tool call.",
+                  },
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Authorization failed");
+        }
+      } catch (err) {
+        logger.error("Failed to authorize tool call:", err);
+        toast.error({
+          title: "Authorization failed",
+          description:
+            "Failed to submit tool call authorization. Please try again.",
+        });
+      } finally {
+        setAuthLoadingStates((prev) => {
+          const next = new Map(prev);
+          next.delete(eventId);
+          return next;
+        });
+      }
+    },
+    [sessionId, toast],
+  );
 
   // Disable submit unless status is idle or failed
   const submitDisabled =
@@ -702,6 +712,7 @@ export default function AutopilotSessionEventsPage({
               scrollContainerRef={scrollContainerRef}
               onLoaded={() => setIsEventsLoading(false)}
               onStatusChange={handleStatusChange}
+              onPendingToolCallsChange={handlePendingToolCallsChange}
             />
           </Suspense>
 
@@ -710,12 +721,26 @@ export default function AutopilotSessionEventsPage({
         </div>
       </div>
 
-      {/* Fixed footer with chat input */}
+      {/* Fixed footer with tool approval card and chat input */}
       <div
         ref={footerRef}
         className="pointer-events-none absolute inset-x-0 bottom-0 z-20"
       >
-        <div className="container mx-auto px-8 pt-4 pb-8">
+        <div className="container mx-auto flex flex-col gap-4 px-8 pt-4 pb-8">
+          {oldestPendingToolCall && (
+            <PendingToolCallCard
+              key={oldestPendingToolCall.id}
+              event={oldestPendingToolCall}
+              isLoading={authLoadingStates.has(oldestPendingToolCall.id)}
+              loadingAction={authLoadingStates.get(oldestPendingToolCall.id)}
+              onAuthorize={(approved) =>
+                handleAuthorize(oldestPendingToolCall.id, approved)
+              }
+              additionalCount={pendingToolCalls.length - 1}
+              isInCooldown={isInCooldown}
+              className="pointer-events-auto"
+            />
+          )}
           <ChatInput
             sessionId={isNewSession ? NIL_UUID : sessionId}
             onMessageSent={handleMessageSent}

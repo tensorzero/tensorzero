@@ -419,14 +419,18 @@ function EventSkeletons({ count = 3 }: { count?: number }) {
   );
 }
 
-function SessionStartedDivider() {
+function Divider({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-4 py-2">
+    <div className="flex items-center gap-5 py-2">
       <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted text-xs">Started</span>
+      <span className="text-fg-muted relative text-xs">{children}</span>
       <div className="border-border flex-1 border-t" />
     </div>
   );
+}
+
+function SessionStartedDivider() {
+  return <Divider>Started</Divider>;
 }
 
 function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
@@ -471,14 +475,10 @@ function getStatusLabel(status: AutopilotStatus): {
 function StatusIndicator({ status }: { status: AutopilotStatus }) {
   const { text, showEllipsis } = getStatusLabel(status);
   return (
-    <div className="mx-4 flex items-center gap-4 py-2">
-      <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted relative text-xs">
-        {text}
-        {showEllipsis && <AnimatedEllipsis mode={EllipsisMode.Absolute} />}
-      </span>
-      <div className="border-border flex-1 border-t" />
-    </div>
+    <Divider>
+      {text}
+      {showEllipsis && <AnimatedEllipsis mode={EllipsisMode.Absolute} />}
+    </Divider>
   );
 }
 
