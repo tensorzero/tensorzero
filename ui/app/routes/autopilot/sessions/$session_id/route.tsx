@@ -591,6 +591,11 @@ export default function AutopilotSessionEventsPage({
   // Track previous footer height for scroll adjustment (null = initial mount)
   const prevFooterHeightRef = useRef<number | null>(null);
 
+  // Reset footer height ref on session change to avoid cross-session scroll jumps
+  useEffect(() => {
+    prevFooterHeightRef.current = null;
+  }, [sessionId]);
+
   // Adjust scroll position when footer height changes (e.g., tool card appears)
   // Only adjust if user is near bottom - don't disrupt users reading older messages
   useEffect(() => {
@@ -605,13 +610,13 @@ export default function AutopilotSessionEventsPage({
     const delta = footerHeight - prevFooterHeightRef.current;
     prevFooterHeightRef.current = footerHeight;
 
-    if (container && delta !== 0) {
+    // Only adjust scroll when footer grows - shrinking doesn't need adjustment
+    if (container && delta > 0) {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
       // When footer grows, distanceFromBottom increases by delta, so we need to
       // subtract it to get the user's original position before the change
-      const originalDistance =
-        delta > 0 ? distanceFromBottom - delta : distanceFromBottom;
+      const originalDistance = distanceFromBottom - delta;
       const wasNearBottom = originalDistance < 100;
 
       if (wasNearBottom) {
