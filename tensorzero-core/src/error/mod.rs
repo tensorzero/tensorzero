@@ -797,7 +797,7 @@ impl ErrorDetails {
             ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
@@ -885,11 +885,11 @@ impl ErrorDetails {
             ErrorDetails::PostgresConnectionInitialization { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
-            ErrorDetails::PostgresConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ValkeyConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::ValkeyQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
