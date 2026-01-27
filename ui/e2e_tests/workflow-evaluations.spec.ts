@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("should show the workflow evaluations page and navigate to the workflow evaluation run page", async ({
   page,
 }) => {
-  await page.goto("/workflow_evaluations");
+  await page.goto("/workflow-evaluations");
   await expect(page.getByText("Evaluation Runs")).toBeVisible();
   await expect(
     page.getByText("01968d04-142c-7e53-8ea7-3a3255b518dc"),
@@ -22,7 +22,7 @@ test("should render comment in workflow evaluation run and open modal when click
   page,
 }) => {
   await page.goto(
-    "/workflow_evaluations/runs/01968d05-d734-7751-ab33-75dd8b3fb4a3",
+    "/workflow-evaluations/runs/01968d05-d734-7751-ab33-75dd8b3fb4a3",
   );
 
   // Wait for the page to load
