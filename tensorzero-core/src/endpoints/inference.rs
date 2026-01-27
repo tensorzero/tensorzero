@@ -1264,7 +1264,7 @@ fn should_stream_chunk_in_create_stream(
                 // We already handled `include_original_response` above
                 raw_chunk: _,
                 // We never actually stream this field, so we don't need it
-                thoughts: _,
+                thought_chunks: _,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
             } = c;
@@ -2124,7 +2124,7 @@ mod tests {
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: Some("Test content".to_string()),
-            thoughts: vec![ThoughtChunk {
+            thought_chunks: vec![ThoughtChunk {
                 id: "0".to_string(),
                 text: Some("Thought 1".to_string()),
                 signature: None,
@@ -2749,7 +2749,7 @@ mod tests {
 
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: Some(r#"{"key": "value"}"#.to_string()),
-            thoughts: vec![],
+            thought_chunks: vec![],
             usage: Some(Usage {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
