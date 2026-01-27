@@ -155,7 +155,7 @@ function EventStreamLoadError() {
 // Receives already-resolved data (resolved by <Await> in parent)
 function EventStreamContent({
   sessionId,
-  resolvedEventsData,
+  eventsData,
   isNewSession,
   optimisticMessages,
   onOptimisticMessagesChange,
@@ -164,7 +164,7 @@ function EventStreamContent({
   onStatusChange,
 }: {
   sessionId: string;
-  resolvedEventsData: EventsData;
+  eventsData: EventsData;
   isNewSession: boolean;
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
@@ -178,7 +178,7 @@ function EventStreamContent({
     hasMoreEvents: initialHasMore,
     pendingToolCalls: initialPendingToolCalls,
     status: initialStatus,
-  } = resolvedEventsData;
+  } = eventsData;
 
   // Signal that loading is complete (this runs after promise resolves)
   useEffect(() => {
@@ -665,7 +665,7 @@ export default function AutopilotSessionEventsPage({
           {(resolvedData) => (
             <EventStreamContentWrapper
               sessionId={sessionId}
-              resolvedEventsData={resolvedData}
+              eventsData={resolvedData}
               isNewSession={isNewSession}
               optimisticMessages={optimisticMessages}
               onOptimisticMessagesChange={setOptimisticMessages}
@@ -691,10 +691,10 @@ export default function AutopilotSessionEventsPage({
   );
 }
 
-// Simple wrapper that receives resolved data from <Await>
+// Wrapper that passes the scroll container ref back to parent
 function EventStreamContentWrapper({
   sessionId,
-  resolvedEventsData,
+  eventsData,
   isNewSession,
   optimisticMessages,
   onOptimisticMessagesChange,
@@ -703,7 +703,7 @@ function EventStreamContentWrapper({
   onStatusChange,
 }: {
   sessionId: string;
-  resolvedEventsData: EventsData;
+  eventsData: EventsData;
   isNewSession: boolean;
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
@@ -715,7 +715,7 @@ function EventStreamContentWrapper({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <EventStreamContent
         sessionId={sessionId}
-        resolvedEventsData={resolvedEventsData}
+        eventsData={eventsData}
         isNewSession={isNewSession}
         optimisticMessages={optimisticMessages}
         onOptimisticMessagesChange={onOptimisticMessagesChange}
