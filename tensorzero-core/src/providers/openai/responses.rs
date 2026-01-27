@@ -295,12 +295,12 @@ impl<'a> OpenAITool<'a> {
     pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
         match self {
             OpenAITool::Function { function, strict } => {
-                OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
-                    name: function.name,
-                    description: function.description,
-                    parameters: function.parameters,
+                OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool::new(
+                    function.name,
+                    function.description,
+                    function.parameters,
                     strict,
-                })
+                ))
             }
             OpenAITool::Custom {
                 custom: custom_tool,
@@ -310,19 +310,37 @@ impl<'a> OpenAITool<'a> {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(untagged)]
 pub enum OpenAIResponsesTool<'a> {
     Function(OpenAIResponsesFunctionTool<'a>),
-    BuiltIn(&'a Value),
     Custom(OpenAIResponsesCustomTool<'a>),
+    Provider(&'a Value), // example: {"type": "web_search"}
 }
 
 #[derive(Serialize, Debug)]
 pub struct OpenAIResponsesFunctionTool<'a> {
+    r#type: &'static str, // must be "function"
     name: &'a str,
     description: Option<&'a str>,
     parameters: &'a Value,
     strict: bool,
+}
+
+impl<'a> OpenAIResponsesFunctionTool<'a> {
+    pub fn new(
+        name: &'a str,
+        description: Option<&'a str>,
+        parameters: &'a Value,
+        strict: bool,
+    ) -> Self {
+        Self {
+            r#type: "function",
+            name,
+            description,
+            parameters,
+            strict,
+        }
+    }
 }
 
 /// Custom tool format for the Responses API (flattened structure)
@@ -338,6 +356,7 @@ pub enum OpenAIResponsesCustomToolFormat {
 
 #[derive(Serialize, Debug)]
 pub struct OpenAIResponsesCustomTool<'a> {
+    r#type: &'static str, // must be "custom"
     name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<&'a str>,
@@ -348,6 +367,7 @@ pub struct OpenAIResponsesCustomTool<'a> {
 impl<'a> From<&'a OpenAICustomTool> for OpenAIResponsesCustomTool<'a> {
     fn from(tool: &'a OpenAICustomTool) -> Self {
         OpenAIResponsesCustomTool {
+            r#type: "custom",
             name: &tool.name,
             description: tool.description.as_deref(),
             format: tool.format.as_ref().map(|f| match f {
@@ -414,7 +434,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
         openai_model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
         include_encrypted_reasoning: bool,
-        built_in_tools: &'a [Value],
+        provider_tools: &'a [Value],
         tensorzero_model_name: &str,
         tensorzero_model_provider_name: &str,
     ) -> Result<OpenAIResponsesRequest<'a>, Error> {
@@ -435,15 +455,15 @@ impl<'a> OpenAIResponsesRequest<'a> {
                     .collect()
             })
             .unwrap_or_default();
-        // If we have built_in_tools we should extend the list with them
-        tools.extend(built_in_tools.iter().map(OpenAIResponsesTool::BuiltIn));
+        // If we have `provider_tools` we should extend the list with them
+        tools.extend(provider_tools.iter().map(OpenAIResponsesTool::Provider));
         if let Some(tc) = request.tool_config.as_ref() {
             let provider_tools =
                 tc.get_scoped_provider_tools(tensorzero_model_name, tensorzero_model_provider_name);
             tools.extend(
                 provider_tools
                     .iter()
-                    .map(|t| OpenAIResponsesTool::BuiltIn(&t.tool)),
+                    .map(|t| OpenAIResponsesTool::Provider(&t.tool)),
             );
         }
 
@@ -453,7 +473,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .and_then(|tc| tc.allowed_tools.as_dynamic_allowed_tools());
 
-        // For now, we don't allow selecting any built-in tools
+        // For now, we don't allow selecting any provider tools
         let tool_choice = request.tool_config.as_ref().map(|tool_config| {
             // If we have allowed_tools, create an AllowedTools variant
             if let Some(allowed_tool_names) = &allowed_tools_list {
