@@ -144,6 +144,8 @@ jobs:
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          # Fall back to HTTP download for fork PRs (secrets unavailable)
+          TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS: ${{ github.event.pull_request.head.repo.full_name != github.repository && '1' || '' }}
         run: |
           # We set all of the environment variables for both the gateway and ui containers here
           # The 'ui-tests-e2e' job tests that the UI container starts without some of these variables set,
