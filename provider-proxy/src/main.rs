@@ -22,20 +22,11 @@ enum Commands {
     },
 }
 
-#[expect(clippy::print_stderr)]
 async fn run_health_check(port: u16) -> ExitCode {
     let url = format!("http://127.0.0.1:{port}/health");
-
     match reqwest::get(&url).await {
         Ok(response) if response.status().is_success() => ExitCode::SUCCESS,
-        Ok(response) => {
-            eprintln!("Health check failed with status: {}", response.status());
-            ExitCode::FAILURE
-        }
-        Err(e) => {
-            eprintln!("Health check failed: {e}");
-            ExitCode::FAILURE
-        }
+        _ => ExitCode::FAILURE,
     }
 }
 
