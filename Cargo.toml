@@ -40,7 +40,7 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.19.0", features = ["serde", "v7"] }
+uuid = { version = "1.20.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "0.9.11", features = ["preserve_order"] }
@@ -60,7 +60,7 @@ clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.30"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
-minijinja = { version = "2.14.0", features = [
+minijinja = { version = "2.15.1", features = [
     "loader",
     "debug",
     "json",
@@ -99,13 +99,13 @@ sqlx = { version = "0.9.0-alpha.1", features = [
     "uuid",
     "sqlx-toml",
 ] }
-rlt = "0.2.1"
+rlt = "0.4.1"
 metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
 blake3 = "1.8.3"
-moka = { version = "0.12.10", features = ["sync"] }
+moka = { version = "0.12.13", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "b779f5a3f7e34f4f8a758ec4627d56538945cfeb" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
