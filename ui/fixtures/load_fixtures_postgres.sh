@@ -80,6 +80,8 @@ fi
 
 # Chat Inferences
 # Note: input, output, tool_params, inference_params are JSONB in our schema
+# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
 load_jsonl "small-fixtures/chat_inference_examples.jsonl" "tensorzero.chat_inferences" "
 INSERT INTO tensorzero.chat_inferences (
@@ -94,17 +96,17 @@ SELECT
     j->>'function_name',
     j->>'variant_name',
     (j->>'episode_id')::uuid,
-    COALESCE(j->'input', '{}')::jsonb,
-    COALESCE(j->'output', '{}')::jsonb,
-    COALESCE(j->'tool_params', '{}')::jsonb,
-    COALESCE(j->'inference_params', '{}')::jsonb,
+    COALESCE(NULLIF(j->>'input', '')::jsonb, '{}'),
+    COALESCE(NULLIF(j->>'output', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'tool_params', '')::jsonb, '{}'),
+    COALESCE(NULLIF(j->>'inference_params', '')::jsonb, '{}'),
     (j->>'processing_time_ms')::integer,
     (j->>'ttft_ms')::integer,
-    COALESCE(j->'tags', '{}')::jsonb,
-    COALESCE(j->'extra_body', '[]')::jsonb,
-    COALESCE(j->'dynamic_tools', '[]')::jsonb,
-    COALESCE(j->'dynamic_provider_tools', '[]')::jsonb,
-    j->'allowed_tools',
+    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
+    COALESCE(NULLIF(j->>'extra_body', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'dynamic_tools', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'dynamic_provider_tools', '')::jsonb, '[]'),
+    NULLIF(j->>'allowed_tools', '')::jsonb,
     j->>'tool_choice',
     (j->>'parallel_tool_calls')::boolean,
     tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
@@ -114,6 +116,8 @@ ON CONFLICT (id, created_at) DO NOTHING;
 
 # JSON Inferences
 # Note: input, output, output_schema, inference_params, auxiliary_content are JSONB in our schema
+# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
 load_jsonl "small-fixtures/json_inference_examples.jsonl" "tensorzero.json_inferences" "
 INSERT INTO tensorzero.json_inferences (
@@ -126,15 +130,15 @@ SELECT
     j->>'function_name',
     j->>'variant_name',
     (j->>'episode_id')::uuid,
-    COALESCE(j->'input', '{}')::jsonb,
-    COALESCE(j->'output', '{}')::jsonb,
-    COALESCE(j->'output_schema', '{}')::jsonb,
-    COALESCE(j->'inference_params', '{}')::jsonb,
+    COALESCE(NULLIF(j->>'input', '')::jsonb, '{}'),
+    COALESCE(NULLIF(j->>'output', '')::jsonb, '{}'),
+    COALESCE(NULLIF(j->>'output_schema', '')::jsonb, '{}'),
+    COALESCE(NULLIF(j->>'inference_params', '')::jsonb, '{}'),
     (j->>'processing_time_ms')::integer,
     (j->>'ttft_ms')::integer,
-    COALESCE(j->'tags', '{}')::jsonb,
-    COALESCE(j->'extra_body', '[]')::jsonb,
-    COALESCE(j->'auxiliary_content', '{}')::jsonb,
+    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
+    COALESCE(NULLIF(j->>'extra_body', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'auxiliary_content', '')::jsonb, '{}'),
     tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
@@ -214,6 +218,8 @@ ON CONFLICT (id) DO NOTHING;
 # Demonstration Feedback
 # Note: demonstration_feedback uses inference_id instead of target_id
 # Note: value is JSONB (stores JsonInferenceOutput or Vec<ContentBlockChatOutput>)
+# ClickHouse stores value as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
 load_jsonl "small-fixtures/demonstration_feedback_examples.jsonl" "tensorzero.demonstration_feedback" "
 INSERT INTO tensorzero.demonstration_feedback (
@@ -222,8 +228,8 @@ INSERT INTO tensorzero.demonstration_feedback (
 SELECT
     (j->>'id')::uuid,
     (j->>'inference_id')::uuid,
-    j->'value',
-    COALESCE(j->'tags', '{}')::jsonb,
+    NULLIF(j->>'value', '')::jsonb,
+    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
     tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id) DO NOTHING;

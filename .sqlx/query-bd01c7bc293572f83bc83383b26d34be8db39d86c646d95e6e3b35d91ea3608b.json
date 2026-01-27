@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT function_name, variant_name, episode_id\n                    FROM tensorzero.chat_inferences\n                    WHERE episode_id = $1\n                    ORDER BY created_at DESC\n                    LIMIT 1\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "function_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "function_name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "variant_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "variant_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "episode_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inferences",
+            "name": "episode_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bd01c7bc293572f83bc83383b26d34be8db39d86c646d95e6e3b35d91ea3608b"
+}

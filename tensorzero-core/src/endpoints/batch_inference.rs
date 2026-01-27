@@ -23,6 +23,9 @@ use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::inferences::InferenceQueries;
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
@@ -487,6 +490,7 @@ pub async fn poll_batch_inference_handler(
         config,
         http_client,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }): AppState,
     Path(path_params): Path<PollPathParams>,
@@ -511,6 +515,7 @@ pub async fn poll_batch_inference_handler(
             .await?;
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
+                &postgres_connection_info,
                 &batch_request,
                 response,
                 &config,
@@ -797,6 +802,7 @@ pub async fn write_batch_request_row(
 /// We don't need to poll if the batch is failed or completed because the status will not change.
 pub async fn write_poll_batch_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
+    postgres_connection_info: &PostgresConnectionInfo,
     batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
     config: &Config,
@@ -821,6 +827,7 @@ pub async fn write_poll_batch_inference(
             let raw_response = response.raw_response.clone();
             let inferences = write_completed_batch_inference(
                 clickhouse_connection_info,
+                postgres_connection_info,
                 batch_request,
                 response,
                 config,
@@ -900,6 +907,7 @@ async fn write_batch_request_status_update(
 /// handler must be adjusted to deal with it and also the lifetimes associated there.
 pub async fn write_completed_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
+    postgres_connection_info: &PostgresConnectionInfo,
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
     config: &Config,
@@ -1057,20 +1065,38 @@ pub async fn write_completed_batch_inference<'a>(
             }
         }
     }
-    // Write all the *Inference rows to the database
-    match &**function {
-        FunctionConfig::Chat(_chat_function) => {
-            clickhouse_connection_info
-                .write_batched(&inference_rows_to_write, TableName::ChatInference)
-                .await?;
-        }
-        FunctionConfig::Json(_json_function) => {
-            clickhouse_connection_info
-                .write_batched(&inference_rows_to_write, TableName::JsonInference)
-                .await?;
-        }
-    }
+    // Write all the *Inference rows to the database (dual-write via InferenceQueries trait)
+    // Separate chat and json inferences for batch insert
+    let (chat_inferences, json_inferences): (Vec<_>, Vec<_>) = inference_rows_to_write
+        .into_iter()
+        .partition(|row| matches!(row, InferenceDatabaseInsert::Chat(_)));
+    let chat_inferences: Vec<_> = chat_inferences
+        .into_iter()
+        .filter_map(|row| match row {
+            InferenceDatabaseInsert::Chat(chat) => Some(chat),
+            InferenceDatabaseInsert::Json(_) => None,
+        })
+        .collect();
+    let json_inferences: Vec<_> = json_inferences
+        .into_iter()
+        .filter_map(|row| match row {
+            InferenceDatabaseInsert::Json(json) => Some(json),
+            InferenceDatabaseInsert::Chat(_) => None,
+        })
+        .collect();
+
+    let inference_database = DelegatingDatabaseConnection::new(
+        clickhouse_connection_info.clone(),
+        postgres_connection_info.clone(),
+    );
+    let _ = inference_database
+        .insert_chat_inferences(&chat_inferences)
+        .await;
+    let _ = inference_database
+        .insert_json_inferences(&json_inferences)
+        .await;
     // Write all the ModelInference rows to the database
+    // Note: model_inferences dual-write deferred to step 1-1
     clickhouse_connection_info
         .write_batched(&model_inference_rows_to_write, TableName::ModelInference)
         .await?;
