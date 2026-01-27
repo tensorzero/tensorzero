@@ -188,12 +188,22 @@ pub async fn list_events_handler(
 /// Creates an event in a session via the Autopilot API.
 /// The deployment_id is injected from the gateway's app state.
 #[axum::debug_handler(state = AppStateData)]
-#[instrument(name = "autopilot.create_event", skip_all, fields(session_id = %session_id))]
+#[instrument(
+    name = "autopilot.create_event",
+    skip_all,
+    fields(
+        session_id = %session_id,
+        event_type = ?std::mem::discriminant(&http_request.payload),
+        previous_user_message_event_id = ?http_request.previous_user_message_event_id
+    )
+)]
 pub async fn create_event_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
     StructuredJson(http_request): StructuredJson<CreateEventGatewayRequest>,
 ) -> Result<Json<CreateEventResponse>, Error> {
+    tracing::debug!(payload = ?http_request.payload, "Creating event for session");
+
     let client = get_autopilot_client(&app_state)?;
 
     // Get deployment_id from app state
@@ -218,6 +228,13 @@ pub async fn create_event_handler(
     };
 
     let response = create_event(&client, session_id, request).await?;
+
+    tracing::debug!(
+        event_id = %response.event_id,
+        response_session_id = %response.session_id,
+        "Event created successfully"
+    );
+
     Ok(Json(response))
 }
 
