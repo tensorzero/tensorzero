@@ -130,6 +130,15 @@ function EventStreamSkeleton() {
   );
 }
 
+// Warning banner for transient errors
+function ErrorBanner({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
+      {children}
+    </div>
+  );
+}
+
 // Main content component that resolves the promise and renders the event stream with SSE
 function EventStreamContent({
   sessionId,
@@ -691,9 +700,7 @@ export default function AutopilotSessionEventsPage({
               />
             </div>
             {sseError.error && sseError.isRetrying && (
-              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
-                Failed to fetch events. Retrying...
-              </div>
+              <ErrorBanner>Failed to fetch events. Retrying...</ErrorBanner>
             )}
           </div>
           <FadeGradient
