@@ -3,41 +3,117 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Code } from "~/components/ui/code";
-import { CodeEditor, type Language } from "~/components/ui/code-editor";
+import {
+  CodeEditor,
+  type CodeEditorProps,
+  type Language,
+} from "~/components/ui/code-editor";
 import { cn } from "~/utils/common";
+
+// Common spacing for block elements
+const BLOCK_SPACING = "mb-3 last:mb-0";
+
+// Common table cell styling
+const TABLE_CELL_BASE = "border-border border px-3 py-2";
 
 /**
  * Map markdown language identifiers to CodeEditor languages.
- * Falls back to "text" for unsupported languages.
+ * Falls back to "text" for unsupported languages (no syntax highlighting).
  */
 function mapLanguage(lang: string | undefined): Language {
   if (!lang) return "text";
   const normalized = lang.toLowerCase();
-  if (normalized === "json" || normalized === "jsonc") return "json";
-  if (normalized === "md" || normalized === "markdown") return "markdown";
-  if (normalized === "jinja" || normalized === "jinja2") return "jinja2";
-  return "text";
+  switch (normalized) {
+    case "json":
+    case "jsonc":
+      return "json";
+    case "md":
+    case "markdown":
+      return "markdown";
+    case "jinja":
+    case "jinja2":
+      return "jinja2";
+    default:
+      return "text"; // No syntax highlighting for unknown languages
+  }
+}
+
+/**
+ * Recursively extract text from React children.
+ */
+function getTextContent(node: React.ReactNode): string {
+  if (node == null) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(getTextContent).join("");
+  if (isValidElement(node)) {
+    const props = node.props as { children?: React.ReactNode };
+    return getTextContent(props.children);
+  }
+  return "";
 }
 
 /**
  * Extract text content and language from pre > code children.
+ * react-markdown wraps code blocks as <pre><code className="language-xxx">...</code></pre>
  */
 function extractCodeBlockInfo(children: React.ReactNode): {
   code: string;
   language: Language;
 } {
-  // react-markdown wraps code blocks as <pre><code className="language-xxx">...</code></pre>
   const child = Children.only(children);
   if (isValidElement(child) && child.type === "code") {
-    const className = (child.props as { className?: string }).className;
-    const lang = className?.replace("language-", "");
-    const code = String(
-      (child.props as { children?: React.ReactNode }).children || "",
-    );
-    // Remove trailing newline that markdown adds
-    return { code: code.replace(/\n$/, ""), language: mapLanguage(lang) };
+    const props = child.props as {
+      className?: string;
+      children?: React.ReactNode;
+    };
+    const lang = props.className?.replace("language-", "");
+    const code = getTextContent(props.children).trimEnd();
+    return { code, language: mapLanguage(lang) };
   }
-  return { code: String(children), language: "text" };
+  // Fallback: use text for monospace font without syntax highlighting
+  return { code: getTextContent(children).trimEnd(), language: "text" };
+}
+
+/**
+ * Read-only code block with copy button and word wrap toggle.
+ * Reusable component for displaying code snippets consistently.
+ */
+export interface ReadOnlyCodeBlockProps
+  extends Pick<CodeEditorProps, "className" | "maxHeight"> {
+  code: string;
+  language?: Language;
+}
+
+export function ReadOnlyCodeBlock({
+  code,
+  language = "text",
+  maxHeight,
+  className,
+}: ReadOnlyCodeBlockProps) {
+  return (
+    <CodeEditor
+      value={code}
+      readOnly
+      allowedLanguages={[language]}
+      autoDetectLanguage={false}
+      showLineNumbers={false}
+      maxHeight={maxHeight}
+      className={className}
+    />
+  );
+}
+
+/**
+ * Markdown code block component using ReadOnlyCodeBlock.
+ */
+function MarkdownCodeBlock({ children }: { children?: React.ReactNode }) {
+  if (!children) return null;
+  const { code, language } = extractCodeBlockInfo(children);
+  return (
+    <div className={BLOCK_SPACING}>
+      <ReadOnlyCodeBlock code={code} language={language} />
+    </div>
+  );
 }
 
 const components: Components = {
@@ -62,52 +138,32 @@ const components: Components = {
   ),
 
   // Paragraphs
-  p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+  p: ({ children }) => <p className={BLOCK_SPACING}>{children}</p>,
 
   // Lists
   ul: ({ children }) => (
-    <ul className="mb-3 list-disc space-y-1 pl-6 last:mb-0">{children}</ul>
+    <ul className={cn("list-disc space-y-1 pl-6", BLOCK_SPACING)}>
+      {children}
+    </ul>
   ),
   ol: ({ children }) => (
-    <ol className="mb-3 list-decimal space-y-1 pl-6 last:mb-0">{children}</ol>
+    <ol className={cn("list-decimal space-y-1 pl-6", BLOCK_SPACING)}>
+      {children}
+    </ol>
   ),
   li: ({ children }) => <li>{children}</li>,
 
   // Inline code - reuse existing Code component
-  code: ({ className, children }) => {
-    // Code blocks are handled by pre, this is only for inline code
-    const isCodeBlock = className?.startsWith("language-");
-    if (isCodeBlock) {
-      // Let pre handle it
-      return (
-        <code className={cn("block whitespace-pre-wrap", className)}>
-          {children}
-        </code>
-      );
-    }
-    return <Code>{children}</Code>;
-  },
+  code: ({ children }) => <Code>{children}</Code>,
 
   // Code blocks - use CodeEditor for consistent UX
-  pre: ({ children }) => {
-    const { code, language } = extractCodeBlockInfo(children);
-    return (
-      <div className="mb-3 last:mb-0">
-        <CodeEditor
-          value={code}
-          readOnly
-          allowedLanguages={[language]}
-          autoDetectLanguage={false}
-          showLineNumbers={false}
-          maxHeight="300px"
-        />
-      </div>
-    );
-  },
+  pre: MarkdownCodeBlock,
 
   // Blockquotes
   blockquote: ({ children }) => (
-    <blockquote className="border-border text-fg-secondary mb-3 border-l-4 pl-4 italic last:mb-0">
+    <blockquote
+      className={cn("border-border border-l-4 pl-4 italic", BLOCK_SPACING)}
+    >
       {children}
     </blockquote>
   ),
@@ -135,7 +191,7 @@ const components: Components = {
 
   // Tables
   table: ({ children }) => (
-    <div className="mb-3 overflow-x-auto last:mb-0">
+    <div className={cn("overflow-x-auto", BLOCK_SPACING)}>
       <table className="border-border min-w-full border-collapse border">
         {children}
       </table>
@@ -145,13 +201,11 @@ const components: Components = {
   tbody: ({ children }) => <tbody>{children}</tbody>,
   tr: ({ children }) => <tr className="border-border border-b">{children}</tr>,
   th: ({ children }) => (
-    <th className="border-border border px-3 py-2 text-left font-semibold">
+    <th className={cn(TABLE_CELL_BASE, "text-left font-semibold")}>
       {children}
     </th>
   ),
-  td: ({ children }) => (
-    <td className="border-border border px-3 py-2">{children}</td>
-  ),
+  td: ({ children }) => <td className={TABLE_CELL_BASE}>{children}</td>,
 };
 
 interface MarkdownProps {

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Markdown } from "./markdown";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
 
 const meta = {
   title: "UI/Markdown",
@@ -7,6 +8,13 @@ const meta = {
   parameters: {
     layout: "padded",
   },
+  decorators: [
+    (Story) => (
+      <GlobalToastProvider>
+        <Story />
+      </GlobalToastProvider>
+    ),
+  ],
   render: (args) => (
     <div className="max-w-2xl">
       <Markdown {...args} />

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventStream from "./EventStream";
 import type { GatewayEvent } from "~/types/tensorzero";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
 
 const baseTime = new Date("2026-04-12T10:00:00Z").getTime();
 const sessionId = "d1a0b0c0-0000-0000-0000-000000000001";
@@ -461,6 +462,13 @@ const longFormEvents: GatewayEvent[] = [
 const meta = {
   title: "Autopilot/EventStream",
   component: EventStream,
+  decorators: [
+    (Story) => (
+      <GlobalToastProvider>
+        <Story />
+      </GlobalToastProvider>
+    ),
+  ],
   render: (args) => (
     <div className="w-[80vw] max-w-3xl p-4">
       <EventStream {...args} />

@@ -1,6 +1,6 @@
 import { AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
 import { type RefObject, useState } from "react";
-import { Markdown } from "~/components/ui/markdown";
+import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
@@ -142,10 +142,19 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return {
         description: payload.status_update.text,
       };
-    case "tool_call":
-      return {
-        description: JSON.stringify(payload.arguments, null, 2),
-      };
+    case "tool_call": {
+      // If arguments is a string, try to parse as JSON for pretty-printing
+      if (typeof payload.arguments === "string") {
+        try {
+          const parsed = JSON.parse(payload.arguments);
+          return { description: JSON.stringify(parsed, null, 2) };
+        } catch {
+          // Not valid JSON, show as plain text
+          return { description: payload.arguments };
+        }
+      }
+      return { description: JSON.stringify(payload.arguments, null, 2) };
+    }
     case "tool_call_authorization":
       return {
         description:
@@ -385,14 +394,13 @@ function EventItem({
           {event.payload.type === "message" &&
           event.payload.role === "assistant" ? (
             <Markdown>{summary.description}</Markdown>
+          ) : event.payload.type === "tool_call" ? (
+            <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (
             <p
               className={cn(
-                "text-fg-secondary whitespace-pre-wrap",
-                event.payload.type === "tool_call" ||
-                  event.payload.type === "tool_result"
-                  ? "font-mono text-sm"
-                  : "text-sm",
+                "text-fg-secondary text-sm whitespace-pre-wrap",
+                event.payload.type === "tool_result" && "font-mono",
               )}
             >
               {summary.description}
