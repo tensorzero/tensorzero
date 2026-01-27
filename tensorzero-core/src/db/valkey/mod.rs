@@ -1,8 +1,13 @@
 mod rate_limiting;
 
-use redis::aio::ConnectionManager;
-use redis::{Client, RedisResult};
+use std::time::Duration;
 
+use async_trait::async_trait;
+use redis::aio::ConnectionManager;
+use redis::{AsyncCommands, Client, RedisResult};
+use tokio::time::timeout;
+
+use crate::db::HealthCheckable;
 use crate::error::{Error, ErrorDetails};
 
 /// Connection info for Valkey (Redis-compatible) rate limiting backend.
@@ -33,6 +38,9 @@ impl ValkeyConnectionInfo {
 
         // When creating the connection, load the function library into Valkey.
         Self::load_function_library(&mut connection).await?;
+
+        // Migrate old rate limit keys to new prefixed keys for backwards compatibility.
+        Self::migrate_old_ratelimit_keys(&mut connection).await?;
 
         Ok(Self::Enabled {
             connection: Box::new(connection),
@@ -67,5 +75,55 @@ impl ValkeyConnectionInfo {
                 message: format!("Failed to load function library: {e}"),
             })
         })
+    }
+
+    /// Migrate old rate limit keys (`ratelimit:*`) to new prefixed keys (`tensorzero_ratelimit:*`).
+    /// This preserves existing rate limit state during upgrades from older versions.
+    /// Keys are only copied if the new key doesn't already exist.
+    /// The migration runs entirely in Lua for efficiency (single round-trip).
+    async fn migrate_old_ratelimit_keys(connection: &mut ConnectionManager) -> Result<(), Error> {
+        // Call the Lua function to perform the migration atomically on the server
+        let _result: String = redis::cmd("FCALL")
+            .arg("tensorzero_migrate_old_keys_v1")
+            .arg(0) // No keys passed
+            .query_async(connection)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::ValkeyQuery {
+                    message: format!("Failed to migrate old rate limit keys: {e}"),
+                })
+            })?;
+
+        Ok(())
+    }
+}
+
+const HEALTH_CHECK_TIMEOUT_MS: u64 = 1000;
+
+#[async_trait]
+impl HealthCheckable for ValkeyConnectionInfo {
+    async fn health(&self) -> Result<(), Error> {
+        match self {
+            Self::Disabled => Ok(()),
+            Self::Enabled { connection } => {
+                let check = async {
+                    let mut conn = connection.clone();
+                    let _: String = conn.ping().await.map_err(|e| {
+                        Error::new(ErrorDetails::ValkeyConnection {
+                            message: format!("Valkey health check failed: {e}"),
+                        })
+                    })?;
+                    Ok(())
+                };
+
+                match timeout(Duration::from_millis(HEALTH_CHECK_TIMEOUT_MS), check).await {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(e)) => Err(e),
+                    Err(_) => Err(Error::new(ErrorDetails::ValkeyConnection {
+                        message: "Valkey health check timed out".to_string(),
+                    })),
+                }
+            }
+        }
     }
 }

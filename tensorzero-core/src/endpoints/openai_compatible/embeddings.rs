@@ -7,11 +7,11 @@
 use axum::{Extension, Json, extract::State};
 
 use crate::endpoints::embeddings::embeddings;
-use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{AppState, AppStateData};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use super::types::embeddings::{OpenAICompatibleEmbeddingParams, OpenAIEmbeddingResponse};
+use super::{OpenAICompatibleError, OpenAIStructuredJson};
 
 pub async fn embeddings_handler(
     State(AppStateData {
@@ -24,8 +24,10 @@ pub async fn embeddings_handler(
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
-    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
-) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
+    OpenAIStructuredJson(openai_compatible_params): OpenAIStructuredJson<
+        OpenAICompatibleEmbeddingParams,
+    >,
+) -> Result<Json<OpenAIEmbeddingResponse>, OpenAICompatibleError> {
     let embedding_params = openai_compatible_params.try_into()?;
     let response = embeddings(
         config,

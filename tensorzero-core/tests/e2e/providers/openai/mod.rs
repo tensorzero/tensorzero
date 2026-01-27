@@ -1294,7 +1294,7 @@ async fn test_embedding_request() {
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
-            PostgresConnectionInfo::Disabled,
+            Arc::new(PostgresConnectionInfo::Disabled),
         )),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
@@ -1445,7 +1445,7 @@ async fn test_embedding_sanity_check() {
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
-            PostgresConnectionInfo::Disabled,
+            Arc::new(PostgresConnectionInfo::Disabled),
         )),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
@@ -2002,9 +2002,10 @@ pub async fn test_embedding_extra_headers() {
     let response_json = response.json::<Value>().await.unwrap();
     println!("API response: {response_json:?}");
     // OpenAI returns 401 for invalid auth, which TensorZero wraps as an error
-    let error_message = response_json["error"]
+    // OpenAI-compatible endpoints return {"error": {"message": "..."}} format
+    let error_message = response_json["error"]["message"]
         .as_str()
-        .expect("Expected a string error response due to invalid auth header");
+        .expect("Expected an OpenAI-format error response due to invalid auth header");
     assert!(
         !error_message.is_empty(),
         "Expected an error message due to invalid auth header"

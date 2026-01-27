@@ -3,6 +3,7 @@
 //! This module contains production-ready tools that can be used by autopilot
 //! to perform actions like inference, feedback, and other operations.
 
+mod auto_reject_tool_call;
 mod create_datapoints;
 mod create_datapoints_from_inferences;
 mod delete_datapoints;
@@ -20,6 +21,7 @@ mod run_evaluation;
 mod update_datapoints;
 mod write_config;
 
+pub use auto_reject_tool_call::AutoRejectToolCallTool;
 pub use create_datapoints::{CreateDatapointsTool, CreateDatapointsToolParams};
 pub use create_datapoints_from_inferences::{
     CreateDatapointsFromInferencesTool, CreateDatapointsFromInferencesToolParams,

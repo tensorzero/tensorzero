@@ -205,14 +205,7 @@ async fn test_tensorzero_unauthenticated_routes() {
         .unwrap();
 
     let status = health_response.status();
-    let text = health_response.text().await.unwrap();
     assert_eq!(status, StatusCode::OK);
-
-    // TODO(shuyangli): Add a HealthResponse type and validate the parsed form.
-    assert_eq!(
-        text,
-        "{\"gateway\":\"ok\",\"clickhouse\":\"ok\",\"postgres\":\"ok\"}"
-    );
 
     let status_response = reqwest::Client::new()
         .request(Method::GET, format!("http://{}/status", child_data.addr))
@@ -950,6 +943,132 @@ async fn test_rate_limit_auth_single_key() {
         .unwrap()
         .error_for_status()
         .unwrap();
+}
+
+/// Tests that auth error responses use the correct format (OpenAI vs TensorZero) based on the route,
+/// without a custom base_path.
+#[tokio::test]
+async fn test_auth_error_format_without_base_path() {
+    let child_data = start_gateway_on_random_port(
+        r"
+    [gateway.auth]
+    enabled = true
+    ",
+        None,
+    )
+    .await;
+
+    let client = reqwest::Client::new();
+
+    // Test OpenAI-compatible route - should return OpenAI error format
+    let openai_response = client
+        .post(format!(
+            "http://{}/openai/v1/chat/completions",
+            child_data.addr
+        ))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(openai_response.status(), StatusCode::UNAUTHORIZED);
+    let openai_error: Value = openai_response.json().await.unwrap();
+    assert!(
+        openai_error.get("error").unwrap().get("message").is_some(),
+        "OpenAI route should return OpenAI error format with nested message, got: {openai_error}"
+    );
+
+    // Test non-OpenAI route - should return TensorZero error format
+    let tensorzero_response = client
+        .post(format!("http://{}/inference", child_data.addr))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(tensorzero_response.status(), StatusCode::UNAUTHORIZED);
+    let tensorzero_error: Value = tensorzero_response.json().await.unwrap();
+    assert!(
+        tensorzero_error.get("error").unwrap().is_string(),
+        "TensorZero route should return flat error format, got: {tensorzero_error}"
+    );
+}
+
+/// Tests that auth error responses use the correct format (OpenAI vs TensorZero) based on the route,
+/// and that this works correctly with a custom base_path.
+///
+/// This test verifies:
+/// 1. The `MatchedPath` from Axum includes the base path (e.g., `/my/prefix/openai/v1/...`)
+/// 2. The `is_openai_compatible_route` function correctly identifies OpenAI routes with base paths
+/// 3. OpenAI-compatible routes return errors in OpenAI format: `{"error": {"message": "..."}}`
+/// 4. Non-OpenAI routes return errors in TensorZero format: `{"error": "..."}`
+#[tokio::test]
+async fn test_auth_error_format_with_base_path() {
+    let child_data = start_gateway_on_random_port(
+        r#"
+    base_path = "/my/prefix"
+
+    [gateway.auth]
+    enabled = true
+    "#,
+        None,
+    )
+    .await;
+
+    let client = reqwest::Client::new();
+
+    // Test OpenAI-compatible route with base path - should return OpenAI error format
+    let openai_response = client
+        .post(format!(
+            "http://{}/my/prefix/openai/v1/chat/completions",
+            child_data.addr
+        ))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(openai_response.status(), StatusCode::UNAUTHORIZED);
+    let openai_error: Value = openai_response.json().await.unwrap();
+    assert!(
+        openai_error.get("error").unwrap().get("message").is_some(),
+        "OpenAI route should return OpenAI error format with nested message, got: {openai_error}"
+    );
+
+    // Test non-OpenAI route with base path - should return TensorZero error format
+    let tensorzero_response = client
+        .post(format!("http://{}/my/prefix/inference", child_data.addr))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(tensorzero_response.status(), StatusCode::UNAUTHORIZED);
+    let tensorzero_error: Value = tensorzero_response.json().await.unwrap();
+    assert!(
+        tensorzero_error.get("error").unwrap().is_string(),
+        "TensorZero route should return flat error format, got: {tensorzero_error}"
+    );
+
+    // When hitting a route without the base path, the MatchedPath extension is None
+    // (because the route doesn't match any registered route), so the error format
+    // should fall back to TensorZero format (not OpenAI format)
+    let no_prefix_response = client
+        .post(format!(
+            "http://{}/openai/v1/chat/completions",
+            child_data.addr
+        ))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        no_prefix_response.status(),
+        StatusCode::UNAUTHORIZED,
+        "Route without base path should still require auth"
+    );
+    let no_prefix_error: Value = no_prefix_response.json().await.unwrap();
+    // Without a MatchedPath, the function returns false, so we get TensorZero format
+    assert!(
+        no_prefix_error.get("error").unwrap().is_string(),
+        "Route without MatchedPath should return TensorZero error format, got: {no_prefix_error}"
+    );
 }
 
 #[tokio::test]

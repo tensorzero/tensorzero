@@ -138,6 +138,7 @@ tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 paste = "1.0.15"
 base64 = "0.22.1"
 tensorzero-derive = { path = "../internal/tensorzero-derive" }
+durable-tools = { path = "../internal/durable-tools" }
 http-body-util = "0.1.3"
 image = "0.25.6"
 gag = "1.0.0"

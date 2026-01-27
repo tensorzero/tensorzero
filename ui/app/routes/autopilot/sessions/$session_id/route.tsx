@@ -25,7 +25,7 @@ import { ChatInput } from "~/components/autopilot/ChatInput";
 import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
-import type { AutopilotStatus, Event } from "~/types/tensorzero";
+import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 
 // Nil UUID for creating new sessions
@@ -42,9 +42,9 @@ export const handle: RouteHandle = {
 const EVENTS_PER_PAGE = 20;
 
 export type EventsData = {
-  events: Event[];
+  events: GatewayEvent[];
   hasMoreEvents: boolean;
-  pendingToolCalls: Event[];
+  pendingToolCalls: GatewayEvent[];
   status: AutopilotStatus;
 };
 
@@ -59,9 +59,9 @@ export async function loader({ params }: Route.LoaderArgs) {
     return {
       sessionId: "new",
       eventsData: {
-        events: [] as Event[],
+        events: [] as GatewayEvent[],
         hasMoreEvents: false,
-        pendingToolCalls: [] as Event[],
+        pendingToolCalls: [] as GatewayEvent[],
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
@@ -367,7 +367,9 @@ function EventStreamContent({
         return;
       }
 
-      const responseData = (await response.json()) as { events: Event[] };
+      const responseData = (await response.json()) as {
+        events: GatewayEvent[];
+      };
 
       logger.debug(
         `Loaded ${responseData.events.length} older events (requested ${EVENTS_PER_PAGE + 1})`,

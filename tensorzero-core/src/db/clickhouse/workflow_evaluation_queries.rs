@@ -5,12 +5,13 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use super::ClickHouseConnectionInfo;
 use super::select_queries::{parse_count, parse_json_rows};
+use super::{ClickHouseConnectionInfo, escape_string_for_clickhouse_literal};
+use crate::config::snapshot::SnapshotHash;
 use crate::db::workflow_evaluation_queries::{
     GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationProjectRow,
     WorkflowEvaluationQueries, WorkflowEvaluationRunEpisodeWithFeedbackRow,
-    WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRaw,
+    WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRaw,
     WorkflowEvaluationRunStatisticsRow, WorkflowEvaluationRunWithEpisodeCountRow,
 };
 use crate::error::{Error, ErrorDetails};
@@ -681,14 +682,156 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
             })
         })
     }
+
+    async fn insert_workflow_evaluation_run(
+        &self,
+        run_id: Uuid,
+        variant_pins: &HashMap<String, String>,
+        tags: &HashMap<String, String>,
+        project_name: Option<&str>,
+        run_display_name: Option<&str>,
+        snapshot_hash: &SnapshotHash,
+    ) -> Result<(), Error> {
+        let query = r"
+        INSERT INTO DynamicEvaluationRun (
+            run_id_uint,
+            variant_pins,
+            tags,
+            project_name,
+            run_display_name,
+            snapshot_hash
+        )
+        VALUES (
+            toUInt128({run_id:UUID}),
+            {variant_pins:Map(String, String)},
+            {tags:Map(String, String)},
+            {project_name:Nullable(String)},
+            {run_display_name:Nullable(String)},
+            toUInt256OrNull({snapshot_hash:Nullable(String)})
+        )
+        ";
+
+        let run_id_str = run_id.to_string();
+        let variant_pins_str = to_map_literal(variant_pins);
+        let tags_str = to_map_literal(tags);
+
+        let mut params = HashMap::new();
+        params.insert("run_id", run_id_str.as_str());
+        params.insert("variant_pins", variant_pins_str.as_str());
+        params.insert("tags", tags_str.as_str());
+        // Use \\N to indicate NULL
+        params.insert("project_name", project_name.unwrap_or("\\N"));
+        params.insert("run_display_name", run_display_name.unwrap_or("\\N"));
+        params.insert("snapshot_hash", &**snapshot_hash);
+
+        self.run_query_synchronous(query.to_string(), &params)
+            .await?;
+        Ok(())
+    }
+
+    async fn insert_workflow_evaluation_run_episode(
+        &self,
+        run_id: Uuid,
+        episode_id: Uuid,
+        task_name: Option<&str>,
+        tags: &HashMap<String, String>,
+        snapshot_hash: &SnapshotHash,
+    ) -> Result<(), Error> {
+        let query = r"
+        INSERT INTO DynamicEvaluationRunEpisode
+        (
+            run_id,
+            episode_id_uint,
+            variant_pins,
+            datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
+            tags,
+            snapshot_hash
+        )
+        SELECT
+            {run_id:UUID} AS run_id,
+            toUInt128({episode_id:UUID}) AS episode_id_uint,
+            variant_pins,
+            {datapoint_name:Nullable(String)} AS datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
+            mapUpdate(tags, {tags:Map(String, String)}) AS tags, -- merge the tags in the params on top of tags in the workflow evaluation run
+            toUInt256OrNull({snapshot_hash:Nullable(String)}) AS snapshot_hash
+        FROM DynamicEvaluationRun
+        WHERE run_id_uint = toUInt128({run_id:UUID})
+        ";
+
+        let run_id_str = run_id.to_string();
+        let episode_id_str = episode_id.to_string();
+        let tags_str = to_map_literal(tags);
+
+        let mut params = HashMap::new();
+        params.insert("run_id", run_id_str.as_str());
+        params.insert("episode_id", episode_id_str.as_str());
+        // Use \\N to indicate NULL; for legacy reasons, stored as `datapoint_name` in the database
+        params.insert("datapoint_name", task_name.unwrap_or("\\N"));
+        params.insert("tags", tags_str.as_str());
+        params.insert("snapshot_hash", &**snapshot_hash);
+
+        self.run_query_synchronous(query.to_string(), &params)
+            .await?;
+        Ok(())
+    }
+
+    async fn get_workflow_evaluation_run_by_episode_id(
+        &self,
+        episode_id: Uuid,
+    ) -> Result<Option<WorkflowEvaluationRunInfo>, Error> {
+        let query = r"
+        SELECT variant_pins, tags
+        FROM DynamicEvaluationRunEpisode
+        WHERE episode_id_uint = toUInt128({episode_id:UUID})
+        FORMAT JSONEachRow
+        ";
+
+        let episode_id_str = episode_id.to_string();
+        let params = HashMap::from([("episode_id", episode_id_str.as_str())]);
+
+        let response = self
+            .run_query_synchronous(query.to_string(), &params)
+            .await?;
+
+        if response.response.is_empty() {
+            return Ok(None);
+        }
+
+        let info: WorkflowEvaluationRunInfo =
+            serde_json::from_str(&response.response).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize workflow evaluation run info: {e}"),
+                })
+            })?;
+
+        Ok(Some(info))
+    }
+}
+
+/// Converts a HashMap to a ClickHouse map literal string.
+/// Example: {"key1": "value1", "key2": "value2"} -> "{'key1':'value1','key2':'value2'}"
+fn to_map_literal(map: &HashMap<String, String>) -> String {
+    let items: Vec<String> = map
+        .iter()
+        .map(|(k, v)| {
+            format!(
+                "'{}':'{}'",
+                escape_string_for_clickhouse_literal(k),
+                escape_string_for_clickhouse_literal(v)
+            )
+        })
+        .collect();
+    format!("{{{}}}", items.join(","))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::sync::Arc;
 
     use uuid::Uuid;
 
+    use crate::config::snapshot::SnapshotHash;
     use crate::db::{
         clickhouse::{
             ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
@@ -1387,5 +1530,291 @@ mod tests {
             .unwrap();
 
         assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_insert_workflow_evaluation_run() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "INSERT INTO DynamicEvaluationRun");
+                assert_query_contains(query, "run_id_uint");
+                assert_query_contains(query, "variant_pins");
+                assert_query_contains(query, "tags");
+                assert_query_contains(query, "project_name");
+                assert_query_contains(query, "run_display_name");
+                assert_query_contains(query, "snapshot_hash");
+                assert_query_contains(query, "toUInt128({run_id:UUID})");
+                assert_query_contains(query, "{variant_pins:Map(String, String)}");
+                assert_query_contains(query, "{tags:Map(String, String)}");
+
+                assert!(params.contains_key("run_id"));
+                assert!(params.contains_key("variant_pins"));
+                assert!(params.contains_key("tags"));
+                assert!(params.contains_key("project_name"));
+                assert!(params.contains_key("run_display_name"));
+                assert!(params.contains_key("snapshot_hash"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 1,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = Uuid::now_v7();
+        let variant_pins = HashMap::from([("fn1".to_string(), "var1".to_string())]);
+        let tags = HashMap::from([("key".to_string(), "value".to_string())]);
+        let snapshot_hash = SnapshotHash::default();
+
+        let result = conn
+            .insert_workflow_evaluation_run(
+                run_id,
+                &variant_pins,
+                &tags,
+                Some("my_project"),
+                Some("My Run"),
+                &snapshot_hash,
+            )
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "insert_workflow_evaluation_run should succeed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_workflow_evaluation_run_with_nulls() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|_query, params| {
+                // When project_name and display_name are None, they should be "\\N"
+                assert_eq!(params.get("project_name"), Some(&"\\N"));
+                assert_eq!(params.get("run_display_name"), Some(&"\\N"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 1,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = Uuid::now_v7();
+        let variant_pins = HashMap::new();
+        let tags = HashMap::new();
+        let snapshot_hash = SnapshotHash::default();
+
+        let result = conn
+            .insert_workflow_evaluation_run(
+                run_id,
+                &variant_pins,
+                &tags,
+                None,
+                None,
+                &snapshot_hash,
+            )
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "insert_workflow_evaluation_run with nulls should succeed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_workflow_evaluation_run_episode() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "INSERT INTO DynamicEvaluationRunEpisode");
+                assert_query_contains(query, "run_id");
+                assert_query_contains(query, "episode_id_uint");
+                assert_query_contains(query, "variant_pins");
+                assert_query_contains(query, "datapoint_name");
+                assert_query_contains(query, "tags");
+                assert_query_contains(query, "snapshot_hash");
+                assert_query_contains(query, "SELECT");
+                assert_query_contains(query, "FROM DynamicEvaluationRun");
+                assert_query_contains(query, "mapUpdate(tags, {tags:Map(String, String)})");
+
+                assert!(params.contains_key("run_id"));
+                assert!(params.contains_key("episode_id"));
+                assert!(params.contains_key("datapoint_name"));
+                assert!(params.contains_key("tags"));
+                assert!(params.contains_key("snapshot_hash"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 1,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let tags = HashMap::from([("episode_tag".to_string(), "value".to_string())]);
+        let snapshot_hash = SnapshotHash::default();
+
+        let result = conn
+            .insert_workflow_evaluation_run_episode(
+                run_id,
+                episode_id,
+                Some("my_task"),
+                &tags,
+                &snapshot_hash,
+            )
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "insert_workflow_evaluation_run_episode should succeed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_workflow_evaluation_run_episode_with_null_task_name() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|_query, params| {
+                // When task_name is None, datapoint_name should be "\\N"
+                assert_eq!(params.get("datapoint_name"), Some(&"\\N"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 1,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let run_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let tags = HashMap::new();
+        let snapshot_hash = SnapshotHash::default();
+
+        let result = conn
+            .insert_workflow_evaluation_run_episode(run_id, episode_id, None, &tags, &snapshot_hash)
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "insert_workflow_evaluation_run_episode with null task_name should succeed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_run_by_episode_id() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let episode_id = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, params| {
+                assert_query_contains(query, "SELECT variant_pins, tags");
+                assert_query_contains(query, "FROM DynamicEvaluationRunEpisode");
+                assert_query_contains(
+                    query,
+                    "WHERE episode_id_uint = toUInt128({episode_id:UUID})",
+                );
+                assert_query_contains(query, "FORMAT JSONEachRow");
+
+                assert_eq!(
+                    params.get("episode_id"),
+                    Some(&"01968d04-142c-7e53-8ea7-3a3255b518dc")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"variant_pins":{"fn1":"var1"},"tags":{"key":"value"}}"#
+                        .to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .get_workflow_evaluation_run_by_episode_id(episode_id)
+            .await
+            .unwrap();
+
+        assert!(result.is_some(), "should return Some for existing episode");
+        let info = result.unwrap();
+        assert_eq!(
+            info.variant_pins.get("fn1"),
+            Some(&"var1".to_string()),
+            "variant_pins should contain fn1 -> var1"
+        );
+        assert_eq!(
+            info.tags.get("key"),
+            Some(&"value".to_string()),
+            "tags should contain key -> value"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_workflow_evaluation_run_by_episode_id_not_found() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let episode_id = Uuid::now_v7();
+        let result = conn
+            .get_workflow_evaluation_run_by_episode_id(episode_id)
+            .await
+            .unwrap();
+
+        assert!(
+            result.is_none(),
+            "should return None for non-existent episode"
+        );
     }
 }
