@@ -20,6 +20,7 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
 async fn test_delete_dataset_with_single_datapoint() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-delete-dataset-single-{}", Uuid::now_v7());
@@ -144,6 +145,7 @@ async fn test_delete_dataset_with_single_datapoint() {
 
 #[tokio::test]
 async fn test_delete_dataset_with_multiple_mixed_datapoints() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-delete-dataset-multiple-{}", Uuid::now_v7());
@@ -297,6 +299,7 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
 
 #[tokio::test]
 async fn test_delete_empty_dataset() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let dataset_name = format!("test-delete-dataset-empty-{}", Uuid::now_v7());
 
@@ -317,6 +320,7 @@ async fn test_delete_empty_dataset() {
 
 #[tokio::test]
 async fn test_delete_dataset_invalid_name() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // Try to delete a dataset with invalid characters
@@ -332,6 +336,7 @@ async fn test_delete_dataset_invalid_name() {
 
 #[tokio::test]
 async fn test_delete_dataset_twice() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-delete-dataset-twice-{}", Uuid::now_v7());
@@ -405,6 +410,7 @@ async fn test_delete_dataset_twice() {
 
 #[tokio::test]
 async fn test_delete_dataset_with_different_function_names() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-delete-dataset-functions-{}", Uuid::now_v7());

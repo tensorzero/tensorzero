@@ -208,6 +208,7 @@ export * from "./LatestFeedbackIdByMetricResponse";
 export * from "./LaunchOptimizationParams";
 export * from "./LaunchOptimizationWorkflowParams";
 export * from "./ListDatapointsRequest";
+export * from "./ListDatasetsRequest";
 export * from "./ListDatasetsResponse";
 export * from "./ListEpisodesResponse";
 export * from "./ListEvaluationRunsResponse";
