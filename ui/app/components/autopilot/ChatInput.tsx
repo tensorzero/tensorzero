@@ -151,7 +151,7 @@ export function ChatInput({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled || isSubmitting}
-        className="resize-none overflow-y-auto"
+        className="bg-bg-secondary resize-none overflow-y-auto"
         style={{ minHeight: MIN_HEIGHT, maxHeight: MAX_HEIGHT }}
         rows={1}
       />

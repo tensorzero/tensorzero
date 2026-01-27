@@ -15,12 +15,13 @@ import {
   type RouteHandle,
 } from "react-router";
 import { Loader2 } from "lucide-react";
-import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
+import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
 import { ChatInput } from "~/components/autopilot/ChatInput";
+import { cn } from "~/utils/common";
 import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
@@ -39,6 +40,9 @@ export const handle: RouteHandle = {
 };
 
 const EVENTS_PER_PAGE = 20;
+
+// Fixed header height: pt-4 (16px) + breadcrumbs (~20px) + pb-5 (20px) = ~56px
+const HEADER_HEIGHT = 60;
 
 export type EventsData = {
   events: GatewayEvent[];
@@ -122,7 +126,7 @@ function debounce<T extends (...args: Parameters<T>) => void>(
 // Skeleton shown while events are loading
 function EventStreamSkeleton() {
   return (
-    <div className="border-border mt-4 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
+    <div className="-mx-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-8">
       <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
     </div>
   );
@@ -330,13 +334,23 @@ function EventStreamContent({
     }
   }, [events, isLoadingOlder, scrollToBottom, scrollContainerRef]);
 
+  // Listen to scroll events from the parent-provided scroll container
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [scrollContainerRef, handleScroll]);
+
   // Initial scroll to bottom on page load (once)
   useEffect(() => {
     if (!hasInitiallyScrolledRef.current && scrollContainerRef.current) {
       scrollToBottom();
+      handleScroll();
       hasInitiallyScrolledRef.current = true;
     }
-  }, [scrollToBottom, scrollContainerRef]);
+  }, [scrollToBottom, scrollContainerRef, handleScroll]);
 
   // Load older events
   const loadOlderEvents = useCallback(async () => {
@@ -468,34 +482,22 @@ function EventStreamContent({
   return (
     <>
       {error && isRetrying && (
-        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           Failed to fetch events. Retrying...
         </div>
       )}
-      <div
-        ref={(el) => {
-          // Update parent's ref to point to the actual scrollable container
-          if (scrollContainerRef) {
-            (
-              scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>
-            ).current = el;
-          }
-        }}
-        onScroll={handleScroll}
-        className="border-border mt-4 min-h-0 flex-1 overflow-y-auto rounded-lg border p-4"
-      >
-        <EventStream
-          events={events}
-          isLoadingOlder={isLoadingOlder}
-          hasReachedStart={isNewSession ? false : hasReachedStart}
-          topSentinelRef={topSentinelRef}
-          pendingToolCallIds={pendingToolCallIds}
-          optimisticMessages={visibleOptimisticMessages}
-          status={isNewSession ? undefined : status}
-        />
-      </div>
 
-      {/* Pinned approval card - outside scroll container */}
+      <EventStream
+        events={events}
+        isLoadingOlder={isLoadingOlder}
+        hasReachedStart={isNewSession ? false : hasReachedStart}
+        topSentinelRef={topSentinelRef}
+        pendingToolCallIds={pendingToolCallIds}
+        optimisticMessages={visibleOptimisticMessages}
+        status={isNewSession ? undefined : status}
+      />
+
+      {/* Pinned approval card */}
       {oldestPendingToolCall && (
         <div className="mt-4">
           <PendingToolCallCard
@@ -564,6 +566,35 @@ export default function AutopilotSessionEventsPage({
   // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Ref for footer container to measure its height dynamically
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  const [footerHeight, setFooterHeight] = useState(120);
+
+  // State for top fade overlay
+  const [showTopFade, setShowTopFade] = useState(false);
+
+  // Measure footer height on resize (minimal debounce for responsiveness)
+  useEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) return;
+
+    const measureHeight = () => {
+      const height = footer.offsetHeight;
+      if (height > 0) {
+        setFooterHeight((prev) => (prev !== height ? height : prev));
+      }
+    };
+
+    measureHeight();
+
+    // Use ResizeObserver with minimal debounce for smooth updates
+    const debouncedMeasure = debounce(measureHeight, 16);
+    const resizeObserver = new ResizeObserver(debouncedMeasure);
+    resizeObserver.observe(footer);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
   const handleNavigateToSession = useCallback(
     (newSessionId: string) => {
       navigate(`/autopilot/sessions/${newSessionId}`);
@@ -613,85 +644,89 @@ export default function AutopilotSessionEventsPage({
   );
 
   return (
-    <div className="container mx-auto flex h-full flex-col px-8 py-8">
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={
-              isNewSession
-                ? [
-                    { label: "Autopilot", href: "/autopilot/sessions" },
-                    { label: "New Session" },
-                  ]
-                : [
-                    { label: "Autopilot", href: "/autopilot/sessions" },
-                    { label: sessionId, isIdentifier: true },
-                  ]
-            }
+    <div className="relative h-full">
+      {/* Fixed header with breadcrumbs and fade gradient */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
+        <div className="container mx-auto px-8">
+          {/* Header background - matches message width with slight outset */}
+          <div className="bg-bg-secondary -mx-2 px-2">
+            <div className="pointer-events-auto pt-4 pb-5">
+              <Breadcrumbs
+                segments={
+                  isNewSession
+                    ? [
+                        { label: "Autopilot", href: "/autopilot/sessions" },
+                        { label: "New Session" },
+                      ]
+                    : [
+                        { label: "Autopilot", href: "/autopilot/sessions" },
+                        { label: sessionId, isIdentifier: true },
+                      ]
+                }
+              />
+            </div>
+          </div>
+          {/* Top fade gradient - matches header width */}
+          <div
+            className={cn(
+              "-mx-2 h-16",
+              "from-bg-secondary bg-gradient-to-b to-transparent",
+              "transition-opacity duration-75",
+              showTopFade ? "opacity-100" : "opacity-0",
+            )}
           />
-        }
-      />
+        </div>
+      </div>
 
-      <Suspense fallback={<EventStreamSkeleton />}>
-        <EventStreamContentWrapper
-          key={sessionId}
-          sessionId={sessionId}
-          eventsData={eventsData}
-          isNewSession={isNewSession}
-          optimisticMessages={optimisticMessages}
-          onOptimisticMessagesChange={setOptimisticMessages}
-          scrollContainerRef={scrollContainerRef}
-          onLoaded={() => setIsEventsLoading(false)}
-          onStatusChange={handleStatusChange}
-        />
-      </Suspense>
+      {/* Main scrollable area - full height with padding for header and footer */}
+      <div
+        ref={scrollContainerRef}
+        className="h-full overflow-y-auto"
+        onScroll={(e) => {
+          const target = e.currentTarget;
+          setShowTopFade(target.scrollTop > 20);
+        }}
+      >
+        <div className="container mx-auto px-8">
+          {/* Spacer for fixed header */}
+          <div style={{ height: HEADER_HEIGHT }} />
 
-      {/* Chat input - always visible outside Suspense, disabled while loading */}
-      <ChatInput
-        sessionId={isNewSession ? NIL_UUID : sessionId}
-        onMessageSent={handleMessageSent}
-        onMessageFailed={handleMessageFailed}
-        className="mt-4"
-        isNewSession={isNewSession}
-        disabled={isEventsLoading}
-        submitDisabled={submitDisabled}
-      />
-    </div>
-  );
-}
+          <Suspense fallback={<EventStreamSkeleton />}>
+            <EventStreamContent
+              key={sessionId}
+              sessionId={sessionId}
+              eventsData={eventsData}
+              isNewSession={isNewSession}
+              optimisticMessages={optimisticMessages}
+              onOptimisticMessagesChange={setOptimisticMessages}
+              scrollContainerRef={scrollContainerRef}
+              onLoaded={() => setIsEventsLoading(false)}
+              onStatusChange={handleStatusChange}
+            />
+          </Suspense>
 
-// Wrapper that passes the scroll container ref back to parent
-function EventStreamContentWrapper({
-  sessionId,
-  eventsData,
-  isNewSession,
-  optimisticMessages,
-  onOptimisticMessagesChange,
-  scrollContainerRef,
-  onLoaded,
-  onStatusChange,
-}: {
-  sessionId: string;
-  eventsData: EventsData | Promise<EventsData>;
-  isNewSession: boolean;
-  optimisticMessages: OptimisticMessage[];
-  onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
-  onLoaded: () => void;
-  onStatusChange: (status: AutopilotStatus) => void;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <EventStreamContent
-        sessionId={sessionId}
-        eventsData={eventsData}
-        isNewSession={isNewSession}
-        optimisticMessages={optimisticMessages}
-        onOptimisticMessagesChange={onOptimisticMessagesChange}
-        scrollContainerRef={scrollContainerRef}
-        onLoaded={onLoaded}
-        onStatusChange={onStatusChange}
-      />
+          {/* Spacer for fixed footer */}
+          <div style={{ height: footerHeight }} />
+        </div>
+      </div>
+
+      {/* Fixed footer with chat input */}
+      <div
+        ref={footerRef}
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-20"
+      >
+        <div className="container mx-auto px-8 pt-4 pb-8">
+          <ChatInput
+            sessionId={isNewSession ? NIL_UUID : sessionId}
+            onMessageSent={handleMessageSent}
+            onMessageFailed={handleMessageFailed}
+            isNewSession={isNewSession}
+            disabled={isEventsLoading}
+            submitDisabled={submitDisabled}
+            className="pointer-events-auto"
+          />
+        </div>
+      </div>
     </div>
   );
 }
