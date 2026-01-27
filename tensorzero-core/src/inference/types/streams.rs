@@ -87,55 +87,44 @@ pub struct UnknownChunk {
     pub provider_name: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ChatInferenceResultChunk {
     pub content: Vec<ContentBlockChunk>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     /// Raw responses from previous model inferences (e.g., best-of-n candidates).
     /// Used for artificial chunks emitted at stream start.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_response: Option<Vec<RawResponseEntry>>,
     /// Time elapsed between making the request to the model provider and receiving this chunk.
     /// Important: this is NOT latency from the start of the TensorZero request.
     /// None for artificial chunks created by TensorZero (e.g., usage/finish_reason chunks).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_latency: Option<Duration>,
     /// Raw response string for the current chunk from the model provider.
     /// Empty for fake streams (non-streaming converted to streaming).
-    #[serde(skip_serializing_if = "String::is_empty")]
     pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct JsonInferenceResultChunk {
     pub raw: Option<String>,
-    pub thought: Vec<ThoughtChunk>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thoughts: Vec<ThoughtChunk>,
     pub usage: Option<Usage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     /// Raw responses from previous model inferences (e.g., best-of-n candidates).
     /// Used for artificial chunks emitted at stream start.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_response: Option<Vec<RawResponseEntry>>,
     /// Time elapsed between making the request to the model provider and receiving this chunk.
     /// Important: this is NOT latency from the start of the TensorZero request.
     /// None for artificial chunks created by TensorZero (e.g., usage/finish_reason chunks).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_latency: Option<Duration>,
     /// Raw response string for the current chunk from the model provider.
     /// Empty for fake streams (non-streaming converted to streaming).
-    #[serde(skip_serializing_if = "String::is_empty")]
     pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type")]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InferenceResultChunk {
     Chat(ChatInferenceResultChunk),
     Json(JsonInferenceResultChunk),
@@ -245,7 +234,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
         }
         Self {
             raw,
-            thought,
+            thoughts: thought,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
             raw_response: None, // Only populated via artificial chunks from TensorZero
@@ -588,7 +577,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                         }
                     }
                 }
-                for thought_chunk in chunk.thought {
+                for thought_chunk in chunk.thoughts {
                     let ThoughtChunk {
                         id: _,
                         text,
@@ -1142,7 +1131,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: vec![ThoughtChunk {
+                thoughts: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 1".to_string()),
                     signature: None,
@@ -1160,7 +1149,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: vec![ThoughtChunk {
+                thoughts: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 2".to_string()),
                     signature: None,
@@ -1247,7 +1236,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: vec![ThoughtChunk {
+                thoughts: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 1".to_string()),
                     signature: None,
@@ -1265,7 +1254,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\"}".to_string()),
-                thought: vec![],
+                thoughts: vec![],
                 usage: None,
                 raw_usage: None,
                 raw_response: None,
@@ -1340,7 +1329,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":\"John\",".to_string()),
-                thought: vec![],
+                thoughts: vec![],
                 usage: Some(model_inference_usage),
                 raw_usage: None,
                 raw_response: None,
@@ -1350,7 +1339,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some(String::new()),
-                thought: vec![ThoughtChunk {
+                thoughts: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 2".to_string()),
                     signature: None,
@@ -1368,7 +1357,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"age\":30}".to_string()),
-                thought: vec![],
+                thoughts: vec![],
                 usage: None,
                 raw_usage: None,
                 raw_response: None,
@@ -1480,7 +1469,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: vec![ThoughtChunk {
+                thoughts: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 1".to_string()),
                     signature: None,
@@ -1498,7 +1487,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: vec![ThoughtChunk {
+                thoughts: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 2".to_string()),
                     signature: None,
@@ -1614,7 +1603,7 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: vec![ThoughtChunk {
+                thoughts: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 1".to_string()),
                     signature: None,
@@ -1632,7 +1621,7 @@ mod tests {
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: vec![ThoughtChunk {
+                thoughts: vec![ThoughtChunk {
                     id: "0".to_string(),
                     text: Some("Thought 2".to_string()),
                     signature: None,
@@ -2521,7 +2510,7 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(tool_chunk);
         assert_eq!(result.raw, Some("{\"key\": \"value\"}".to_string()));
-        assert!(result.thought.is_empty());
+        assert!(result.thoughts.is_empty());
         assert_eq!(result.raw_response, None);
         assert_eq!(result.raw_chunk, "raw response");
         assert_eq!(result.provider_latency, Some(Duration::from_secs(1)));
@@ -2548,7 +2537,7 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(text_chunk);
         assert_eq!(result.raw, Some("some text".to_string()));
-        assert!(result.thought.is_empty());
+        assert!(result.thoughts.is_empty());
 
         // Test case for Thought content
         let thought_chunk = ProviderInferenceResponseChunk {
@@ -2571,7 +2560,7 @@ mod tests {
         let result = JsonInferenceResultChunk::from(thought_chunk);
         assert_eq!(result.raw, None);
         assert_eq!(
-            result.thought,
+            result.thoughts,
             vec![ThoughtChunk {
                 id: "123".to_string(),
                 text: Some("thinking...".to_string()),
@@ -2615,7 +2604,7 @@ mod tests {
         let result = JsonInferenceResultChunk::from(mixed_chunk);
         assert_eq!(result.raw, Some("final content".to_string()));
         assert_eq!(
-            result.thought,
+            result.thoughts,
             vec![ThoughtChunk {
                 id: "789".to_string(),
                 text: Some("final thought".to_string()),
@@ -2639,7 +2628,7 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(empty_chunk);
         assert_eq!(result.raw, None);
-        assert!(result.thought.is_empty());
+        assert!(result.thoughts.is_empty());
         assert_eq!(result.finish_reason, None);
 
         // Test case: ThoughtChunk with only summary_text (no text)
@@ -2663,7 +2652,7 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(summary_chunk);
         assert_eq!(
-            result.thought,
+            result.thoughts,
             vec![ThoughtChunk {
                 id: "0".to_string(),
                 text: None,
