@@ -12,7 +12,7 @@ test.describe("Error Boundaries", () => {
       ).toBeVisible();
 
       // Sidebar should still be visible and functional
-      await expect(page.getByText("Dashboard")).toBeVisible();
+      await expect(page.getByText("Overview")).toBeVisible();
       await expect(page.getByText("Inferences")).toBeVisible();
     });
 
@@ -24,8 +24,8 @@ test.describe("Error Boundaries", () => {
       // Verify we're on the error page
       await expect(page.getByText("Page Not Found")).toBeVisible();
 
-      // Click on Dashboard in sidebar
-      await page.getByRole("link", { name: "Dashboard" }).click();
+      // Click on Overview in sidebar
+      await page.getByRole("link", { name: "Overview" }).click();
 
       // Should navigate to home page successfully
       await expect(page.getByText("Ask a question")).toBeVisible();

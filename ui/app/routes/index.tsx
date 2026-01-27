@@ -20,6 +20,7 @@ import {
   Playground,
   Model,
 } from "~/components/icons/Icons";
+import { KeyRound } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -49,18 +50,18 @@ function DirectoryCard({
 }: DirectoryCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="border-border hover:border-border-hover group flex w-full flex-row items-center gap-3 rounded-xl border p-4 hover:shadow-[0_0_0_3px_rgba(0,0,0,0.05)]">
-        <div className="bg-bg-tertiary group-hover:bg-card-highlight h-8 w-8 rounded-lg p-2 transition-colors">
+      <Card className="border-border group hover:border-card-highlight-border hover:bg-card-highlight flex w-full flex-row items-center gap-3 rounded-xl border p-4 transition-colors">
+        <div className="bg-bg-tertiary group-hover:bg-card-highlight-icon-bg h-8 w-8 rounded-lg p-2 transition-colors">
           <Icon
             className="text-fg-secondary group-hover:text-card-highlight-icon transition-colors"
             size={16}
           />
         </div>
         <div className="flex w-full flex-col overflow-hidden">
-          <h3 className="text-fg-primary overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap">
+          <h3 className="text-fg-primary overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap transition-colors group-hover:text-orange-600">
             {title}
           </h3>
-          <p className="text-fg-secondary overflow-hidden text-xs text-ellipsis whitespace-nowrap">
+          <p className="text-fg-secondary overflow-hidden text-xs text-ellipsis whitespace-nowrap transition-colors group-hover:text-orange-500">
             {typeof description === "string" ? (
               description
             ) : (
@@ -117,8 +118,8 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
       rel="noopener noreferrer"
       target="_blank"
     >
-      <Icon className="text-fg-muted group-hover:text-fg-secondary mr-2 h-4 w-4 transition-colors" />
-      <span className="text-fg-secondary group-hover:text-fg-primary transition-colors">
+      <Icon className="text-fg-muted mr-2 h-4 w-4 transition-colors group-hover:text-orange-600" />
+      <span className="text-fg-secondary text-sm transition-colors group-hover:text-orange-600">
         {children}
       </span>
     </Link>
@@ -175,10 +176,6 @@ export async function loader() {
     (datasets) => `${datasets.datasets.length} datasets`,
   );
 
-  const numEvaluationRunsDesc = numEvaluationRunsPromise.then(
-    (runs) => `evaluations, ${runs} runs`,
-  );
-
   const inferenceEvaluationsDesc = Promise.all([
     configPromise,
     numEvaluationRunsPromise,
@@ -202,7 +199,6 @@ export async function loader() {
     numVariantsDesc,
     numEpisodesDesc,
     numDatasetsDesc,
-    numEvaluationRunsDesc,
     inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
     numModelsUsedDesc,
@@ -224,7 +220,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <div className="mx-auto flex w-full max-w-240 flex-col gap-12">
-        <h1 className="text-2xl font-medium">Dashboard</h1>
+        <h1 className="text-2xl font-medium">Overview</h1>
+
         <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
           <div id="observability" className="flex w-full flex-col gap-2">
             <h2 className="text-md text-fg-secondary font-medium">
@@ -258,22 +255,47 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
 
-          <div id="optimization" className="flex w-full flex-col gap-2">
-            <h2 className="text-md text-fg-secondary font-medium">
-              Optimization
-            </h2>
-            <div className="flex flex-col gap-2">
-              <DirectoryCard
-                source="/optimization/supervised-fine-tuning"
-                icon={SupervisedFineTuning}
-                title="Supervised Fine-tuning"
-                description={numFunctionsDesc}
-              />
+          <div className="flex w-full flex-col gap-12 lg:gap-6">
+            <div id="evaluations" className="flex w-full flex-col gap-2">
+              <h2 className="text-md text-fg-secondary font-medium">
+                Evaluations
+              </h2>
+              <div className="flex flex-col gap-2">
+                <DirectoryCard
+                  source="/evaluations"
+                  icon={GridCheck}
+                  title="Inference Evaluations"
+                  description={inferenceEvaluationsDesc}
+                />
+                <DirectoryCard
+                  source="/workflow-evaluations"
+                  icon={SequenceChecks}
+                  title="Workflow Evaluations"
+                  description={dynamicEvaluationsDesc}
+                />
+              </div>
+            </div>
+
+            <div
+              id="optimization"
+              className="mt-auto flex w-full flex-col gap-2"
+            >
+              <h2 className="text-md text-fg-secondary font-medium">
+                Optimization
+              </h2>
+              <div className="flex flex-col gap-2">
+                <DirectoryCard
+                  source="/optimization/supervised-fine-tuning"
+                  icon={SupervisedFineTuning}
+                  title="Supervised Fine-tuning"
+                  description={numFunctionsDesc}
+                />
+              </div>
             </div>
           </div>
 
-          <div id="workflows" className="flex w-full flex-col gap-2">
-            <h2 className="text-md text-fg-secondary font-medium">Workflows</h2>
+          <div id="resources" className="flex w-full flex-col gap-2">
+            <h2 className="text-md text-fg-secondary font-medium">Resources</h2>
             <div className="flex flex-col gap-2">
               <DirectoryCard
                 source="/playground"
@@ -288,16 +310,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 description={numDatasetsDesc}
               />
               <DirectoryCard
-                source="/evaluations"
-                icon={GridCheck}
-                title="Inference Evaluations"
-                description={inferenceEvaluationsDesc}
-              />
-              <DirectoryCard
-                source="/workflow-evaluations"
-                icon={SequenceChecks}
-                title="Workflow Evaluations"
-                description={dynamicEvaluationsDesc}
+                source="/api-keys"
+                icon={KeyRound}
+                title="API Keys"
+                description=""
               />
             </div>
           </div>
@@ -315,7 +331,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="https://www.tensorzero.com/docs"
                 icon={Documentation}
               >
-                Documentation
+                Docs
               </FooterLink>
               <FooterLink
                 source="https://github.com/tensorzero/tensorzero"
