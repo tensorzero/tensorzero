@@ -2130,8 +2130,8 @@ fn prepare_tools<'a>(
             if !tool_config.any_tools_available() && provider_tools.is_empty() {
                 return Ok((None, None));
             }
-            // Build function tools
-            let mut tools: Vec<GCPVertexGeminiToolEntry> =
+            // Build function tools (only if there are any)
+            let mut tools: Vec<GCPVertexGeminiToolEntry> = if tool_config.any_tools_available() {
                 vec![GCPVertexGeminiToolEntry::Function(
                     GCPVertexGeminiTool::FunctionDeclarations(
                         tool_config
@@ -2139,7 +2139,10 @@ fn prepare_tools<'a>(
                             .map(GCPVertexGeminiFunctionDeclaration::from)
                             .collect(),
                     ),
-                )];
+                )]
+            } else {
+                Vec::new()
+            };
             // Add provider tools (e.g., google_search, code_execution)
             tools.extend(
                 provider_tools

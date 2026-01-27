@@ -993,13 +993,17 @@ fn prepare_tools<'a>(
             if !tool_config.any_tools_available() && provider_tools.is_empty() {
                 return Ok((None, None));
             }
-            // Build function tools
-            let mut tools: Vec<GeminiToolEntry> = vec![GeminiToolEntry::Function(GeminiTool {
-                function_declarations: tool_config
-                    .tools_available()?
-                    .map(GeminiFunctionDeclaration::from_tool_config)
-                    .collect(),
-            })];
+            // Build function tools (only if there are any)
+            let mut tools: Vec<GeminiToolEntry> = if tool_config.any_tools_available() {
+                vec![GeminiToolEntry::Function(GeminiTool {
+                    function_declarations: tool_config
+                        .tools_available()?
+                        .map(GeminiFunctionDeclaration::from_tool_config)
+                        .collect(),
+                })]
+            } else {
+                Vec::new()
+            };
             // Add provider tools (e.g., google_search, code_execution)
             tools.extend(
                 provider_tools
