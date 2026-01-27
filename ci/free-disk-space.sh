@@ -6,7 +6,7 @@ set -euo pipefail
 # Optimized for ClickHouse tests - targeting 20GB+ space savings
 
 # Minimum free space required (in GB) - exit early once achieved
-REQUIRED_FREE_GB=25
+REQUIRED_FREE_GB=20
 
 # Check if we have enough free space and exit early if so
 check_space_and_maybe_exit() {
