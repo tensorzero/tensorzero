@@ -1,5 +1,6 @@
-import { AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import { type RefObject, useState } from "react";
+import { AnimatedEllipsis } from "~/components/ui/AnimatedEllipsis";
 import { Skeleton } from "~/components/ui/skeleton";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
@@ -441,39 +442,37 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
   );
 }
 
-function getStatusLabel(status: AutopilotStatus): string {
+function getStatusLabel(status: AutopilotStatus): {
+  text: string;
+  showEllipsis: boolean;
+} {
   switch (status.status) {
     case "idle":
-      return "Ready";
+      return { text: "Ready", showEllipsis: false };
     case "server_side_processing":
-      return "Thinking...";
+      return { text: "Thinking", showEllipsis: true };
     case "waiting_for_tool_call_authorization":
-      return "Waiting";
+      return { text: "Waiting", showEllipsis: false };
     case "waiting_for_tool_execution":
-      return "Executing tool...";
+      return { text: "Executing tool", showEllipsis: true };
     case "waiting_for_retry":
-      return "Something went wrong. Retrying...";
+      return { text: "Something went wrong. Retrying", showEllipsis: true };
     case "failed":
-      return "Something went wrong. Please try again.";
+      return {
+        text: "Something went wrong. Please try again.",
+        showEllipsis: false,
+      };
   }
 }
 
-function isLoadingStatus(status: AutopilotStatus): boolean {
-  return (
-    status.status === "server_side_processing" ||
-    status.status === "waiting_for_tool_execution" ||
-    status.status === "waiting_for_retry"
-  );
-}
-
 function StatusIndicator({ status }: { status: AutopilotStatus }) {
-  const showSpinner = isLoadingStatus(status);
+  const { text, showEllipsis } = getStatusLabel(status);
   return (
     <div className="flex items-center gap-4 py-2">
       <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted flex items-center gap-1.5 text-xs">
-        {getStatusLabel(status)}
-        {showSpinner && <Loader2 className="h-3 w-3 animate-spin" />}
+      <span className="text-fg-muted flex items-center text-xs">
+        {text}
+        {showEllipsis && <AnimatedEllipsis />}
       </span>
       <div className="border-border flex-1 border-t" />
     </div>
