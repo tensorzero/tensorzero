@@ -44,6 +44,8 @@ impl ToolMetadata for ListDatasetsTool {
         )
     }
 
+    // NOTE: This schema must be kept in sync with `ListDatasetsRequest` fields.
+    // We manually construct it for OpenAI structured outputs compatibility (using anyOf for optional fields).
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
