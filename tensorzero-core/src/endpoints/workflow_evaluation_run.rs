@@ -8,8 +8,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    config::{Config, snapshot::SnapshotHash},
-    db::clickhouse::{ClickHouseConnectionInfo, escape_string_for_clickhouse_literal},
+    config::Config,
+    db::{
+        clickhouse::ClickHouseConnectionInfo,
+        workflow_evaluation_queries::WorkflowEvaluationQueries,
+    },
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
     utils::{
@@ -20,12 +23,6 @@ use crate::{
         },
     },
 };
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct WorkflowEvaluationRunInfo {
-    pub variant_pins: HashMap<String, String>,
-    pub tags: HashMap<String, String>,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkflowEvaluationRunParams {
@@ -65,16 +62,16 @@ pub async fn workflow_evaluation_run(
     validate_tags(&params.tags, params.internal)?;
     validate_variant_pins(&params.variants, &config)?;
     let run_id = Uuid::now_v7();
-    write_workflow_evaluation_run(
-        clickhouse_connection_info,
-        run_id,
-        params.variants,
-        params.tags,
-        params.project_name,
-        params.display_name,
-        &config.hash,
-    )
-    .await?;
+    clickhouse_connection_info
+        .insert_workflow_evaluation_run(
+            run_id,
+            &params.variants,
+            &params.tags,
+            params.project_name.as_deref(),
+            params.display_name.as_deref(),
+            &config.hash,
+        )
+        .await?;
     Ok(WorkflowEvaluationRunResponse { run_id })
 }
 
@@ -140,15 +137,15 @@ pub async fn workflow_evaluation_run_episode(
         "tensorzero::workflow_evaluation_run_id".to_string(),
         run_id_str,
     );
-    write_workflow_evaluation_run_episode(
-        &clickhouse_connection_info,
-        params.task_name.as_deref(),
-        tags,
-        run_id,
-        episode_id,
-        &config.hash,
-    )
-    .await?;
+    clickhouse_connection_info
+        .insert_workflow_evaluation_run_episode(
+            run_id,
+            episode_id,
+            params.task_name.as_deref(),
+            &tags,
+            &config.hash,
+        )
+        .await?;
     Ok(WorkflowEvaluationRunEpisodeResponse { episode_id })
 }
 
@@ -169,138 +166,6 @@ pub fn validate_variant_pins(
                 })
             })?;
     }
-    Ok(())
-}
-
-fn to_map_literal(map: &HashMap<String, String>) -> String {
-    let items: Vec<String> = map
-        .iter()
-        .map(|(k, v)| {
-            format!(
-                "'{}':'{}'",
-                escape_string_for_clickhouse_literal(k),
-                escape_string_for_clickhouse_literal(v)
-            )
-        })
-        .collect();
-    format!("{{{}}}", items.join(","))
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct WorkflowEvaluationRunRow {
-    pub run_id: Uuid,
-    pub variant_pins: HashMap<String, String>,
-    pub tags: HashMap<String, String>,
-    pub project_name: Option<String>,
-    pub run_display_name: Option<String>,
-}
-
-/// Writes a workflow evaluation run to the database.
-///
-/// Note: The table is named `DynamicEvaluationRun` for historical reasons,
-/// but this feature is now called "Workflow Evaluations".
-///
-/// Similarly, we write both `tensorzero::dynamic_evaluation_run_id` (old) and
-/// `tensorzero::workflow_evaluation_run_id` (new) tags to episode inferences
-/// to support backward compatibility during the migration period.
-async fn write_workflow_evaluation_run(
-    clickhouse: ClickHouseConnectionInfo,
-    run_id: Uuid,
-    variant_pins: HashMap<String, String>,
-    tags: HashMap<String, String>,
-    project_name: Option<String>,
-    run_display_name: Option<String>,
-    snapshot_hash: &SnapshotHash,
-) -> Result<(), Error> {
-    let query = r"
-    INSERT INTO DynamicEvaluationRun (
-        run_id_uint,
-        variant_pins,
-        tags,
-        project_name,
-        run_display_name,
-        snapshot_hash
-    )
-    VALUES (
-        toUInt128({run_id:UUID}),
-        {variant_pins:Map(String, String)},
-        {tags:Map(String, String)},
-        {project_name:Nullable(String)},
-        {run_display_name:Nullable(String)},
-        toUInt256OrNull({snapshot_hash:Nullable(String)})
-    )
-    ";
-    let mut params = HashMap::new();
-    let variant_pins_str = to_map_literal(&variant_pins);
-    let tags_str = to_map_literal(&tags);
-    let run_id_str = run_id.to_string();
-    params.insert("run_id", run_id_str.as_str());
-    params.insert("variant_pins", variant_pins_str.as_str());
-    params.insert("tags", tags_str.as_str());
-    params.insert("project_name", project_name.as_deref().unwrap_or("\\N")); // Use \\N to indicate NULL
-    params.insert(
-        "run_display_name",
-        run_display_name.as_deref().unwrap_or("\\N"),
-    ); // Use \\N to indicate NULL
-    params.insert("snapshot_hash", snapshot_hash);
-    clickhouse
-        .run_query_synchronous(query.to_string(), &params)
-        .await?;
-    Ok(())
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct WorkflowEvaluationRunEpisodeRow {
-    pub run_id: Uuid,
-    pub episode_id: Uuid,
-    pub variant_pins: HashMap<String, String>,
-    pub task_name: Option<String>, // For legacy reasons, stored as `task_name` in the database
-    pub tags: HashMap<String, String>,
-}
-
-/// Writes a workflow evaluation run episode to the database.
-/// Note: The table is named `DynamicEvaluationRunEpisode` for historical reasons,
-/// but this feature is now called "Workflow Evaluations".
-async fn write_workflow_evaluation_run_episode(
-    clickhouse: &ClickHouseConnectionInfo,
-    task_name: Option<&str>,
-    tags: HashMap<String, String>,
-    run_id: Uuid,
-    episode_id: Uuid,
-    snapshot_hash: &SnapshotHash,
-) -> Result<(), Error> {
-    let query = r"
-    INSERT INTO DynamicEvaluationRunEpisode
-    (
-        run_id,
-        episode_id_uint,
-        variant_pins,
-        datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
-        tags,
-        snapshot_hash
-    )
-    SELECT
-        {run_id:UUID} AS run_id,
-        toUInt128({episode_id:UUID}) AS episode_id_uint,
-        variant_pins,
-        {datapoint_name:Nullable(String)} AS datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
-        mapUpdate(tags, {tags:Map(String, String)}) AS tags, -- merge the tags in the params on top of tags in the workflow evaluation run
-        toUInt256OrNull({snapshot_hash:Nullable(String)}) AS snapshot_hash
-    FROM DynamicEvaluationRun
-    WHERE run_id_uint = toUInt128({run_id:UUID})
-    ";
-    let mut query_params = HashMap::new();
-    let run_id_str = run_id.to_string();
-    let episode_id_str = episode_id.to_string();
-    query_params.insert("run_id", run_id_str.as_str());
-    query_params.insert("episode_id", episode_id_str.as_str());
-    query_params.insert("datapoint_name", task_name.unwrap_or("\\N")); // Use \\N to indicate NULL; for legacy reasons, stored as `datapoint_name` in the database
-    let tags_str = to_map_literal(&tags);
-    query_params.insert("tags", tags_str.as_str());
-    query_params.insert("snapshot_hash", &**snapshot_hash);
-    clickhouse
-        .run_query_synchronous(query.to_string(), &query_params)
-        .await?;
     Ok(())
 }
 
@@ -326,7 +191,9 @@ pub async fn validate_inference_episode_id_and_apply_workflow_evaluation_run(
     if compare_timestamps(episode_id_timestamp, WORKFLOW_EVALUATION_THRESHOLD) {
         return validate_tensorzero_uuid(episode_id, "Episode");
     }
-    let workflow_evaluation_run = lookup_workflow_evaluation_run(clickhouse, episode_id).await?;
+    let workflow_evaluation_run = clickhouse
+        .get_workflow_evaluation_run_by_episode_id(episode_id)
+        .await?;
     let Some(workflow_evaluation_run) = workflow_evaluation_run else {
         return Err(Error::new(ErrorDetails::InvalidWorkflowEvaluationRun {
             episode_id,
@@ -358,33 +225,6 @@ pub async fn validate_inference_episode_id_and_apply_workflow_evaluation_run(
     }
 
     Ok(())
-}
-
-/// Looks up a workflow evaluation run from the database.
-/// Note: The table is named `DynamicEvaluationRunEpisode` for historical reasons,
-/// but this feature is now called "Workflow Evaluations".
-async fn lookup_workflow_evaluation_run(
-    clickhouse: &ClickHouseConnectionInfo,
-    episode_id: Uuid,
-) -> Result<Option<WorkflowEvaluationRunInfo>, Error> {
-    let query = r"
-    SELECT variant_pins, tags FROM DynamicEvaluationRunEpisode WHERE episode_id_uint = toUInt128({episode_id:UUID}) FORMAT JSONEachRow
-    ";
-    let episode_id_str = episode_id.to_string();
-    let params = HashMap::from([("episode_id", episode_id_str.as_str())]);
-    let result = clickhouse
-        .run_query_synchronous(query.to_string(), &params)
-        .await?;
-    if result.response.is_empty() {
-        return Ok(None);
-    }
-    let workflow_evaluation_run: WorkflowEvaluationRunInfo = serde_json::from_str(&result.response)
-        .map_err(|_| {
-            Error::new(ErrorDetails::Serialization {
-                message: "Failed to deserialize workflow evaluation run".to_string(),
-            })
-        })?;
-    Ok(Some(workflow_evaluation_run))
 }
 
 // ============================================================================
