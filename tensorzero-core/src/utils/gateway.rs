@@ -60,7 +60,6 @@ pub type DropWrapper = fn(Box<dyn FnOnce() + Send + '_>);
 /// so that it's easy for us to tell where it gets dropped.
 pub struct GatewayHandle {
     pub app_state: AppStateData,
-    pub cancel_token: CancellationToken,
     drop_wrapper: Option<DropWrapper>,
     _private: (),
 }
@@ -69,7 +68,7 @@ impl Drop for GatewayHandle {
     fn drop(&mut self) {
         let drop_wrapper = self.drop_wrapper.take();
         let mut drop_self = || {
-            self.cancel_token.cancel();
+            self.app_state.shutdown_token.cancel();
             let handle = self
                 .app_state
                 .clickhouse_connection_info
@@ -156,6 +155,7 @@ pub struct AppStateData {
     pub deployment_id: Option<String>,
     /// Token pool manager for rate limiting pre-borrowing
     pub rate_limiting_manager: Arc<RateLimitingManager>,
+    pub shutdown_token: CancellationToken,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -264,9 +264,9 @@ impl GatewayHandle {
                 autopilot_client: None,
                 deployment_id: None,
                 rate_limiting_manager,
+                shutdown_token: cancel_token,
                 _private: (),
             },
-            cancel_token,
             drop_wrapper: None,
             _private: (),
         }
@@ -341,9 +341,9 @@ impl GatewayHandle {
                 autopilot_client,
                 deployment_id,
                 rate_limiting_manager,
+                shutdown_token: cancel_token,
                 _private: (),
             },
-            cancel_token,
             drop_wrapper,
             _private: (),
         })
@@ -361,6 +361,7 @@ impl AppStateData {
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
         deferred_tasks: TaskTracker,
+        shutdown_token: CancellationToken,
     ) -> Result<Self, Error> {
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
@@ -379,6 +380,7 @@ impl AppStateData {
             autopilot_client: None,
             deployment_id: None,
             rate_limiting_manager,
+            shutdown_token,
             _private: (),
         })
     }
