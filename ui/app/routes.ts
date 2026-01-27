@@ -69,6 +69,10 @@ export default [
       "autopilot/sessions/:session_id/events/message",
       "routes/api/autopilot/sessions/$session_id/events/message.route.ts",
     ),
+    route(
+      "autopilot/sessions/:session_id/actions/cancel",
+      "routes/api/autopilot/sessions/$session_id/actions/cancel.route.ts",
+    ),
   ]),
 
   // Datasets

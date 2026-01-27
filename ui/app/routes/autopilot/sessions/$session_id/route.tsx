@@ -12,10 +12,12 @@ import {
   data,
   isRouteErrorResponse,
   Link,
+  useFetcher,
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, StopCircle } from "lucide-react";
+import { Button } from "~/components/ui/button";
 import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
@@ -522,6 +524,7 @@ export default function AutopilotSessionEventsPage({
   const { sessionId, eventsData, isNewSession } = loaderData;
   const navigate = useNavigate();
   const { toast } = useToast();
+  const cancelFetcher = useFetcher();
 
   // Lift optimistic messages state to parent so ChatInput can work outside Suspense
   const [optimisticMessages, setOptimisticMessages] = useState<
@@ -557,6 +560,34 @@ export default function AutopilotSessionEventsPage({
   const handleStatusChange = useCallback((status: AutopilotStatus) => {
     setAutopilotStatus(status);
   }, []);
+
+  // Handle interrupt session
+  const handleInterruptSession = useCallback(() => {
+    cancelFetcher.submit(null, {
+      method: "POST",
+      action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/cancel`,
+    });
+  }, [cancelFetcher, sessionId]);
+
+  // Show toast on interrupt result
+  useEffect(() => {
+    if (cancelFetcher.state === "idle" && cancelFetcher.data) {
+      if (
+        typeof cancelFetcher.data === "object" &&
+        "success" in cancelFetcher.data &&
+        cancelFetcher.data.success
+      ) {
+        toast.success({
+          title: "Session interrupted",
+          description: "The autopilot session has been cancelled.",
+        });
+      }
+    }
+  }, [cancelFetcher.state, cancelFetcher.data, toast]);
+
+  // Interruptible when actively processing (not idle or failed)
+  const isInterruptible =
+    autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
 
   // Disable submit unless status is idle or failed
   const submitDisabled =
@@ -626,13 +657,28 @@ export default function AutopilotSessionEventsPage({
         name={isNewSession ? "New Session" : sessionId}
         tag={
           !isNewSession ? (
-            <Link
-              to="/autopilot/sessions/new"
-              className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              New Session
-            </Link>
+            <div className="ml-2 flex items-center gap-2">
+              <Button
+                variant="destructiveOutline"
+                size="sm"
+                onClick={handleInterruptSession}
+                disabled={!isInterruptible || cancelFetcher.state !== "idle"}
+              >
+                {cancelFetcher.state !== "idle" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <StopCircle className="h-4 w-4" />
+                )}
+                Interrupt Session
+              </Button>
+              <Link
+                to="/autopilot/sessions/new"
+                className="text-fg-tertiary hover:text-fg-secondary inline-flex items-center gap-1 text-sm font-medium transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                New Session
+              </Link>
+            </div>
           ) : undefined
         }
       />
