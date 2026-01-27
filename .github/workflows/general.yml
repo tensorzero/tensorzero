@@ -1065,6 +1065,10 @@ jobs:
       - name: Test (Rust)
         run: cargo test-optimization-mock
 
+      - name: Print docker compose logs
+        if: always()
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
