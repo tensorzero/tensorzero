@@ -429,8 +429,8 @@ function Divider({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SessionStartedDivider() {
-  return <Divider>Started</Divider>;
+function SessionStartDivider() {
+  return <Divider>Start</Divider>;
 }
 
 function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
@@ -494,10 +494,10 @@ export default function EventStream({
 }: EventStreamProps) {
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* Session started indicator, or sentinel for loading more */}
+      {/* Session start indicator, or sentinel for loading more */}
       {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
       {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
-        <SessionStartedDivider />
+        <SessionStartDivider />
       ) : (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
       )}
