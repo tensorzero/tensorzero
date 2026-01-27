@@ -193,6 +193,7 @@ impl WrappedProvider for TGIProvider {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             })
@@ -263,6 +264,7 @@ impl InferenceProvider for TGIProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -290,6 +292,7 @@ impl InferenceProvider for TGIProvider {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                     })
@@ -416,9 +419,10 @@ fn stream_tgi(
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                 ),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
-                                provider_type: PROVIDER_TYPE.to_string(),
                             }));
 
                         let latency = start_time.elapsed();
@@ -588,6 +592,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response),
             }
@@ -603,6 +608,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
@@ -653,6 +659,7 @@ pub(super) fn handle_tgi_error(response_code: StatusCode, response_body: &str) -
             message: response_body.to_string(),
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }
@@ -660,6 +667,7 @@ pub(super) fn handle_tgi_error(response_code: StatusCode, response_body: &str) -
         _ => ErrorDetails::InferenceServer {
             message: response_body.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }
@@ -808,9 +816,10 @@ fn tgi_to_tensorzero_chunk(
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
-            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into());
     }
@@ -839,9 +848,10 @@ fn tgi_to_tensorzero_chunk(
             return Err(ErrorDetails::InferenceServer {
                 message: "TGI returned a tool call but we don't make streaming tool call requests for this provider"
                     .to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: Some(raw_message),
-                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }

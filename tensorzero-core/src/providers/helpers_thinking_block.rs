@@ -1,4 +1,5 @@
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::ApiType;
 
 pub const THINK_TAG: &str = "<think>";
 pub const THINK_TAG_LEN: usize = THINK_TAG.len();
@@ -32,6 +33,7 @@ pub fn process_think_blocks(
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         }));
     }
 
@@ -41,6 +43,7 @@ pub fn process_think_blocks(
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         }))
     } else if let (Some(start), Some(end)) = (text.find(THINK_TAG), text.find(END_THINK_TAG)) {
         let reasoning = text[start + THINK_TAG_LEN..end].to_string();
@@ -75,6 +78,7 @@ impl ThinkingState {
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     }
 

@@ -20,7 +20,8 @@ use crate::config::snapshot::SnapshotHash;
 use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
-use crate::inference::types::usage::{ApiType, RawResponseEntry};
+pub use crate::inference::types::usage::ApiType;
+use crate::inference::types::usage::RawResponseEntry;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
@@ -198,36 +199,39 @@ impl Error {
             ErrorDetails::InferenceClient {
                 raw_response: Some(data),
                 provider_type,
+                api_type,
                 ..
             } => {
                 entries.push(RawResponseEntry {
                     model_inference_id: None,
                     provider_type: provider_type.clone(),
-                    api_type: ApiType::ChatCompletions,
+                    api_type: *api_type,
                     data: data.clone(),
                 });
             }
             ErrorDetails::InferenceServer {
                 raw_response: Some(data),
                 provider_type,
+                api_type,
                 ..
             } => {
                 entries.push(RawResponseEntry {
                     model_inference_id: None,
                     provider_type: provider_type.clone(),
-                    api_type: ApiType::ChatCompletions,
+                    api_type: *api_type,
                     data: data.clone(),
                 });
             }
             ErrorDetails::FatalStreamError {
                 raw_response: Some(data),
                 provider_type,
+                api_type,
                 ..
             } => {
                 entries.push(RawResponseEntry {
                     model_inference_id: None,
                     provider_type: provider_type.clone(),
-                    api_type: ApiType::ChatCompletions,
+                    api_type: *api_type,
                     data: data.clone(),
                 });
             }
@@ -383,6 +387,7 @@ pub enum ErrorDetails {
         #[serde(serialize_with = "serialize_status")]
         status_code: Option<StatusCode>,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -394,6 +399,7 @@ pub enum ErrorDetails {
     FatalStreamError {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -402,6 +408,7 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -1281,6 +1288,7 @@ impl std::fmt::Display for ErrorDetails {
                 raw_request,
                 raw_response,
                 status_code,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1314,6 +1322,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1338,6 +1347,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1894,5 +1904,51 @@ impl From<tensorzero_types::TypeError> for Error {
                 Self::new(ErrorDetails::Base64 { message })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_collect_raw_responses_from_inference_errors() {
+        // Test that InferenceClient errors collect raw responses with correct api_type
+        let error = Error::new(ErrorDetails::InferenceClient {
+            message: "test error".to_string(),
+            status_code: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::Responses,
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+
+        let entries = error.collect_raw_responses();
+
+        assert_eq!(entries.len(), 1, "should collect one entry");
+        assert_eq!(
+            entries[0].api_type,
+            ApiType::Responses,
+            "should preserve Responses api_type"
+        );
+        assert_eq!(entries[0].provider_type, "openai");
+
+        // Test ChatCompletions api_type
+        let error = Error::new(ErrorDetails::InferenceServer {
+            message: "test error".to_string(),
+            provider_type: "anthropic".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+
+        let entries = error.collect_raw_responses();
+
+        assert_eq!(entries.len(), 1, "should collect one entry");
+        assert_eq!(
+            entries[0].api_type,
+            ApiType::ChatCompletions,
+            "should preserve ChatCompletions api_type"
+        );
     }
 }

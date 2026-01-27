@@ -227,6 +227,7 @@ impl InferenceProvider for FireworksProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -236,6 +237,7 @@ impl InferenceProvider for FireworksProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -262,12 +264,14 @@ impl InferenceProvider for FireworksProvider {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                     })
                 })?,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -696,9 +700,10 @@ fn stream_fireworks(
                     }
                     yield Err(ErrorDetails::InferenceServer {
                         message,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response,
-                        provider_type: PROVIDER_TYPE.to_string(),
                     }.into());
                 }
                 Ok(event) => match event {
@@ -710,9 +715,10 @@ fn stream_fireworks(
                         let data: Result<FireworksChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing chunk. Error: {e}"),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
-                                provider_type: PROVIDER_TYPE.to_string(),
                             }));
 
                         let latency = start_time.elapsed();
@@ -755,9 +761,10 @@ fn fireworks_to_tensorzero_chunk(
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
-            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into());
     }
@@ -831,9 +838,10 @@ fn fireworks_to_tensorzero_chunk(
                             .get(index as usize)
                             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                                 message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: None,
                                 raw_response: None,
-                                provider_type: PROVIDER_TYPE.to_string(),
                             }))?
                             .clone()
                     }
@@ -892,6 +900,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }
@@ -907,6 +916,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }

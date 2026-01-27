@@ -10,7 +10,7 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::{TensorZeroEventSource, TensorzeroRequestBuilder, TensorzeroResponseWrapper},
     inference::types::{
-        ProviderInferenceResponseChunk,
+        ApiType, ProviderInferenceResponseChunk,
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
         extra_body::{DynamicExtraBody, ExtraBodyReplacementKind, FullExtraBodyConfig},
         extra_headers::{DynamicExtraHeader, ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig},
@@ -51,6 +51,7 @@ pub async fn convert_stream_error(
             ErrorDetails::FatalStreamError {
                 message,
                 provider_type,
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request),
                 raw_response,
             }
@@ -78,6 +79,7 @@ pub async fn convert_stream_error(
             ErrorDetails::FatalStreamError {
                 message,
                 provider_type,
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request),
                 raw_response: None,
             }
@@ -93,6 +95,7 @@ pub async fn convert_stream_error(
                 raw_request: Some(raw_request),
                 raw_response: None,
                 provider_type,
+                api_type: ApiType::ChatCompletions,
             }
             .into()
         }
@@ -147,6 +150,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
     let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
@@ -159,6 +163,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
     for line in text.lines() {
@@ -174,6 +179,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
                     raw_request: None,
                     raw_response: Some(line.to_string()),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 });
                 continue;
             }
@@ -302,6 +308,7 @@ pub async fn inject_extra_request_data_and_send_with_headers(
                     status_code,
                     message,
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 }),
@@ -391,6 +398,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
             let error = Error::new(ErrorDetails::FatalStreamError {
                 message,
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request),
                 raw_response,
             });
@@ -1004,6 +1012,7 @@ pub async fn peek_first_chunk<
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: "Stream ended before first chunk".to_string(),
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.to_string()),
                 raw_response: None,
             }))

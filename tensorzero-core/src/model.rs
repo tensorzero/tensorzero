@@ -2781,7 +2781,7 @@ mod tests {
         cache::CacheOptions,
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         inference::types::{
-            ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
+            ApiType, ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },
         model_table::RESERVED_MODEL_PREFIXES,
         providers::anthropic::AnthropicCredentials,
@@ -2921,6 +2921,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3306,6 +3307,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3574,6 +3576,7 @@ mod tests {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }

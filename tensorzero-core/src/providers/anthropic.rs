@@ -303,6 +303,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -315,6 +316,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -338,6 +340,7 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error fetching response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -474,6 +477,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.to_string()),
                                 raw_response: Some(message.data.clone()),
                             }));
@@ -654,6 +658,7 @@ impl<'a> AnthropicMessageContent<'a> {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: provider_type.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -664,6 +669,7 @@ impl<'a> AnthropicMessageContent<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: provider_type.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }));
@@ -1032,6 +1038,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
             ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }))
@@ -1135,6 +1142,7 @@ fn convert_to_output(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(serde_json::to_string(&input).unwrap_or_default()),
                     })
@@ -1327,6 +1335,7 @@ pub(super) fn handle_anthropic_error(
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some(raw_request),
             raw_response: Some(raw_response.clone()),
             message: raw_response,
@@ -1338,6 +1347,7 @@ pub(super) fn handle_anthropic_error(
             raw_response: Some(raw_response.clone()),
             message: raw_response,
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some(raw_request),
         }
         .into()),
@@ -1437,6 +1447,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                             provider_type: provider_type.to_string(),
+                            api_type: ApiType::ChatCompletions,
                             raw_request: None,
                             raw_response: None,
                         }))?,
@@ -1557,6 +1568,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }
@@ -2342,6 +2354,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2360,6 +2373,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2378,6 +2392,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2397,6 +2412,7 @@ mod tests {
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
@@ -2414,6 +2430,7 @@ mod tests {
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
     }
@@ -2756,6 +2773,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
 
@@ -2909,6 +2927,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
 

@@ -11,6 +11,7 @@ pub enum ApiType {
     ChatCompletions,
     Responses,
     Embeddings,
+    Other,
 }
 
 /// A single entry in the raw usage array, representing usage data from one model inference.
@@ -200,6 +201,7 @@ mod tests {
             serde_json::to_string(&ApiType::Embeddings).unwrap(),
             "\"embeddings\""
         );
+        assert_eq!(serde_json::to_string(&ApiType::Other).unwrap(), "\"other\"");
     }
 
     #[test]

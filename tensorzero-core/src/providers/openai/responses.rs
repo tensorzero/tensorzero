@@ -152,6 +152,7 @@ impl OpenAIResponsesResponse<'_> {
                                 "Only assistant messages are supported in responses API output"
                                     .to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            api_type: ApiType::Responses,
                             raw_request: Some(raw_request.clone()),
                             raw_response: Some(raw_response.clone()),
                         }));
@@ -169,6 +170,7 @@ impl OpenAIResponsesResponse<'_> {
                                         "Only output text is supported in responses API output"
                                             .to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
+                                    api_type: ApiType::Responses,
                                     raw_request: Some(raw_request.clone()),
                                     raw_response: Some(raw_response.clone()),
                                 }));
@@ -1316,6 +1318,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                             message: "Got function_call_arguments.delta without current tool id"
                                 .to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            api_type: ApiType::Responses,
                             raw_request: Some(raw_request.to_string()),
                             raw_response: Some(raw_message.clone()),
                         })
@@ -1462,6 +1465,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: error_msg.to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Responses,
                 raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
@@ -1522,6 +1526,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: format!("Model refused to respond: {delta}"),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Responses,
                 raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
@@ -1532,6 +1537,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: error.to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Responses,
                 raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))

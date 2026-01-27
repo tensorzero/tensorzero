@@ -202,6 +202,7 @@ impl InferenceProvider for GroqProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -214,6 +215,7 @@ impl InferenceProvider for GroqProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -241,6 +243,7 @@ impl InferenceProvider for GroqProvider {
                         raw_request: Some(raw_request),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?,
                 PROVIDER_TYPE,
@@ -364,6 +367,7 @@ pub fn stream_groq(
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
+                                api_type: ApiType::ChatCompletions,
                             }));
 
                         let latency = start_time.elapsed();
@@ -399,6 +403,7 @@ pub(super) fn handle_groq_error(
             raw_request: None,
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
@@ -406,6 +411,7 @@ pub(super) fn handle_groq_error(
             raw_request: None,
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into(),
     }
@@ -1314,6 +1320,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -1329,6 +1336,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
@@ -1446,6 +1454,7 @@ fn groq_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(raw_message.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -1486,6 +1495,7 @@ fn groq_to_tensorzero_chunk(
                                 raw_request: None,
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }))?
                             .clone()
                     }
@@ -1555,6 +1565,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            api_type,
         } = details
         {
             assert_eq!(message, "Unauthorized access");
@@ -1562,6 +1573,7 @@ mod tests {
             assert_eq!(provider, PROVIDER_TYPE);
             assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, Some("Unauthorized access".to_string()));
+            assert_eq!(*api_type, ApiType::ChatCompletions);
         }
 
         // Test forbidden error
@@ -1574,6 +1586,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            api_type,
         } = details
         {
             assert_eq!(message, "Forbidden access");
@@ -1581,6 +1594,7 @@ mod tests {
             assert_eq!(provider, PROVIDER_TYPE);
             assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, Some("Forbidden access".to_string()));
+            assert_eq!(*api_type, ApiType::ChatCompletions);
         }
 
         // Test rate limit error
@@ -1597,6 +1611,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            api_type,
         } = details
         {
             assert_eq!(message, "Rate limit exceeded");
@@ -1604,6 +1619,7 @@ mod tests {
             assert_eq!(provider, PROVIDER_TYPE);
             assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, Some("Rate limit exceeded".to_string()));
+            assert_eq!(*api_type, ApiType::ChatCompletions);
         }
 
         // Test server error
@@ -1619,12 +1635,14 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            api_type,
         } = details
         {
             assert_eq!(message, "Server error");
             assert_eq!(provider, PROVIDER_TYPE);
             assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, Some("Server error".to_string()));
+            assert_eq!(*api_type, ApiType::ChatCompletions);
         }
     }
 
@@ -2472,6 +2490,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         // Test a correct new tool chunk
