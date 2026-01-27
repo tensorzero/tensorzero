@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -10,6 +12,9 @@ use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOpera
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::endpoints::datasets::v1::types::DatapointOrderBy;
 use crate::error::Error;
+
+/// Default value for `allow_stale` in `get_datapoint` when not specified.
+pub const DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT: bool = false;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
@@ -152,8 +157,9 @@ pub trait DatasetQueries {
 
     /// Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
     ///
-    /// For each source datapoint ID, generates a new UUID and attempts to clone the datapoint
-    /// to the target dataset. The operation handles both Chat and Json datapoints.
+    /// The `id_mappings` parameter provides a mapping from source datapoint IDs to their
+    /// corresponding new IDs. This ensures consistent IDs when writing to multiple databases.
+    /// The `source_datapoint_ids` parameter determines the order of results.
     ///
     /// Returns a Vec with the same length as `source_datapoint_ids`, where each element is:
     /// - `Some(new_id)` if the source datapoint was found and cloned successfully
@@ -162,5 +168,6 @@ pub trait DatasetQueries {
         &self,
         target_dataset_name: &str,
         source_datapoint_ids: &[Uuid],
+        id_mappings: &HashMap<Uuid, Uuid>,
     ) -> Result<Vec<Option<Uuid>>, Error>;
 }
