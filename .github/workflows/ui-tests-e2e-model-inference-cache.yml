@@ -77,7 +77,6 @@ jobs:
             fi
             sleep $((10 * attempt))
           done
-        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
@@ -94,7 +93,6 @@ jobs:
             fi
             sleep $((10 * attempt))
           done
-        shell: bash
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
