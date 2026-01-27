@@ -315,7 +315,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-tools"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-worker"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1847,7 +1847,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "async-trait",
  "durable",
@@ -2009,7 +2009,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2112,7 +2112,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2358,7 +2358,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "async-stream",
  "autopilot-tools",
@@ -3587,7 +3587,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "minijinja",
  "serde",
@@ -4779,7 +4779,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6234,7 +6234,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "axum",
  "chrono",
@@ -6254,7 +6254,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6375,7 +6375,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "napi",
  "napi-build",
@@ -6388,7 +6388,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -6422,7 +6422,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "evaluations",
  "futures",
@@ -6440,7 +6440,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "aws-smithy-types",
  "infer",
@@ -6460,7 +6460,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.1.5"
+version = "2026.1.6"
 dependencies = [
  "serde",
  "serde_json",
@@ -6468,7 +6468,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2026.1.5"
+version = "2026.1.6"
 
 [[package]]
 name = "termcolor"
