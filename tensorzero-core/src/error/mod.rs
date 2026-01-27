@@ -493,6 +493,10 @@ pub enum ErrorDetails {
         message: String,
     },
     NoFallbackVariantsRemaining,
+    /// Feature not yet implemented. Used for stubbed functionality during incremental migration.
+    NotImplemented {
+        message: String,
+    },
     Observability {
         message: String,
     },
@@ -518,7 +522,6 @@ pub enum ErrorDetails {
         message: String,
     },
     PostgresQuery {
-        function_name: Option<String>,
         message: String,
     },
     PostgresResult {
@@ -716,6 +719,7 @@ impl ErrorDetails {
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
+            ErrorDetails::NotImplemented { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
@@ -793,7 +797,7 @@ impl ErrorDetails {
             ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
@@ -872,6 +876,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
+            ErrorDetails::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -880,11 +885,11 @@ impl ErrorDetails {
             ErrorDetails::PostgresConnectionInitialization { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
-            ErrorDetails::PostgresConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ValkeyConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::ValkeyQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
@@ -1474,6 +1479,9 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::NoFallbackVariantsRemaining => {
                 write!(f, "No fallback variants remaining.")
             }
+            ErrorDetails::NotImplemented { message } => {
+                write!(f, "Not implemented: {message}")
+            }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
             }
@@ -1522,16 +1530,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Unexpected Postgres result of type {result_type}: {message}"
                 )
             }
-            ErrorDetails::PostgresQuery {
-                function_name,
-                message,
-            } => match function_name {
-                Some(function_name) => write!(
-                    f,
-                    "Postgres query failed in function {function_name} with message: {message}"
-                ),
-                None => write!(f, "Postgres query failed: {message}"),
-            },
+            ErrorDetails::PostgresQuery { message } => {
+                write!(f, "Postgres query failed: {message}")
+            }
             ErrorDetails::ValkeyConnection { message } => {
                 write!(f, "Error connecting to Valkey: {message}")
             }
@@ -1708,7 +1709,6 @@ impl From<sqlx::Error> for Error {
     fn from(err: sqlx::Error) -> Self {
         Self::new(ErrorDetails::PostgresQuery {
             message: err.to_string(),
-            function_name: None,
         })
     }
 }
@@ -1757,6 +1757,10 @@ impl From<autopilot_client::AutopilotError> for Error {
                 message: format!("Spawn error: {e}"),
                 status_code: None,
             }),
+            autopilot_client::AutopilotError::Database(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Database error: {e}"),
+                status_code: None,
+            }),
             autopilot_client::AutopilotError::MissingConfig(field) => {
                 Self::new(ErrorDetails::Autopilot {
                     message: format!("Missing config: {field}"),
@@ -1777,6 +1781,12 @@ impl From<autopilot_client::AutopilotError> for Error {
                         errors.len(),
                         failed_ids.join(", ")
                     ),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::Internal(message) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Internal error: {message}"),
                     status_code: None,
                 })
             }

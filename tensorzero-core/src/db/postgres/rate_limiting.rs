@@ -33,7 +33,6 @@ impl RateLimitQueries for PostgresConnectionInfo {
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
                 message: "Failed to consume tickets for rate limiting: PostgreSQL connection is disabled.".to_string(),
-                function_name: None,
             })
         })?;
 
@@ -76,9 +75,8 @@ impl RateLimitQueries for PostgresConnectionInfo {
         }
 
         let pool = self.get_pool().ok_or_else(|| {
-            Error::new(ErrorDetails::PostgresQuery {
+            Error::new(ErrorDetails::PostgresConnection {
                 message: "PostgreSQL connection is disabled".to_string(),
-                function_name: None,
             })
         })?;
 
@@ -106,8 +104,9 @@ impl RateLimitQueries for PostgresConnectionInfo {
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::PostgresQuery {
-                message: format!("Database query failed: {e}"),
-                function_name: Some("return_multiple_resource_tickets".to_string()),
+                message: format!(
+                    "Database query failed in function return_multiple_resource_tickets: {e}"
+                ),
             })
         })?;
 
@@ -129,7 +128,6 @@ impl RateLimitQueries for PostgresConnectionInfo {
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
                 message: "PostgreSQL connection is disabled".to_string(),
-                function_name: None,
             })
         })?;
 
@@ -144,8 +142,9 @@ impl RateLimitQueries for PostgresConnectionInfo {
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::PostgresQuery {
-                message: format!("Database query failed: {e}"),
-                function_name: Some("get_resource_bucket_balance".to_string()),
+                message: format!(
+                    "Database query failed in function get_resource_bucket_balance: {e}"
+                ),
             })
         })?;
 

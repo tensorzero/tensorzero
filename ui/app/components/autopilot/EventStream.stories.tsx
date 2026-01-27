@@ -1,18 +1,18 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventStream from "./EventStream";
-import type { Event } from "~/types/tensorzero";
+import type { GatewayEvent } from "~/types/tensorzero";
 
 const baseTime = new Date("2026-04-12T10:00:00Z").getTime();
 const sessionId = "d1a0b0c0-0000-0000-0000-000000000001";
 
-function buildEvent(event: Event, index: number): Event {
+function buildEvent(event: GatewayEvent, index: number): GatewayEvent {
   return {
     ...event,
     created_at: new Date(baseTime + index * 60 * 1000).toISOString(),
   };
 }
 
-const conversationEvents: Event[] = [
+const conversationEvents: GatewayEvent[] = [
   buildEvent(
     {
       id: "e2a3f5d6-7b8c-4d9e-8f01-1234567890a1",
@@ -46,7 +46,7 @@ const conversationEvents: Event[] = [
   ),
 ];
 
-const toolingEvents: Event[] = [
+const toolingEvents: GatewayEvent[] = [
   buildEvent(
     {
       id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
@@ -101,7 +101,7 @@ const toolingEvents: Event[] = [
   ),
 ];
 
-const mixedEvents: Event[] = [
+const mixedEvents: GatewayEvent[] = [
   buildEvent(
     {
       id: "a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
@@ -297,7 +297,7 @@ const longToolResult = [
   longText,
 ].join("\n\n");
 
-const longFormEvents: Event[] = [
+const longFormEvents: GatewayEvent[] = [
   buildEvent(
     {
       id: "7b8c9d0e-1f2a-4b3c-8d4e-0123456789d0",

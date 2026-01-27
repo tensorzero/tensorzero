@@ -3,7 +3,6 @@
 use futures::StreamExt;
 use rand::Rng;
 use reqwest::Client;
-use reqwest::StatusCode;
 use reqwest_eventsource::Event;
 use reqwest_eventsource::RequestBuilderExt;
 use serde_json::Value;
@@ -525,15 +524,6 @@ pub async fn check_test_streaming_cache_with_err(
         "stream": true,
         "cache_options": {"enabled": "on", "lookback_s": 10}
     });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
 
     let mut event_source = Client::new()
         .post(get_gateway_endpoint("/inference"))

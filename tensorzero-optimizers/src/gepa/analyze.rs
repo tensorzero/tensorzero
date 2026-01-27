@@ -33,6 +33,37 @@ use evaluations::stats::EvaluationInfo;
 
 use crate::gepa::validate::FunctionContext;
 
+/// Fields to exclude when serializing datapoints for GEPA functions.
+/// These metadata fields are not relevant for prompt optimization and waste tokens.
+const DATAPOINT_FIELDS_TO_DROP: &[&str] = &[
+    "dataset_name",
+    "id",
+    "episode_id",
+    "auxiliary",
+    "is_deleted",
+    "is_custom",
+    "source_inference_id",
+    "staled_at",
+    "updated_at",
+    "name",
+];
+
+/// Serialize a datapoint for GEPA functions, excluding superfluous metadata fields.
+///
+/// This reduces token usage by removing fields like IDs, timestamps, and flags
+/// that are not relevant for prompt optimization analysis.
+fn serialize_filtered_datapoint(datapoint: &Datapoint) -> Result<Value, Error> {
+    let mut value = to_value(datapoint)?;
+
+    if let Some(obj) = value.as_object_mut() {
+        for field in DATAPOINT_FIELDS_TO_DROP {
+            obj.remove(*field);
+        }
+    }
+
+    Ok(value)
+}
+
 // ============================================================================
 // Type-safe thought signature stripping
 // ============================================================================
@@ -202,13 +233,16 @@ pub fn build_analyze_input(
 
     // Strip thought signatures at the type level before serialization.
     // Only Chat types can contain Thought blocks; Json outputs are left intact.
-    let datapoint_value = match eval_info.datapoint.clone() {
-        Datapoint::Chat(mut chat_datapoint) => {
-            strip_signatures_from_chat_datapoint(&mut chat_datapoint);
-            to_value(Datapoint::Chat(chat_datapoint))?
+    let mut datapoint_for_serialization = eval_info.datapoint.clone();
+    match &mut datapoint_for_serialization {
+        Datapoint::Chat(chat_datapoint) => {
+            strip_signatures_from_chat_datapoint(chat_datapoint);
         }
-        json_datapoint @ Datapoint::Json(_) => to_value(&json_datapoint)?,
-    };
+        Datapoint::Json(_) => {} // No signatures to strip in JSON
+    }
+
+    // Serialize with filtered fields
+    let datapoint_value = serialize_filtered_datapoint(&datapoint_for_serialization)?;
     map.insert("datapoint".to_string(), datapoint_value);
 
     let output_value = match &eval_info.response {
@@ -1246,6 +1280,189 @@ mod tests {
             thought.text,
             Some("Stored thought".to_string()),
             "text should be preserved"
+        );
+    }
+
+    // ============================================================================
+    // Unit Tests for datapoint field filtering
+    // ============================================================================
+
+    #[test]
+    fn test_serialize_filtered_datapoint_chat() {
+        let eval_info = create_test_evaluation_info();
+        let datapoint = match &eval_info.datapoint {
+            Datapoint::Chat(dp) => Datapoint::Chat(dp.clone()),
+            Datapoint::Json(_) => panic!("Expected Chat datapoint"),
+        };
+
+        let filtered = serialize_filtered_datapoint(&datapoint)
+            .expect("Serialization should succeed, expected Chat datapoint with valid fields");
+        let obj = filtered
+            .as_object()
+            .expect("Filtered result should be a JSON object");
+
+        // Verify kept fields are present
+        assert!(
+            obj.contains_key("function_name"),
+            "Expected function_name to be kept for context"
+        );
+        assert!(
+            obj.contains_key("input"),
+            "Expected input to be kept as core data for analysis"
+        );
+        // Note: output might be None in test data, so we check it's either present or absent as an Option
+        // tool_params is flattened so its individual fields would be in the object
+        // tags is optional but if present should be kept
+
+        // Verify dropped fields are absent
+        assert!(
+            !obj.contains_key("dataset_name"),
+            "Expected dataset_name to be dropped as not relevant for optimization"
+        );
+        assert!(
+            !obj.contains_key("id"),
+            "Expected id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("episode_id"),
+            "Expected episode_id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("auxiliary"),
+            "Expected auxiliary to be dropped as extra metadata"
+        );
+        assert!(
+            !obj.contains_key("is_deleted"),
+            "Expected is_deleted to be dropped as internal state flag"
+        );
+        assert!(
+            !obj.contains_key("is_custom"),
+            "Expected is_custom to be dropped as internal flag"
+        );
+        assert!(
+            !obj.contains_key("source_inference_id"),
+            "Expected source_inference_id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("staled_at"),
+            "Expected staled_at to be dropped as timestamp not relevant"
+        );
+        assert!(
+            !obj.contains_key("updated_at"),
+            "Expected updated_at to be dropped as timestamp not relevant"
+        );
+        assert!(
+            !obj.contains_key("name"),
+            "Expected name to be dropped as optional name field typically not relevant"
+        );
+    }
+
+    #[test]
+    fn test_serialize_filtered_datapoint_json() {
+        use tensorzero_core::{
+            db::stored_datapoint::StoredJsonInferenceDatapoint,
+            inference::types::JsonInferenceOutput,
+        };
+
+        // Create a JSON datapoint
+        let input = Input {
+            messages: vec![],
+            system: None,
+        };
+
+        let stored_input = serde_json::from_value(to_value(&input).unwrap()).unwrap();
+
+        let output_schema = json!({
+            "type": "object",
+            "properties": {
+                "result": {"type": "string"}
+            }
+        });
+
+        let stored_datapoint = StoredJsonInferenceDatapoint {
+            dataset_name: "test_dataset".to_string(),
+            function_name: "test_function".to_string(),
+            id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
+            input: stored_input,
+            output: Some(JsonInferenceOutput {
+                raw: Some(r#"{"result": "test"}"#.to_string()),
+                parsed: Some(json!({"result": "test"})),
+            }),
+            output_schema: output_schema.clone(),
+            tags: Some(HashMap::new()),
+            auxiliary: String::new(),
+            is_deleted: false,
+            is_custom: false,
+            source_inference_id: None,
+            staled_at: None,
+            updated_at: "2025-01-01T00:00:00Z".to_string(),
+            name: Some("test_name".to_string()),
+            snapshot_hash: None,
+        };
+
+        let datapoint = Datapoint::Json(stored_datapoint.into_datapoint());
+
+        let filtered = serialize_filtered_datapoint(&datapoint)
+            .expect("Serialization should succeed, expected JSON datapoint with valid fields");
+        let obj = filtered
+            .as_object()
+            .expect("Filtered result should be a JSON object");
+
+        // Verify kept fields are present
+        assert!(
+            obj.contains_key("function_name"),
+            "Expected function_name to be kept for context"
+        );
+        assert!(
+            obj.contains_key("input"),
+            "Expected input to be kept as core data for analysis"
+        );
+        assert!(
+            obj.contains_key("output_schema"),
+            "Expected output_schema to be kept for understanding output format"
+        );
+
+        // Verify dropped fields are absent (same as Chat datapoint)
+        assert!(
+            !obj.contains_key("dataset_name"),
+            "Expected dataset_name to be dropped as not relevant for optimization"
+        );
+        assert!(
+            !obj.contains_key("id"),
+            "Expected id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("episode_id"),
+            "Expected episode_id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("auxiliary"),
+            "Expected auxiliary to be dropped as extra metadata"
+        );
+        assert!(
+            !obj.contains_key("is_deleted"),
+            "Expected is_deleted to be dropped as internal state flag"
+        );
+        assert!(
+            !obj.contains_key("is_custom"),
+            "Expected is_custom to be dropped as internal flag"
+        );
+        assert!(
+            !obj.contains_key("source_inference_id"),
+            "Expected source_inference_id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("staled_at"),
+            "Expected staled_at to be dropped as timestamp not relevant"
+        );
+        assert!(
+            !obj.contains_key("updated_at"),
+            "Expected updated_at to be dropped as timestamp not relevant"
+        );
+        assert!(
+            !obj.contains_key("name"),
+            "Expected name to be dropped as optional name field typically not relevant"
         );
     }
 }

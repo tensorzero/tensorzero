@@ -22,16 +22,14 @@ use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CommentTargetType,
     DemonstrationFeedbackInsert, FeedbackQueries, FloatMetricFeedbackInsert,
 };
+use crate::db::inferences::{FunctionInfo, InferenceQueries};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text, parse_chat_output,
+    ContentBlockChatOutput, ContentBlockOutput, Text, parse_chat_output,
 };
 use crate::jsonschema_util::JSONSchema;
-use crate::tool::{
-    StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
-    deserialize_optional_tool_info,
-};
+use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
 use tensorzero_auth::middleware::RequestApiKeyExtension;
@@ -355,11 +353,11 @@ async fn write_demonstration(
         &inference_id,
     )
     .await?;
-    let function_config = config.get_function(&function_info.name)?;
+    let function_config = config.get_function(&function_info.function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
         &connection_info,
         inference_id,
-        &function_info.name,
+        &function_info.function_name,
         &function_config,
         &config.tools,
     )
@@ -539,8 +537,11 @@ async fn throttled_get_function_info(
     // Poll every 500ms until the deadline is reached.
     loop {
         // If an error occurs during lookup (distinct from the target_id not existing), we bail out immediately.
-        match get_function_info(connection_info, metric_config_level, target_id).await? {
-            Some(identifier) => return Ok(identifier),
+        let feedback_target_info = connection_info
+            .get_function_info(target_id, metric_config_level.clone())
+            .await?;
+        match feedback_target_info {
+            Some(feedback_target_info) => return Ok(feedback_target_info),
             None => {
                 if Instant::now() >= deadline {
                     let identifier_type = match metric_config_level {
@@ -561,67 +562,6 @@ async fn throttled_get_function_info(
         }
         tokio::time::sleep(FEEDBACK_TARGET_POLL_INTERVAL).await;
     }
-}
-
-/// Retrieves the function name associated with a given `target_id` of the inference or episode.
-///
-/// # Arguments
-///
-/// * `connection_info` - Connection details for the ClickHouse database.
-/// * `metric_config_level` - The level of metric configuration, either `Inference` or `Episode`.
-/// * `target_id` - The UUID of the target to be validated and retrieved.
-///
-/// # Returns
-///
-/// * On success:
-///   - Returns a `FunctionInfo` containing the function name and type.
-///   - Returns `None` if the `target_id` does not exist.
-/// * On failure:
-///   - Returns an `Error` if the `target_id` exists, but is invalid
-async fn get_function_info(
-    connection_info: &ClickHouseConnectionInfo,
-    metric_config_level: &MetricConfigLevel,
-    target_id: &Uuid,
-) -> Result<Option<FunctionInfo>, Error> {
-    let query = match metric_config_level {
-        MetricConfigLevel::Inference => format!(
-            "SELECT function_name as name, function_type, variant_name, episode_id
-            FROM InferenceById
-            WHERE id_uint = toUInt128(toUUID('{target_id}'))
-            LIMIT 1
-            FORMAT JSONEachRow
-            SETTINGS max_threads=1"
-        ),
-        MetricConfigLevel::Episode => format!(
-            "SELECT function_name as name, function_type, variant_name, uint_to_uuid(episode_id_uint) as episode_id
-            FROM InferenceByEpisodeId
-            WHERE episode_id_uint = toUInt128(toUUID('{target_id}'))
-            LIMIT 1
-            FORMAT JSONEachRow
-            SETTINGS max_threads=1"
-        ),
-    };
-    let response = connection_info
-        .run_query_synchronous_no_params(query)
-        .await?;
-    if response.response.is_empty() {
-        return Ok(None);
-    };
-    Ok(Some(serde_json::from_str(&response.response).map_err(
-        |e| {
-            Error::new(ErrorDetails::ClickHouseDeserialization {
-                message: e.to_string(),
-            })
-        },
-    )?))
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-struct FunctionInfo {
-    name: String,
-    function_type: FunctionType,
-    variant_name: String,
-    episode_id: Uuid,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -767,12 +707,6 @@ pub enum DynamicDemonstrationInfo {
     Json(Value),
 }
 
-#[derive(Debug, Deserialize)]
-struct ToolParamsResult {
-    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
-    tool_params: Option<ToolCallConfigDatabaseInsert>,
-}
-
 /// In order to properly validate demonstration data we need to fetch the information that was
 /// passed to the inference at runtime.
 /// If we don't do this then we might allow some e.g. tool calls or output schemas that would not
@@ -789,52 +723,22 @@ async fn get_dynamic_demonstration_info(
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
-            let parameterized_query = "SELECT tool_params, dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
-            let result = clickhouse_client
-                .run_query_synchronous(
-                    parameterized_query,
-                    &HashMap::from([
-                        ("function_name", function_name),
-                        ("inference_id", &inference_id.to_string()),
-                    ]),
-                )
+            let tool_params = clickhouse_client
+                .get_chat_inference_tool_params(function_name, inference_id)
                 .await?;
-
-            let tool_params_result = serde_json::from_str::<ToolParamsResult>(&result.response)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse demonstration result: {e}"),
-                    })
-                })?;
 
             Ok(DynamicDemonstrationInfo::Chat(
                 // If the tool params are not present in the database, we use the default tool params (empty tools).
                 // This is consistent with how they are serialized at inference time.
-                tool_params_result
-                    .tool_params
+                tool_params
                     .unwrap_or_default()
                     .into_tool_call_config(function_config, static_tools)?,
             ))
         }
         FunctionConfig::Json(..) => {
-            let parameterized_query = "SELECT output_schema FROM JsonInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
-            let result = clickhouse_client
-                .run_query_synchronous(
-                    parameterized_query,
-                    &HashMap::from([
-                        ("function_name", function_name),
-                        ("inference_id", &inference_id.to_string()),
-                    ]),
-                )
-                .await?;
-            let result_value = serde_json::from_str::<Value>(&result.response).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
-                    message: format!("Failed to parse demonstration result: {e}"),
-                })
-            })?;
-            let output_schema_str = result_value
-                .get("output_schema")
-                .and_then(|v| v.as_str())
+            let output_schema = clickhouse_client
+                .get_json_inference_output_schema(function_name, inference_id)
+                .await?
                 .ok_or_else(|| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: "Failed to get output schema from demonstration result"
@@ -842,15 +746,11 @@ async fn get_dynamic_demonstration_info(
                     })
                 })?;
 
-            let mut output_schema =
-                serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse output schema: {e}"),
-                    })
-                })?;
-            if function_name.starts_with("tensorzero::llm_judge") {
-                output_schema = handle_llm_judge_output_schema(output_schema);
-            }
+            let output_schema = if function_name.starts_with("tensorzero::llm_judge") {
+                handle_llm_judge_output_schema(output_schema)
+            } else {
+                output_schema
+            };
             Ok(DynamicDemonstrationInfo::Json(output_schema))
         }
     }

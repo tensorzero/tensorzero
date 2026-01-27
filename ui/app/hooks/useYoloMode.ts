@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalStorage } from "~/hooks/use-local-storage";
 import { useToast } from "~/hooks/use-toast";
 import { logger } from "~/utils/logger";
-import type { Event } from "~/types/tensorzero";
+import type { GatewayEvent } from "~/types/tensorzero";
 
 interface UseYoloModeOptions {
   sessionId: string;
-  pendingToolCalls: Event[];
+  pendingToolCalls: GatewayEvent[];
   onApproveToolCall: (eventId: string) => Promise<void>;
   onApproveAll: (lastToolCallEventId: string) => Promise<void>;
 }

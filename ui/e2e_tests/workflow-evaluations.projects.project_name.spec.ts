@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("workflow evaluation project page should render and show correct information", async ({
   page,
 }) => {
-  await page.goto("/workflow_evaluations/projects/beerqa-agentic-rag");
+  await page.goto("/workflow-evaluations/projects/beerqa-agentic-rag");
   await expect(
     page
       .getByRole("navigation", { name: "breadcrumb" })
