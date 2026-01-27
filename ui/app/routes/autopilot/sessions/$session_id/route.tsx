@@ -135,10 +135,15 @@ function EventStreamSkeleton() {
  * Error state shown when initial event stream load fails.
  * Preserves the chat container layout so the page doesn't completely break.
  */
-function EventStreamLoadError() {
+function EventStreamLoadError({ onError }: { onError?: () => void }) {
   const error = useAsyncError();
   const message =
     error instanceof Error ? error.message : "Failed to load session events";
+
+  // Signal that loading is complete (even though it failed)
+  useEffect(() => {
+    onError?.();
+  }, [onError]);
 
   return (
     <div className="border-border mt-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
@@ -661,7 +666,12 @@ export default function AutopilotSessionEventsPage({
       />
 
       <Suspense key={sessionId} fallback={<EventStreamSkeleton />}>
-        <Await resolve={eventsData} errorElement={<EventStreamLoadError />}>
+        <Await
+          resolve={eventsData}
+          errorElement={
+            <EventStreamLoadError onError={() => setIsEventsLoading(false)} />
+          }
+        >
           {(resolvedData) => (
             <EventStreamContentWrapper
               sessionId={sessionId}
