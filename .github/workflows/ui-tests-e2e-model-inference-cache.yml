@@ -139,6 +139,8 @@ jobs:
         if: inputs.regen_cache == true
         env:
           TENSORZERO_CI: 1
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
