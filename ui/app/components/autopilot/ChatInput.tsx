@@ -46,7 +46,6 @@ export function ChatInput({
   isNewSession = false,
 }: ChatInputProps) {
   const [text, setText] = useState("");
-  const [isMultiline, setIsMultiline] = useState(false);
   const fetcher = useFetcher<MessageResponse>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
@@ -87,7 +86,6 @@ export function ChatInput({
       MAX_HEIGHT,
     );
     textarea.style.height = `${newHeight}px`;
-    setIsMultiline(newHeight > MIN_HEIGHT);
   }, []);
 
   useEffect(() => {
@@ -174,10 +172,8 @@ export function ChatInput({
         disabled={disabled}
         className={cn(
           "resize-none overflow-y-auto",
-          "py-[11px] pr-14 pl-4 text-sm",
-          "transition-[border-radius]",
+          "rounded-md py-[11px] pr-14 pl-4 text-sm",
           "focus-visible:border-fg-muted focus-visible:ring-0",
-          isMultiline ? "rounded-md" : "rounded-full",
         )}
         style={{ minHeight: MIN_HEIGHT, maxHeight: MAX_HEIGHT }}
         rows={1}
