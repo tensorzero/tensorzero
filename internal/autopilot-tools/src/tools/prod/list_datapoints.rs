@@ -8,7 +8,7 @@ use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMeta
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
-use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
+use tensorzero::{ListDatapointsRequest, ListDatapointsResponse};
 
 use autopilot_client::AutopilotSideInfo;
 
@@ -30,7 +30,7 @@ pub struct ListDatapointsTool;
 
 impl ToolMetadata for ListDatapointsTool {
     type SideInfo = AutopilotSideInfo;
-    type Output = GetDatapointsResponse;
+    type Output = ListDatapointsResponse;
     type LlmParams = ListDatapointsToolParams;
 
     fn name(&self) -> Cow<'static, str> {
@@ -150,6 +150,12 @@ impl ToolMetadata for ListDatapointsTool {
                 "search_query_experimental": {
                     "type": "string",
                     "description": "EXPERIMENTAL: Text query for case-insensitive substring search over input and output. Requires exact substring match. May be slow without other filters."
+                },
+                "response_format": {
+                    "type": "string",
+                    "enum": ["datapoint", "id"],
+                    "default": "datapoint",
+                    "description": "Response format. 'datapoint' returns full datapoint objects, 'id' returns only UUIDs."
                 }
             },
             "required": ["dataset_name"]

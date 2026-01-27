@@ -24,6 +24,7 @@ use autopilot_tools::tools::{
 use common::{
     MockTensorZeroClient, create_mock_chat_datapoint, create_mock_create_datapoints_response,
     create_mock_delete_datapoints_response, create_mock_get_datapoints_response,
+    create_mock_list_datapoints_ids_response, create_mock_list_datapoints_response,
     create_mock_update_datapoints_response, create_test_input,
 };
 
@@ -379,7 +380,7 @@ async fn test_get_datapoints_tool_error(pool: PgPool) {
 async fn test_list_datapoints_tool_basic(pool: PgPool) {
     let datapoint_id = Uuid::now_v7();
     let datapoint = create_mock_chat_datapoint(datapoint_id, "test_dataset", "test_function");
-    let mock_response = create_mock_get_datapoints_response(vec![datapoint]);
+    let mock_response = create_mock_list_datapoints_response(vec![datapoint]);
 
     let llm_params = ListDatapointsToolParams {
         dataset_name: "test_dataset".to_string(),
@@ -418,7 +419,7 @@ async fn test_list_datapoints_tool_basic(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_list_datapoints_tool_with_filters(pool: PgPool) {
-    let mock_response = create_mock_get_datapoints_response(vec![]);
+    let mock_response = create_mock_list_datapoints_response(vec![]);
 
     let llm_params = ListDatapointsToolParams {
         dataset_name: "test_dataset".to_string(),
@@ -498,6 +499,55 @@ async fn test_list_datapoints_tool_error(pool: PgPool) {
         .await;
 
     assert!(result.is_err(), "Should return error when client fails");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_datapoints_tool_with_response_format_id(pool: PgPool) {
+    let id1 = Uuid::now_v7();
+    let id2 = Uuid::now_v7();
+    let mock_response = create_mock_list_datapoints_ids_response(vec![id1, id2]);
+
+    let llm_params = ListDatapointsToolParams {
+        dataset_name: "test_dataset".to_string(),
+        request: ListDatapointsRequest::default(),
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_datapoints()
+        .withf(|dataset_name, _request| dataset_name == "test_dataset")
+        .return_once(move |_, _| Ok(mock_response));
+
+    let tool = ListDatapointsTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListDatapointsTool execution should succeed with ID response format");
+
+    // When response_format is "id", the result should contain only IDs
+    assert!(result.is_object(), "Result should be a JSON object");
+    let obj = result.as_object().unwrap();
+    assert!(
+        obj.contains_key("ids"),
+        "Response should contain 'ids' field"
+    );
+    let ids = obj.get("ids").unwrap().as_array().unwrap();
+    assert_eq!(ids.len(), 2, "Should contain 2 IDs");
 }
 
 // ===== UpdateDatapointsTool Tests =====

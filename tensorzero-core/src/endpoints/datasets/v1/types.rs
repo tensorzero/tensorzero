@@ -505,6 +505,12 @@ pub struct ListDatapointsRequest {
     ///   filters, it will perform a full table scan, which may be extremely slow depending
     ///   on the data volume.
     pub search_query_experimental: Option<String>,
+
+    /// Response format for the list_datapoints endpoint.
+    /// If `datapoint` (default), returns full datapoint objects.
+    /// If `id`, returns only datapoint IDs.
+    #[serde(default)]
+    pub response_format: ListDatapointsResponseFormat,
 }
 
 /// Request to get specific datapoints by their IDs.
@@ -526,6 +532,36 @@ pub struct GetDatapointsRequest {
 pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
     pub datapoints: Vec<Datapoint>,
+}
+
+/// Response format for the list_datapoints endpoint.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum ListDatapointsResponseFormat {
+    /// Return full datapoint objects (default).
+    #[default]
+    Datapoint,
+    /// Return only datapoint IDs.
+    Id,
+}
+
+/// Response for the list_datapoints endpoint.
+/// Can return either full datapoint objects or just IDs depending on the request's `response_format`.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(untagged)]
+#[export_schema]
+pub enum ListDatapointsResponse {
+    /// Full datapoint objects (when response_format is "datapoint" or not specified).
+    Datapoints(GetDatapointsResponse),
+    /// Only datapoint IDs (when response_format is "id").
+    Ids {
+        /// The datapoint IDs.
+        ids: Vec<Uuid>,
+    },
 }
 
 /// Request to create datapoints from inferences.

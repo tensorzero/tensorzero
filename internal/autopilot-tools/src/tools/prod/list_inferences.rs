@@ -8,7 +8,7 @@ use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMeta
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
-use tensorzero::{GetInferencesResponse, ListInferencesRequest};
+use tensorzero::{ListInferencesRequest, ListInferencesResponse};
 
 use autopilot_client::AutopilotSideInfo;
 
@@ -29,7 +29,7 @@ pub struct ListInferencesTool;
 
 impl ToolMetadata for ListInferencesTool {
     type SideInfo = AutopilotSideInfo;
-    type Output = GetInferencesResponse;
+    type Output = ListInferencesResponse;
     type LlmParams = ListInferencesToolParams;
 
     fn name(&self) -> Cow<'static, str> {
@@ -213,6 +213,12 @@ impl ToolMetadata for ListInferencesTool {
                 "search_query_experimental": {
                     "type": "string",
                     "description": "EXPERIMENTAL: Text query for case-insensitive substring search over input and output. Requires exact substring match. May be slow without other filters."
+                },
+                "response_format": {
+                    "type": "string",
+                    "enum": ["inference", "id"],
+                    "default": "inference",
+                    "description": "Response format. 'inference' returns full inference objects, 'id' returns only UUIDs."
                 }
             }
         });

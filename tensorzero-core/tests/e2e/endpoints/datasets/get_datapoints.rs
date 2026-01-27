@@ -5,7 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::GetDatapointsRequest;
+use tensorzero::{GetDatapointsRequest, ListDatapointsResponse};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -1610,5 +1610,289 @@ mod list_datapoints_tests {
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         // Should return all 3 datapoints, not 100
         assert_eq!(datapoints.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_list_datapoints_response_format_id() {
+        let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+        let dataset_name = format!("test-list-dp-format-id-{}", Uuid::now_v7());
+
+        // Create 3 datapoints
+        let mut expected_ids = vec![];
+        let mut inserts = vec![];
+        for i in 0..3 {
+            let id = Uuid::now_v7();
+            expected_ids.push(id);
+            inserts.push(StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+                dataset_name: dataset_name.clone(),
+                function_name: "basic_test".to_string(),
+                name: None,
+                id,
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
+                    }],
+                },
+                output: Some(vec![
+                    tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                        text: format!("Response {i}"),
+                    }),
+                ]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: String::new(),
+                snapshot_hash: None,
+            }));
+        }
+
+        clickhouse.insert_datapoints(&inserts).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Request with response_format: "id"
+        let resp = http_client
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/list_datapoints"
+            )))
+            .json(&json!({
+                "response_format": "id"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert!(
+            resp.status().is_success(),
+            "list_datapoints with response_format: id should succeed"
+        );
+
+        let resp_json: ListDatapointsResponse = resp.json().await.unwrap();
+
+        // Should return Ids variant
+        let ListDatapointsResponse::Ids { ids } = resp_json else {
+            panic!("Expected Ids variant, got Datapoints");
+        };
+
+        assert_eq!(ids.len(), 3, "Should return 3 IDs");
+
+        // Verify all returned IDs match the expected IDs
+        for id in &ids {
+            assert!(
+                expected_ids.contains(id),
+                "Returned ID {id} should be in expected IDs"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_datapoints_response_format_datapoint_explicit() {
+        let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+        let dataset_name = format!("test-list-dp-format-explicit-{}", Uuid::now_v7());
+
+        // Create 2 datapoints
+        let mut inserts = vec![];
+        for i in 0..2 {
+            inserts.push(StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+                dataset_name: dataset_name.clone(),
+                function_name: "basic_test".to_string(),
+                name: Some(format!("Datapoint {i}")),
+                id: Uuid::now_v7(),
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
+                    }],
+                },
+                output: Some(vec![
+                    tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                        text: format!("Response {i}"),
+                    }),
+                ]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: String::new(),
+                snapshot_hash: None,
+            }));
+        }
+
+        clickhouse.insert_datapoints(&inserts).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Request with explicit response_format: "datapoint" (default behavior)
+        let resp = http_client
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/list_datapoints"
+            )))
+            .json(&json!({
+                "response_format": "datapoint"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert!(
+            resp.status().is_success(),
+            "list_datapoints with response_format: datapoint should succeed"
+        );
+
+        let resp_json: ListDatapointsResponse = resp.json().await.unwrap();
+
+        // Should return Datapoints variant
+        let ListDatapointsResponse::Datapoints(get_response) = resp_json else {
+            panic!("Expected Datapoints variant, got Ids");
+        };
+
+        assert_eq!(
+            get_response.datapoints.len(),
+            2,
+            "Should return 2 datapoints"
+        );
+
+        // Verify each datapoint has full data
+        for datapoint in &get_response.datapoints {
+            assert_eq!(datapoint.dataset_name(), dataset_name);
+            assert_eq!(datapoint.function_name(), "basic_test");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_datapoints_response_format_id_with_filter() {
+        let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+        let dataset_name = format!("test-list-dp-format-id-filter-{}", Uuid::now_v7());
+
+        // Create datapoints with different tags
+        let mut tags1 = HashMap::new();
+        tags1.insert("env".to_string(), "production".to_string());
+
+        let mut tags2 = HashMap::new();
+        tags2.insert("env".to_string(), "staging".to_string());
+
+        let production_id = Uuid::now_v7();
+        let staging_id = Uuid::now_v7();
+
+        let datapoint1 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "basic_test".to_string(),
+            name: None,
+            id: production_id,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Production message".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![
+                tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                    text: "Production response".to_string(),
+                }),
+            ]),
+            tool_params: None,
+            tags: Some(tags1),
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        });
+
+        let datapoint2 = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "basic_test".to_string(),
+            name: None,
+            id: staging_id,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Staging message".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![
+                tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                    text: "Staging response".to_string(),
+                }),
+            ]),
+            tool_params: None,
+            tags: Some(tags2),
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        });
+
+        clickhouse
+            .insert_datapoints(&[datapoint1, datapoint2])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Request with response_format: "id" and filter for production
+        let resp = http_client
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/list_datapoints"
+            )))
+            .json(&json!({
+                "response_format": "id",
+                "filter": {
+                    "type": "tag",
+                    "key": "env",
+                    "comparison_operator": "=",
+                    "value": "production"
+                }
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert!(
+            resp.status().is_success(),
+            "list_datapoints with response_format: id and filter should succeed"
+        );
+
+        let resp_json: ListDatapointsResponse = resp.json().await.unwrap();
+
+        let ListDatapointsResponse::Ids { ids } = resp_json else {
+            panic!("Expected Ids variant");
+        };
+
+        assert_eq!(ids.len(), 1, "Should return 1 ID matching the filter");
+        assert_eq!(
+            ids[0], production_id,
+            "Should return the production datapoint ID"
+        );
     }
 }

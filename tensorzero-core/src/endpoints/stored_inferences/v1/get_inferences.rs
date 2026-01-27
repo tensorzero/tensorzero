@@ -8,7 +8,10 @@ use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
-use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
+use super::types::{
+    GetInferencesRequest, GetInferencesResponse, ListInferencesRequest, ListInferencesResponse,
+    ListInferencesResponseFormat,
+};
 
 /// Handler for the POST `/v1/inferences/get_inferences` endpoint.
 /// Retrieves specific inferences by their IDs.
@@ -70,7 +73,7 @@ pub async fn get_inferences(
 pub async fn list_inferences_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<ListInferencesRequest>,
-) -> Result<Json<GetInferencesResponse>, Error> {
+) -> Result<Json<ListInferencesResponse>, Error> {
     let response = list_inferences(
         &app_state.config,
         &app_state.clickhouse_connection_info,
@@ -85,7 +88,7 @@ pub async fn list_inferences(
     config: &Config,
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
-) -> Result<GetInferencesResponse, Error> {
+) -> Result<ListInferencesResponse, Error> {
     // Validate output_source parameter
     if request.output_source == InferenceOutputSource::None {
         return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -93,14 +96,25 @@ pub async fn list_inferences(
         }));
     }
 
+    let response_format = request.response_format;
     let params = request.as_list_inferences_params()?;
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
-    let inferences = inferences_storage
-        .into_iter()
-        .map(StoredInferenceDatabase::into_stored_inference)
-        .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(GetInferencesResponse { inferences })
+    match response_format {
+        ListInferencesResponseFormat::Inference => {
+            let inferences = inferences_storage
+                .into_iter()
+                .map(StoredInferenceDatabase::into_stored_inference)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(ListInferencesResponse::Inferences(GetInferencesResponse {
+                inferences,
+            }))
+        }
+        ListInferencesResponseFormat::Id => {
+            let ids = inferences_storage.into_iter().map(|inf| inf.id()).collect();
+            Ok(ListInferencesResponse::Ids { ids })
+        }
+    }
 }
 
 #[cfg(test)]
@@ -120,6 +134,15 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
     use uuid::Uuid;
+
+    /// Helper function to extract inferences from a `ListInferencesResponse`.
+    /// Panics if the response is the `Ids` variant.
+    fn unwrap_inferences(response: ListInferencesResponse) -> Vec<StoredInference> {
+        match response {
+            ListInferencesResponse::Inferences(resp) => resp.inferences,
+            ListInferencesResponse::Ids { .. } => panic!("Expected Inferences variant"),
+        }
+    }
 
     /// Helper to create a test config with the functions registered
     fn create_test_config() -> Config {
@@ -339,8 +362,9 @@ mod tests {
         let result = list_inferences(&config, &mock_clickhouse, request)
             .await
             .unwrap();
+        let inferences = unwrap_inferences(result);
 
-        assert_eq!(result.inferences.len(), 1);
+        assert_eq!(inferences.len(), 1);
     }
 
     #[tokio::test]
@@ -374,8 +398,9 @@ mod tests {
         let result = list_inferences(&config, &mock_clickhouse, request)
             .await
             .unwrap();
+        let inferences = unwrap_inferences(result);
 
-        assert_eq!(result.inferences.len(), 1);
+        assert_eq!(inferences.len(), 1);
     }
 
     #[tokio::test]
@@ -427,8 +452,9 @@ mod tests {
         let result = list_inferences(&config, &mock_clickhouse, request)
             .await
             .unwrap();
+        let inferences = unwrap_inferences(result);
 
-        assert_eq!(result.inferences.len(), 1);
+        assert_eq!(inferences.len(), 1);
     }
 
     #[tokio::test]
@@ -468,8 +494,9 @@ mod tests {
         let result = list_inferences(&config, &mock_clickhouse, request)
             .await
             .unwrap();
+        let inferences = unwrap_inferences(result);
 
-        assert_eq!(result.inferences.len(), 1);
+        assert_eq!(inferences.len(), 1);
     }
 
     #[tokio::test]
@@ -490,8 +517,9 @@ mod tests {
         let result = list_inferences(&config, &mock_clickhouse, request)
             .await
             .unwrap();
+        let inferences = unwrap_inferences(result);
 
-        assert_eq!(result.inferences.len(), 0);
+        assert_eq!(inferences.len(), 0);
     }
 
     #[tokio::test]
@@ -548,5 +576,84 @@ mod tests {
             error_message.contains("none"),
             "Error message should mention 'none': {error_message}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_list_inferences_with_response_format_id() {
+        let config = create_test_config();
+        let id1 = Uuid::now_v7();
+        let id2 = Uuid::now_v7();
+        let inference1 = create_test_inference_database(id1);
+        let inference2 = create_test_inference_database(id2);
+
+        let mut mock_clickhouse = MockInferenceQueries::new();
+        mock_clickhouse
+            .expect_list_inferences()
+            .times(1)
+            .returning(move |_, _| {
+                let inf1 = inference1.clone();
+                let inf2 = inference2.clone();
+                Box::pin(async move { Ok(vec![inf1, inf2]) })
+            });
+
+        let request = ListInferencesRequest {
+            output_source: InferenceOutputSource::Inference,
+            response_format: ListInferencesResponseFormat::Id,
+            ..Default::default()
+        };
+
+        let result = list_inferences(&config, &mock_clickhouse, request)
+            .await
+            .expect("list_inferences should succeed with response_format: id");
+
+        match result {
+            ListInferencesResponse::Ids { ids } => {
+                assert_eq!(ids.len(), 2, "Should return 2 IDs");
+                assert!(ids.contains(&id1), "Should contain first inference ID");
+                assert!(ids.contains(&id2), "Should contain second inference ID");
+            }
+            ListInferencesResponse::Inferences(_) => {
+                panic!("Expected Ids variant but got Inferences variant");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_inferences_with_response_format_inference_default() {
+        let config = create_test_config();
+        let id = Uuid::now_v7();
+        let inference = create_test_inference_database(id);
+
+        let mut mock_clickhouse = MockInferenceQueries::new();
+        mock_clickhouse
+            .expect_list_inferences()
+            .times(1)
+            .returning(move |_, _| {
+                let inf = inference.clone();
+                Box::pin(async move { Ok(vec![inf]) })
+            });
+
+        // Default response_format should be Inference
+        let request = ListInferencesRequest {
+            output_source: InferenceOutputSource::Inference,
+            ..Default::default()
+        };
+
+        let result = list_inferences(&config, &mock_clickhouse, request)
+            .await
+            .expect("list_inferences should succeed with default response_format");
+
+        match result {
+            ListInferencesResponse::Inferences(resp) => {
+                assert_eq!(
+                    resp.inferences.len(),
+                    1,
+                    "Should return 1 full inference object"
+                );
+            }
+            ListInferencesResponse::Ids { .. } => {
+                panic!("Expected Inferences variant but got Ids variant");
+            }
+        }
     }
 }

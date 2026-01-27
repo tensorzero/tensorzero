@@ -4,10 +4,21 @@
 use serde_json::json;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, InferenceOutput, InferenceOutputSource, Input,
-    InputMessage, InputMessageContent, ListInferencesRequest, Role, System,
+    InputMessage, InputMessageContent, ListInferencesRequest, ListInferencesResponse, Role, System,
 };
 use tensorzero_core::inference::types::{Arguments, Text};
+use tensorzero_core::stored_inference::StoredInference;
 use uuid::Uuid;
+
+/// Helper function to extract inferences from a `ListInferencesResponse`.
+/// Panics if the response is the `Ids` variant.
+#[expect(clippy::panic)]
+fn unwrap_inferences(response: ListInferencesResponse) -> Vec<StoredInference> {
+    match response {
+        ListInferencesResponse::Inferences(resp) => resp.inferences,
+        ListInferencesResponse::Ids { .. } => panic!("Expected Inferences variant"),
+    }
+}
 
 // Helper function to create test inferences using the client
 // This ensures embedded gateway tests write and read through the same ClickHouse connection
@@ -62,19 +73,19 @@ async fn test_get_inferences_by_ids(client: Client) {
         ..Default::default()
     };
     let list_response = client.list_inferences(list_request).await.unwrap();
+    let inferences = unwrap_inferences(list_response);
 
     assert!(
-        !list_response.inferences.is_empty(),
+        !inferences.is_empty(),
         "Expected at least some inferences to exist"
     );
 
     // Get the IDs of some existing inferences
-    let inference_ids: Vec<Uuid> = list_response
-        .inferences
+    let inference_ids: Vec<Uuid> = inferences
         .iter()
         .map(|inf| match inf {
-            tensorzero::StoredInference::Chat(chat_inf) => chat_inf.inference_id,
-            tensorzero::StoredInference::Json(json_inf) => json_inf.inference_id,
+            StoredInference::Chat(chat_inf) => chat_inf.inference_id,
+            StoredInference::Json(json_inf) => json_inf.inference_id,
         })
         .collect();
 
@@ -95,8 +106,8 @@ async fn test_get_inferences_by_ids(client: Client) {
         .inferences
         .iter()
         .map(|inf| match inf {
-            tensorzero::StoredInference::Chat(chat_inf) => chat_inf.inference_id,
-            tensorzero::StoredInference::Json(json_inf) => json_inf.inference_id,
+            StoredInference::Chat(chat_inf) => chat_inf.inference_id,
+            StoredInference::Json(json_inf) => json_inf.inference_id,
         })
         .collect();
 
@@ -150,18 +161,15 @@ async fn test_get_inferences_with_function_name(client: Client) {
         ..Default::default()
     };
     let list_response = client.list_inferences(list_request).await.unwrap();
-    assert!(
-        !list_response.inferences.is_empty(),
-        "Should have at least one inference"
-    );
+    let inferences = unwrap_inferences(list_response);
+    assert!(!inferences.is_empty(), "Should have at least one inference");
 
     // Get the inference IDs
-    let inference_ids: Vec<_> = list_response
-        .inferences
+    let inference_ids: Vec<_> = inferences
         .iter()
         .map(|inf| match inf {
-            tensorzero::StoredInference::Chat(chat_inf) => chat_inf.inference_id,
-            tensorzero::StoredInference::Json(json_inf) => json_inf.inference_id,
+            StoredInference::Chat(chat_inf) => chat_inf.inference_id,
+            StoredInference::Json(json_inf) => json_inf.inference_id,
         })
         .collect();
 
@@ -180,8 +188,8 @@ async fn test_get_inferences_with_function_name(client: Client) {
     // Verify we got the correct inferences
     for inference in &response_with_function.inferences {
         let inference_id = match inference {
-            tensorzero::StoredInference::Chat(chat_inf) => chat_inf.inference_id,
-            tensorzero::StoredInference::Json(json_inf) => json_inf.inference_id,
+            StoredInference::Chat(chat_inf) => chat_inf.inference_id,
+            StoredInference::Json(json_inf) => json_inf.inference_id,
         };
         assert!(inference_ids.contains(&inference_id));
     }
@@ -231,12 +239,10 @@ async fn test_list_inferences_with_pagination(client: Client) {
         ..Default::default()
     };
     let response = client.list_inferences(request).await.unwrap();
+    let inferences = unwrap_inferences(response);
 
-    assert!(
-        !response.inferences.is_empty(),
-        "Expected at least some inferences"
-    );
-    let total_count = response.inferences.len();
+    assert!(!inferences.is_empty(), "Expected at least some inferences");
+    let total_count = inferences.len();
 
     // List with limit
     let request = ListInferencesRequest {
@@ -245,11 +251,9 @@ async fn test_list_inferences_with_pagination(client: Client) {
         ..Default::default()
     };
     let response = client.list_inferences(request).await.unwrap();
+    let inferences = unwrap_inferences(response);
 
-    assert!(
-        response.inferences.len() <= 2,
-        "Limit should cap the results at 2"
-    );
+    assert!(inferences.len() <= 2, "Limit should cap the results at 2");
 
     // List with offset (only if we have enough inferences)
     if total_count > 2 {
@@ -260,9 +264,10 @@ async fn test_list_inferences_with_pagination(client: Client) {
             ..Default::default()
         };
         let response = client.list_inferences(request).await.unwrap();
+        let inferences = unwrap_inferences(response);
 
         assert!(
-            !response.inferences.is_empty(),
+            !inferences.is_empty(),
             "Expected at least some inferences with offset"
         );
     }
@@ -287,16 +292,14 @@ async fn test_list_inferences_by_function(client: Client) {
         ..Default::default()
     };
     let response = client.list_inferences(request).await.unwrap();
+    let inferences = unwrap_inferences(response);
 
     // Verify all returned inferences are from basic_test
-    assert!(
-        !response.inferences.is_empty(),
-        "Expected at least some inferences"
-    );
-    for inference in &response.inferences {
+    assert!(!inferences.is_empty(), "Expected at least some inferences");
+    for inference in &inferences {
         let function_name = match inference {
-            tensorzero::StoredInference::Chat(chat_inf) => &chat_inf.function_name,
-            tensorzero::StoredInference::Json(json_inf) => &json_inf.function_name,
+            StoredInference::Chat(chat_inf) => &chat_inf.function_name,
+            StoredInference::Json(json_inf) => &json_inf.function_name,
         };
         assert_eq!(function_name, "basic_test");
     }
@@ -321,16 +324,17 @@ async fn test_list_inferences_by_variant(client: Client) {
         ..Default::default()
     };
     let list_response = client.list_inferences(list_request).await.unwrap();
+    let inferences = unwrap_inferences(list_response);
 
     assert!(
-        !list_response.inferences.is_empty(),
+        !inferences.is_empty(),
         "Expected at least some inferences to exist"
     );
 
     // Get the variant name from the first inference
-    let variant_name = match &list_response.inferences[0] {
-        tensorzero::StoredInference::Chat(chat_inf) => &chat_inf.variant_name,
-        tensorzero::StoredInference::Json(json_inf) => &json_inf.variant_name,
+    let variant_name = match &inferences[0] {
+        StoredInference::Chat(chat_inf) => &chat_inf.variant_name,
+        StoredInference::Json(json_inf) => &json_inf.variant_name,
     };
 
     // List inferences for that specific variant
@@ -341,16 +345,17 @@ async fn test_list_inferences_by_variant(client: Client) {
         ..Default::default()
     };
     let response = client.list_inferences(request).await.unwrap();
+    let inferences = unwrap_inferences(response);
 
     // Verify all returned inferences are from the specified variant
     assert!(
-        !response.inferences.is_empty(),
+        !inferences.is_empty(),
         "Expected at least some inferences with this variant"
     );
-    for inference in &response.inferences {
+    for inference in &inferences {
         let inf_variant_name = match inference {
-            tensorzero::StoredInference::Chat(chat_inf) => &chat_inf.variant_name,
-            tensorzero::StoredInference::Json(json_inf) => &json_inf.variant_name,
+            StoredInference::Chat(chat_inf) => &chat_inf.variant_name,
+            StoredInference::Json(json_inf) => &json_inf.variant_name,
         };
         assert_eq!(inf_variant_name, variant_name);
     }
@@ -375,16 +380,17 @@ async fn test_list_inferences_by_episode(client: Client) {
         ..Default::default()
     };
     let list_response = client.list_inferences(list_request).await.unwrap();
+    let inferences = unwrap_inferences(list_response);
 
     assert!(
-        !list_response.inferences.is_empty(),
+        !inferences.is_empty(),
         "Expected at least some inferences to exist"
     );
 
     // Get an episode_id from one of the existing inferences
-    let episode_id = match &list_response.inferences[0] {
-        tensorzero::StoredInference::Chat(chat_inf) => chat_inf.episode_id,
-        tensorzero::StoredInference::Json(json_inf) => json_inf.episode_id,
+    let episode_id = match &inferences[0] {
+        StoredInference::Chat(chat_inf) => chat_inf.episode_id,
+        StoredInference::Json(json_inf) => json_inf.episode_id,
     };
 
     // List inferences by episode ID
@@ -394,17 +400,18 @@ async fn test_list_inferences_by_episode(client: Client) {
         ..Default::default()
     };
     let response = client.list_inferences(request).await.unwrap();
+    let inferences = unwrap_inferences(response);
 
     assert!(
-        !response.inferences.is_empty(),
+        !inferences.is_empty(),
         "Expected at least one inference with this episode_id"
     );
 
     // Verify all inferences have the correct episode ID
-    for inference in &response.inferences {
+    for inference in &inferences {
         let inf_episode_id = match inference {
-            tensorzero::StoredInference::Chat(chat_inf) => chat_inf.episode_id,
-            tensorzero::StoredInference::Json(json_inf) => json_inf.episode_id,
+            StoredInference::Chat(chat_inf) => chat_inf.episode_id,
+            StoredInference::Json(json_inf) => json_inf.episode_id,
         };
         assert_eq!(inf_episode_id, episode_id);
     }
@@ -435,16 +442,16 @@ async fn test_list_inferences_with_ordering(client: Client) {
         ..Default::default()
     };
     let response = client.list_inferences(request).await.unwrap();
+    let inferences = unwrap_inferences(response);
 
-    assert!(!response.inferences.is_empty());
+    assert!(!inferences.is_empty());
 
     // Verify timestamps are in descending order
-    let timestamps: Vec<_> = response
-        .inferences
+    let timestamps: Vec<_> = inferences
         .iter()
         .map(|inf| match inf {
-            tensorzero::StoredInference::Chat(chat_inf) => chat_inf.timestamp,
-            tensorzero::StoredInference::Json(json_inf) => json_inf.timestamp,
+            StoredInference::Chat(chat_inf) => chat_inf.timestamp,
+            StoredInference::Json(json_inf) => json_inf.timestamp,
         })
         .collect();
 
@@ -498,23 +505,24 @@ async fn test_list_inferences_with_tag_filter(client: Client) {
         ..Default::default()
     };
     let list_response = client.list_inferences(list_request).await.unwrap();
+    let inferences = unwrap_inferences(list_response);
 
     assert!(
-        !list_response.inferences.is_empty(),
+        !inferences.is_empty(),
         "Expected at least some inferences to exist"
     );
 
     // Find an inference with tags
-    let inference_with_tags = list_response.inferences.iter().find(|inf| match inf {
-        tensorzero::StoredInference::Chat(chat_inf) => !chat_inf.tags.is_empty(),
-        tensorzero::StoredInference::Json(json_inf) => !json_inf.tags.is_empty(),
+    let inference_with_tags = inferences.iter().find(|inf| match inf {
+        StoredInference::Chat(chat_inf) => !chat_inf.tags.is_empty(),
+        StoredInference::Json(json_inf) => !json_inf.tags.is_empty(),
     });
 
     // If we found an inference with tags, test filtering by one of its tags
     if let Some(inference) = inference_with_tags {
         let (key, value) = match inference {
-            tensorzero::StoredInference::Chat(chat_inf) => chat_inf.tags.iter().next().unwrap(),
-            tensorzero::StoredInference::Json(json_inf) => json_inf.tags.iter().next().unwrap(),
+            StoredInference::Chat(chat_inf) => chat_inf.tags.iter().next().unwrap(),
+            StoredInference::Json(json_inf) => json_inf.tags.iter().next().unwrap(),
         };
 
         // List inferences filtered by tag
@@ -529,16 +537,17 @@ async fn test_list_inferences_with_tag_filter(client: Client) {
             ..Default::default()
         };
         let response = client.list_inferences(request).await.unwrap();
+        let inferences = unwrap_inferences(response);
 
         // Verify all returned inferences have the tag
         assert!(
-            !response.inferences.is_empty(),
+            !inferences.is_empty(),
             "Expected at least some inferences with this tag"
         );
-        for inference in &response.inferences {
+        for inference in &inferences {
             let inf_tags = match inference {
-                tensorzero::StoredInference::Chat(chat_inf) => &chat_inf.tags,
-                tensorzero::StoredInference::Json(json_inf) => &json_inf.tags,
+                StoredInference::Chat(chat_inf) => &chat_inf.tags,
+                StoredInference::Json(json_inf) => &json_inf.tags,
             };
             assert_eq!(
                 inf_tags.get(key),

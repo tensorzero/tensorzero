@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use tensorzero::{
     Client, ClientExt, CreateChatDatapointRequest, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, Datapoint, ListDatapointsRequest,
-    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
+    ListDatapointsResponse, UpdateChatDatapointRequest, UpdateDatapointMetadataRequest,
+    UpdateDatapointRequest,
 };
 use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::endpoints::datasets::v1::types::DatapointMetadataUpdate;
@@ -14,6 +15,16 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::tool::DynamicToolParams;
 use uuid::Uuid;
+
+/// Helper function to extract datapoints from a `ListDatapointsResponse`.
+/// Panics if the response is the `Ids` variant.
+#[expect(clippy::panic)]
+fn unwrap_datapoints(response: ListDatapointsResponse) -> Vec<Datapoint> {
+    match response {
+        ListDatapointsResponse::Datapoints(resp) => resp.datapoints,
+        ListDatapointsResponse::Ids { .. } => panic!("Expected Datapoints variant"),
+    }
+}
 
 /// Helper function to create a unique dataset name for testing
 fn test_dataset_name(prefix: &str) -> String {
@@ -241,8 +252,9 @@ async fn test_list_datapoints_with_pagination(client: Client) {
         .list_datapoints(dataset_name.clone(), request)
         .await
         .unwrap();
+    let datapoints = unwrap_datapoints(response);
 
-    assert_eq!(response.datapoints.len(), 2);
+    assert_eq!(datapoints.len(), 2);
 
     // List with limit
     let request = ListDatapointsRequest {
@@ -254,8 +266,9 @@ async fn test_list_datapoints_with_pagination(client: Client) {
         .list_datapoints(dataset_name.clone(), request)
         .await
         .unwrap();
+    let datapoints = unwrap_datapoints(response);
 
-    assert_eq!(response.datapoints.len(), 1);
+    assert_eq!(datapoints.len(), 1);
 
     // List with offset
     let request = ListDatapointsRequest {
@@ -267,8 +280,9 @@ async fn test_list_datapoints_with_pagination(client: Client) {
         .list_datapoints(dataset_name.clone(), request)
         .await
         .unwrap();
+    let datapoints = unwrap_datapoints(response);
 
-    assert_eq!(response.datapoints.len(), 1);
+    assert_eq!(datapoints.len(), 1);
 
     // Clean up
     client
@@ -459,10 +473,11 @@ async fn test_delete_multiple_datapoints(client: Client) {
         .list_datapoints(dataset_name.clone(), request)
         .await
         .unwrap();
+    let remaining_datapoints = unwrap_datapoints(remaining);
 
-    assert_eq!(remaining.datapoints.len(), 2);
+    assert_eq!(remaining_datapoints.len(), 2);
 
-    let remaining_ids: Vec<Uuid> = remaining.datapoints.iter().map(Datapoint::id).collect();
+    let remaining_ids: Vec<Uuid> = remaining_datapoints.iter().map(Datapoint::id).collect();
     for id in &datapoint_ids[3..] {
         assert!(remaining_ids.contains(id));
     }
@@ -523,8 +538,9 @@ async fn test_delete_entire_dataset(client: Client) {
         .list_datapoints(dataset_name.clone(), request)
         .await
         .unwrap();
+    let remaining_datapoints = unwrap_datapoints(remaining);
 
-    assert_eq!(remaining.datapoints.len(), 0);
+    assert_eq!(remaining_datapoints.len(), 0);
 }
 
 tensorzero::make_gateway_test_functions!(test_delete_entire_dataset);
