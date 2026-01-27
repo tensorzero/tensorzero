@@ -19,7 +19,7 @@ import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
 import { TensorZeroLogo } from "~/components/icons/Icons";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import type { IconProps } from "~/components/icons/Icons";
 
 import {
@@ -137,6 +137,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { state } = useSidebar();
   const activePathUtils = useActivePath();
   const autopilotAvailable = useAutopilotAvailable();
+  const navigate = useNavigate();
 
   // Filter out Autopilot section if not available
   const filteredNavigation = useMemo(() => {
@@ -205,14 +206,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <>
                           <span className="flex-1">{item.title}</span>
                           {section.title === "Autopilot" && (
-                            <Link
-                              to="/autopilot/sessions/new"
+                            <button
+                              type="button"
                               className="text-fg-tertiary hover:text-fg-secondary rounded p-0.5 transition-colors"
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                navigate("/autopilot/sessions/new");
+                              }}
                               aria-label="New session"
                             >
                               <Plus className="h-4 w-4" />
-                            </Link>
+                            </button>
                           )}
                         </>
                       )}

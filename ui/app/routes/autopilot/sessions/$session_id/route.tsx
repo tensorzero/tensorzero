@@ -617,7 +617,10 @@ export default function AutopilotSessionEventsPage({
           <Breadcrumbs
             segments={
               isNewSession
-                ? [{ label: "Autopilot", href: "/autopilot/sessions" }]
+                ? [
+                    { label: "Autopilot", href: "/autopilot/sessions" },
+                    { label: "New Session" },
+                  ]
                 : [
                     { label: "Autopilot", href: "/autopilot/sessions" },
                     { label: sessionId, isIdentifier: true },
@@ -625,7 +628,6 @@ export default function AutopilotSessionEventsPage({
             }
           />
         }
-        name={isNewSession ? "New Session" : undefined}
       />
 
       <Suspense fallback={<EventStreamSkeleton />}>
