@@ -31,7 +31,7 @@ import {
 import { useActivePath } from "~/hooks/use-active-path";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
 import { TensorZeroLogo } from "~/components/icons/Icons";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import type { IconProps } from "~/components/icons/Icons";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
 import { ReadOnlyBadge } from "./ReadOnlyBadge";
@@ -124,7 +124,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { state, toggleSidebar } = useSidebar();
   const activePathUtils = useActivePath();
   const autopilotAvailable = useAutopilotAvailable();
-  const navigate = useNavigate();
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -163,7 +162,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             {autopilotAvailable && (
-              <SidebarMenuItem className="list-none">
+              <SidebarMenuItem className="relative list-none">
                 <SidebarMenuButton
                   asChild
                   tooltip={state === "collapsed" ? "Autopilot" : undefined}
@@ -171,30 +170,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 >
                   <Link to="/autopilot" className="flex items-center gap-2">
                     <Chat className="h-4 w-4" />
-                    {state === "expanded" && (
-                      <>
-                        <span className="flex-1">Autopilot</span>
-                        <button
-                          type="button"
-                          className="text-fg-muted hover:text-fg-primary cursor-pointer rounded p-0.5 transition-colors"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            navigate("/autopilot/sessions/new");
-                          }}
-                          aria-label="New session"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
-                      </>
-                    )}
-                    {state === "collapsed" && (
-                      <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                        Autopilot
-                      </span>
-                    )}
+                    <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                      Autopilot
+                    </span>
                   </Link>
                 </SidebarMenuButton>
+                {state === "expanded" && (
+                  <Link
+                    to="/autopilot/sessions/new"
+                    className="text-fg-muted hover:text-fg-primary absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded p-0.5 transition-colors"
+                    aria-label="New session"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Link>
+                )}
               </SidebarMenuItem>
             )}
           </SidebarGroupContent>
