@@ -56,6 +56,7 @@ env:
   TENSORZERO_E2E_PROXY: http://localhost:3003
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
   TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
+  TENSORZERO_MOCK_PROVIDER_API_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
   # Nextest filter expression for flaky tests to skip (e.g. "test(hyperbolic)|test(tgi)")
   CARGO_NEXTEST_FLAKY_TESTS: ${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}
@@ -275,8 +276,6 @@ jobs:
           docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
           docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
@@ -430,8 +429,7 @@ jobs:
           docker run -d --name gateway-e2e --network host \
             --env-file gateway.env \
             -v ${{ github.workspace }}/gcp_jwt_key.json:/app/gcp_jwt_key.json:ro \
-            -v ${{ github.workspace }}/tensorzero-core/tests/e2e/config:/app/tensorzero-core/tests/e2e/config:ro \
-            -v ${{ github.workspace }}/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
+            -v ${{ github.workspace }}/tensorzero-core:/app/tensorzero-core:ro \
             -v ${{ github.workspace }}/ui/fixtures:/app/ui/fixtures:ro \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --config-file '/app/tensorzero-core/tests/e2e/config/tensorzero.*.toml'

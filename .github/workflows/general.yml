@@ -804,16 +804,10 @@ jobs:
           # Note: In replicated mode, we use the HTTP port (8124) of the second replica so we can ensure this works
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8124/tensorzero_e2e_tests" >> $GITHUB_ENV
 
-      - name: Set TENSORZERO_GATEWAY_TAG
+      - name: Set container image tags
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-
-      - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
-        run: |
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-
-      - name: Set TENSORZERO_COMMIT_TAG
-        run: |
           echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
@@ -981,12 +975,9 @@ jobs:
           docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Set TENSORZERO_GATEWAY_TAG
+      - name: Set container image tags
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-
-      - name: Set TENSORZERO_COMMIT_TAG
-        run: |
           echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Set environment variables for Postgres
