@@ -2,7 +2,6 @@ import { Children, isValidElement } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Code } from "~/components/ui/code";
 import {
   CodeEditor,
   type CodeEditorProps,
@@ -140,21 +139,25 @@ const components: Components = {
   // Paragraphs
   p: ({ children }) => <p className={BLOCK_SPACING}>{children}</p>,
 
-  // Lists
+  // Lists - add top margin for nested lists, bottom margin for block spacing
   ul: ({ children }) => (
-    <ul className={cn("list-disc space-y-1 pl-6", BLOCK_SPACING)}>
+    <ul className="mt-2 mb-3 list-disc space-y-1.5 pl-6 first:mt-0 last:mb-0">
       {children}
     </ul>
   ),
   ol: ({ children }) => (
-    <ol className={cn("list-decimal space-y-1 pl-6", BLOCK_SPACING)}>
+    <ol className="mt-2 mb-3 list-decimal space-y-1.5 pl-6 first:mt-0 last:mb-0">
       {children}
     </ol>
   ),
   li: ({ children }) => <li>{children}</li>,
 
-  // Inline code - reuse existing Code component
-  code: ({ children }) => <Code>{children}</Code>,
+  // Inline code - slightly smaller than body text for visual balance
+  code: ({ children }) => (
+    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
+      {children}
+    </code>
+  ),
 
   // Code blocks - use CodeEditor for consistent UX
   pre: MarkdownCodeBlock,
