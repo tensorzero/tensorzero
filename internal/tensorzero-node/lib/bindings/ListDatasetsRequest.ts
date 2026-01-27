@@ -12,12 +12,10 @@ export type ListDatasetsRequest = {
   function_name?: string;
   /**
    * The maximum number of datasets to return.
-   * Defaults to 100.
    */
   limit?: number;
   /**
    * The number of datasets to skip before starting to return results.
-   * Defaults to 0.
    */
   offset?: number;
 };

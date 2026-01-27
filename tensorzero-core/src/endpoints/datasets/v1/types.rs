@@ -707,11 +707,9 @@ pub struct ListDatasetsRequest {
     pub function_name: Option<String>,
 
     /// The maximum number of datasets to return.
-    /// Defaults to 100.
     pub limit: Option<u32>,
 
     /// The number of datasets to skip before starting to return results.
-    /// Defaults to 0.
     pub offset: Option<u32>,
 }
 

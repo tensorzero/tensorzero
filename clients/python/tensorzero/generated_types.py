@@ -621,12 +621,10 @@ class ListDatasetsRequest:
     limit: int | None = None
     """
     The maximum number of datasets to return.
-    Defaults to 100.
     """
     offset: int | None = None
     """
     The number of datasets to skip before starting to return results.
-    Defaults to 0.
     """
 
 

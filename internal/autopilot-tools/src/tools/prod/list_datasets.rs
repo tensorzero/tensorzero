@@ -50,18 +50,29 @@ impl ToolMetadata for ListDatasetsTool {
             "description": "List available datasets with optional filtering and pagination.",
             "properties": {
                 "function_name": {
-                    "type": "string",
-                    "description": "Filter by function name. Only datasets with datapoints for this function will be returned (optional)."
+                    "anyOf": [
+                        { "type": "string" },
+                        { "type": "null" }
+                    ],
+                    "description": "Filter by function name. Only datasets with datapoints for this function will be returned."
                 },
                 "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of datasets to return (default: 100)."
+                    "anyOf": [
+                        { "type": "integer" },
+                        { "type": "null" }
+                    ],
+                    "description": "Maximum number of datasets to return."
                 },
                 "offset": {
-                    "type": "integer",
-                    "description": "Number of datasets to skip (for pagination)."
+                    "anyOf": [
+                        { "type": "integer" },
+                        { "type": "null" }
+                    ],
+                    "description": "Number of datasets to skip for pagination."
                 }
-            }
+            },
+            "required": [],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
