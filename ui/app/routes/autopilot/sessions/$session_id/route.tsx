@@ -141,6 +141,7 @@ function EventStreamContent({
   onLoaded,
   onStatusChange,
   onPendingToolCallsChange,
+  onErrorChange,
 }: {
   sessionId: string;
   eventsData: EventsData | Promise<EventsData>;
@@ -151,6 +152,7 @@ function EventStreamContent({
   onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
+  onErrorChange: (error: string | null, isRetrying: boolean) => void;
 }) {
   // Resolve promise (or use direct data for new session)
   const {
@@ -184,6 +186,11 @@ function EventStreamContent({
   useEffect(() => {
     onPendingToolCallsChange(pendingToolCalls);
   }, [pendingToolCalls, onPendingToolCallsChange]);
+
+  // Notify parent of error state changes
+  useEffect(() => {
+    onErrorChange(error, isRetrying);
+  }, [error, isRetrying, onErrorChange]);
 
   // State for pagination
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
@@ -406,23 +413,15 @@ function EventStreamContent({
   );
 
   return (
-    <>
-      {error && isRetrying && (
-        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          Failed to fetch events. Retrying...
-        </div>
-      )}
-
-      <EventStream
-        events={events}
-        isLoadingOlder={isLoadingOlder}
-        hasReachedStart={isNewSession ? false : hasReachedStart}
-        topSentinelRef={topSentinelRef}
-        pendingToolCallIds={pendingToolCallIds}
-        optimisticMessages={visibleOptimisticMessages}
-        status={isNewSession ? undefined : status}
-      />
-    </>
+    <EventStream
+      events={events}
+      isLoadingOlder={isLoadingOlder}
+      hasReachedStart={isNewSession ? false : hasReachedStart}
+      topSentinelRef={topSentinelRef}
+      pendingToolCallIds={pendingToolCallIds}
+      optimisticMessages={visibleOptimisticMessages}
+      status={isNewSession ? undefined : status}
+    />
   );
 }
 
@@ -471,6 +470,19 @@ export default function AutopilotSessionEventsPage({
     Map<string, "approving" | "rejecting">
   >(new Map());
 
+  // State for SSE connection error
+  const [sseError, setSseError] = useState<{
+    error: string | null;
+    isRetrying: boolean;
+  }>({ error: null, isRetrying: false });
+
+  const handleErrorChange = useCallback(
+    (error: string | null, isRetrying: boolean) => {
+      setSseError({ error, isRetrying });
+    },
+    [],
+  );
+
   // Reset all session-specific state when session changes
   useEffect(() => {
     setOptimisticMessages([]);
@@ -478,6 +490,7 @@ export default function AutopilotSessionEventsPage({
     setAutopilotStatus({ status: "idle" });
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
+    setSseError({ error: null, isRetrying: false });
   }, [sessionId, isNewSession, eventsData]);
 
   // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
@@ -661,8 +674,8 @@ export default function AutopilotSessionEventsPage({
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
         <div className="container mx-auto px-8">
           {/* Header background - matches message width with slight outset */}
-          <div ref={headerRef} className="bg-bg-secondary -mx-2 px-2">
-            <div className="pointer-events-auto pt-4 pb-5">
+          <div ref={headerRef} className="bg-bg-secondary -mx-2 px-2 pt-4 pb-5">
+            <div className="pointer-events-auto">
               <Breadcrumbs
                 segments={
                   isNewSession
@@ -677,6 +690,11 @@ export default function AutopilotSessionEventsPage({
                 }
               />
             </div>
+            {sseError.error && sseError.isRetrying && (
+              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
+                Failed to fetch events. Retrying...
+              </div>
+            )}
           </div>
           <FadeGradient
             direction={FadeDirection.Top}
@@ -708,6 +726,7 @@ export default function AutopilotSessionEventsPage({
               onLoaded={() => setIsEventsLoading(false)}
               onStatusChange={handleStatusChange}
               onPendingToolCallsChange={handlePendingToolCallsChange}
+              onErrorChange={handleErrorChange}
             />
           </Suspense>
         </div>
