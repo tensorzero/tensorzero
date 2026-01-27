@@ -14,6 +14,7 @@
 //! - `FeedbackTool` - Submits feedback for inferences or episodes (comments, demonstrations, metrics)
 //! - `CreateDatapointsTool` - Creates datapoints in a dataset
 //! - `CreateDatapointsFromInferencesTool` - Creates datapoints from existing inferences
+//! - `ListDatasetsTool` - Lists available datasets with metadata
 //! - `ListDatapointsTool` - Lists datapoints with filtering and pagination
 //! - `GetDatapointsTool` - Gets specific datapoints by ID
 //! - `UpdateDatapointsTool` - Updates existing datapoints
@@ -144,6 +145,9 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .await?;
     visitor
         .visit_simple_tool::<tools::CreateDatapointsFromInferencesTool>()
+        .await?;
+    visitor
+        .visit_simple_tool::<tools::ListDatasetsTool>()
         .await?;
     visitor
         .visit_simple_tool::<tools::ListDatapointsTool>()

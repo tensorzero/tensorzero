@@ -59,11 +59,11 @@ pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWin
 pub use tensorzero_core::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, CreateDatapointsResponse,
-    CreateJsonDatapointRequest, DeleteDatapointsRequest, DeleteDatapointsResponse,
+    CreateJsonDatapointRequest, DatasetMetadata, DeleteDatapointsRequest, DeleteDatapointsResponse,
     GetDatapointsRequest, GetDatapointsResponse, JsonDatapointOutputUpdate, ListDatapointsRequest,
-    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
-    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
-    UpdateJsonDatapointRequest,
+    ListDatasetsRequest, ListDatasetsResponse, UpdateChatDatapointRequest,
+    UpdateDatapointMetadataRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
+    UpdateDatapointsRequest, UpdateDatapointsResponse, UpdateJsonDatapointRequest,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
@@ -360,6 +360,24 @@ pub trait ClientExt {
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
     ) -> Result<CreateDatapointsResponse, TensorZeroError>;
+
+    /// Lists all datasets with optional filtering and pagination.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The request parameters for listing datasets.
+    ///
+    /// # Returns
+    ///
+    /// A `ListDatasetsResponse` containing metadata for matching datasets.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn list_datasets(
+        &self,
+        request: ListDatasetsRequest,
+    ) -> Result<ListDatasetsResponse, TensorZeroError>;
 
     // ================================================================
     // Workflow evaluation operations
@@ -1096,6 +1114,57 @@ impl ClientExt for Client {
                     .map_err(err_to_http)
                 })
                 .await?)
+            }
+        }
+    }
+
+    async fn list_datasets(
+        &self,
+        request: ListDatasetsRequest,
+    ) -> Result<ListDatasetsResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let ListDatasetsRequest {
+                    function_name,
+                    limit,
+                    offset,
+                } = &request;
+                let mut url = client.base_url.join("internal/datasets").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/datasets endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                // Add query params
+                if let Some(function_name) = function_name {
+                    url.query_pairs_mut()
+                        .append_pair("function_name", function_name);
+                }
+                if let Some(limit) = limit {
+                    url.query_pairs_mut()
+                        .append_pair("limit", &limit.to_string());
+                }
+                if let Some(offset) = offset {
+                    url.query_pairs_mut()
+                        .append_pair("offset", &offset.to_string());
+                }
+                let builder = client.http_client.get(url);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::list_datasets(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
             }
         }
     }
