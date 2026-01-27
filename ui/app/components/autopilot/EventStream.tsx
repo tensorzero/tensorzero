@@ -165,8 +165,9 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       }
       return {};
     case "error":
-      // TODO: handle errors
-      return {};
+      return {
+        description: payload.message,
+      };
     case "unknown":
       return {};
     default:
@@ -329,6 +330,7 @@ function EventItem({
   const eventIsToolEvent = isToolEvent(event);
   const isExpandable =
     event.payload.type === "tool_call" ||
+    event.payload.type === "error" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -384,7 +386,8 @@ function EventItem({
           className={cn(
             "text-fg-secondary whitespace-pre-wrap",
             event.payload.type === "tool_call" ||
-              event.payload.type === "tool_result"
+              event.payload.type === "tool_result" ||
+              event.payload.type === "error"
               ? "font-mono text-sm"
               : "text-sm",
           )}
