@@ -2108,11 +2108,19 @@ fn check_good_mixture_response(exporter: CapturingOtelExporter, output: ChatInfe
     assert_eq!(root_attr_map.get("variant_name"), None);
 
     let root_children = &spans.span_children[&root_span.span_context.span_id()];
-    let [variant_span] = root_children.as_slice() else {
-        panic!("Expected one child span: {root_children:#?}");
+    let (variant_span, write_inference_span) = {
+        let mut children: Vec<_> = root_children.iter().collect();
+        children.sort_by_key(|s| s.name.as_ref());
+        match children.as_slice() {
+            [variant, write] => (*variant, *write),
+            _ => panic!(
+                "Expected two child spans (variant_inference, write_inference): {root_children:#?}"
+            ),
+        }
     };
 
     assert_eq!(variant_span.name, "variant_inference");
+    assert_eq!(write_inference_span.name, "write_inference");
     let variant_attr_map = attrs_to_map(&variant_span.attributes);
     assert_eq!(variant_attr_map["function_name"], "mixture_of_n".into());
     assert_eq!(
@@ -2162,7 +2170,10 @@ fn check_good_mixture_response(exporter: CapturingOtelExporter, output: ChatInfe
     };
     check_dummy_model_span(variant1_model_span, &spans, "dummy::alternate", "alternate");
 
-    assert_eq!(num_spans, 16);
+    assert_eq!(
+        num_spans, 17,
+        "Expected 17 spans (added write_inference span)"
+    );
 }
 
 fn check_dummy_model_span(
