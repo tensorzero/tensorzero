@@ -156,8 +156,6 @@ function EventStreamLoadError({ onError }: { onError: () => void }) {
   );
 }
 
-// Main content component that renders the event stream with SSE
-// Receives already-resolved data (resolved by <Await> in parent)
 function EventStreamContent({
   sessionId,
   eventsData,
@@ -165,6 +163,7 @@ function EventStreamContent({
   optimisticMessages,
   onOptimisticMessagesChange,
   scrollContainerRef,
+  onLoaded,
   onStatusChange,
 }: {
   sessionId: string;
@@ -173,9 +172,9 @@ function EventStreamContent({
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
 }) {
-  // Data is already resolved by <Await> in parent
   const {
     events: initialEvents,
     hasMoreEvents: initialHasMore,
@@ -183,7 +182,9 @@ function EventStreamContent({
     status: initialStatus,
   } = eventsData;
 
-  // Now that we have resolved events, start SSE with the correct lastEventId
+  useEffect(() => {
+    onLoaded();
+  }, [onLoaded]);
   const { events, pendingToolCalls, status, error, isRetrying, prependEvents } =
     useAutopilotEventStream({
       sessionId: isNewSession ? NIL_UUID : sessionId,
@@ -544,22 +545,18 @@ export default function AutopilotSessionEventsPage({
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Lift optimistic messages state to parent so ChatInput can work outside Suspense
   const [optimisticMessages, setOptimisticMessages] = useState<
     OptimisticMessage[]
   >([]);
 
-  // Clear optimistic messages when session changes to prevent cross-session leakage
   useEffect(() => {
     setOptimisticMessages([]);
   }, [sessionId]);
 
-  // Track autopilot status for disabling submit
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
     status: "idle",
   });
 
-  // Reset status when session changes
   useEffect(() => {
     setAutopilotStatus({ status: "idle" });
   }, [sessionId]);
@@ -568,23 +565,29 @@ export default function AutopilotSessionEventsPage({
     setAutopilotStatus(status);
   }, []);
 
-  // Disable submit unless status is idle or failed
   const submitDisabled =
     autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
 
-  // Track if initial load failed (disables ChatInput to avoid confusing UX)
+  // Track loading/error state for ChatInput - disabled until events resolve
+  const [isEventsLoading, setIsEventsLoading] = useState(
+    !isNewSession && eventsData instanceof Promise,
+  );
   const [hasLoadError, setHasLoadError] = useState(false);
 
-  // Reset error state when session changes
   useEffect(() => {
+    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
     setHasLoadError(false);
-  }, [sessionId]);
+  }, [sessionId, isNewSession, eventsData]);
+
+  const handleEventsLoaded = useCallback(() => {
+    setIsEventsLoading(false);
+  }, []);
 
   const handleLoadError = useCallback(() => {
+    setIsEventsLoading(false);
     setHasLoadError(true);
   }, []);
 
-  // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const handleNavigateToSession = useCallback(
@@ -672,27 +675,26 @@ export default function AutopilotSessionEventsPage({
               optimisticMessages={optimisticMessages}
               onOptimisticMessagesChange={setOptimisticMessages}
               scrollContainerRef={scrollContainerRef}
+              onLoaded={handleEventsLoaded}
               onStatusChange={handleStatusChange}
             />
           )}
         </Await>
       </Suspense>
 
-      {/* Chat input - always visible outside Suspense, disabled on load error */}
       <ChatInput
         sessionId={isNewSession ? NIL_UUID : sessionId}
         onMessageSent={handleMessageSent}
         onMessageFailed={handleMessageFailed}
         className="mt-4"
         isNewSession={isNewSession}
-        disabled={hasLoadError}
+        disabled={isEventsLoading || hasLoadError}
         submitDisabled={submitDisabled}
       />
     </div>
   );
 }
 
-// Wrapper that passes the scroll container ref back to parent
 function EventStreamContentWrapper({
   sessionId,
   eventsData,
@@ -700,6 +702,7 @@ function EventStreamContentWrapper({
   optimisticMessages,
   onOptimisticMessagesChange,
   scrollContainerRef,
+  onLoaded,
   onStatusChange,
 }: {
   sessionId: string;
@@ -708,6 +711,7 @@ function EventStreamContentWrapper({
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
 }) {
   return (
@@ -719,6 +723,7 @@ function EventStreamContentWrapper({
         optimisticMessages={optimisticMessages}
         onOptimisticMessagesChange={onOptimisticMessagesChange}
         scrollContainerRef={scrollContainerRef}
+        onLoaded={onLoaded}
         onStatusChange={onStatusChange}
       />
     </div>
