@@ -397,6 +397,21 @@ impl AutopilotClient {
         Ok(body)
     }
 
+    /// Cancels a session.
+    pub async fn cancel_session(&self, session_id: Uuid) -> Result<(), AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/actions/cancel"))?;
+        let response = self
+            .http_client
+            .post(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        self.check_response(response).await?;
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Event Endpoints
     // -------------------------------------------------------------------------
