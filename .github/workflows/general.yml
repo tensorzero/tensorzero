@@ -1271,6 +1271,50 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
+  # Polls for job failures and cancels the workflow early in merge queue.
+  # This provides fast feedback (~10 seconds) instead of waiting for all jobs to complete.
+  # Note that we do *not* add this to the 'needs' array in 'check-all-general-jobs-passed',
+  # as this job itself polls and exits if 'check-all-general-jobs-passed' finishes
+  fail-fast-watcher:
+    if: github.event_name == 'merge_group' && github.repository == 'tensorzero/tensorzero'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Watch for failures and cancel workflow
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runId = context.runId;
+
+            // Poll every 10 seconds
+            while (true) {
+              await new Promise(r => setTimeout(r, 10000));
+
+              const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
+                owner, repo, run_id: runId
+              });
+
+              const gateJob = jobs.jobs.find(job => job.name === 'check-all-general-jobs-passed');
+
+              // Stop if gate job is done (success or failure)
+              if (gateJob && gateJob.status === 'completed') break;
+
+              const failedJob = jobs.jobs.find(job =>
+                job.conclusion === 'failure' && job.name !== 'fail-fast-watcher'
+              );
+
+              if (failedJob) {
+                console.log(`Job "${failedJob.name}" failed, cancelling workflow...`);
+                await github.rest.actions.cancelWorkflowRun({
+                  owner, repo, run_id: runId
+                });
+                break;
+              }
+            }
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
