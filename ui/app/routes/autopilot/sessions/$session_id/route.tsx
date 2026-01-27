@@ -678,14 +678,15 @@ export default function AutopilotSessionEventsPage({
         </Await>
       </Suspense>
 
-      {/* Chat input - always visible outside Suspense, submit disabled on load error */}
+      {/* Chat input - always visible outside Suspense, disabled on load error */}
       <ChatInput
         sessionId={isNewSession ? NIL_UUID : sessionId}
         onMessageSent={handleMessageSent}
         onMessageFailed={handleMessageFailed}
         className="mt-4"
         isNewSession={isNewSession}
-        submitDisabled={submitDisabled || hasLoadError}
+        disabled={hasLoadError}
+        submitDisabled={submitDisabled}
       />
     </div>
   );
