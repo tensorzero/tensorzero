@@ -1,8 +1,44 @@
+import { Children, isValidElement } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Code } from "~/components/ui/code";
+import { CodeEditor, type Language } from "~/components/ui/code-editor";
 import { cn } from "~/utils/common";
+
+/**
+ * Map markdown language identifiers to CodeEditor languages.
+ * Falls back to "text" for unsupported languages.
+ */
+function mapLanguage(lang: string | undefined): Language {
+  if (!lang) return "text";
+  const normalized = lang.toLowerCase();
+  if (normalized === "json" || normalized === "jsonc") return "json";
+  if (normalized === "md" || normalized === "markdown") return "markdown";
+  if (normalized === "jinja" || normalized === "jinja2") return "jinja2";
+  return "text";
+}
+
+/**
+ * Extract text content and language from pre > code children.
+ */
+function extractCodeBlockInfo(children: React.ReactNode): {
+  code: string;
+  language: Language;
+} {
+  // react-markdown wraps code blocks as <pre><code className="language-xxx">...</code></pre>
+  const child = Children.only(children);
+  if (isValidElement(child) && child.type === "code") {
+    const className = (child.props as { className?: string }).className;
+    const lang = className?.replace("language-", "");
+    const code = String(
+      (child.props as { children?: React.ReactNode }).children || "",
+    );
+    // Remove trailing newline that markdown adds
+    return { code: code.replace(/\n$/, ""), language: mapLanguage(lang) };
+  }
+  return { code: String(children), language: "text" };
+}
 
 const components: Components = {
   // Headings
@@ -37,28 +73,37 @@ const components: Components = {
   ),
   li: ({ children }) => <li>{children}</li>,
 
-  // Code - reuse existing Code component for inline code
+  // Inline code - reuse existing Code component
   code: ({ className, children }) => {
-    // Check if this is inline code or a code block
-    // Code blocks have a language className like "language-javascript"
+    // Code blocks are handled by pre, this is only for inline code
     const isCodeBlock = className?.startsWith("language-");
-
     if (isCodeBlock) {
+      // Let pre handle it
       return (
         <code className={cn("block whitespace-pre-wrap", className)}>
           {children}
         </code>
       );
     }
-
-    // Inline code - reuse existing Code component
     return <Code>{children}</Code>;
   },
-  pre: ({ children }) => (
-    <pre className="bg-muted mb-3 overflow-x-auto rounded-md p-3 font-mono text-sm last:mb-0">
-      {children}
-    </pre>
-  ),
+
+  // Code blocks - use CodeEditor for consistent UX
+  pre: ({ children }) => {
+    const { code, language } = extractCodeBlockInfo(children);
+    return (
+      <div className="mb-3 last:mb-0">
+        <CodeEditor
+          value={code}
+          readOnly
+          allowedLanguages={[language]}
+          autoDetectLanguage={false}
+          showLineNumbers={false}
+          maxHeight="300px"
+        />
+      </div>
+    );
+  },
 
   // Blockquotes
   blockquote: ({ children }) => (
