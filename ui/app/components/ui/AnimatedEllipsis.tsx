@@ -11,20 +11,29 @@ export function ReservedWidth({ children }: ReservedWidthProps) {
   return <span className="invisible">{children}</span>;
 }
 
+/** Layout mode for AnimatedEllipsis */
+export const EllipsisMode = {
+  /** Dynamic width - shifts layout as dots change */
+  Dynamic: "dynamic",
+  /** Fixed width - reserves space for "..." to prevent layout shift */
+  FixedWidth: "fixed-width",
+  /** Absolute - positioned outside layout flow */
+  Absolute: "absolute",
+} as const;
+
+export type EllipsisMode = (typeof EllipsisMode)[keyof typeof EllipsisMode];
+
 type AnimatedEllipsisProps = {
   /** Animation interval in ms */
   interval?: number;
-  /** Reserve width to prevent layout shift */
-  reserveWidth?: boolean;
-  /** Position absolutely (doesn't affect parent layout) */
-  absolute?: boolean;
+  /** Layout mode */
+  mode?: EllipsisMode;
   className?: string;
 };
 
 export function AnimatedEllipsis({
   interval = 400,
-  reserveWidth = true,
-  absolute = false,
+  mode = EllipsisMode.FixedWidth,
   className,
 }: AnimatedEllipsisProps) {
   const [dots, setDots] = useState(0);
@@ -38,13 +47,13 @@ export function AnimatedEllipsis({
 
   const dotsContent = ".".repeat(dots);
 
-  if (absolute) {
+  if (mode === EllipsisMode.Absolute) {
     return (
       <span className={cn("absolute left-full", className)}>{dotsContent}</span>
     );
   }
 
-  if (reserveWidth) {
+  if (mode === EllipsisMode.FixedWidth) {
     return (
       <span className={cn("relative inline-block", className)}>
         <ReservedWidth>...</ReservedWidth>

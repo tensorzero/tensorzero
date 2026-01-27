@@ -1,6 +1,9 @@
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { type RefObject, useState } from "react";
-import { AnimatedEllipsis } from "~/components/ui/AnimatedEllipsis";
+import {
+  AnimatedEllipsis,
+  EllipsisMode,
+} from "~/components/ui/AnimatedEllipsis";
 import { Skeleton } from "~/components/ui/skeleton";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
@@ -468,11 +471,11 @@ function getStatusLabel(status: AutopilotStatus): {
 function StatusIndicator({ status }: { status: AutopilotStatus }) {
   const { text, showEllipsis } = getStatusLabel(status);
   return (
-    <div className="flex items-center gap-4 py-2">
+    <div className="mx-4 flex items-center gap-4 py-2">
       <div className="border-border flex-1 border-t" />
       <span className="text-fg-muted relative text-xs">
         {text}
-        {showEllipsis && <AnimatedEllipsis absolute />}
+        {showEllipsis && <AnimatedEllipsis mode={EllipsisMode.Absolute} />}
       </span>
       <div className="border-border flex-1 border-t" />
     </div>
