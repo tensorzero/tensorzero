@@ -704,7 +704,14 @@ jobs:
       contents: read
       # Permission to download artifacts and for rust-cache
       actions: read
-    needs: [build-gateway-container, build-mock-provider-api-container]
+      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      id-token: write
+    needs:
+      [
+        build-gateway-container,
+        build-mock-provider-api-container,
+        build-fixtures-container,
+      ]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
@@ -774,9 +781,11 @@ jobs:
         run: |
           docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
           docker pull nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
+          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
           # Retag the images to what we expect the names to be
           docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download ClickHouse fixtures
@@ -795,21 +804,19 @@ jobs:
           # Note: In replicated mode, we use the HTTP port (8124) of the second replica so we can ensure this works
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8124/tensorzero_e2e_tests" >> $GITHUB_ENV
 
-      - name: Set TENSORZERO_GATEWAY_TAG
+      - name: Set container image tags
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-
-      - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
-        run: |
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build --wait
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up --no-build --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
@@ -921,7 +928,7 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication for Namespace login
       id-token: write
     runs-on: ubuntu-latest
-    needs: [build-gateway-container]
+    needs: [build-gateway-container, build-fixtures-container]
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
 
     steps:
@@ -960,15 +967,18 @@ jobs:
         run: nsc docker login
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Download gateway container image
+      - name: Download container images
         run: |
           docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Set TENSORZERO_GATEWAY_TAG
+      - name: Set container image tags
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Set environment variables for Postgres
         run: |
@@ -976,7 +986,7 @@ jobs:
           echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
 
       - name: Launch Postgres
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up postgres gateway-postgres-migrations fixtures-postgres -d --wait
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build postgres gateway-postgres-migrations fixtures-postgres -d --wait
 
       - name: Test (Rust)
         run: cargo test-e2e --filterset 'test(db::) & test(postgres)'
@@ -1226,6 +1236,16 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
 
+  build-fixtures-container:
+    uses: ./.github/workflows/build-fixtures-container.yml
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
   ui-tests:
     permissions:
       contents: read
@@ -1341,6 +1361,7 @@ jobs:
         build-gateway-container,
         build-gateway-e2e-container,
         build-mock-provider-api-container,
+        build-fixtures-container,
       ]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:

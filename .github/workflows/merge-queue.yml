@@ -56,15 +56,53 @@ env:
   TENSORZERO_E2E_PROXY: http://localhost:3003
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
   TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
+  TENSORZERO_MOCK_PROVIDER_API_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
   # Nextest filter expression for flaky tests to skip (e.g. "test(hyperbolic)|test(tgi)")
   CARGO_NEXTEST_FLAKY_TESTS: ${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}
 
 jobs:
+  # Build containers when triggered directly (not from general.yml which already builds them)
+  # When called from general.yml, github.event_name is 'merge_group' so this is skipped
+  build-gateway-e2e-container:
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    uses: ./.github/workflows/build-gateway-e2e-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-gateway-container:
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    uses: ./.github/workflows/build-gateway-container.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  build-mock-provider-api-container:
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    uses: ./.github/workflows/build-mock-provider-api-container.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  build-fixtures-container:
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    uses: ./.github/workflows/build-fixtures-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
   live-tests:
+    needs: [build-gateway-e2e-container]
+    # Run even when build-gateway-e2e-container is skipped (merge_group case)
+    if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -156,9 +194,17 @@ jobs:
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
 
   client-tests:
+    needs:
+      [
+        build-gateway-e2e-container,
+        build-gateway-container,
+        build-mock-provider-api-container,
+        build-fixtures-container,
+      ]
+    # Run even when build jobs are skipped (merge_group case where general.yml already built them)
+    if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -220,6 +266,18 @@ jobs:
 
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+
+      - name: Login to Namespace registry
+        run: nsc docker login
+
+      - name: Pull pre-built containers from Namespace registry
+        run: |
+          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker pull nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
@@ -306,7 +364,7 @@ jobs:
 
       - name: Launch dependency services for E2E tests
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
@@ -317,19 +375,70 @@ jobs:
         run: |
           ./ci/run-provider-proxy.sh ci
 
-      # TODO - get rid of this when the merge queue has a freshly-build gateway image available
-      - name: Manually run the latest postgres migrations
-        run: cargo run-e2e --run-postgres-migrations
+      - name: Pull gateway-e2e container
+        run: docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
+
+      - name: Set up gateway environment file
+        run: |
+          # TensorZero config
+          echo "TENSORZERO_CLICKHOUSE_URL=${TENSORZERO_CLICKHOUSE_URL}" >> gateway.env
+          echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${TENSORZERO_CLICKHOUSE_BATCH_WRITES}" >> gateway.env
+          echo "TENSORZERO_POSTGRES_URL=${TENSORZERO_POSTGRES_URL}" >> gateway.env
+          echo "TENSORZERO_VALKEY_URL=${TENSORZERO_VALKEY_URL}" >> gateway.env
+          echo "TENSORZERO_E2E_PROXY=${TENSORZERO_E2E_PROXY}" >> gateway.env
+          echo "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}" >> gateway.env
+          echo "GCP_VERTEX_CREDENTIALS_PATH=/app/gcp_jwt_key.json" >> gateway.env
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/app/gcp_jwt_key.json" >> gateway.env
+          # Provider API keys
+          echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> gateway.env
+          echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> gateway.env
+          echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> gateway.env
+          echo "AWS_REGION=${AWS_REGION}" >> gateway.env
+          echo "AZURE_API_KEY=${AZURE_API_KEY}" >> gateway.env
+          echo "AZURE_OPENAI_EASTUS2_API_KEY=${AZURE_OPENAI_EASTUS2_API_KEY}" >> gateway.env
+          echo "AZURE_OPENAI_DEPLOYMENT_ID=${AZURE_OPENAI_DEPLOYMENT_ID}" >> gateway.env
+          echo "AZURE_AI_FOUNDRY_API_KEY=${AZURE_AI_FOUNDRY_API_KEY}" >> gateway.env
+          echo "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}" >> gateway.env
+          echo "FIREWORKS_API_KEY=${FIREWORKS_API_KEY}" >> gateway.env
+          echo "FIREWORKS_ACCOUNT_ID=${FIREWORKS_ACCOUNT_ID}" >> gateway.env
+          echo "GCP_STORAGE_ACCESS_KEY_ID=${GCP_STORAGE_ACCESS_KEY_ID}" >> gateway.env
+          echo "GCP_STORAGE_SECRET_ACCESS_KEY=${GCP_STORAGE_SECRET_ACCESS_KEY}" >> gateway.env
+          echo "GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_AI_STUDIO_API_KEY}" >> gateway.env
+          echo "GROQ_API_KEY=${GROQ_API_KEY}" >> gateway.env
+          echo "HYPERBOLIC_API_KEY=${HYPERBOLIC_API_KEY}" >> gateway.env
+          echo "MISTRAL_API_KEY=${MISTRAL_API_KEY}" >> gateway.env
+          echo "MODAL_KEY=${MODAL_KEY}" >> gateway.env
+          echo "MODAL_SECRET=${MODAL_SECRET}" >> gateway.env
+          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> gateway.env
+          echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" >> gateway.env
+          echo "SGLANG_API_KEY=${SGLANG_API_KEY}" >> gateway.env
+          echo "TGI_API_KEY=${TGI_API_KEY}" >> gateway.env
+          echo "TOGETHER_API_KEY=${TOGETHER_API_KEY}" >> gateway.env
+          echo "VLLM_API_KEY=${VLLM_API_KEY}" >> gateway.env
+          echo "VOYAGE_API_KEY=${VOYAGE_API_KEY}" >> gateway.env
+          echo "XAI_API_KEY=${XAI_API_KEY}" >> gateway.env
+
+      - name: Run postgres migrations
+        run: |
+          docker run --rm --network host \
+            --env-file gateway.env \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            --run-postgres-migrations
 
       - name: Launch the gateway for E2E tests
         timeout-minutes: 2
         run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
+          docker run -d --name gateway-e2e --network host \
+            --env-file gateway.env \
+            -v ${{ github.workspace }}/gcp_jwt_key.json:/app/gcp_jwt_key.json:ro \
+            -v ${{ github.workspace }}/tensorzero-core:/app/tensorzero-core:ro \
+            -v ${{ github.workspace }}/ui/fixtures:/app/ui/fixtures:ro \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            --config-file '/app/tensorzero-core/tests/e2e/config/tensorzero.*.toml'
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
           done
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Install Python for python async client tests
         run: uv python install 3.9
@@ -403,27 +512,24 @@ jobs:
         run: |
           uv run pytest
 
-      - name: Terminate the gateway and wait for it to exit
-        if: always()
-        run: |
-          echo "Killing gateway with pid $GATEWAY_PID"
-          kill $GATEWAY_PID
-          # Wait for at most 30 seconds for the gateway to exit
-          for i in {1..30}; do
-            if ! kill -0 $GATEWAY_PID 2>/dev/null; then
-              echo "Gateway exited"
-              break
-            fi
-            sleep 1
-          done
-          if kill -0 $GATEWAY_PID 2>/dev/null; then
-            echo "Gateway did not exit after 30 seconds!"
-            exit 1
-          fi
-
       - name: Print e2e logs
         if: always()
-        run: cat e2e_logs.txt
+        run: docker logs gateway-e2e 2>&1 || echo "No gateway container logs available"
+
+      - name: Check e2e logs for impossible error messages
+        run: |
+          LOGS=$(docker logs gateway-e2e 2>&1)
+          if [ -z "$LOGS" ]; then
+            echo "ERROR: Gateway logs are empty"
+            exit 1
+          fi
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
+
+      - name: Terminate the gateway container
+        if: always()
+        run: |
+          docker stop gateway-e2e || true
+          docker rm gateway-e2e || true
 
       - name: Print provider-proxy logs
         if: always()
@@ -441,10 +547,6 @@ jobs:
         if: always()
         continue-on-error: true
         run: cat vllm_gpt_oss_modal_logs.txt
-
-      - name: Check e2e logs for impossible error messages
-        run: |
-          grep --invert-match -i "please file a bug report" <<< "$LOGS"
 
       - name: Upload client-tests provider-proxy cache
         # Only upload the cache when we're running from a 'good' run

@@ -18,6 +18,7 @@ services:
       - "3030:3030"
 
   fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
       context: ../../..
@@ -53,6 +54,7 @@ services:
 
   # fixtures-postgres and fixtures have exactly the same build context, so the fixture is downloaded only once and shared.
   fixtures-postgres:
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
       context: ../../..
