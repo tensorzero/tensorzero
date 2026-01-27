@@ -178,6 +178,30 @@ export function TableErrorNotice(props: ErrorNoticeProps) {
   );
 }
 
+export function ChartErrorContainer({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-72 w-full items-center justify-center">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside ChartErrorContainer.
+ * Use for chart error states.
+ */
+export function ChartErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <ChartErrorContainer>
+      <ErrorNotice {...props} />
+    </ChartErrorContainer>
+  );
+}
+
 export function SectionErrorContainer({
   children,
 }: {

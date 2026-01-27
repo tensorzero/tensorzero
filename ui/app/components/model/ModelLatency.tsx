@@ -7,9 +7,14 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import React, { useState, useMemo } from "react";
-import { Await } from "react-router";
-import { CHART_COLORS } from "~/utils/chart";
+import { useMemo } from "react";
+import {
+  CHART_COLORS,
+  CHART_MARGIN,
+  CHART_AXIS_STROKE,
+  formatLatency,
+} from "~/utils/chart";
+import { BasicChartLegend, ChartContainer } from "~/components/ui/chart";
 import {
   Select,
   SelectItem,
@@ -17,21 +22,19 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-} from "~/components/ui/chart";
-import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
-type LatencyMetric = "response_time_ms" | "ttft_ms";
+export type LatencyMetric = "response_time_ms" | "ttft_ms";
+
+export const LATENCY_METRIC_CONFIG = {
+  response_time_ms: {
+    label: "Response Time",
+    description: "Response time distribution",
+  },
+  ttft_ms: {
+    label: "Time to First Token",
+    description: "Time to first token distribution",
+  },
+} as const;
 
 interface TooltipPayload {
   value: number | null;
@@ -87,9 +90,7 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
   );
 }
 
-const MARGIN = { top: 12, right: 16, bottom: 28, left: 56 };
-
-function LatencyTimeWindowSelector({
+export function LatencyTimeWindowSelector({
   value,
   onValueChange,
 }: {
@@ -112,16 +113,40 @@ function LatencyTimeWindowSelector({
   );
 }
 
+export function LatencyMetricSelector({
+  value,
+  onValueChange,
+}: {
+  value: LatencyMetric;
+  onValueChange: (metric: LatencyMetric) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(v: LatencyMetric) => onValueChange(v)}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Choose metric" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="response_time_ms">Response Time</SelectItem>
+        <SelectItem value="ttft_ms">Time to First Token</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+interface LatencyQuantileChartProps {
+  latencyData: ModelLatencyDatapoint[];
+  selectedMetric: LatencyMetric;
+  quantiles: number[];
+}
+
 export function LatencyQuantileChart({
   latencyData,
   selectedMetric,
   quantiles,
-}: {
-  latencyData: ModelLatencyDatapoint[];
-  selectedMetric: LatencyMetric;
-  quantiles: number[];
-}) {
-  // Prepare eCDF series (your existing transform is fine)
+}: LatencyQuantileChartProps) {
   const { data, modelNames } = useMemo(
     () => transformLatencyData(latencyData, selectedMetric, quantiles),
     [latencyData, selectedMetric, quantiles],
@@ -143,57 +168,54 @@ export function LatencyQuantileChart({
   );
 
   return (
-    <ChartContainer config={chartConfig} className="h-80 w-full">
-      <LineChart accessibilityLayer data={data} margin={MARGIN}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis
-          dataKey="percentile"
-          domain={[0, 1]}
-          tickLine={false}
-          tickMargin={10}
-          axisLine={true}
-          ticks={[
-            0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
-          ]}
-          tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-        />
-        <YAxis
-          scale="log"
-          domain={["dataMin", "dataMax"]}
-          tickLine={false}
-          tickMargin={10}
-          axisLine={true}
-          tickFormatter={(v) => `${v}ms`}
-        />
-
-        <Tooltip
-          content={<CustomTooltipContent />}
-          cursor={{
-            stroke: "#666666",
-            strokeDasharray: "3 3",
-            strokeWidth: 2,
-          }}
-        />
-
-        <ChartLegend
-          content={<ChartLegendContent className="font-mono text-xs" />}
-        />
-
-        {modelNames.map((name, index) => (
-          <Line
-            key={name}
-            type="monotone"
-            dataKey={name}
-            name={name}
-            stroke={CHART_COLORS[index % CHART_COLORS.length]}
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-            isAnimationActive={false}
+    <div>
+      <ChartContainer config={chartConfig} className="h-72 w-full">
+        <LineChart accessibilityLayer data={data} margin={CHART_MARGIN}>
+          <CartesianGrid />
+          <XAxis
+            dataKey="percentile"
+            domain={[0, 1]}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={{ stroke: CHART_AXIS_STROKE }}
+            ticks={[
+              0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
+            ]}
+            tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
           />
-        ))}
-      </LineChart>
-    </ChartContainer>
+          <YAxis
+            scale="log"
+            domain={["dataMin", "dataMax"]}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={formatLatency}
+          />
+
+          <Tooltip
+            content={<CustomTooltipContent />}
+            cursor={{
+              stroke: "rgba(249, 115, 22, 0.4)",
+              strokeWidth: 1,
+            }}
+          />
+
+          {modelNames.map((name, index) => (
+            <Line
+              key={name}
+              type="monotone"
+              dataKey={name}
+              name={name}
+              stroke={CHART_COLORS[index % CHART_COLORS.length]}
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          ))}
+        </LineChart>
+      </ChartContainer>
+      <BasicChartLegend items={modelNames} colors={CHART_COLORS} />
+    </div>
   );
 }
 
@@ -210,7 +232,6 @@ function transformLatencyData(
   const modelNames = latencyData.map((d) => d.model_name);
   const data: QuantileDataPoint[] = [];
 
-  // Create data points for each quantile/percentile
   quantiles.forEach((percentile) => {
     const dp: QuantileDataPoint = { percentile };
 
@@ -221,7 +242,6 @@ function transformLatencyData(
           ? md.response_time_ms_quantiles
           : md.ttft_ms_quantiles;
 
-      // Find the quantile index for this percentile
       const quantileIndex = quantiles.indexOf(percentile);
       if (quantileIndex >= 0 && quantileIndex < arr.length) {
         const latencyValue = arr[quantileIndex];
@@ -234,63 +254,4 @@ function transformLatencyData(
   });
 
   return { data, modelNames };
-}
-
-export function ModelLatency({
-  modelLatencyDataPromise,
-  quantiles,
-}: {
-  modelLatencyDataPromise: Promise<ModelLatencyDatapoint[]>;
-  quantiles: number[];
-}) {
-  const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
-    "latencyTimeGranularity",
-    "week",
-  );
-  const [selectedMetric, setSelectedMetric] =
-    useState<LatencyMetric>("response_time_ms");
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between">
-        <div>
-          <CardTitle>Model Latency Distribution</CardTitle>
-          <CardDescription>
-            Quantiles of latency metrics by model
-          </CardDescription>
-        </div>
-        <div className="flex flex-col justify-center gap-2">
-          <LatencyTimeWindowSelector
-            value={timeGranularity}
-            onValueChange={onTimeGranularityChange}
-          />
-          <Select
-            value={selectedMetric}
-            onValueChange={(value: LatencyMetric) => setSelectedMetric(value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Choose metric" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="response_time_ms">Response Time</SelectItem>
-              <SelectItem value="ttft_ms">Time to First Token</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <React.Suspense fallback={<div>Loading latency data...</div>}>
-          <Await resolve={modelLatencyDataPromise}>
-            {(latencyData) => (
-              <LatencyQuantileChart
-                latencyData={latencyData}
-                selectedMetric={selectedMetric}
-                quantiles={quantiles}
-              />
-            )}
-          </Await>
-        </React.Suspense>
-      </CardContent>
-    </Card>
-  );
 }
