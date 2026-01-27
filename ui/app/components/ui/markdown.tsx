@@ -1,5 +1,7 @@
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Code } from "~/components/ui/code";
 import { cn } from "~/utils/common";
 
 const components: Components = {
@@ -35,7 +37,7 @@ const components: Components = {
   ),
   li: ({ children }) => <li>{children}</li>,
 
-  // Code
+  // Code - reuse existing Code component for inline code
   code: ({ className, children }) => {
     // Check if this is inline code or a code block
     // Code blocks have a language className like "language-javascript"
@@ -49,15 +51,11 @@ const components: Components = {
       );
     }
 
-    // Inline code
-    return (
-      <code className="bg-bg-tertiary rounded px-1.5 py-0.5 font-mono text-sm">
-        {children}
-      </code>
-    );
+    // Inline code - reuse existing Code component
+    return <Code>{children}</Code>;
   },
   pre: ({ children }) => (
-    <pre className="bg-bg-tertiary mb-3 overflow-x-auto rounded-md p-3 font-mono text-sm last:mb-0">
+    <pre className="bg-muted mb-3 overflow-x-auto rounded-md p-3 font-mono text-sm last:mb-0">
       {children}
     </pre>
   ),
@@ -98,7 +96,7 @@ const components: Components = {
       </table>
     </div>
   ),
-  thead: ({ children }) => <thead className="bg-bg-tertiary">{children}</thead>,
+  thead: ({ children }) => <thead className="bg-muted">{children}</thead>,
   tbody: ({ children }) => <tbody>{children}</tbody>,
   tr: ({ children }) => <tr className="border-border border-b">{children}</tr>,
   th: ({ children }) => (
@@ -119,7 +117,9 @@ interface MarkdownProps {
 export function Markdown({ children, className }: MarkdownProps) {
   return (
     <div className={cn("text-fg-secondary text-sm", className)}>
-      <ReactMarkdown components={components}>{children}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {children}
+      </ReactMarkdown>
     </div>
   );
 }
