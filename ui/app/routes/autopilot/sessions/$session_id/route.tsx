@@ -570,6 +570,7 @@ export default function AutopilotSessionEventsPage({
   const prevFooterHeightRef = useRef<number | null>(null);
 
   // Adjust scroll position when footer height changes (e.g., tool card appears)
+  // Only adjust if user is near bottom - don't disrupt users reading older messages
   useEffect(() => {
     const container = scrollContainerRef.current;
 
@@ -583,21 +584,24 @@ export default function AutopilotSessionEventsPage({
     prevFooterHeightRef.current = footerHeight;
 
     if (container && delta !== 0) {
-      container.scrollTop += delta;
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const isNearBottom = distanceFromBottom < 100;
+
+      if (isNearBottom) {
+        container.scrollTop += delta;
+      }
     }
   }, [footerHeight]);
 
   // Update fade overlay visibility based on scroll position
-  const handleScroll = useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      const target = e.currentTarget;
-      setShowTopFade(target.scrollTop > 20);
-      const distanceFromBottom =
-        target.scrollHeight - target.scrollTop - target.clientHeight;
-      setShowBottomFade(distanceFromBottom > 20);
-    },
-    [],
-  );
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    setShowTopFade(target.scrollTop > 20);
+    const distanceFromBottom =
+      target.scrollHeight - target.scrollTop - target.clientHeight;
+    setShowBottomFade(distanceFromBottom > 20);
+  }, []);
 
   const handleNavigateToSession = useCallback(
     (newSessionId: string) => {
