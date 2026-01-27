@@ -139,16 +139,12 @@ const components: Components = {
   // Paragraphs
   p: ({ children }) => <p className={BLOCK_SPACING}>{children}</p>,
 
-  // Lists - add top margin for nested lists, bottom margin for block spacing
+  // Lists - symmetric vertical margin for consistent spacing
   ul: ({ children }) => (
-    <ul className="mt-2 mb-3 list-disc space-y-1.5 pl-6 first:mt-0 last:mb-0">
-      {children}
-    </ul>
+    <ul className="my-3 list-disc space-y-1.5 pl-6">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="mt-2 mb-3 list-decimal space-y-1.5 pl-6 first:mt-0 last:mb-0">
-      {children}
-    </ol>
+    <ol className="my-3 list-decimal space-y-1.5 pl-6">{children}</ol>
   ),
   li: ({ children }) => <li>{children}</li>,
 
