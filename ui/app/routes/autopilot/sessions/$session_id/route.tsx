@@ -28,6 +28,7 @@ import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
+import { getFeatureFlags } from "~/utils/feature_flags";
 
 // Nil UUID for creating new sessions
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -597,9 +598,12 @@ export default function AutopilotSessionEventsPage({
     }
   }, [interruptFetcher.state, interruptFetcher.data, toast, sessionId]);
 
-  // Interruptible when actively processing (not idle or failed)
+  // Interruptible when actively processing (not idle or failed) and feature flag is enabled
+  const { FF_INTERRUPT_SESSION } = getFeatureFlags();
   const isInterruptible =
-    autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
+    FF_INTERRUPT_SESSION &&
+    autopilotStatus.status !== "idle" &&
+    autopilotStatus.status !== "failed";
 
   // Disable submit unless status is idle or failed
   const submitDisabled =
