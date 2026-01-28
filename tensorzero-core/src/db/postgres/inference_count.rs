@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{PgPool, QueryBuilder, Row};
 
 use super::PostgresConnectionInfo;
+use crate::config::{MetricConfig, MetricConfigOptimize, MetricConfigType};
 use crate::db::TimeWindow;
 use crate::db::inference_count::{
     CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
@@ -78,6 +79,94 @@ async fn count_by_variant(
             }
         })
         .collect())
+}
+
+/// Builds and executes a count query for inferences with metric feedback.
+/// If `metric_threshold` is Some, filters to only count feedbacks meeting the threshold criteria
+/// based on metric type and optimize direction.
+async fn count_inferences_with_metric_feedback(
+    pool: &PgPool,
+    function_name: &str,
+    function_type: FunctionConfigType,
+    metric_name: &str,
+    metric_config: &MetricConfig,
+    metric_threshold: Option<f64>,
+) -> Result<i64, Error> {
+    let inference_table = function_type.postgres_table_name();
+    let feedback_table = match metric_config.r#type {
+        MetricConfigType::Float => "tensorzero.float_metric_feedback",
+        MetricConfigType::Boolean => "tensorzero.boolean_metric_feedback",
+    };
+    let join_column = metric_config.level.inference_column_name();
+
+    // Build the query using DISTINCT ON to get the latest feedback per target
+    let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM ");
+    qb.push(inference_table);
+    qb.push(" i JOIN (SELECT DISTINCT ON (target_id) target_id, value FROM ");
+    qb.push(feedback_table);
+    qb.push(" WHERE metric_name = ");
+    qb.push_bind(metric_name);
+    qb.push(" ORDER BY target_id, created_at DESC) f ON i.");
+    qb.push(join_column);
+    qb.push(" = f.target_id WHERE i.function_name = ");
+    qb.push_bind(function_name);
+
+    // Add value condition based on threshold and metric type
+    if let Some(threshold) = metric_threshold {
+        match metric_config.r#type {
+            MetricConfigType::Boolean => {
+                // For boolean metrics, optimize direction determines which value to filter for
+                match metric_config.optimize {
+                    MetricConfigOptimize::Max => qb.push(" AND f.value = TRUE"),
+                    MetricConfigOptimize::Min => qb.push(" AND f.value = FALSE"),
+                };
+            }
+            MetricConfigType::Float => {
+                // For float metrics, use the threshold with appropriate operator
+                match metric_config.optimize {
+                    MetricConfigOptimize::Max => qb.push(" AND f.value > "),
+                    MetricConfigOptimize::Min => qb.push(" AND f.value < "),
+                };
+                qb.push_bind(threshold);
+            }
+        }
+    }
+
+    let count: i64 = qb.build_query_scalar().fetch_one(pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to count inferences with metric feedback: {e}"),
+        })
+    })?;
+
+    Ok(count)
+}
+
+/// Builds and executes a count query for inferences with demonstration feedback.
+async fn count_inferences_with_demonstration(
+    pool: &PgPool,
+    function_name: &str,
+    function_type: FunctionConfigType,
+) -> Result<i64, Error> {
+    let inference_table = function_type.postgres_table_name();
+
+    // Build the query using DISTINCT ON to get the latest demonstration per inference
+    let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM ");
+    qb.push(inference_table);
+    qb.push(
+        " i JOIN (SELECT DISTINCT ON (inference_id) inference_id \
+         FROM tensorzero.demonstration_feedback \
+         ORDER BY inference_id, created_at DESC) f ON i.id = f.inference_id \
+         WHERE i.function_name = ",
+    );
+    qb.push_bind(function_name);
+
+    let count: i64 = qb.build_query_scalar().fetch_one(pool).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to count inferences with demonstration feedback: {e}"),
+        })
+    })?;
+
+    Ok(count)
 }
 
 /// Builds and executes a throughput-by-variant query.
@@ -202,24 +291,30 @@ impl InferenceCountQueries for PostgresConnectionInfo {
 
     async fn count_inferences_with_feedback(
         &self,
-        _params: CountInferencesWithFeedbackParams<'_>,
+        params: CountInferencesWithFeedbackParams<'_>,
     ) -> Result<u64, Error> {
-        // TODO(#5691): Implement when feedback tables are added in step-2
-        Err(Error::new(ErrorDetails::NotImplemented {
-            message: "count_inferences_with_feedback not yet implemented for Postgres".to_string(),
-        }))
+        let pool = self.get_pool_result()?;
+        let count = count_inferences_with_metric_feedback(
+            pool,
+            params.function_name,
+            params.function_type,
+            params.metric_name,
+            params.metric_config,
+            params.metric_threshold,
+        )
+        .await?;
+        Ok(count as u64)
     }
 
     async fn count_inferences_with_demonstration_feedback(
         &self,
-        _params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
+        params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
     ) -> Result<u64, Error> {
-        // TODO(#5691): Implement when feedback tables are added in step-2
-        Err(Error::new(ErrorDetails::NotImplemented {
-            message:
-                "count_inferences_with_demonstration_feedback not yet implemented for Postgres"
-                    .to_string(),
-        }))
+        let pool = self.get_pool_result()?;
+        let count =
+            count_inferences_with_demonstration(pool, params.function_name, params.function_type)
+                .await?;
+        Ok(count as u64)
     }
 
     async fn count_inferences_for_episode(&self, episode_id: uuid::Uuid) -> Result<u64, Error> {
