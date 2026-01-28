@@ -17,7 +17,7 @@ import {
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import { AlertCircle, Loader2, Plus } from "lucide-react";
+import { AlertCircle, AlertTriangle, Loader2, Plus } from "lucide-react";
 import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
@@ -252,8 +252,14 @@ function EventStreamContent({
 
   // Handle tool call authorization
   const handleAuthorize = useCallback(
-    async (eventId: string, approved: boolean) => {
-      userActionRef.current = true;
+    async (
+      eventId: string,
+      approved: boolean,
+      options?: { silent?: boolean; onError?: () => void },
+    ) => {
+      if (!options?.silent) {
+        userActionRef.current = true;
+      }
 
       setAuthLoadingStates((prev) =>
         new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
@@ -282,11 +288,15 @@ function EventStreamContent({
         }
       } catch (err) {
         logger.error("Failed to authorize tool call:", err);
-        toast.error({
-          title: "Authorization failed",
-          description:
-            "Failed to submit tool call authorization. Please try again.",
-        });
+        if (options?.onError) {
+          options.onError();
+        } else {
+          toast.error({
+            title: "Authorization failed",
+            description:
+              "Failed to submit tool call authorization. Please try again.",
+          });
+        }
       } finally {
         setAuthLoadingStates((prev) => {
           const next = new Map(prev);
@@ -298,27 +308,94 @@ function EventStreamContent({
     [sessionId, toast],
   );
 
-  const autoApprovedIdsRef = useRef<Set<string>>(new Set());
+  // YOLO mode auto-approval with retry logic
+  const retryCountsRef = useRef<Map<string, number>>(new Map());
+  const retryTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const [failedAutoApprovals, setFailedAutoApprovals] = useState<Set<string>>(
+    new Set(),
+  );
 
+  // Clean up retry state when tool calls are no longer pending
   useEffect(() => {
     const currentIds = new Set(pendingToolCalls.map((tc) => tc.id));
-    for (const id of autoApprovedIdsRef.current) {
+    for (const id of retryCountsRef.current.keys()) {
       if (!currentIds.has(id)) {
-        autoApprovedIdsRef.current.delete(id);
+        retryCountsRef.current.delete(id);
+        const timer = retryTimersRef.current.get(id);
+        if (timer) {
+          clearTimeout(timer);
+          retryTimersRef.current.delete(id);
+        }
       }
     }
+    setFailedAutoApprovals((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const id of prev) {
+        if (!currentIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   }, [pendingToolCalls]);
 
+  // Clean up all timers on unmount
+  useEffect(() => {
+    const timers = retryTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
+
+  const scheduleAutoApprovalRetry = useCallback(
+    (toolCallId: string) => {
+      const retryCount = retryCountsRef.current.get(toolCallId) ?? 0;
+      retryCountsRef.current.set(toolCallId, retryCount + 1);
+
+      // Exponential backoff: 1s, 2s, 4s for first 3 retries, then 60s
+      const delay = retryCount < 3 ? Math.pow(2, retryCount) * 1000 : 60 * 1000;
+
+      // Mark as failed after 3 retries
+      if (retryCount >= 3) {
+        setFailedAutoApprovals((prev) => new Set(prev).add(toolCallId));
+      }
+
+      const timer = setTimeout(() => {
+        retryTimersRef.current.delete(toolCallId);
+        // Trigger retry by calling handleAuthorize directly
+        handleAuthorize(toolCallId, true);
+      }, delay);
+
+      retryTimersRef.current.set(toolCallId, timer);
+    },
+    [handleAuthorize],
+  );
+
+  // Auto-approve oldest pending tool call in YOLO mode
   useEffect(() => {
     if (!yoloMode || pendingToolCalls.length === 0) return;
 
     const oldest = pendingToolCalls[0];
-    if (autoApprovedIdsRef.current.has(oldest.id)) return;
+    // Skip if already loading or has a pending retry timer
     if (authLoadingStates.has(oldest.id)) return;
+    if (retryTimersRef.current.has(oldest.id)) return;
 
-    autoApprovedIdsRef.current.add(oldest.id);
-    handleAuthorize(oldest.id, true);
-  }, [yoloMode, pendingToolCalls, authLoadingStates, handleAuthorize]);
+    // First attempt (no retry count yet) or retry triggered by timer
+    handleAuthorize(oldest.id, true, {
+      silent: true,
+      onError: () => scheduleAutoApprovalRetry(oldest.id),
+    });
+  }, [
+    yoloMode,
+    pendingToolCalls,
+    authLoadingStates,
+    handleAuthorize,
+    scheduleAutoApprovalRetry,
+  ]);
 
   /*
    * SCROLL BEHAVIOR SPEC:
@@ -525,6 +602,16 @@ function EventStreamContent({
       {error && isRetrying && (
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           Failed to fetch events. Retrying...
+        </div>
+      )}
+      {yoloMode && failedAutoApprovals.size > 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-4 py-2 text-sm text-orange-800">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          <span>
+            Auto-approval failed for {failedAutoApprovals.size} tool call
+            {failedAutoApprovals.size > 1 ? "s" : ""}. Retrying every 60
+            seconds...
+          </span>
         </div>
       )}
       <div
