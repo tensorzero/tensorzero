@@ -32,8 +32,8 @@ WORKDIR /app
 # Port 3004: health check
 EXPOSE 3003 3004
 
-# Usage: proxider-proxy health-check [--port XXXX]
-HEALTHCHECK CMD provider-proxy health-check
+# Usage: provider-proxy health-check [--port XXXX]
+HEALTHCHECK CMD ["provider-proxy", "health-check"]
 
 ENTRYPOINT ["provider-proxy"]
 
