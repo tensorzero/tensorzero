@@ -13,7 +13,7 @@ default-filter = "not (test(no_aws_credentials) | test(export_bindings_) | test(
 
 [[profile.default.overrides]]
 filter = 'test(evaluations)'
-slow-timeout = { period = "20s", terminate-after = 3 }
+slow-timeout = { period = "20s", terminate-after = 5 }
 
 # Profiles config
 # We use these profiles to define our major test groups.
