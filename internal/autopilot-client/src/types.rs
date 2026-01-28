@@ -88,7 +88,6 @@ pub struct Session {
     pub deployment_id: String,
     pub tensorzero_version: String,
     pub created_at: DateTime<Utc>,
-    /// First ~100 characters of the first user message, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub short_summary: Option<String>,

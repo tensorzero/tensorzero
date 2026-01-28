@@ -10,8 +10,5 @@ export type Session = {
   deployment_id: string;
   tensorzero_version: string;
   created_at: string;
-  /**
-   * First ~100 characters of the first user message, if available.
-   */
   short_summary?: string;
 };

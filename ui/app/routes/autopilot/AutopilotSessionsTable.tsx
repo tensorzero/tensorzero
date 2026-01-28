@@ -14,11 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import {
-  TableItemShortUuid,
-  TableItemText,
-  TableItemTime,
-} from "~/components/ui/TableItems";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 
 type AutopilotSessionsTableProps = {
   sessions: Session[];
@@ -149,10 +145,23 @@ export function SessionsTableRows({
               uiVersion={uiVersion}
             />
           </TableCell>
-          <TableCell>
-            <TableItemText text={session.short_summary} />
+          <TableCell className="max-w-xs">
+            {session.short_summary ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="block truncate">
+                    {session.short_summary}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-sm">
+                  {session.short_summary}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="text-fg-muted">—</span>
+            )}
           </TableCell>
-          <TableCell className="w-0 text-right whitespace-nowrap">
+          <TableCell className="w-52 whitespace-nowrap">
             <TableItemTime timestamp={session.created_at} />
           </TableCell>
         </TableRow>
@@ -170,11 +179,9 @@ export default function AutopilotSessionsTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Session ID</TableHead>
+          <TableHead className="w-36">Session ID</TableHead>
           <TableHead>Summary</TableHead>
-          <TableHead className="w-0 text-right whitespace-nowrap">
-            Created
-          </TableHead>
+          <TableHead className="w-52 whitespace-nowrap">Created</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
