@@ -48,7 +48,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
         let responses = sqlx::query_as!(
             ConsumeTicketsResponse,
             "SELECT bucket_key as key, is_successful as success, tickets_remaining, tickets_consumed
-             FROM consume_multiple_resource_tickets($1, $2, $3, $4, $5)",
+             FROM tensorzero.consume_multiple_resource_tickets($1, $2, $3, $4, $5)",
             &keys,
             &requested_amounts,
             &capacities,
@@ -93,7 +93,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
         let responses = sqlx::query_as!(
             ReturnTicketsResponse,
             "SELECT bucket_key_returned as key_returned, final_balance
-             FROM return_multiple_resource_tickets($1, $2, $3, $4, $5)",
+             FROM tensorzero.return_multiple_resource_tickets($1, $2, $3, $4, $5)",
             &keys,
             &amounts,
             &capacities,
@@ -132,7 +132,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
         })?;
 
         let balance: Option<i64> = sqlx::query_scalar!(
-            "SELECT get_resource_bucket_balance($1, $2, $3, $4)",
+            "SELECT tensorzero.get_resource_bucket_balance($1, $2, $3, $4)",
             key,
             capacity as i64,
             refill_amount as i64,
