@@ -133,7 +133,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
     };
 
@@ -157,7 +157,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
                 // Verify tags are being passed correctly
                 && params.tags.get("tensorzero::autopilot::tool_call_event_id") == Some(&expected_tool_call_event_id.to_string())
                 && params.tags.get("tensorzero::autopilot::session_id") == Some(&expected_session_id.to_string())
-                && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"test_hash".to_string())
+                && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"1234567".to_string())
                 && params.tags.get("tensorzero::autopilot") == Some(&String::new())
         })
         .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
@@ -214,7 +214,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
     };
 
@@ -237,7 +237,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
                 // Verify tags are being passed correctly
                 && params.tags.get("tensorzero::autopilot::tool_call_event_id") == Some(&expected_tool_call_event_id.to_string())
                 && params.tags.get("tensorzero::autopilot::session_id") == Some(&expected_session_id.to_string())
-                && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"test_hash".to_string())
+                && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"1234567".to_string())
                 && params.tags.get("tensorzero::autopilot") == Some(&String::new())
         })
         .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
@@ -292,7 +292,7 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
     };
 
@@ -357,7 +357,7 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
     };
 
@@ -484,7 +484,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id,
         session_id,
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
     };
 

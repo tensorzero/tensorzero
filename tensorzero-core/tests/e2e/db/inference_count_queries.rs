@@ -3,8 +3,6 @@
 //! Each test function accepts a connection implementing `InferenceCountQueries`.
 //! Tests use `>=` assertions since ClickHouse may accumulate data from other tests.
 
-use crate::db::get_test_postgres;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::inference_count::{
     CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
     CountInferencesWithFeedbackParams, InferenceCountQueries,
@@ -13,38 +11,6 @@ use tensorzero_core::{
     config::{MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
     function::FunctionConfigType,
 };
-
-/// Generates test functions for both ClickHouse and Postgres backends.
-macro_rules! make_db_test {
-    ($test_name:ident) => {
-        paste::paste! {
-            #[tokio::test]
-            async fn [<$test_name _clickhouse>]() {
-                let conn = get_clickhouse().await;
-                $test_name(conn).await;
-            }
-
-            #[tokio::test]
-            async fn [<$test_name _postgres>]() {
-                let conn = get_test_postgres().await;
-                $test_name(conn).await;
-            }
-        }
-    };
-}
-
-/// Generates test functions for ClickHouse only.
-macro_rules! make_clickhouse_only_test {
-    ($test_name:ident) => {
-        paste::paste! {
-            #[tokio::test]
-            async fn [<$test_name _clickhouse>]() {
-                let conn = get_clickhouse().await;
-                $test_name(conn).await;
-            }
-        }
-    };
-}
 
 // ===== SHARED TEST IMPLEMENTATIONS =====
 

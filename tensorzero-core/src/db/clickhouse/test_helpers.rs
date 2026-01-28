@@ -36,7 +36,7 @@ pub struct WorkflowEvaluationRunEpisodeRow {
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
 #[cfg(feature = "e2e_tests")]
-use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
+use crate::db::feedback::StaticEvaluationHumanFeedbackInsert;
 use serde_json::Value;
 use std::sync::LazyLock;
 use uuid::Uuid;
@@ -594,7 +594,7 @@ pub async fn select_inference_evaluation_human_feedback_clickhouse(
     metric_name: &str,
     datapoint_id: Uuid,
     output: &str,
-) -> Option<StaticEvaluationHumanFeedback> {
+) -> Option<StaticEvaluationHumanFeedbackInsert> {
     let datapoint_id_str = datapoint_id.to_string();
     let escaped_output = escape_string_for_clickhouse_literal(output);
     let params = HashMap::from([
@@ -619,7 +619,8 @@ pub async fn select_inference_evaluation_human_feedback_clickhouse(
         None
     } else {
         // Panic if the query fails to parse or multiple rows are returned
-        let json: StaticEvaluationHumanFeedback = serde_json::from_str(&text.response).unwrap();
+        let json: StaticEvaluationHumanFeedbackInsert =
+            serde_json::from_str(&text.response).unwrap();
         Some(json)
     }
 }
