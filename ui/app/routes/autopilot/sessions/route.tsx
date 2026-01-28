@@ -83,7 +83,7 @@ function SkeletonRows() {
           <TableCell>
             <Skeleton className="h-5 w-24" />
           </TableCell>
-          <TableCell>
+          <TableCell className="max-w-xs">
             <Skeleton className="h-5 w-48" />
           </TableCell>
           <TableCell className="w-52 whitespace-nowrap">
