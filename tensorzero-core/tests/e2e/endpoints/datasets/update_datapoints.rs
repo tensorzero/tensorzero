@@ -15,6 +15,9 @@ use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
+use tensorzero_core::endpoints::datasets::v1::types::{
+    DatapointMetadataUpdate, UpdateDatapointMetadataRequest, UpdateDatapointsMetadataRequest,
+};
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Template, Text,
@@ -28,6 +31,7 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
 async fn test_update_chat_datapoint_output() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-chat-{}", Uuid::now_v7());
@@ -161,6 +165,7 @@ async fn test_update_chat_datapoint_output() {
 
 #[tokio::test]
 async fn test_update_json_datapoint_output() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-json-{}", Uuid::now_v7());
@@ -267,6 +272,7 @@ async fn test_update_json_datapoint_output() {
 
 #[tokio::test]
 async fn test_update_multiple_datapoints() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-batch-{}", Uuid::now_v7());
@@ -421,6 +427,7 @@ async fn test_update_multiple_datapoints() {
 
 #[tokio::test]
 async fn test_update_datapoint_not_found() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let dataset_name = format!("test-update-not-found-{}", Uuid::now_v7());
     let nonexistent_id = Uuid::now_v7();
@@ -445,6 +452,7 @@ async fn test_update_datapoint_not_found() {
 
 #[tokio::test]
 async fn test_update_datapoint_type_mismatch() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-type-mismatch-{}", Uuid::now_v7());
@@ -517,6 +525,7 @@ async fn test_update_datapoint_type_mismatch() {
 
 #[tokio::test]
 async fn test_update_datapoint_with_metadata() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-metadata-{}", Uuid::now_v7());
@@ -606,6 +615,7 @@ async fn test_update_datapoint_with_metadata() {
 
 #[tokio::test]
 async fn test_update_datapoint_empty_request() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let dataset_name = format!("test-update-empty-{}", Uuid::now_v7());
 
@@ -625,6 +635,7 @@ async fn test_update_datapoint_empty_request() {
 
 #[tokio::test]
 async fn test_update_datapoint_duplicate_ids() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let dataset_name = format!("test-update-duplicate-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
@@ -656,6 +667,7 @@ async fn test_update_datapoint_duplicate_ids() {
 
 #[tokio::test]
 async fn test_update_chat_datapoint_set_output_to_null() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-chat-output-null-{}", Uuid::now_v7());
@@ -747,6 +759,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
 
 #[tokio::test]
 async fn test_update_chat_datapoint_set_tool_params_to_null() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-chat-tool-params-null-{}", Uuid::now_v7());
@@ -860,6 +873,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
 
 #[tokio::test]
 async fn test_update_chat_datapoint_set_tags_to_empty() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-chat-tags-null-{}", Uuid::now_v7());
@@ -954,6 +968,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
 
 #[tokio::test]
 async fn test_update_chat_datapoint_set_name_to_null() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-chat-name-null-{}", Uuid::now_v7());
@@ -1045,6 +1060,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
 
 #[tokio::test]
 async fn test_update_json_datapoint_set_output_to_null() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-json-output-null-{}", Uuid::now_v7());
@@ -1143,6 +1159,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
 
 #[tokio::test]
 async fn test_update_json_datapoint_set_tags_to_empty() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-json-tags-null-{}", Uuid::now_v7());
@@ -1249,6 +1266,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
 
 #[tokio::test]
 async fn test_update_metadata_chat_datapoint() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-metadata-chat-{}", Uuid::now_v7());
@@ -1344,6 +1362,7 @@ async fn test_update_metadata_chat_datapoint() {
 
 #[tokio::test]
 async fn test_update_metadata_json_datapoint() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-metadata-json-{}", Uuid::now_v7());
@@ -1442,6 +1461,7 @@ async fn test_update_metadata_json_datapoint() {
 
 #[tokio::test]
 async fn test_update_metadata_set_name_to_null() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-metadata-null-{}", Uuid::now_v7());
@@ -1522,7 +1542,8 @@ async fn test_update_metadata_set_name_to_null() {
 }
 
 #[tokio::test]
-async fn test_update_metadata_batch() {
+async fn test_update_metadata_multiple_datapoints() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-update-metadata-batch-{}", Uuid::now_v7());
@@ -1597,22 +1618,27 @@ async fn test_update_metadata_batch() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update both datapoints' metadata
+    let update_request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![
+            UpdateDatapointMetadataRequest {
+                id: datapoint_id1,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("updated_name1".to_string())),
+                },
+            },
+            UpdateDatapointMetadataRequest {
+                id: datapoint_id2,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("updated_name2".to_string())),
+                },
+            },
+        ],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [
-                {
-                    "id": datapoint_id1.to_string(),
-                    "metadata": {"name": "updated_name1"}
-                },
-                {
-                    "id": datapoint_id2.to_string(),
-                    "metadata": {"name": "updated_name2"}
-                }
-            ]
-        }))
+        .json(&update_request)
         .send()
         .await
         .unwrap();
@@ -1658,6 +1684,7 @@ async fn test_update_metadata_batch() {
 
 #[tokio::test]
 async fn test_update_metadata_datapoint_not_found() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let dataset_name = format!("test-update-metadata-notfound-{}", Uuid::now_v7());
     let non_existent_id = Uuid::now_v7();
@@ -1681,6 +1708,7 @@ async fn test_update_metadata_datapoint_not_found() {
 
 #[tokio::test]
 async fn test_update_metadata_duplicate_ids() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let dataset_name = format!("test-update-metadata-duplicate-{}", Uuid::now_v7());
     let duplicate_id = Uuid::now_v7();
@@ -1710,6 +1738,7 @@ async fn test_update_metadata_duplicate_ids() {
 
 #[tokio::test]
 async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-roundtrip-{}", Uuid::now_v7());
@@ -1853,6 +1882,7 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
 
 #[tokio::test]
 async fn test_get_json_datapoint_modify_and_update_roundtrip() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-json-roundtrip-{}", Uuid::now_v7());

@@ -381,4 +381,16 @@ pub trait InferenceQueries {
         function_name: &str,
         inference_id: Uuid,
     ) -> Result<Option<Value>, Error>;
+
+    /// Get the output string from an inference for human feedback context.
+    ///
+    /// Returns the serialized output of the inference, which is needed when
+    /// writing static evaluation human feedback records.
+    ///
+    /// Returns `None` if the inference doesn't exist.
+    async fn get_inference_output(
+        &self,
+        function_info: &FunctionInfo,
+        inference_id: Uuid,
+    ) -> Result<Option<String>, Error>;
 }

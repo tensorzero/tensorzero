@@ -44,6 +44,7 @@ async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_datapoint_preserves_source_inference_id() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, config) = get_test_setup().await;
 
@@ -146,6 +147,7 @@ async fn test_clone_datapoint_preserves_source_inference_id() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_chat_datapoint_success() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
@@ -226,6 +228,7 @@ async fn test_clone_chat_datapoint_success() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_to_same_dataset() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
@@ -307,6 +310,7 @@ async fn test_clone_to_same_dataset() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_multiple_datapoints() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
@@ -405,6 +409,7 @@ async fn test_clone_multiple_datapoints() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_nonexistent_datapoint_returns_null() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Try to clone a nonexistent datapoint

@@ -1,7 +1,6 @@
 import type { Route } from "./+types/route";
 import {
   Suspense,
-  use,
   useCallback,
   useEffect,
   useMemo,
@@ -9,13 +8,16 @@ import {
   useState,
 } from "react";
 import {
+  Await,
   data,
   isRouteErrorResponse,
   Link,
+  useAsyncError,
+  useFetcher,
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import { Loader2, Plus } from "lucide-react";
+import { AlertCircle, Loader2, Plus } from "lucide-react";
 import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
@@ -27,6 +29,8 @@ import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { getFeatureFlags } from "~/utils/feature_flags";
 
 // Nil UUID for creating new sessions
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -129,7 +133,32 @@ function EventStreamSkeleton() {
   );
 }
 
-// Main content component that resolves the promise and renders the event stream with SSE
+/**
+ * Error state shown when initial event stream load fails.
+ * Preserves the chat container layout so the page doesn't completely break.
+ */
+function EventStreamLoadError({ onError }: { onError: () => void }) {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load session events";
+
+  // Notify parent that we're in error state (disables ChatInput)
+  useEffect(() => {
+    onError();
+  }, [onError]);
+
+  return (
+    <div className="border-border mt-8 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-lg border p-4">
+      <SectionErrorNotice
+        icon={AlertCircle}
+        title="Error loading session"
+        description={message}
+      />
+    </div>
+  );
+}
+
+// Main content component that renders the event stream with SSE
 function EventStreamContent({
   sessionId,
   eventsData,
@@ -141,7 +170,7 @@ function EventStreamContent({
   onStatusChange,
 }: {
   sessionId: string;
-  eventsData: EventsData | Promise<EventsData>;
+  eventsData: EventsData;
   isNewSession: boolean;
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
@@ -149,13 +178,12 @@ function EventStreamContent({
   onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
 }) {
-  // Resolve promise (or use direct data for new session)
   const {
     events: initialEvents,
     hasMoreEvents: initialHasMore,
     pendingToolCalls: initialPendingToolCalls,
     status: initialStatus,
-  } = eventsData instanceof Promise ? use(eventsData) : eventsData;
+  } = eventsData;
 
   // Signal that loading is complete (this runs after promise resolves)
   useEffect(() => {
@@ -522,6 +550,10 @@ export default function AutopilotSessionEventsPage({
   const { sessionId, eventsData, isNewSession } = loaderData;
   const navigate = useNavigate();
   const { toast } = useToast();
+  const interruptFetcher = useFetcher();
+
+  // Track which session the interrupt was initiated for to prevent cross-session toast
+  const interruptedSessionRef = useRef<string | null>(null);
 
   // Lift optimistic messages state to parent so ChatInput can work outside Suspense
   const [optimisticMessages, setOptimisticMessages] = useState<
@@ -532,17 +564,6 @@ export default function AutopilotSessionEventsPage({
   useEffect(() => {
     setOptimisticMessages([]);
   }, [sessionId]);
-
-  // Track if events are still loading (for disabling chat input)
-  // New sessions have direct data (not a promise), so they're not loading
-  const [isEventsLoading, setIsEventsLoading] = useState(
-    !isNewSession && eventsData instanceof Promise,
-  );
-
-  // Reset loading state when session changes (useState initial value only applies on first mount)
-  useEffect(() => {
-    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
-  }, [sessionId, isNewSession, eventsData]);
 
   // Track autopilot status for disabling submit
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
@@ -558,9 +579,70 @@ export default function AutopilotSessionEventsPage({
     setAutopilotStatus(status);
   }, []);
 
+  // Handle interrupt session
+  const handleInterruptSession = useCallback(() => {
+    interruptedSessionRef.current = sessionId;
+    interruptFetcher.submit(null, {
+      method: "POST",
+      action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/interrupt`,
+    });
+  }, [interruptFetcher, sessionId]);
+
+  // Show toast on interrupt result (only if still on the same session)
+  useEffect(() => {
+    if (interruptFetcher.state === "idle" && interruptFetcher.data) {
+      // Only show toast if we're still on the session that was interrupted
+      if (interruptedSessionRef.current !== sessionId) {
+        return;
+      }
+      const data = interruptFetcher.data as {
+        success: boolean;
+        error?: string;
+      };
+      if (data.success) {
+        toast.success({
+          title: "Session interrupted",
+          description: "The autopilot session has been interrupted.",
+        });
+      } else if (data.error) {
+        toast.error({
+          title: "Failed to interrupt session",
+          description: data.error,
+        });
+      }
+    }
+  }, [interruptFetcher.state, interruptFetcher.data, toast, sessionId]);
+
+  // Interruptible when actively processing (not idle or failed) and feature flag is enabled
+  const { FF_INTERRUPT_SESSION } = getFeatureFlags();
+  const isInterruptible =
+    FF_INTERRUPT_SESSION &&
+    autopilotStatus.status !== "idle" &&
+    autopilotStatus.status !== "failed";
+
   // Disable submit unless status is idle or failed
   const submitDisabled =
     autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
+
+  // Track loading/error state for ChatInput - disabled until events resolve
+  const [isEventsLoading, setIsEventsLoading] = useState(
+    !isNewSession && eventsData instanceof Promise,
+  );
+  const [hasLoadError, setHasLoadError] = useState(false);
+
+  useEffect(() => {
+    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
+    setHasLoadError(false);
+  }, [sessionId, isNewSession, eventsData]);
+
+  const handleEventsLoaded = useCallback(() => {
+    setIsEventsLoading(false);
+  }, []);
+
+  const handleLoadError = useCallback(() => {
+    setIsEventsLoading(false);
+    setHasLoadError(true);
+  }, []);
 
   // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -618,9 +700,7 @@ export default function AutopilotSessionEventsPage({
       <PageHeader
         eyebrow={
           <Breadcrumbs
-            segments={[
-              { label: "Autopilot Sessions", href: "/autopilot/sessions" },
-            ]}
+            segments={[{ label: "Autopilot", href: "/autopilot/sessions" }]}
           />
         }
         name={isNewSession ? "New Session" : sessionId}
@@ -637,18 +717,24 @@ export default function AutopilotSessionEventsPage({
         }
       />
 
-      <Suspense fallback={<EventStreamSkeleton />}>
-        <EventStreamContentWrapper
-          key={sessionId}
-          sessionId={sessionId}
-          eventsData={eventsData}
-          isNewSession={isNewSession}
-          optimisticMessages={optimisticMessages}
-          onOptimisticMessagesChange={setOptimisticMessages}
-          scrollContainerRef={scrollContainerRef}
-          onLoaded={() => setIsEventsLoading(false)}
-          onStatusChange={handleStatusChange}
-        />
+      <Suspense key={sessionId} fallback={<EventStreamSkeleton />}>
+        <Await
+          resolve={eventsData}
+          errorElement={<EventStreamLoadError onError={handleLoadError} />}
+        >
+          {(resolvedData) => (
+            <EventStreamContentWrapper
+              sessionId={sessionId}
+              eventsData={resolvedData}
+              isNewSession={isNewSession}
+              optimisticMessages={optimisticMessages}
+              onOptimisticMessagesChange={setOptimisticMessages}
+              scrollContainerRef={scrollContainerRef}
+              onLoaded={handleEventsLoaded}
+              onStatusChange={handleStatusChange}
+            />
+          )}
+        </Await>
       </Suspense>
 
       {/* Chat input - always visible outside Suspense, disabled while loading */}
@@ -658,8 +744,11 @@ export default function AutopilotSessionEventsPage({
         onMessageFailed={handleMessageFailed}
         className="mt-4"
         isNewSession={isNewSession}
-        disabled={isEventsLoading}
+        disabled={isEventsLoading || hasLoadError}
         submitDisabled={submitDisabled}
+        isInterruptible={isInterruptible}
+        isInterrupting={interruptFetcher.state !== "idle"}
+        onInterrupt={handleInterruptSession}
       />
     </div>
   );
@@ -677,7 +766,7 @@ function EventStreamContentWrapper({
   onStatusChange,
 }: {
   sessionId: string;
-  eventsData: EventsData | Promise<EventsData>;
+  eventsData: EventsData;
   isNewSession: boolean;
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;

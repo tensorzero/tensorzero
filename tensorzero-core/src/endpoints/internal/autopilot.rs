@@ -136,6 +136,35 @@ pub async fn approve_all_tool_calls(
         .map_err(Error::from)
 }
 
+/// Interrupt an autopilot session via the Autopilot API.
+///
+/// This interrupts all durable tasks associated with the session (best effort),
+/// then interrupts the session via the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn interrupt_session(
+    autopilot_client: &AutopilotClient,
+    session_id: Uuid,
+) -> Result<(), Error> {
+    // Interrupt durable tasks first (best effort - log warning on failure)
+    if let Err(e) = autopilot_client
+        .interrupt_tasks_for_session(session_id)
+        .await
+    {
+        tracing::warn!(
+            session_id = %session_id,
+            error = %e,
+            "Failed to interrupt durable tasks for session"
+        );
+    }
+
+    // Then interrupt the session via autopilot API
+    autopilot_client
+        .interrupt_session(session_id)
+        .await
+        .map_err(Error::from)
+}
+
 // =============================================================================
 // HTTP Handlers
 // =============================================================================
@@ -233,6 +262,19 @@ pub async fn approve_all_tool_calls_handler(
 
     let response = approve_all_tool_calls(&client, session_id, request).await?;
     Ok(Json(response))
+}
+
+/// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/interrupt`
+///
+/// Interrupts an autopilot session via the Autopilot API.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "autopilot.interrupt_session", skip_all, fields(session_id = %session_id))]
+pub async fn interrupt_session_handler(
+    State(app_state): AppState,
+    Path(session_id): Path<Uuid>,
+) -> Result<(), Error> {
+    let client = get_autopilot_client(&app_state)?;
+    interrupt_session(&client, session_id).await
 }
 
 /// Handler for `GET /internal/autopilot/status`
