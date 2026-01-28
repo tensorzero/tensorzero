@@ -42,6 +42,7 @@ pub async fn get_demonstration_feedback_handler(
     let database = DelegatingDatabaseConnection::new(
         app_state.clickhouse_connection_info.clone(),
         app_state.postgres_connection_info.clone(),
+        app_state.deferred_tasks.clone(),
     );
     let response = get_demonstration_feedback(
         &database,

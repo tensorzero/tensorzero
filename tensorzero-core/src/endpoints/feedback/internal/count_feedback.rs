@@ -34,6 +34,7 @@ pub async fn count_feedback_by_target_id_handler(
     let database = DelegatingDatabaseConnection::new(
         app_state.clickhouse_connection_info.clone(),
         app_state.postgres_connection_info.clone(),
+        app_state.deferred_tasks.clone(),
     );
     let response = count_feedback_by_target_id(&database, target_id).await?;
     Ok(Json(response))

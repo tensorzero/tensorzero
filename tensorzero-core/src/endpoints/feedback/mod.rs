@@ -189,6 +189,7 @@ pub async fn feedback(
         Arc::new(DelegatingDatabaseConnection::new(
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
+            deferred_tasks.clone(),
         ));
 
     match feedback_metadata.r#type {

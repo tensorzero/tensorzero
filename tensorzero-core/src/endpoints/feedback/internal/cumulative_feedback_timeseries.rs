@@ -47,6 +47,7 @@ pub async fn get_cumulative_feedback_timeseries_handler(
     let database = DelegatingDatabaseConnection::new(
         app_state.clickhouse_connection_info.clone(),
         app_state.postgres_connection_info.clone(),
+        app_state.deferred_tasks.clone(),
     );
 
     let variant_names = params.variant_names.map(|s| {

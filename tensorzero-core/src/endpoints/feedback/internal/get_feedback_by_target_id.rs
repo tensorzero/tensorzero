@@ -42,6 +42,7 @@ pub async fn get_feedback_by_target_id_handler(
     let database = DelegatingDatabaseConnection::new(
         app_state.clickhouse_connection_info.clone(),
         app_state.postgres_connection_info.clone(),
+        app_state.deferred_tasks.clone(),
     );
     let response = get_feedback_by_target_id(
         &database,
