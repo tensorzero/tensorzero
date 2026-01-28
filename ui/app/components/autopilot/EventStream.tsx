@@ -143,16 +143,6 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
         description: payload.status_update.text,
       };
     case "tool_call": {
-      // If arguments is a string, try to parse as JSON for pretty-printing
-      if (typeof payload.arguments === "string") {
-        try {
-          const parsed = JSON.parse(payload.arguments);
-          return { description: JSON.stringify(parsed, null, 2) };
-        } catch {
-          // Not valid JSON, show as plain text
-          return { description: payload.arguments };
-        }
-      }
       return { description: JSON.stringify(payload.arguments, null, 2) };
     }
     case "tool_call_authorization":
