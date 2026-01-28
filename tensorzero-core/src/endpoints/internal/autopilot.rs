@@ -136,28 +136,31 @@ pub async fn approve_all_tool_calls(
         .map_err(Error::from)
 }
 
-/// Cancel an autopilot session via the Autopilot API.
+/// Interrupt an autopilot session via the Autopilot API.
 ///
-/// This cancels all durable tasks associated with the session (best effort),
-/// then cancels the session via the Autopilot API.
+/// This interrupts all durable tasks associated with the session (best effort),
+/// then interrupts the session via the Autopilot API.
 ///
 /// This is the core function called by both the HTTP handler and embedded client.
-pub async fn cancel_session(
+pub async fn interrupt_session(
     autopilot_client: &AutopilotClient,
     session_id: Uuid,
 ) -> Result<(), Error> {
-    // Cancel durable tasks first (best effort - log warning on failure)
-    if let Err(e) = autopilot_client.cancel_tasks_for_session(session_id).await {
+    // Interrupt durable tasks first (best effort - log warning on failure)
+    if let Err(e) = autopilot_client
+        .interrupt_tasks_for_session(session_id)
+        .await
+    {
         tracing::warn!(
             session_id = %session_id,
             error = %e,
-            "Failed to cancel durable tasks for session"
+            "Failed to interrupt durable tasks for session"
         );
     }
 
-    // Then cancel the session via autopilot API
+    // Then interrupt the session via autopilot API
     autopilot_client
-        .cancel_session(session_id)
+        .interrupt_session(session_id)
         .await
         .map_err(Error::from)
 }
@@ -261,17 +264,17 @@ pub async fn approve_all_tool_calls_handler(
     Ok(Json(response))
 }
 
-/// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/cancel`
+/// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/interrupt`
 ///
-/// Cancels an autopilot session via the Autopilot API.
+/// Interrupts an autopilot session via the Autopilot API.
 #[axum::debug_handler(state = AppStateData)]
-#[instrument(name = "autopilot.cancel_session", skip_all, fields(session_id = %session_id))]
-pub async fn cancel_session_handler(
+#[instrument(name = "autopilot.interrupt_session", skip_all, fields(session_id = %session_id))]
+pub async fn interrupt_session_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
 ) -> Result<(), Error> {
     let client = get_autopilot_client(&app_state)?;
-    cancel_session(&client, session_id).await
+    interrupt_session(&client, session_id).await
 }
 
 /// Handler for `GET /internal/autopilot/status`

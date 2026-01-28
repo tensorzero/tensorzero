@@ -70,8 +70,8 @@ export default [
       "routes/api/autopilot/sessions/$session_id/events/message.route.ts",
     ),
     route(
-      "autopilot/sessions/:session_id/actions/cancel",
-      "routes/api/autopilot/sessions/$session_id/actions/cancel.route.ts",
+      "autopilot/sessions/:session_id/actions/interrupt",
+      "routes/api/autopilot/sessions/$session_id/actions/interrupt.route.ts",
     ),
   ]),
 

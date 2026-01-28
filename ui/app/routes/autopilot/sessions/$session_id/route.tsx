@@ -523,7 +523,7 @@ export default function AutopilotSessionEventsPage({
   const { sessionId, eventsData, isNewSession } = loaderData;
   const navigate = useNavigate();
   const { toast } = useToast();
-  const cancelFetcher = useFetcher();
+  const interruptFetcher = useFetcher();
 
   // Lift optimistic messages state to parent so ChatInput can work outside Suspense
   const [optimisticMessages, setOptimisticMessages] = useState<
@@ -562,23 +562,23 @@ export default function AutopilotSessionEventsPage({
 
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
-    cancelFetcher.submit(null, {
+    interruptFetcher.submit(null, {
       method: "POST",
-      action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/cancel`,
+      action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/interrupt`,
     });
-  }, [cancelFetcher, sessionId]);
+  }, [interruptFetcher, sessionId]);
 
   // Show toast on interrupt result
   useEffect(() => {
-    if (cancelFetcher.state === "idle" && cancelFetcher.data) {
-      const data = cancelFetcher.data as {
+    if (interruptFetcher.state === "idle" && interruptFetcher.data) {
+      const data = interruptFetcher.data as {
         success: boolean;
         error?: string;
       };
       if (data.success) {
         toast.success({
           title: "Session interrupted",
-          description: "The autopilot session has been cancelled.",
+          description: "The autopilot session has been interrupted.",
         });
       } else if (data.error) {
         toast.error({
@@ -587,7 +587,7 @@ export default function AutopilotSessionEventsPage({
         });
       }
     }
-  }, [cancelFetcher.state, cancelFetcher.data, toast]);
+  }, [interruptFetcher.state, interruptFetcher.data, toast]);
 
   // Interruptible when actively processing (not idle or failed)
   const isInterruptible =
@@ -696,7 +696,7 @@ export default function AutopilotSessionEventsPage({
         disabled={isEventsLoading}
         submitDisabled={submitDisabled}
         isInterruptible={isInterruptible}
-        isInterrupting={cancelFetcher.state !== "idle"}
+        isInterrupting={interruptFetcher.state !== "idle"}
         onInterrupt={handleInterruptSession}
       />
     </div>

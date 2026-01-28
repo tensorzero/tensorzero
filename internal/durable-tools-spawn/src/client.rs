@@ -155,20 +155,20 @@ impl SpawnClient {
         self.durable.pool()
     }
 
-    /// Cancel all durable tasks associated with a session ID.
+    /// Interrupt all durable tasks associated with a session ID.
     ///
     /// This queries for non-terminal tasks where `params->'side_info'->>'session_id'`
-    /// matches the provided session ID, then cancels each one. The durable framework's
-    /// `cancel_task` function automatically cascades cancellation to child tasks.
+    /// matches the provided session ID, then interrupts each one. The durable framework's
+    /// `cancel_task` function automatically cascades interruption to child tasks.
     ///
     /// # Returns
     ///
-    /// Returns the number of tasks that were cancelled.
+    /// Returns the number of tasks that were interrupted.
     ///
     /// # Errors
     ///
     /// Returns an error if any database operation fails.
-    pub async fn cancel_tasks_by_session_id(&self, session_id: Uuid) -> Result<u64, SpawnError> {
+    pub async fn interrupt_tasks_by_session_id(&self, session_id: Uuid) -> Result<u64, SpawnError> {
         let queue_name = self.queue_name();
 
         // Find all non-terminal tasks with this session_id
@@ -185,7 +185,7 @@ impl SpawnClient {
             .fetch_all(self.pool())
             .await?;
 
-        // Cancel each task (cascade to children handled by durable.cancel_task)
+        // Interrupt each task (cascade to children handled by durable.cancel_task)
         for (task_id,) in &task_ids {
             sqlx::query("SELECT durable.cancel_task($1, $2)")
                 .bind(queue_name)
