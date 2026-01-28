@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, BarChart3, ChevronRight, Loader2 } from "lucide-react";
 import { type RefObject, useState } from "react";
 import { Skeleton } from "~/components/ui/skeleton";
 import { TableItemTime } from "~/components/ui/TableItems";
@@ -12,8 +12,10 @@ import type {
   EventPayloadMessageContent,
   GatewayEvent,
   GatewayEventPayload,
+  VisualizationType,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
+import TopKEvaluationViz from "./TopKEvaluationViz";
 
 /**
  * Optimistic messages are shown after the API confirms receipt but before
@@ -77,7 +79,13 @@ export function ToolEventId({ id }: { id: string }) {
  */
 export type ToolEventPayload = Extract<
   GatewayEventPayload,
-  { type: "tool_call" | "tool_call_authorization" | "tool_result" }
+  {
+    type:
+      | "tool_call"
+      | "tool_call_authorization"
+      | "tool_result"
+      | "visualization";
+  }
 >;
 
 /**
@@ -92,14 +100,15 @@ export function isToolEvent(event: GatewayEvent): event is ToolEvent {
   return (
     event.payload.type === "tool_call" ||
     event.payload.type === "tool_call_authorization" ||
-    event.payload.type === "tool_result"
+    event.payload.type === "tool_result" ||
+    event.payload.type === "visualization"
   );
 }
 
 /**
  * Extracts the tool_call_event_id from a tool event.
  * For tool_call events, this is in side_info.tool_call_event_id.
- * For tool_call_authorization and tool_result events, this is directly on the payload.
+ * For tool_call_authorization, tool_result, and visualization events, this is directly on the payload.
  */
 export function getToolCallEventId(event: ToolEvent): string {
   const { payload } = event;
@@ -111,6 +120,30 @@ export function getToolCallEventId(event: ToolEvent): string {
 
 function getMessageText(content: EventPayloadMessageContent[]) {
   return content.map((cb) => cb.text).join("\n\n");
+}
+
+/**
+ * Get the title for a visualization based on its type.
+ */
+function getVisualizationTitle(visualization: VisualizationType): string {
+  switch (visualization.type) {
+    case "top_k_evaluation":
+      return "Top-K Evaluation Results";
+  }
+}
+
+/**
+ * Renders the appropriate visualization component based on the type.
+ */
+function VisualizationRenderer({
+  visualization,
+}: {
+  visualization: VisualizationType;
+}) {
+  switch (visualization.type) {
+    case "top_k_evaluation":
+      return <TopKEvaluationViz data={visualization} />;
+  }
 }
 
 /**
@@ -168,6 +201,9 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return {
         description: payload.message,
       };
+    case "visualization":
+      // Visualization events render their own content, no text description needed
+      return {};
     case "unknown":
       return {};
     default:
@@ -293,6 +329,13 @@ function renderEventTitle(event: GatewayEvent) {
     case "error":
       // TODO: handle errors better
       return "Error";
+    case "visualization":
+      return (
+        <span className="inline-flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          <span>{getVisualizationTitle(payload.visualization)}</span>
+        </span>
+      );
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -331,6 +374,7 @@ function EventItem({
   const isExpandable =
     event.payload.type === "tool_call" ||
     event.payload.type === "error" ||
+    event.payload.type === "visualization" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -394,6 +438,9 @@ function EventItem({
         >
           {summary.description}
         </p>
+      )}
+      {shouldShowDetails && event.payload.type === "visualization" && (
+        <VisualizationRenderer visualization={event.payload.visualization} />
       )}
     </div>
   );
