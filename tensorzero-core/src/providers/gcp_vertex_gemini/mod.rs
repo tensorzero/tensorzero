@@ -815,6 +815,7 @@ fn make_provider_batch_inference_output(
             raw_request: Some(raw_request.clone()),
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
     let usage = Usage {
@@ -1131,6 +1132,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1140,6 +1142,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -1161,6 +1164,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`.".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 }));
@@ -1172,6 +1176,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1360,6 +1365,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1374,6 +1380,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1394,6 +1401,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 raw_request: Some(raw_request.clone()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -1402,6 +1410,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -1477,6 +1486,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1491,6 +1501,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1510,6 +1521,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 raw_request: Some(raw_request.clone()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
         let response =
@@ -1517,6 +1529,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -1541,6 +1554,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?;
                 let batch_response = self
@@ -1599,6 +1613,7 @@ fn stream_gcp_vertex_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                             })
@@ -2153,6 +2168,7 @@ async fn convert_non_thought_content_block<'a>(
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 })
@@ -2163,6 +2179,7 @@ async fn convert_non_thought_content_block<'a>(
                     status_code: Some(StatusCode::BAD_REQUEST),
                     message: "Tool call arguments must be a JSON object".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 }
@@ -2187,6 +2204,7 @@ async fn convert_non_thought_content_block<'a>(
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 })
@@ -2197,6 +2215,7 @@ async fn convert_non_thought_content_block<'a>(
                     status_code: Some(StatusCode::BAD_REQUEST),
                     message: "Tool call arguments must be a JSON object".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 }
@@ -2304,6 +2323,7 @@ async fn handle_thought_block<'a>(
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Thought block with signature must be followed by a content block in GCP Vertex Gemini".to_string(),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: None,
                     }));
@@ -2313,6 +2333,7 @@ async fn handle_thought_block<'a>(
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Thought block with signature cannot be followed by another thought block in GCP Vertex Gemini".to_string(),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: None,
                     }));
@@ -2322,6 +2343,7 @@ async fn handle_thought_block<'a>(
                 return Err(Error::new(ErrorDetails::InferenceServer {
 message: "Thought block with signature cannot be followed by an unknown block in GCP Vertex Gemini".to_string(),
 provider_type: provider_type.to_string(),
+api_type: ApiType::ChatCompletions,
 raw_request: None,
 raw_response: None,
 }));
@@ -2382,6 +2404,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -2392,6 +2415,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }
@@ -2419,6 +2443,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -2429,6 +2454,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }
@@ -2666,6 +2692,7 @@ fn content_part_to_tensorzero_chunk(
                     message: "Thought part in GCP Vertex Gemini response must be a text block"
                         .to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
                 }));
@@ -2736,6 +2763,7 @@ fn content_part_to_tensorzero_chunk(
                     "executableCode is not supported in streaming response for GCP Vertex Gemini"
                         .to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
             }));
@@ -2966,6 +2994,7 @@ fn get_response_content(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(raw_response.to_string()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -3007,6 +3036,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -3071,6 +3101,7 @@ fn convert_stream_response_with_metadata_to_chunk(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -3165,6 +3196,7 @@ fn handle_gcp_vertex_gemini_error(
             raw_request: Some(raw_request),
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
@@ -3173,6 +3205,7 @@ fn handle_gcp_vertex_gemini_error(
             raw_request: Some(raw_request),
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }),
     }
 }

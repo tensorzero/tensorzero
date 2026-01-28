@@ -152,6 +152,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -242,6 +243,7 @@ impl InferenceProvider for AWSBedrockProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -253,6 +255,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 raw_request: Some(raw_request),
                 raw_response: Some(raw_response),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }));
         }
 
@@ -540,6 +543,7 @@ async fn convert_content_block_to_bedrock(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?;
 
@@ -682,6 +686,7 @@ fn convert_converse_response(
             raw_response: Some(raw_response.clone()),
             message: "AWS Bedrock returned an empty message.".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -755,6 +760,7 @@ fn convert_response_content_block(
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -833,6 +839,7 @@ where
                         raw_response: None,
                         message: format!("Error reading stream: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     }.into());
                     return;
                 }
@@ -850,6 +857,7 @@ where
                                         raw_response: Some(error_message),
                                         message: format!("AWS Bedrock streaming exception: {exception_type}"),
                                         provider_type: PROVIDER_TYPE.to_string(),
+                                        api_type: ApiType::ChatCompletions,
                                     }.into());
                                     return;
                                 }
@@ -886,6 +894,7 @@ where
                                     raw_response: None,
                                     message: format!("Error decoding event stream frame: {e}"),
                                     provider_type: PROVIDER_TYPE.to_string(),
+                                    api_type: ApiType::ChatCompletions,
                                 }.into());
                                 return;
                             }
@@ -909,6 +918,7 @@ fn parse_stream_event<T: serde::de::DeserializeOwned>(
             raw_response: Some(raw_message.to_string()),
             message: format!("Error parsing {event_name}: {e}"),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })
 }
@@ -972,6 +982,7 @@ fn process_stream_event(
                         Error::new(ErrorDetails::InferenceServer {
                             message: "Got tool use delta without current tool id".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            api_type: ApiType::ChatCompletions,
                             raw_request: None,
                             raw_response: None,
                         })

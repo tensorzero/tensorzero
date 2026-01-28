@@ -19,7 +19,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
-    Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ApiType, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError, WrappedProvider};
@@ -249,6 +249,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -260,6 +261,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                 raw_request: Some(raw_request),
                 raw_response: Some(raw_response),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }));
         }
 
@@ -283,6 +285,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }
                         )));
                         return;
@@ -302,6 +305,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                                                 raw_request: Some(raw_request.clone()),
                                                 raw_response: Some(error_message),
                                                 provider_type: PROVIDER_TYPE.to_string(),
+                                                api_type: ApiType::ChatCompletions,
                                             }
                                         )));
                                         return;
@@ -332,6 +336,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                                             raw_request: Some(raw_request.clone()),
                                             raw_response: None,
                                             provider_type: PROVIDER_TYPE.to_string(),
+                                            api_type: ApiType::ChatCompletions,
                                         }
                                     )));
                                     return;

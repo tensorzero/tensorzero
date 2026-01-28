@@ -17,7 +17,7 @@ use tensorzero_core::{
     },
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
-    error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{ApiType, DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
     inference::types::ContentBlock,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
@@ -331,6 +331,7 @@ impl JobHandle for TogetherSFTJobHandle {
                     Error::new(ErrorDetails::InferenceServer {
                         message: "Missing model_output_name in Together job response".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Other,
                         raw_request: None,
                         raw_response: None,
                     })

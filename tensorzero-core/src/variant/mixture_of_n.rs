@@ -375,6 +375,7 @@ pub fn stream_inference_from_non_stream(
         },
         cached: model_inference_result.cached,
         model_inference_id: model_inference_result.id,
+        failed_raw_responses: model_inference_result.failed_raw_responses.clone(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage), raw_usage_entries)?;
     Ok((stream, model_used_info))
@@ -1185,6 +1186,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1220,6 +1222,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1274,6 +1277,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1312,6 +1316,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1391,6 +1396,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1426,6 +1432,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(

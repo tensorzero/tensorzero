@@ -224,6 +224,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -236,6 +237,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -260,6 +262,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -381,6 +384,7 @@ fn stream_google_ai_studio_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                             })
@@ -517,6 +521,7 @@ impl<'a> GeminiContent<'a> {
                                 return Err(Error::new(ErrorDetails::InferenceServer {
                                     message: "Thought block with signature must be followed by a content block in Gemini".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
+                                    api_type: ApiType::ChatCompletions,
                                     raw_request: None,
                                     raw_response: None,
                                 }));
@@ -525,6 +530,7 @@ impl<'a> GeminiContent<'a> {
                                 return Err(Error::new(ErrorDetails::InferenceServer {
                                     message: "Thought block with signature cannot be followed by another thought block in Gemini".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
+                                    api_type: ApiType::ChatCompletions,
                                     raw_request: None,
                                     raw_response: None,
                                 }));
@@ -533,6 +539,7 @@ impl<'a> GeminiContent<'a> {
                                 return Err(Error::new(ErrorDetails::InferenceServer {
                                     message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
+                                    api_type: ApiType::ChatCompletions,
                                     raw_request: None,
                                     raw_response: None,
                                 }));
@@ -646,6 +653,7 @@ async fn convert_non_thought_content_block(
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 })
@@ -656,6 +664,7 @@ async fn convert_non_thought_content_block(
                     status_code: Some(StatusCode::BAD_REQUEST),
                     message: "Tool call arguments must be a JSON object".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 }
@@ -1065,6 +1074,7 @@ fn content_part_to_tensorzero_chunk(
                         "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
                 }));
@@ -1355,6 +1365,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -1377,6 +1388,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
         let raw_usage = google_ai_studio_usage_from_raw_response(&raw_response).map(|usage| {
@@ -1444,6 +1456,7 @@ fn convert_stream_response_with_metadata_to_chunk(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -1526,6 +1539,7 @@ fn handle_google_ai_studio_error(
             raw_request: None,
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
@@ -1535,6 +1549,7 @@ fn handle_google_ai_studio_error(
             raw_request: None,
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into()),
     }

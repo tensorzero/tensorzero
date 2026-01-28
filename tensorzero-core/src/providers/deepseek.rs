@@ -201,6 +201,7 @@ impl InferenceProvider for DeepSeekProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -213,6 +214,7 @@ impl InferenceProvider for DeepSeekProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -240,6 +242,7 @@ impl InferenceProvider for DeepSeekProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
             Err(handle_openai_error(
@@ -248,6 +251,7 @@ impl InferenceProvider for DeepSeekProvider {
                 &response,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -506,6 +510,7 @@ fn stream_deepseek(
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }));
 
                         let latency = start_time.elapsed();
@@ -583,6 +588,7 @@ fn deepseek_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -634,6 +640,7 @@ fn deepseek_to_tensorzero_chunk(
                                 raw_request: None,
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }))?
                             .clone()
                     }
@@ -748,6 +755,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -764,6 +772,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {

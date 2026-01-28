@@ -44,6 +44,7 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
+use crate::inference::types::usage::RawResponseEntry;
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
@@ -165,6 +166,9 @@ pub struct StreamResponse {
     pub model_provider_name: Arc<str>,
     pub cached: bool,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts before this successful one.
+    /// Used when `include_raw_response` is true and some providers failed before success.
+    pub failed_raw_responses: Vec<RawResponseEntry>,
 }
 
 impl StreamResponse {
@@ -210,6 +214,7 @@ impl StreamResponse {
             model_provider_name,
             cached: true,
             model_inference_id,
+            failed_raw_responses: Vec::new(), // cache hits don't have failed attempts
         }
     }
 }
@@ -441,6 +446,7 @@ impl ModelConfig {
                 model_provider_name: model_provider_request.provider_name.into(),
                 cached: false,
                 model_inference_id: model_provider_request.model_inference_id,
+                failed_raw_responses: Vec::new(), // populated by caller if needed
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -510,7 +516,7 @@ impl ModelConfig {
                 };
 
                 match response {
-                    Ok(response) => {
+                    Ok(mut response) => {
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
                         // (in case we ever add a blocking cache write option)
                         if !response.cached && clients.cache_options.enabled.write() {
@@ -534,6 +540,14 @@ impl ModelConfig {
                                         .map(std::borrow::Cow::into_owned),
                                 },
                             );
+                        }
+
+                        // Collect raw responses from failed providers before returning success
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                let failed_raw_responses = error.collect_raw_responses();
+                                response.failed_raw_responses.extend(failed_raw_responses);
+                            }
                         }
 
                         return Ok(response);
@@ -601,6 +615,7 @@ impl ModelConfig {
                         model_provider_name: "tensorzero::relay".into(),
                         cached: false,
                         model_inference_id: Uuid::now_v7(),
+                        failed_raw_responses: Vec::new(), // relay doesn't track failed attempts
                     },
                     messages: request.messages.clone(),
                 });
@@ -639,7 +654,19 @@ impl ModelConfig {
                 };
 
                 match response {
-                    Ok(response) => return Ok(response),
+                    Ok(mut response) => {
+                        // Collect raw responses from failed providers before returning success
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                let failed_raw_responses = error.collect_raw_responses();
+                                response
+                                    .response
+                                    .failed_raw_responses
+                                    .extend(failed_raw_responses);
+                            }
+                        }
+                        return Ok(response);
+                    }
                     Err(error) => {
                         provider_errors.insert(provider_name.to_string(), error);
                     }
@@ -2754,7 +2781,7 @@ mod tests {
         cache::CacheOptions,
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         inference::types::{
-            ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
+            ApiType, ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },
         model_table::RESERVED_MODEL_PREFIXES,
         providers::anthropic::AnthropicCredentials,
@@ -2894,6 +2921,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3205,6 +3233,7 @@ mod tests {
                     model_provider_name,
                     cached: _,
                     model_inference_id: _,
+                    failed_raw_responses: _,
                 },
             messages: _input,
         } = model_config
@@ -3278,6 +3307,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3380,6 +3410,7 @@ mod tests {
                     model_provider_name,
                     cached: _,
                     model_inference_id: _,
+                    failed_raw_responses: _,
                 },
             messages: _,
         } = model_config
@@ -3545,6 +3576,7 @@ mod tests {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }

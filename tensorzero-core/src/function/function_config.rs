@@ -1917,6 +1917,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1985,6 +1986,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2039,6 +2041,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2095,6 +2098,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2149,6 +2153,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2203,6 +2208,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2276,6 +2282,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2324,6 +2331,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2379,6 +2387,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2432,6 +2441,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(
@@ -2492,6 +2502,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
         let response = function_config
             .prepare_response(

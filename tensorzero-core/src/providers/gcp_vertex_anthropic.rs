@@ -245,6 +245,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: None,
             })
@@ -255,6 +256,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -405,6 +407,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }));
@@ -622,6 +625,7 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
             ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }))
