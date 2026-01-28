@@ -16,8 +16,7 @@ import {
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import { Loader2, Plus, StopCircle } from "lucide-react";
-import { Button } from "~/components/ui/button";
+import { Loader2, Plus } from "lucide-react";
 import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
@@ -662,28 +661,13 @@ export default function AutopilotSessionEventsPage({
         name={isNewSession ? "New Session" : sessionId}
         tag={
           !isNewSession ? (
-            <div className="ml-2 flex items-center gap-2">
-              <Button
-                variant="destructiveOutline"
-                size="sm"
-                onClick={handleInterruptSession}
-                disabled={!isInterruptible || cancelFetcher.state !== "idle"}
-              >
-                {cancelFetcher.state !== "idle" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <StopCircle className="h-4 w-4" />
-                )}
-                Interrupt Session
-              </Button>
-              <Link
-                to="/autopilot/sessions/new"
-                className="text-fg-tertiary hover:text-fg-secondary inline-flex items-center gap-1 text-sm font-medium transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                New Session
-              </Link>
-            </div>
+            <Link
+              to="/autopilot/sessions/new"
+              className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New Session
+            </Link>
           ) : undefined
         }
       />
@@ -711,6 +695,9 @@ export default function AutopilotSessionEventsPage({
         isNewSession={isNewSession}
         disabled={isEventsLoading}
         submitDisabled={submitDisabled}
+        isInterruptible={isInterruptible}
+        isInterrupting={cancelFetcher.state !== "idle"}
+        onInterrupt={handleInterruptSession}
       />
     </div>
   );
