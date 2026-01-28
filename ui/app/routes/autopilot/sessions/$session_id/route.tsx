@@ -31,6 +31,8 @@ import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { getFeatureFlags } from "~/utils/feature_flags";
+import { useLocalStorage } from "~/hooks/use-local-storage";
+import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 
 // Nil UUID for creating new sessions
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -168,6 +170,7 @@ function EventStreamContent({
   scrollContainerRef,
   onLoaded,
   onStatusChange,
+  yoloMode,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -177,6 +180,7 @@ function EventStreamContent({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
+  yoloMode: boolean;
 }) {
   const {
     events: initialEvents,
@@ -293,6 +297,28 @@ function EventStreamContent({
     },
     [sessionId, toast],
   );
+
+  const autoApprovedIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const currentIds = new Set(pendingToolCalls.map((tc) => tc.id));
+    for (const id of autoApprovedIdsRef.current) {
+      if (!currentIds.has(id)) {
+        autoApprovedIdsRef.current.delete(id);
+      }
+    }
+  }, [pendingToolCalls]);
+
+  useEffect(() => {
+    if (!yoloMode || pendingToolCalls.length === 0) return;
+
+    const oldest = pendingToolCalls[0];
+    if (autoApprovedIdsRef.current.has(oldest.id)) return;
+    if (authLoadingStates.has(oldest.id)) return;
+
+    autoApprovedIdsRef.current.add(oldest.id);
+    handleAuthorize(oldest.id, true);
+  }, [yoloMode, pendingToolCalls, authLoadingStates, handleAuthorize]);
 
   /*
    * SCROLL BEHAVIOR SPEC:
@@ -524,8 +550,7 @@ function EventStreamContent({
         />
       </div>
 
-      {/* Pinned approval card - outside scroll container */}
-      {oldestPendingToolCall && (
+      {oldestPendingToolCall && !yoloMode && (
         <div className="mt-4">
           <PendingToolCallCard
             key={oldestPendingToolCall.id}
@@ -620,6 +645,11 @@ export default function AutopilotSessionEventsPage({
     autopilotStatus.status !== "idle" &&
     autopilotStatus.status !== "failed";
 
+  const [yoloMode, setYoloMode] = useLocalStorage<boolean>(
+    "autopilot-yolo-mode",
+    false,
+  );
+
   // Disable submit unless status is idle or failed
   const submitDisabled =
     autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
@@ -697,25 +727,31 @@ export default function AutopilotSessionEventsPage({
 
   return (
     <div className="container mx-auto flex h-full flex-col px-8 py-8">
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[{ label: "Autopilot", href: "/autopilot/sessions" }]}
-          />
-        }
-        name={isNewSession ? "New Session" : sessionId}
-        tag={
-          !isNewSession ? (
-            <Link
-              to="/autopilot/sessions/new"
-              className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              New Session
-            </Link>
-          ) : undefined
-        }
-      />
+      <div className="flex items-start justify-between">
+        <PageHeader
+          eyebrow={
+            <Breadcrumbs
+              segments={[{ label: "Autopilot", href: "/autopilot/sessions" }]}
+            />
+          }
+          name={isNewSession ? "New Session" : sessionId}
+          tag={
+            !isNewSession ? (
+              <Link
+                to="/autopilot/sessions/new"
+                className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                New Session
+              </Link>
+            ) : undefined
+          }
+        />
+        <YoloModeToggle
+          checked={Boolean(yoloMode)}
+          onCheckedChange={setYoloMode}
+        />
+      </div>
 
       <Suspense key={sessionId} fallback={<EventStreamSkeleton />}>
         <Await
@@ -732,6 +768,7 @@ export default function AutopilotSessionEventsPage({
               scrollContainerRef={scrollContainerRef}
               onLoaded={handleEventsLoaded}
               onStatusChange={handleStatusChange}
+              yoloMode={Boolean(yoloMode)}
             />
           )}
         </Await>
@@ -754,7 +791,6 @@ export default function AutopilotSessionEventsPage({
   );
 }
 
-// Wrapper that passes the scroll container ref back to parent
 function EventStreamContentWrapper({
   sessionId,
   eventsData,
@@ -764,6 +800,7 @@ function EventStreamContentWrapper({
   scrollContainerRef,
   onLoaded,
   onStatusChange,
+  yoloMode,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -773,6 +810,7 @@ function EventStreamContentWrapper({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
+  yoloMode: boolean;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -785,6 +823,7 @@ function EventStreamContentWrapper({
         scrollContainerRef={scrollContainerRef}
         onLoaded={onLoaded}
         onStatusChange={onStatusChange}
+        yoloMode={yoloMode}
       />
     </div>
   );
