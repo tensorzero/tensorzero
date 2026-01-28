@@ -156,9 +156,9 @@ jiter==0.12.0 \
     --hash=sha256:f8ec0259d3f26c62aed4d73b198c53e316ae11f0f69c8fbe6682c6dcfa0fcce2 \
     --hash=sha256:fd990541982a24281d12b67a335e44f117e4c6cbad3c3b75c7dea68bf4ce3a67
     # via openai
-openai==2.15.0 \
-    --hash=sha256:42eb8cbb407d84770633f31bf727d4ffb4138711c670565a41663d9439174fba \
-    --hash=sha256:6ae23b932cd7230f7244e52954daa6602716d6b9bf235401a107af731baea6c3
+openai==2.16.0 \
+    --hash=sha256:42eaa22ca0d8ded4367a77374104d7a2feafee5bd60a107c3c11b5243a11cd12 \
+    --hash=sha256:5f46643a8f42899a84e80c38838135d7038e7718333ce61396994f887b09a59b
     # via tensorzero-examples-docs-guides-operations-enforce-rate-limits-postgres
 pydantic==2.12.5 \
     --hash=sha256:4d351024c75c0f085a9febbb665ce8c0c6ec5d30e903bdb6394b7ede26aebb49 \
@@ -300,14 +300,14 @@ tensorzero==2025.11.3 ; python_full_version < '3.10' \
     --hash=sha256:ccbcb45949593cfdb7e7653a9b6366beb077f0cd34e04e0297003eae669a66d4 \
     --hash=sha256:f95556807fa0b3bdc122d0242ffdef96281e0ce0f872f67844e919fc9519cdef
     # via tensorzero-examples-docs-guides-operations-enforce-rate-limits-postgres
-tensorzero==2026.1.3 ; python_full_version >= '3.10' \
-    --hash=sha256:1b60a09e85f98c296f0c5132db9b939e688cc664690a633ff0dbcb2e1caab795 \
-    --hash=sha256:559ada0d0e120b87ee1f6deca6136cdb4ffcd31a7bc9252ae79c0cb8e3d6d2f2 \
-    --hash=sha256:66753e6113155cdbb0d77d70714200cd5104bc6d943f72216a9caf0ee8f76c61 \
-    --hash=sha256:6f2d13b74d490a71e94082ca938ccf5cf22e5309872084fea40713cd950f91fe \
-    --hash=sha256:9987da95ed55c8121e4d204ce4f38ad68a3428ef77fa2ed99e78bd5ce0fe7aa2 \
-    --hash=sha256:a0f534b5f801892dea56fb6e8f0ed3a57e4628e05e700b5a325facb312a7721b \
-    --hash=sha256:fe3cdcaf3d8d6214d8ca7476470fe81c513c2337b90bc5dbf7e124ed750169be
+tensorzero==2026.1.5 ; python_full_version >= '3.10' \
+    --hash=sha256:09f655155ffd4618f3202c45e70a21584e14578f09372da8c76d7f3e1ab27925 \
+    --hash=sha256:160c0f32c3119addfd5f64eb93efc51a920a3cd77398982b7d177676c7a0c9f7 \
+    --hash=sha256:2b0b6571ad51e3116100ae8d40fee8f6aa128ba851fefc2981c184bd0422bf0c \
+    --hash=sha256:56835dddb2b50379a8c4056552ed152a4d9e0b25eee7744697f1cb1443a203e8 \
+    --hash=sha256:a069ad5a20f7011682ccabb2dcd31e470635a57983d332016160b6652ffc9ff9 \
+    --hash=sha256:beb805c33fb4217d899e2b824bf24435b93be737ba2967bc488215ba4000f5e4 \
+    --hash=sha256:f58322ea0f7c0460e18ba59bc8540fbfb9d4c13ef1a0f867a5f0bbf32478ccd2
     # via tensorzero-examples-docs-guides-operations-enforce-rate-limits-postgres
 tqdm==4.67.1 \
     --hash=sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2 \
