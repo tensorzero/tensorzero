@@ -1,10 +1,9 @@
-import {
-  AlertCircle,
-  AlertTriangle,
-  ChevronRight,
-  Loader2,
-} from "lucide-react";
+import { AlertCircle, AlertTriangle, ChevronRight } from "lucide-react";
 import { Component, type RefObject, useState } from "react";
+import {
+  AnimatedEllipsis,
+  EllipsisMode,
+} from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
@@ -483,14 +482,18 @@ function EventSkeletons({ count = 3 }: { count?: number }) {
   );
 }
 
-function SessionStartedDivider() {
+function Divider({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-4 py-2">
+    <div className="flex items-center gap-5 py-2">
       <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted text-xs">Started</span>
+      <span className="text-fg-muted relative text-xs">{children}</span>
       <div className="border-border flex-1 border-t" />
     </div>
   );
+}
+
+function SessionStartDivider() {
+  return <Divider>Start</Divider>;
 }
 
 function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
@@ -509,42 +512,36 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
   );
 }
 
-function getStatusLabel(status: AutopilotStatus): string {
+function getStatusLabel(status: AutopilotStatus): {
+  text: string;
+  showEllipsis: boolean;
+} {
   switch (status.status) {
     case "idle":
-      return "Ready";
+      return { text: "Ready", showEllipsis: false };
     case "server_side_processing":
-      return "Thinking...";
+      return { text: "Thinking", showEllipsis: true };
     case "waiting_for_tool_call_authorization":
-      return "Waiting";
+      return { text: "Waiting", showEllipsis: false };
     case "waiting_for_tool_execution":
-      return "Executing tool...";
+      return { text: "Executing tool", showEllipsis: true };
     case "waiting_for_retry":
-      return "Something went wrong. Retrying...";
+      return { text: "Something went wrong. Retrying", showEllipsis: true };
     case "failed":
-      return "Something went wrong. Please try again.";
+      return {
+        text: "Something went wrong. Please try again.",
+        showEllipsis: false,
+      };
   }
 }
 
-function isLoadingStatus(status: AutopilotStatus): boolean {
-  return (
-    status.status === "server_side_processing" ||
-    status.status === "waiting_for_tool_execution" ||
-    status.status === "waiting_for_retry"
-  );
-}
-
 function StatusIndicator({ status }: { status: AutopilotStatus }) {
-  const showSpinner = isLoadingStatus(status);
+  const { text, showEllipsis } = getStatusLabel(status);
   return (
-    <div className="flex items-center gap-4 py-2">
-      <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted flex items-center gap-1.5 text-xs">
-        {getStatusLabel(status)}
-        {showSpinner && <Loader2 className="h-3 w-3 animate-spin" />}
-      </span>
-      <div className="border-border flex-1 border-t" />
-    </div>
+    <Divider>
+      {text}
+      {showEllipsis && <AnimatedEllipsis mode={EllipsisMode.Absolute} />}
+    </Divider>
   );
 }
 
@@ -560,10 +557,10 @@ export default function EventStream({
 }: EventStreamProps) {
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* Session started indicator, or sentinel for loading more */}
+      {/* Session start indicator, or sentinel for loading more */}
       {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
       {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
-        <SessionStartedDivider />
+        <SessionStartDivider />
       ) : (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
       )}

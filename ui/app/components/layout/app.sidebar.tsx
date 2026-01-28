@@ -13,7 +13,7 @@ import {
   SidebarCollapse,
   SidebarExpand,
 } from "~/components/icons/Icons";
-import { KeyRound, LayoutGrid } from "lucide-react";
+import { KeyRound, LayoutGrid, Plus } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -162,7 +162,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             {autopilotAvailable && (
-              <SidebarMenuItem className="list-none">
+              <SidebarMenuItem className="relative list-none">
                 <SidebarMenuButton
                   asChild
                   tooltip={state === "collapsed" ? "Autopilot" : undefined}
@@ -175,6 +175,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     </span>
                   </Link>
                 </SidebarMenuButton>
+                {state === "expanded" && (
+                  <Link
+                    to="/autopilot/sessions/new"
+                    className="text-fg-muted hover:text-fg-primary absolute top-1/2 right-2 z-10 -translate-y-1/2 rounded p-0.5 transition-colors"
+                    aria-label="New session"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Link>
+                )}
               </SidebarMenuItem>
             )}
           </SidebarGroupContent>
@@ -190,11 +199,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     tooltip={state === "collapsed" ? item.title : undefined}
                     isActive={activePathUtils.isActive(item.url)}
                   >
-                    <Link
-                      to={item.url}
-                      className="flex items-center gap-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <Link to={item.url} className="flex items-center gap-2">
                       <item.icon className="h-4 w-4" />
                       <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
                         {item.title}
