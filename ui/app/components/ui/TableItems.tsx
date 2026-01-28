@@ -71,6 +71,25 @@ function TableItemText({ text }: TableItemTextProps) {
   }
 }
 
+interface TableItemSummaryProps {
+  text?: string;
+  placeholder?: string;
+}
+
+function TableItemSummary({
+  text,
+  placeholder = "No message",
+}: TableItemSummaryProps) {
+  if (!text) {
+    return <span className="text-fg-muted">{placeholder}</span>;
+  }
+  return (
+    <span className="block max-w-[300px] truncate" title={text}>
+      {text}
+    </span>
+  );
+}
+
 interface TableItemFunctionProps {
   functionName: string;
   functionType: string;
@@ -136,4 +155,10 @@ function TableItemFunction({
   return <div className={`${baseClasses} cursor-default`}>{content}</div>;
 }
 
-export { TableItemFunction, TableItemShortUuid, TableItemText, TableItemTime };
+export {
+  TableItemFunction,
+  TableItemShortUuid,
+  TableItemSummary,
+  TableItemText,
+  TableItemTime,
+};
