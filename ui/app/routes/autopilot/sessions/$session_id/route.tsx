@@ -28,6 +28,7 @@ import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
+import { FullAutoToggle } from "~/components/autopilot/FullAutoToggle";
 
 // Nil UUID for creating new sessions
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -485,6 +486,11 @@ export default function AutopilotSessionEventsPage({
     isRetrying: boolean;
   }>({ error: null, isRetrying: false });
 
+  // Full Auto - auto-approve all tool calls
+  const [fullAuto, setFullAuto] = useState(false);
+  // Track IDs we've already attempted to auto-approve (cleared only when tool call leaves queue)
+  const autoApprovedIdsRef = useRef<Set<string>>(new Set());
+
   const handleErrorChange = useCallback(
     (error: string | null, isRetrying: boolean) => {
       setSseError({ error, isRetrying });
@@ -500,6 +506,7 @@ export default function AutopilotSessionEventsPage({
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
+    autoApprovedIdsRef.current.clear();
   }, [sessionId, isNewSession, eventsData]);
 
   // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
@@ -572,6 +579,34 @@ export default function AutopilotSessionEventsPage({
     },
     [sessionId, toast],
   );
+
+  // Clean up auto-approved IDs when tool calls leave the queue
+  useEffect(() => {
+    const currentIds = new Set(pendingToolCalls.map((tc) => tc.id));
+    for (const id of autoApprovedIdsRef.current) {
+      if (!currentIds.has(id)) {
+        autoApprovedIdsRef.current.delete(id);
+      }
+    }
+  }, [pendingToolCalls]);
+
+  // Full Auto: auto-approve tool calls when enabled
+  useEffect(() => {
+    if (!fullAuto) return;
+    if (pendingToolCalls.length === 0) return;
+
+    // Auto-approve the oldest pending tool call
+    const oldest = pendingToolCalls[0];
+    // Skip if we've already attempted to auto-approve this one
+    if (autoApprovedIdsRef.current.has(oldest.id)) return;
+    // Skip if user manually started approving
+    if (authLoadingStates.has(oldest.id)) return;
+
+    // Mark as auto-approved BEFORE any async work (never cleared until tool call leaves queue)
+    autoApprovedIdsRef.current.add(oldest.id);
+
+    handleAuthorize(oldest.id, true);
+  }, [fullAuto, pendingToolCalls, authLoadingStates, handleAuthorize]);
 
   // Disable submit unless status is idle or failed
   const submitDisabled =
@@ -689,7 +724,7 @@ export default function AutopilotSessionEventsPage({
         <div className="container mx-auto px-8">
           {/* Header background - matches message width with slight outset */}
           <div ref={headerRef} className="bg-bg-secondary -mx-2 px-2 pt-4 pb-5">
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto flex items-center justify-between">
               <Breadcrumbs
                 segments={
                   isNewSession
@@ -703,6 +738,9 @@ export default function AutopilotSessionEventsPage({
                       ]
                 }
               />
+              {!isNewSession && (
+                <FullAutoToggle onCheckedChange={setFullAuto} />
+              )}
             </div>
             {sseError.error && sseError.isRetrying && (
               <ErrorBanner>Failed to fetch events. Retrying...</ErrorBanner>
