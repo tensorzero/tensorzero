@@ -30,7 +30,6 @@ services:
         "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
       ]
     healthcheck:
-      test: ["CMD", "provider-proxy", "health-check", "--port", "3004"]
       start_period: 10s
       start_interval: 1s
       timeout: 1s
