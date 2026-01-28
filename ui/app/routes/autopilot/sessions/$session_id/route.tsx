@@ -16,6 +16,7 @@ import {
   useNavigate,
   type RouteHandle,
 } from "react-router";
+import debounce from "lodash-es/debounce";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
@@ -105,23 +106,6 @@ export async function loader({ params }: Route.LoaderArgs) {
     sessionId,
     eventsData: eventsDataPromise,
     isNewSession: false,
-  };
-}
-
-// Simple debounce helper
-function debounce<T extends (...args: Parameters<T>) => void>(
-  fn: T,
-  delay: number,
-): (...args: Parameters<T>) => void {
-  let timeoutId: NodeJS.Timeout | null = null;
-  return (...args: Parameters<T>) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    timeoutId = setTimeout(() => {
-      fn(...args);
-      timeoutId = null;
-    }, delay);
   };
 }
 
