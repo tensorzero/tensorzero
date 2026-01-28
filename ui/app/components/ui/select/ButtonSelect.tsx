@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Popover,
   PopoverContent,
@@ -64,7 +64,16 @@ export interface ButtonSelectProps {
   align?: "start" | "center" | "end";
   /** Additional className for the popover menu */
   menuClassName?: string;
+  /**
+   * Number of items at which virtualization is enabled.
+   * Set to 0 to always virtualize, or Infinity to never virtualize.
+   * Default: 100
+   */
+  virtualizeThreshold?: number;
 }
+
+/** Default threshold for enabling virtualization */
+const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
 
 export function ButtonSelect({
   items,
@@ -88,9 +97,11 @@ export function ButtonSelect({
   creatable = false,
   align = "start",
   menuClassName,
+  virtualizeThreshold = DEFAULT_VIRTUALIZE_THRESHOLD,
 }: ButtonSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
 
   const filteredItems = useMemo(() => {
     if (!searchable || !searchValue.trim()) {
@@ -99,6 +110,23 @@ export function ButtonSelect({
     const search = searchValue.toLowerCase().trim();
     return items.filter((item) => item.toLowerCase().includes(search));
   }, [items, searchValue, searchable]);
+
+  const shouldVirtualize = filteredItems.length >= virtualizeThreshold;
+
+  // Reset highlighted index when dropdown opens or filtered items change
+  useEffect(() => {
+    if (open) {
+      setHighlightedIndex((prev) => {
+        if (filteredItems.length === 0) return 0;
+        return Math.min(prev, filteredItems.length - 1);
+      });
+    }
+  }, [open, filteredItems.length]);
+
+  // Reset to first item when search changes
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [searchValue]);
 
   const showCreateOption =
     searchable &&
@@ -117,6 +145,63 @@ export function ButtonSelect({
       setOpen(false);
     },
     [onSelect],
+  );
+
+  // Keyboard handler for virtualized mode
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!shouldVirtualize) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev < filteredItems.length - 1 ? prev + 1 : prev,
+        );
+        return;
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+        return;
+      }
+
+      if (e.key === "Home") {
+        e.preventDefault();
+        setHighlightedIndex(0);
+        return;
+      }
+
+      if (e.key === "End") {
+        e.preventDefault();
+        setHighlightedIndex(Math.max(0, filteredItems.length - 1));
+        return;
+      }
+
+      if (e.key === "PageDown") {
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          Math.min(prev + 8, filteredItems.length - 1),
+        );
+        return;
+      }
+
+      if (e.key === "PageUp") {
+        e.preventDefault();
+        setHighlightedIndex((prev) => Math.max(prev - 8, 0));
+        return;
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const item = filteredItems[highlightedIndex];
+        if (item) {
+          handleSelectItem(item, false);
+        }
+        return;
+      }
+    },
+    [shouldVirtualize, filteredItems, highlightedIndex, handleSelectItem],
   );
 
   const triggerContent =
@@ -149,7 +234,10 @@ export function ButtonSelect({
         )}
         align={align}
       >
-        <Command shouldFilter={false}>
+        <Command
+          shouldFilter={false}
+          onKeyDown={shouldVirtualize ? handleKeyDown : undefined}
+        >
           {searchable && (
             <CommandInput
               placeholder={placeholder}
@@ -185,6 +273,8 @@ export function ButtonSelect({
                 getPrefix={getPrefix}
                 getSuffix={getSuffix}
                 getItemDataAttributes={getItemDataAttributes}
+                virtualize={shouldVirtualize}
+                highlightedIndex={highlightedIndex}
               />
             </CommandList>
           )}

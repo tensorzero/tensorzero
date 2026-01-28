@@ -3,12 +3,15 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "~/components/ui/popover";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ComboboxInput } from "./ComboboxInput";
 import { ComboboxContent } from "./ComboboxContent";
 import { ComboboxHint } from "./ComboboxHint";
 import { ComboboxMenuItems } from "./ComboboxMenuItems";
 import { useCombobox } from "./use-combobox";
+
+/** Default threshold for enabling virtualization */
+const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
 
 export type ComboboxItem = string | { value: string; label: string };
 
@@ -40,6 +43,12 @@ type ComboboxProps = {
   loadingMessage?: string;
   error?: boolean;
   errorMessage?: string;
+  /**
+   * Number of items at which virtualization is enabled.
+   * Set to 0 to always virtualize, or Infinity to never virtualize.
+   * Default: 100
+   */
+  virtualizeThreshold?: number;
 };
 
 export function Combobox({
@@ -61,6 +70,7 @@ export function Combobox({
   loadingMessage = "Loading...",
   error = false,
   errorMessage = "An error occurred.",
+  virtualizeThreshold = DEFAULT_VIRTUALIZE_THRESHOLD,
 }: ComboboxProps) {
   const {
     open,
@@ -68,11 +78,14 @@ export function Combobox({
     commandRef,
     getInputValue,
     closeDropdown,
-    handleKeyDown,
+    handleKeyDown: baseHandleKeyDown,
     handleInputChange,
     handleBlur,
     handleClick,
   } = useCombobox();
+
+  // Track highlighted index for virtualized keyboard navigation
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
 
   // Normalize items to { value, label } format
   const normalizedItems = useMemo(() => items.map(normalizeItem), [items]);
@@ -93,12 +106,108 @@ export function Combobox({
     );
   }, [normalizedItems, searchValue]);
 
+  const shouldVirtualize = filteredItems.length >= virtualizeThreshold;
+
+  // Reset highlighted index when dropdown opens or filtered items change
+  useEffect(() => {
+    if (open) {
+      setHighlightedIndex((prev) => {
+        if (filteredItems.length === 0) return 0;
+        // Clamp to valid range if items were filtered
+        return Math.min(prev, filteredItems.length - 1);
+      });
+    }
+  }, [open, filteredItems.length]);
+
+  // Reset to first item when search changes
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [searchValue]);
+
   const handleSelectItem = useCallback(
     (value: string, isNew: boolean) => {
       onSelect(value, isNew);
       closeDropdown();
     },
     [onSelect, closeDropdown],
+  );
+
+  // Custom keyboard handler for virtualized mode
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!shouldVirtualize) {
+        // Non-virtualized: delegate to cmdk
+        baseHandleKeyDown(e);
+        return;
+      }
+
+      // Virtualized mode: handle navigation ourselves
+      if (e.key === "Escape") {
+        closeDropdown();
+        return;
+      }
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev < filteredItems.length - 1 ? prev + 1 : prev,
+        );
+        return;
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+        return;
+      }
+
+      if (e.key === "Home") {
+        e.preventDefault();
+        setHighlightedIndex(0);
+        return;
+      }
+
+      if (e.key === "End") {
+        e.preventDefault();
+        setHighlightedIndex(Math.max(0, filteredItems.length - 1));
+        return;
+      }
+
+      if (e.key === "PageDown") {
+        e.preventDefault();
+        // Jump ~8 items (one viewport)
+        setHighlightedIndex((prev) =>
+          Math.min(prev + 8, filteredItems.length - 1),
+        );
+        return;
+      }
+
+      if (e.key === "PageUp") {
+        e.preventDefault();
+        setHighlightedIndex((prev) => Math.max(prev - 8, 0));
+        return;
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const item = filteredItems[highlightedIndex];
+        if (item) {
+          handleSelectItem(item.value, false);
+        }
+        return;
+      }
+
+      // For other keys, use base handler
+      baseHandleKeyDown(e);
+    },
+    [
+      shouldVirtualize,
+      baseHandleKeyDown,
+      closeDropdown,
+      filteredItems,
+      highlightedIndex,
+      handleSelectItem,
+    ],
   );
 
   const showCreateOption =
@@ -170,6 +279,8 @@ export function Combobox({
                 getPrefix={getPrefix}
                 getSuffix={getSuffix}
                 getItemDataAttributes={getItemDataAttributes}
+                virtualize={shouldVirtualize}
+                highlightedIndex={highlightedIndex}
               />
             )}
           </ComboboxContent>

@@ -35,6 +35,7 @@
     "@tailwindcss/vite": "^4.1.15",
     "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.18",
     "@uiw/codemirror-theme-github": "^4.24.0",
     "@uiw/react-codemirror": "^4.24.0",
     "@vitejs/plugin-react": "^5.0.4",
