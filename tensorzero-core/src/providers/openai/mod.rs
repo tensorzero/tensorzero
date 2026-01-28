@@ -551,12 +551,11 @@ impl InferenceProvider for OpenAIProvider {
                 let request_url =
                     get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
 
-                // TODO - support encrypted reasoning in streaming
                 let request_body = serde_json::to_value(
                     OpenAIResponsesRequest::new(
                         &self.model_name,
                         request,
-                        false,
+                        self.include_encrypted_reasoning,
                         &self.provider_tools,
                         model_name,
                         provider_name,

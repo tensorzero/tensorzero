@@ -136,6 +136,35 @@ pub async fn approve_all_tool_calls(
         .map_err(Error::from)
 }
 
+/// Interrupt an autopilot session via the Autopilot API.
+///
+/// This interrupts all durable tasks associated with the session (best effort),
+/// then interrupts the session via the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn interrupt_session(
+    autopilot_client: &AutopilotClient,
+    session_id: Uuid,
+) -> Result<(), Error> {
+    // Interrupt durable tasks first (best effort - log warning on failure)
+    if let Err(e) = autopilot_client
+        .interrupt_tasks_for_session(session_id)
+        .await
+    {
+        tracing::warn!(
+            session_id = %session_id,
+            error = %e,
+            "Failed to interrupt durable tasks for session"
+        );
+    }
+
+    // Then interrupt the session via autopilot API
+    autopilot_client
+        .interrupt_session(session_id)
+        .await
+        .map_err(Error::from)
+}
+
 // =============================================================================
 // HTTP Handlers
 // =============================================================================
@@ -235,6 +264,19 @@ pub async fn approve_all_tool_calls_handler(
     Ok(Json(response))
 }
 
+/// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/interrupt`
+///
+/// Interrupts an autopilot session via the Autopilot API.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "autopilot.interrupt_session", skip_all, fields(session_id = %session_id))]
+pub async fn interrupt_session_handler(
+    State(app_state): AppState,
+    Path(session_id): Path<Uuid>,
+) -> Result<(), Error> {
+    let client = get_autopilot_client(&app_state)?;
+    interrupt_session(&client, session_id).await
+}
+
 /// Handler for `GET /internal/autopilot/status`
 ///
 /// Returns whether autopilot is configured (i.e., whether `TENSORZERO_AUTOPILOT_API_KEY` is set).
@@ -282,7 +324,14 @@ pub async fn stream_events_handler(
         },
     );
 
-    Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))
+    // Close the stream when the server shuts down
+    // We do *not* want to wait for the stream to finish when the gateway shuts down,
+    // as it may stay open indefinitely (on either end - a browser ui ta might be holding open a connection)
+    // Clients using the endpoint should be able to auto-reconnect, so this is fine.
+    Ok(
+        Sse::new(sse_stream.take_until(app_state.shutdown_token.clone().cancelled_owned()))
+            .keep_alive(KeepAlive::new()),
+    )
 }
 
 #[cfg(test)]
@@ -293,6 +342,7 @@ mod tests {
     use crate::db::postgres::PostgresConnectionInfo;
     use crate::db::valkey::ValkeyConnectionInfo;
     use crate::http::TensorzeroHttpClient;
+    use tokio_util::sync::CancellationToken;
     use tokio_util::task::TaskTracker;
 
     fn make_test_app_state_without_autopilot() -> AppStateData {
@@ -308,6 +358,7 @@ mod tests {
             postgres_connection_info,
             ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
+            CancellationToken::new(),
         )
         .unwrap()
     }

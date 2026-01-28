@@ -6,7 +6,10 @@
 
 pub mod chat_completions;
 pub mod embeddings;
+pub mod error;
 pub mod types;
+
+pub use error::{OpenAICompatibleError, OpenAIStructuredJson};
 
 use chat_completions::chat_completions_handler;
 use embeddings::embeddings_handler;

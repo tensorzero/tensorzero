@@ -60,7 +60,6 @@ pub type DropWrapper = fn(Box<dyn FnOnce() + Send + '_>);
 /// so that it's easy for us to tell where it gets dropped.
 pub struct GatewayHandle {
     pub app_state: AppStateData,
-    pub cancel_token: CancellationToken,
     drop_wrapper: Option<DropWrapper>,
     _private: (),
 }
@@ -69,7 +68,7 @@ impl Drop for GatewayHandle {
     fn drop(&mut self) {
         let drop_wrapper = self.drop_wrapper.take();
         let mut drop_self = || {
-            self.cancel_token.cancel();
+            self.app_state.shutdown_token.cancel();
             let handle = self
                 .app_state
                 .clickhouse_connection_info
@@ -156,6 +155,7 @@ pub struct AppStateData {
     pub deployment_id: Option<String>,
     /// Token pool manager for rate limiting pre-borrowing
     pub rate_limiting_manager: Arc<RateLimitingManager>,
+    pub shutdown_token: CancellationToken,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -264,9 +264,9 @@ impl GatewayHandle {
                 autopilot_client: None,
                 deployment_id: None,
                 rate_limiting_manager,
+                shutdown_token: cancel_token,
                 _private: (),
             },
-            cancel_token,
             drop_wrapper: None,
             _private: (),
         }
@@ -341,9 +341,9 @@ impl GatewayHandle {
                 autopilot_client,
                 deployment_id,
                 rate_limiting_manager,
+                shutdown_token: cancel_token,
                 _private: (),
             },
-            cancel_token,
             drop_wrapper,
             _private: (),
         })
@@ -361,6 +361,7 @@ impl AppStateData {
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
         deferred_tasks: TaskTracker,
+        shutdown_token: CancellationToken,
     ) -> Result<Self, Error> {
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
@@ -379,6 +380,7 @@ impl AppStateData {
             autopilot_client: None,
             deployment_id: None,
             rate_limiting_manager,
+            shutdown_token,
             _private: (),
         })
     }
@@ -610,6 +612,41 @@ async fn setup_autopilot_client(
 /// and instead simply assume that the request body is a JSON object.
 pub struct StructuredJson<T>(pub T);
 
+/// Shared JSON deserialization logic used by both `StructuredJson` and `OpenAIStructuredJson`.
+///
+/// Parses the request body as JSON and deserializes it into the target type `T`,
+/// using `serde_path_to_error` for detailed error messages.
+pub(crate) async fn deserialize_json_request<S, T>(req: Request, state: &S) -> Result<T, Error>
+where
+    S: Send + Sync,
+    T: DeserializeOwned,
+{
+    // Retrieve the request body as Bytes before deserializing it
+    let bytes = bytes::Bytes::from_request(req, state).await.map_err(|e| {
+        Error::new(ErrorDetails::JsonRequest {
+            message: format!("{} ({})", e, e.status()),
+        })
+    })?;
+
+    // Convert the entire body into `serde_json::Value`
+    let value = Json::<serde_json::Value>::from_bytes(&bytes)
+        .map_err(|e| {
+            Error::new(ErrorDetails::JsonRequest {
+                message: format!("{} ({})", e, e.status()),
+            })
+        })?
+        .0;
+
+    // Now use `serde_path_to_error::deserialize` to attempt deserialization into `T`
+    let deserialized: T = serde_path_to_error::deserialize(&value).map_err(|e| {
+        Error::new(ErrorDetails::JsonRequest {
+            message: e.to_string(),
+        })
+    })?;
+
+    Ok(deserialized)
+}
+
 impl<S, T> FromRequest<S> for StructuredJson<T>
 where
     Json<T>: FromRequest<S, Rejection = JsonRejection>,
@@ -620,30 +657,9 @@ where
 
     #[instrument(skip_all, level = "trace", name = "StructuredJson::from_request")]
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        // Retrieve the request body as Bytes before deserializing it
-        let bytes = bytes::Bytes::from_request(req, state).await.map_err(|e| {
-            Error::new(ErrorDetails::JsonRequest {
-                message: format!("{} ({})", e, e.status()),
-            })
-        })?;
-
-        // Convert the entire body into `serde_json::Value`
-        let value = Json::<serde_json::Value>::from_bytes(&bytes)
-            .map_err(|e| {
-                Error::new(ErrorDetails::JsonRequest {
-                    message: format!("{} ({})", e, e.status()),
-                })
-            })?
-            .0;
-
-        // Now use `serde_path_to_error::deserialize` to attempt deserialization into `T`
-        let deserialized: T = serde_path_to_error::deserialize(&value).map_err(|e| {
-            Error::new(ErrorDetails::JsonRequest {
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(StructuredJson(deserialized))
+        deserialize_json_request(req, state)
+            .await
+            .map(StructuredJson)
     }
 }
 

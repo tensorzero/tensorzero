@@ -10,6 +10,7 @@ mod best_of_n;
 mod built_in;
 mod cache;
 mod clickhouse;
+#[macro_use]
 mod common;
 mod config;
 mod datasets;

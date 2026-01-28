@@ -37,6 +37,18 @@ export class AutopilotClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Interrupts an autopilot session.
+   */
+  async interruptAutopilotSession(sessionId: string): Promise<void> {
+    const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/actions/interrupt`;
+    const response = await this.fetch(endpoint, { method: "POST" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+  }
+
+  /**
    * Lists events for an autopilot session with optional pagination.
    */
   async listAutopilotEvents(

@@ -26,6 +26,7 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_single_chat_datapoint_without_dataset_name() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-get-dp-single-chat-{}", Uuid::now_v7());
@@ -111,6 +112,7 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_single_chat_datapoint() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-get-dp-single-chat-{}", Uuid::now_v7());
@@ -198,6 +200,7 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_single_json_datapoint() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-get-dp-single-json-{}", Uuid::now_v7());
@@ -281,6 +284,7 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_multiple_mixed_datapoints() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-get-dp-multiple-{}", Uuid::now_v7());
@@ -425,6 +429,7 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_with_non_existent_ids() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-get-dp-non-existent-{}", Uuid::now_v7());
@@ -496,6 +501,7 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_returns_stale_datapoints() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-get-dp-stale-{}", Uuid::now_v7());
@@ -572,6 +578,7 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_empty_ids_list() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-get-dp-empty-ids-list-{}", Uuid::now_v7());
@@ -634,6 +641,7 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_invalid_uuid() {
+        skip_for_postgres!();
         // Create a valid dataset name so we have a valid dataset name.
         let dataset_name = format!("test-get-dp-invalid-uuid-{}", Uuid::now_v7());
         let http_client = Client::new();
@@ -701,6 +709,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_basic_pagination() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-pagination-{}", Uuid::now_v7());
@@ -815,6 +824,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_filter_by_function_name() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-function-{}", Uuid::now_v7());
@@ -928,6 +938,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_filter_by_tags() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-tags-{}", Uuid::now_v7());
@@ -1060,6 +1071,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_filter_by_time() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-time-{}", Uuid::now_v7());
@@ -1150,6 +1162,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_complex_filters() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-complex-{}", Uuid::now_v7());
@@ -1341,6 +1354,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_empty_dataset() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let dataset_name = format!("test-list-dp-empty-{}", Uuid::now_v7());
 
@@ -1362,6 +1376,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_does_not_return_stale() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-no-stale-{}", Uuid::now_v7());
@@ -1444,6 +1459,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_mixed_chat_and_json() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-mixed-{}", Uuid::now_v7());
@@ -1551,6 +1567,7 @@ mod list_datapoints_tests {
 
     #[tokio::test]
     async fn test_list_datapoints_with_large_limit() {
+        skip_for_postgres!();
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-large-page-{}", Uuid::now_v7());

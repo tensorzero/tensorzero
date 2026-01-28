@@ -24,12 +24,12 @@ JSONL_FILES=(
 
 # Upload each file
 for file in "${JSONL_FILES[@]}"; do
-    if [ -f "$file" ]; then
+    if [ -f "small-fixtures/$file" ]; then
         echo "Uploading $file..."
         aws s3 --endpoint-url https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/ \
-            cp "$file" "s3://tensorzero-fixtures/${file}"
+            cp "small-fixtures/$file" "s3://tensorzero-fixtures/${file}"
     else
-        echo "Warning: $file not found, skipping"
+        echo "Warning: small-fixtures/$file not found, skipping"
     fi
 done
 

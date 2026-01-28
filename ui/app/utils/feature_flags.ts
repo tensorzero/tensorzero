@@ -7,6 +7,9 @@ interface FeatureFlags {
   /// from regen-fixtures without trampling existing entries, and then to use the cached
   /// entries from the normal ui e2e tests
   FORCE_CACHE_ON: boolean;
+  /// When set, enables the interrupt session button in autopilot sessions
+  /// This allows users to interrupt a running autopilot session
+  FF_INTERRUPT_SESSION: boolean;
 }
 
 /**
@@ -15,12 +18,19 @@ interface FeatureFlags {
  * @returns FeatureFlags
  */
 export function getFeatureFlags(): FeatureFlags {
-  const envValue = canUseDOM
+  const forceCacheEnv = canUseDOM
     ? import.meta.env.VITE_TENSORZERO_FORCE_CACHE_ON
     : process.env.VITE_TENSORZERO_FORCE_CACHE_ON;
-  const FORCE_CACHE_ON = envValue === "1";
+  const FORCE_CACHE_ON = forceCacheEnv === "1";
+
+  const interruptSessionEnv = canUseDOM
+    ? import.meta.env.VITE_TENSORZERO_FF_INTERRUPT_SESSION
+    : process.env.VITE_TENSORZERO_FF_INTERRUPT_SESSION;
+  const FF_INTERRUPT_SESSION = interruptSessionEnv === "1";
+
   return {
     FORCE_CACHE_ON,
+    FF_INTERRUPT_SESSION,
   };
 }
 

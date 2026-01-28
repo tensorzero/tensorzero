@@ -4,12 +4,27 @@ Most of our fixtures are stored in this directory, with the exception of some la
 
 ## Pulling fixtures from R2
 
-Our large fixtures are stored in Cloudflare R2:
+Our fixtures are stored in Cloudflare R2. There are two ways to download them:
+
+### Local development (no credentials needed)
+
+Set `TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS=1` when running docker compose:
+
+```bash
+TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS=1 docker compose -f docker-compose.yml up
+```
+
+This downloads fixtures via public HTTP URLs. You can also run the HTTP scripts directly:
+
+- **Parquet files** (large tables): `uv run ./download-large-fixtures-http.py`
+- **JSONL files** (small tables): `uv run ./download-small-fixtures-http.py`
+
+### CI / With R2 credentials (faster)
+
+Set `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` environment variables. This uses `aws s3 sync` for faster, more reliable downloads:
 
 - **Parquet files** (large tables): `uv run ./download-large-fixtures.py`
 - **JSONL files** (small tables): `uv run ./download-small-fixtures.py`
-
-Downloads use public URLs by default. In CI, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` env vars enable authenticated access.
 
 ## Writing new fixtures
 
@@ -17,7 +32,7 @@ Large fixtures should _not_ be committed to the repository. Instead:
 
 **For parquet files:**
 
-1. Add the new fixtures to `./s3-fixtures`
+1. Add the new fixtures to `./large-fixtures`
 2. Run `./upload-large-fixtures.sh`
 3. List the new fixture files in `download-large-fixtures.py`
 

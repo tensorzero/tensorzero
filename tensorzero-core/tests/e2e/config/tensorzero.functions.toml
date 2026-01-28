@@ -155,6 +155,21 @@ system_template = "../../../fixtures/config/functions/json_success/prompt/system
 max_tokens = 100
 json_mode = "strict"
 
+[functions.judge_answer]
+type = "json"
+system_schema = "../../../../ui/fixtures/config/functions/judge_answer/system_schema.json"
+user_schema = "../../../../ui/fixtures/config/functions/judge_answer/user_schema.json"
+output_schema = "../../../../ui/fixtures/config/functions/judge_answer/output_schema.json"
+
+[functions.judge_answer.variants."gpt-4.1-mini"]
+type = "chat_completion"
+model = "openai::gpt-4.1-mini"
+system_template = "../../../../ui/fixtures/config/functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
+user_template = "../../../../ui/fixtures/config/functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }
+json_mode = "strict"
+
+
 [functions.variant_failover]
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"

@@ -11,7 +11,7 @@ use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
 use tensorzero::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    ListDatapointsRequest, UpdateChatDatapointRequest, UpdateDatapointRequest,
+    ListDatapointsRequest, ListDatasetsRequest, UpdateChatDatapointRequest, UpdateDatapointRequest,
 };
 use uuid::Uuid;
 
@@ -19,11 +19,13 @@ use autopilot_tools::tools::{
     CreateDatapointsFromInferencesTool, CreateDatapointsFromInferencesToolParams,
     CreateDatapointsTool, CreateDatapointsToolParams, DeleteDatapointsTool,
     DeleteDatapointsToolParams, GetDatapointsTool, GetDatapointsToolParams, ListDatapointsTool,
-    ListDatapointsToolParams, UpdateDatapointsTool, UpdateDatapointsToolParams,
+    ListDatapointsToolParams, ListDatasetsTool, ListDatasetsToolParams, UpdateDatapointsTool,
+    UpdateDatapointsToolParams,
 };
 use common::{
     MockTensorZeroClient, create_mock_chat_datapoint, create_mock_create_datapoints_response,
-    create_mock_delete_datapoints_response, create_mock_get_datapoints_response,
+    create_mock_dataset_metadata, create_mock_delete_datapoints_response,
+    create_mock_get_datapoints_response, create_mock_list_datasets_response,
     create_mock_update_datapoints_response, create_test_input,
 };
 
@@ -757,6 +759,215 @@ async fn test_create_datapoints_from_inferences_tool_error(pool: PgPool) {
         .returning(|_, _| Err(TensorZeroClientError::AutopilotUnavailable));
 
     let tool = CreateDatapointsFromInferencesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await;
+
+    assert!(result.is_err(), "Should return error when client fails");
+}
+
+// ===== ListDatasetsTool Tests =====
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_datasets_tool_basic(pool: PgPool) {
+    let dataset1 = create_mock_dataset_metadata("dataset_1", 100, "2024-01-01T00:00:00Z");
+    let dataset2 = create_mock_dataset_metadata("dataset_2", 50, "2024-01-02T00:00:00Z");
+    let mock_response = create_mock_list_datasets_response(vec![dataset1, dataset2]);
+
+    let llm_params = ListDatasetsToolParams {
+        request: ListDatasetsRequest::default(),
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_datasets()
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListDatasetsTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListDatasetsTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+    let datasets = result.get("datasets").expect("Should have datasets field");
+    assert!(datasets.is_array(), "datasets should be an array");
+    assert_eq!(
+        datasets.as_array().unwrap().len(),
+        2,
+        "Should have 2 datasets"
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_datasets_tool_with_function_filter(pool: PgPool) {
+    let dataset = create_mock_dataset_metadata("filtered_dataset", 25, "2024-01-03T00:00:00Z");
+    let mock_response = create_mock_list_datasets_response(vec![dataset]);
+
+    let llm_params = ListDatasetsToolParams {
+        request: ListDatasetsRequest {
+            function_name: Some("specific_function".to_string()),
+            limit: None,
+            offset: None,
+        },
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_datasets()
+        .withf(|request| request.function_name == Some("specific_function".to_string()))
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListDatasetsTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListDatasetsTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_datasets_tool_with_pagination(pool: PgPool) {
+    let mock_response = create_mock_list_datasets_response(vec![]);
+
+    let llm_params = ListDatasetsToolParams {
+        request: ListDatasetsRequest {
+            function_name: None,
+            limit: Some(10),
+            offset: Some(20),
+        },
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_datasets()
+        .withf(|request| request.limit == Some(10) && request.offset == Some(20))
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListDatasetsTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListDatasetsTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_datasets_tool_empty_response(pool: PgPool) {
+    let mock_response = create_mock_list_datasets_response(vec![]);
+
+    let llm_params = ListDatasetsToolParams {
+        request: ListDatasetsRequest::default(),
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_datasets()
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListDatasetsTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListDatasetsTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+    let datasets = result.get("datasets").expect("Should have datasets field");
+    assert!(
+        datasets.as_array().unwrap().is_empty(),
+        "Datasets should be empty"
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_datasets_tool_error(pool: PgPool) {
+    let llm_params = ListDatasetsToolParams {
+        request: ListDatasetsRequest::default(),
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_datasets()
+        .returning(|_| Err(TensorZeroClientError::AutopilotUnavailable));
+
+    let tool = ListDatasetsTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let ctx = SimpleToolContext::new(&pool, &t0_client);
 

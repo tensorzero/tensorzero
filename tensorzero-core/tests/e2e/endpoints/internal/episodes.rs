@@ -10,6 +10,7 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_query_episode_table_bounds() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/episodes/bounds");
 
@@ -33,6 +34,7 @@ async fn test_query_episode_table_bounds() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_query_episode_table() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/episodes?limit=10");
 
@@ -67,6 +69,7 @@ async fn test_query_episode_table() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_query_episode_table_with_pagination() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // First, get the bounds to know what episodes exist
@@ -110,6 +113,7 @@ async fn test_query_episode_table_with_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_query_episode_table_limit_zero() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/episodes?limit=0");
 
@@ -129,6 +133,7 @@ async fn test_query_episode_table_limit_zero() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_query_episode_table_rejects_limit_over_100() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/episodes?limit=101");
 
@@ -142,6 +147,7 @@ async fn test_query_episode_table_rejects_limit_over_100() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_episode_inference_count() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // First get an episode that exists
@@ -169,6 +175,7 @@ async fn test_get_episode_inference_count() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_episode_inference_count_nonexistent_episode() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use a UUID that likely doesn't exist

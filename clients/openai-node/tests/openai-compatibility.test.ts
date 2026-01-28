@@ -1305,7 +1305,7 @@ it("should reject string input for function with input schema", async () => {
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
     })
-  ).rejects.toThrow(/400 "JSON Schema validation failed/);
+  ).rejects.toThrow(/400 JSON Schema validation failed/);
 });
 
 it("should handle multi-turn parallel tool calls", async () => {

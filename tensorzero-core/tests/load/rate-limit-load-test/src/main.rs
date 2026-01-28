@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
         rlt::cli::Collector::Tui => {
             tracing_subscriber::registry()
                 .with(EnvFilter::from_default_env())
-                .with(rlt::tui_tracing_subscriber_layer())
+                .with(rlt::TuiTracingSubscriberLayer)
                 .init();
         }
         rlt::cli::Collector::Silent => {

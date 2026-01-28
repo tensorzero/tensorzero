@@ -397,6 +397,43 @@ impl AutopilotClient {
         Ok(body)
     }
 
+    /// Interrupts a session.
+    pub async fn interrupt_session(&self, session_id: Uuid) -> Result<(), AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/actions/interrupt"))?;
+        let response = self
+            .http_client
+            .post(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        self.check_response(response).await?;
+        Ok(())
+    }
+
+    /// Interrupt all durable tasks associated with a session ID.
+    ///
+    /// This interrupts any running durable tasks (and their recursive children)
+    /// that were spawned for the given session.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of tasks that were interrupted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the interruption fails.
+    pub async fn interrupt_tasks_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<u64, AutopilotError> {
+        self.spawn_client
+            .interrupt_tasks_by_session_id(session_id)
+            .await
+            .map_err(AutopilotError::from)
+    }
+
     // -------------------------------------------------------------------------
     // Event Endpoints
     // -------------------------------------------------------------------------

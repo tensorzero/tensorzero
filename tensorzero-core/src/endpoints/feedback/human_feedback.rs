@@ -1,5 +1,5 @@
 use super::throttled_get_function_info;
-use crate::db::inferences::FunctionInfo;
+use crate::db::inferences::{FunctionInfo, InferenceQueries};
 use crate::{
     config::MetricConfigLevel,
     db::clickhouse::{ClickHouseConnectionInfo, TableName},
@@ -40,7 +40,14 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
                 .await?
         }
     };
-    let output = get_output(clickhouse, &function_info, target_id).await?;
+    let output = clickhouse
+        .get_inference_output(&function_info, target_id)
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InferenceNotFound {
+                inference_id: target_id,
+            })
+        })?;
     let row = StaticEvaluationHumanFeedback {
         output,
         feedback_id,
@@ -99,41 +106,6 @@ fn get_static_evaluation_human_feedback_info(
 struct InferenceEvaluationInfo {
     datapoint_id: Uuid,
     evaluator_inference_id: Uuid,
-}
-
-async fn get_output(
-    clickhouse: &ClickHouseConnectionInfo,
-    function_info: &FunctionInfo,
-    inference_id: Uuid,
-) -> Result<String, Error> {
-    let FunctionInfo {
-        function_type,
-        episode_id,
-        function_name,
-        variant_name,
-    } = function_info;
-    let table_name = function_type.inference_table_name();
-    let output: OutputResponse = clickhouse
-        .run_query_synchronous_no_params_de(format!(
-            r"
-    SELECT output FROM {table_name}
-    WHERE
-        id = '{inference_id}' AND
-        episode_id = '{episode_id}' AND
-        function_name = '{function_name}' AND
-        variant_name = '{variant_name}'
-    LIMIT 1
-    FORMAT JSONEachRow
-    SETTINGS max_threads=1"
-        ))
-        .await?;
-    Ok(output.output)
-}
-
-/// This is so we're absolutely sure things are escaped properly.
-#[derive(Debug, Deserialize)]
-struct OutputResponse {
-    output: String,
 }
 
 /// Represents a row in the StaticEvaluationHumanFeedback database table.

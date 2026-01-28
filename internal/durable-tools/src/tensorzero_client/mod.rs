@@ -15,9 +15,9 @@ pub use tensorzero::{
     Client, ClientBuilder, ClientBuilderError, ClientBuilderMode, ClientInferenceParams,
     CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
     DeleteDatapointsResponse, FeedbackParams, FeedbackResponse, GetConfigResponse,
-    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, PostgresConfig,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
-    WriteConfigResponse,
+    GetDatapointsResponse, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
+    ListDatasetsResponse, PostgresConfig, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
 pub use tensorzero_core::cache::CacheEnabledMode;
@@ -193,6 +193,12 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
     ) -> Result<CreateDatapointsResponse, TensorZeroClientError>;
+
+    /// List all datasets with optional filtering and pagination.
+    async fn list_datasets(
+        &self,
+        request: ListDatasetsRequest,
+    ) -> Result<ListDatasetsResponse, TensorZeroClientError>;
 
     /// List datapoints in a dataset with filtering and pagination.
     async fn list_datapoints(

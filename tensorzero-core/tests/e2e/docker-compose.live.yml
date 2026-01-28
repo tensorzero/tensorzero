@@ -30,8 +30,6 @@ services:
         "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
       ]
     healthcheck:
-      test:
-        ["CMD", "wget", "--spider", "--tries=1", "http://localhost:3004/health"]
       start_period: 10s
       start_interval: 1s
       timeout: 1s

@@ -38,6 +38,7 @@ async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_ids_success() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, config) = get_test_setup().await;
 
@@ -78,6 +79,7 @@ async fn test_create_from_inference_ids_success() {
 
 #[tokio::test]
 async fn test_create_from_inference_query_success() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Create datapoints using a query (no filters, just function name)
@@ -110,6 +112,7 @@ async fn test_create_from_inference_query_success() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_same_inference_multiple_times_succeeds() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, config) = get_test_setup().await;
 
@@ -163,6 +166,7 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_missing_ids_error() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, config) = get_test_setup().await;
 
@@ -209,6 +213,7 @@ async fn test_create_from_inference_missing_ids_error() {
 
 #[tokio::test]
 async fn test_create_from_inference_with_filters() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Create datapoints using a tag filter that exists in the test data

@@ -221,7 +221,7 @@ async fn test_openai_compatible_raw_usage_streaming_error_without_include_usage(
     );
 
     let error_body: Value = response.json().await.unwrap();
-    let error_message = error_body["error"].as_str().unwrap_or("");
+    let error_message = error_body["error"]["message"].as_str().unwrap_or("");
     assert!(
         error_message.contains("include_usage"),
         "Error message should mention include_usage requirement. Got: {error_message}"

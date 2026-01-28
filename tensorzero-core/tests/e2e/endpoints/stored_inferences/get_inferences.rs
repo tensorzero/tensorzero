@@ -39,6 +39,7 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 /// This tests both list_inferences and get_inferences endpoints.
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_output_source_defaults_to_inference() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // Test list_inferences without output_source - should succeed and default to "inference"
@@ -138,6 +139,7 @@ async fn get_inferences_by_ids(
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_simple_query_json_function() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
@@ -178,6 +180,7 @@ pub async fn test_list_simple_query_json_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_simple_query_chat_function() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "write_haiku",
         "output_source": "demonstration",
@@ -219,6 +222,7 @@ pub async fn test_list_simple_query_chat_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_query_with_float_filter() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
@@ -253,6 +257,7 @@ pub async fn test_list_query_with_float_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_demonstration_output_source() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "demonstration",
@@ -275,6 +280,7 @@ pub async fn test_list_demonstration_output_source() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_boolean_metric_filter() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
@@ -302,6 +308,7 @@ pub async fn test_list_boolean_metric_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_and_filter_multiple_float_metrics() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
@@ -340,6 +347,7 @@ pub async fn test_list_and_filter_multiple_float_metrics() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_or_filter_mixed_metrics() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
@@ -384,6 +392,7 @@ async fn test_list_or_filter_mixed_metrics() {
 /// NOT (exact_match = true OR exact_match = false) should return rows WITHOUT the metric.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_not_filter() {
+    skip_for_postgres!();
     // Get total count
     let request_total = json!({
         "function_name": "extract_entities",
@@ -462,6 +471,7 @@ async fn test_list_not_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_simple_time_filter() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
@@ -508,6 +518,7 @@ async fn test_list_simple_time_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_simple_tag_filter() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
@@ -535,6 +546,7 @@ async fn test_list_simple_tag_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_combined_time_and_tag_filter() {
+    skip_for_postgres!();
     let request = json!({
         "function_name": "write_haiku",
         "output_source": "inference",
@@ -574,6 +586,7 @@ async fn test_list_combined_time_and_tag_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_json_only() {
+    skip_for_postgres!();
     // First, list some JSON inference IDs
     let list_request = json!({
         "function_name": "extract_entities",
@@ -609,6 +622,7 @@ pub async fn test_get_by_ids_json_only() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_chat_only() {
+    skip_for_postgres!();
     // First, list some Chat inference IDs
     let list_request = json!({
         "function_name": "write_haiku",
@@ -644,6 +658,7 @@ pub async fn test_get_by_ids_chat_only() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_unknown_id_returns_empty() {
+    skip_for_postgres!();
     // Get by an unknown ID
     let unknown_ids = vec![Uuid::now_v7()];
     let res = get_inferences_by_ids(unknown_ids, InferenceOutputSource::Inference)
@@ -655,6 +670,7 @@ pub async fn test_get_by_ids_unknown_id_returns_empty() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_mixed_types() {
+    skip_for_postgres!();
     // Get some JSON inference IDs
     let json_request = json!({
         "function_name": "extract_entities",
@@ -714,6 +730,7 @@ pub async fn test_get_by_ids_mixed_types() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_empty_list() {
+    skip_for_postgres!();
     // Get by empty list of IDs should return empty result
     let res = get_inferences_by_ids(vec![], InferenceOutputSource::Inference)
         .await
@@ -723,6 +740,7 @@ pub async fn test_get_by_ids_empty_list() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_duplicate_ids() {
+    skip_for_postgres!();
     // First, get one inference ID
     let list_request = json!({
         "function_name": "extract_entities",
@@ -753,23 +771,24 @@ pub async fn test_get_by_ids_duplicate_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_simple_search() {
+    skip_for_postgres!();
     let request = json!({
-        "function_name": "write_haiku",
+        "function_name": "answer_question",
         "output_source": "inference",
         "limit": 10,
         // We arbitrarily choose a query term in the data fixture
-        "search_query_experimental": "formamide"
+        "search_query_experimental": "canister"
     });
 
     let res = list_inferences(request).await.unwrap();
     assert!(
         !res.is_empty(),
-        "Expected at least one result for 'formamide' query"
+        "Expected at least one result for 'canister' query"
     );
 
     for inference in &res {
         assert_eq!(
-            inference["function_name"], "write_haiku",
+            inference["function_name"], "answer_question",
             "Function name filter should be applied"
         );
         let input_string = serde_json::to_string(&inference["input"])
@@ -779,43 +798,45 @@ async fn test_search_query_simple_search() {
             .unwrap()
             .to_lowercase();
         assert!(
-            input_string.contains("formamide") || output_string.contains("formamide"),
-            "Input or output should contain 'formamide'"
+            input_string.contains("canister") || output_string.contains("canister"),
+            "Input or output should contain 'canister'"
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_case_insensitive() {
+    skip_for_postgres!();
     let request = json!({
-        "function_name": "write_haiku",
+        "function_name": "answer_question",
         "output_source": "inference",
         "limit": 5,
-        "search_query_experimental": "FORMAMIDE"
+        "search_query_experimental": "CANISTER"
     });
 
     let res = list_inferences(request).await.unwrap();
 
-    assert!(!res.is_empty(), "Expected results for 'FORMAMIDE' query");
+    assert!(!res.is_empty(), "Expected results for 'CANISTER' query");
 
-    // There is no inference with all-caps 'FORMAMIDE', but there are ones with lowercase ones.
+    // There is no inference with all-caps 'CANISTER', but there are ones with lowercase ones.
     for inference in &res {
         let input_string = serde_json::to_string(&inference["input"]).unwrap();
         let output_string = serde_json::to_string(&inference["output"]).unwrap();
         assert!(
-            !input_string.contains("FORMAMIDE") && !output_string.contains("FORMAMIDE"),
-            "Input or output should not contain all-caps 'FORMAMIDE'"
+            !input_string.contains("CANISTER") && !output_string.contains("CANISTER"),
+            "Input or output should not contain all-caps 'CANISTER'"
         );
         assert!(
-            input_string.to_lowercase().contains("formamide")
-                || output_string.to_lowercase().contains("formamide"),
-            "Input or output should contain 'formamide' in a case-insensitive match"
+            input_string.to_lowercase().contains("canister")
+                || output_string.to_lowercase().contains("canister"),
+            "Input or output should contain 'canister' in a case-insensitive match"
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_no_results() {
+    skip_for_postgres!();
     // Search for something that definitely doesn't exist
     let request = json!({
         "function_name": "write_haiku",
@@ -830,6 +851,7 @@ async fn test_search_query_no_results() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_with_other_filters() {
+    skip_for_postgres!();
     // Test that text query works in combination with other filters
     let request = json!({
         "function_name": "write_haiku",
@@ -870,12 +892,13 @@ async fn test_search_query_with_other_filters() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_order_by_search_relevance() {
+    skip_for_postgres!();
     // Test ordering by term frequency in descending order
     let request = json!({
-        "function_name": "write_haiku",
+        "function_name": "answer_question",
         "output_source": "inference",
         "limit": 10,
-        "search_query_experimental": "formamide",
+        "search_query_experimental": "canister",
         "order_by": [
             {
                 "by": "search_relevance",
@@ -886,12 +909,12 @@ async fn test_search_query_order_by_search_relevance() {
 
     let res = list_inferences(request).await.unwrap();
 
-    assert!(!res.is_empty(), "Expected results for 'formamide' query");
+    assert!(!res.is_empty(), "Expected results for 'canister' query");
 
     // Verify that results are ordered by search relevance (currently term frequency) in descending order
     let mut prev_relevance = None;
     for inference in &res {
-        assert_eq!(inference["function_name"], "write_haiku");
+        assert_eq!(inference["function_name"], "answer_question");
         let input_string = serde_json::to_string(&inference["input"])
             .unwrap()
             .to_lowercase();
@@ -899,7 +922,7 @@ async fn test_search_query_order_by_search_relevance() {
             .unwrap()
             .to_lowercase();
         let relevance =
-            input_string.matches("formamide").count() + output_string.matches("formamide").count();
+            input_string.matches("canister").count() + output_string.matches("canister").count();
         if let Some(prev) = &prev_relevance {
             assert!(
                 relevance <= *prev,
@@ -914,6 +937,7 @@ async fn test_search_query_order_by_search_relevance() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_inferences_with_before_cursor() {
+    skip_for_postgres!();
     // First, get some inferences without cursor
     let initial_request = json!({
         "function_name": "write_haiku",
@@ -976,6 +1000,7 @@ pub async fn test_list_inferences_with_before_cursor() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_inferences_with_after_cursor() {
+    skip_for_postgres!();
     // First, get some inferences without cursor
     let initial_request = json!({
         "function_name": "write_haiku",
@@ -1034,6 +1059,7 @@ pub async fn test_list_inferences_with_after_cursor() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_inferences_cursor_pagination_prevents_offset() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // First, get an inference ID to use as cursor
@@ -1078,6 +1104,7 @@ pub async fn test_list_inferences_cursor_pagination_prevents_offset() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_inferences_cursor_mutually_exclusive() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // First, get inference IDs to use as cursors
@@ -1126,6 +1153,7 @@ pub async fn test_list_inferences_cursor_mutually_exclusive() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_inferences_cursor_with_filters() {
+    skip_for_postgres!();
     // Test that cursor pagination works with filters
     let initial_request = json!({
         "function_name": "write_haiku",
@@ -1193,6 +1221,7 @@ pub async fn test_list_inferences_cursor_with_filters() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_inferences_cursor_with_timestamp_ordering_succeeds() {
+    skip_for_postgres!();
     // First, get some inferences to use as cursor
     let initial_request = json!({
         "function_name": "write_haiku",
@@ -1248,6 +1277,7 @@ pub async fn test_list_inferences_cursor_with_timestamp_ordering_succeeds() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_list_inferences_cursor_with_metric_ordering_fails() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // First, get an inference ID to use as cursor
@@ -1292,6 +1322,7 @@ pub async fn test_list_inferences_cursor_with_metric_ordering_fails() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference with a nontrivial extra_body and inference params
@@ -1386,6 +1417,7 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_json_function_with_inference_params() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create a JSON inference with extra_body and inference params

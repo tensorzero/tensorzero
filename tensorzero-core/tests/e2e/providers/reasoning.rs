@@ -19,7 +19,9 @@ use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHe
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage, Text};
 use uuid::Uuid;
 
-pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
+    provider: E2ETestProvider,
+) {
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -85,7 +87,9 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
             "thought" => {
                 found_thought = true;
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 
@@ -156,7 +160,9 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
             "thought" => {
                 found_thought = true;
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 
@@ -270,7 +276,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     assert_eq!(id, inference_id);
 }
 
-pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
+pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
     use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -453,7 +459,9 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
                         .push_str(thought_text);
                 }
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 
@@ -581,7 +589,9 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     assert_eq!(id, inference_id);
 }
 
-pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
+pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provider(
+    provider: E2ETestProvider,
+) {
     // Direct Anthropic uses output_format for json_mode=strict
     // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
 
@@ -801,7 +811,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     );
 }
 
-pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
+pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
@@ -1079,12 +1089,16 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         StoredContentBlock::Thought(thought) => thought,
         _ => panic!("Expected a thought block"),
     };
-    assert!(
-        thought
-            .text
-            .as_ref()
-            .unwrap()
-            .to_lowercase()
-            .contains("tokyo")
-    );
+    // If text is present, check it contains "tokyo"; otherwise ensure signature exists
+    if let Some(text) = &thought.text {
+        assert!(
+            text.to_lowercase().contains("tokyo"),
+            "Expected thought text to contain 'tokyo', got: {text}"
+        );
+    } else {
+        assert!(
+            thought.signature.is_some(),
+            "Expected either thought text or signature to be present"
+        );
+    }
 }

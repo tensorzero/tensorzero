@@ -69,6 +69,7 @@ async fn call_action(
 /// Test that the action endpoint can execute inference using a historical config
 /// that has a function not present in the running gateway config.
 async fn test_action_with_historical_config_impl(client: Client) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let id = Uuid::now_v7();
 
@@ -152,6 +153,7 @@ async fn test_action_with_historical_config_impl_http_gateway() {
 
 /// Test that the action endpoint returns an error for a non-existent snapshot hash.
 async fn test_action_nonexistent_snapshot_hash_impl(client: Client) {
+    skip_for_postgres!();
     // Use a properly formatted hash that simply doesn't exist in the database
     let nonexistent_hash = SnapshotHash::new_test();
 
@@ -200,6 +202,7 @@ async fn test_action_nonexistent_snapshot_hash_impl_http_gateway() {
 
 /// Test that the action endpoint rejects streaming requests.
 async fn test_action_streaming_rejected_impl(client: Client) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let id = Uuid::now_v7();
 

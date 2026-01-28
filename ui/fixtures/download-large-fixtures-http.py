@@ -4,8 +4,10 @@
 #   "parquet-tools",
 # ]
 # ///
-# For local development without R2 credentials, use download-large-fixtures-http.py instead.
+# HTTP-only version for local development without R2 credentials.
+# For CI with R2 credentials, use download-large-fixtures.py instead.
 
+import concurrent.futures
 import hashlib
 import os
 import subprocess
@@ -38,12 +40,11 @@ FIXTURES = [
     "large_json_demonstration_feedback.parquet",
 ]
 R2_PUBLIC_BUCKET_URL = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
-R2_S3_ENDPOINT_URL = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/"
 LARGE_FIXTURES_DIR = Path("./large-fixtures")
 
 
 # =============================================================================
-# Shared utilities
+# Utilities
 # =============================================================================
 
 
@@ -96,91 +97,66 @@ def get_remote_etag(filename, retries: int = 3):
     raise Exception(f"Failed to fetch ETag for {filename} after {retries} attempts") from last_error
 
 
-def verify_etags():
-    """Verify ETags of all downloaded fixtures match remote."""
-    mismatches = []
-    for fixture in FIXTURES:
-        local_file = LARGE_FIXTURES_DIR / fixture
-        if not local_file.exists():
-            raise Exception(f"Fixture {fixture} not found after sync")
-
-        local_etag = calculate_etag(local_file)
-        remote_etag = get_remote_etag(fixture)
-
-        if local_etag != remote_etag:
-            mismatches.append(f"{fixture}: local={local_etag}, remote={remote_etag}")
-        else:
-            print(f"ETag OK: {fixture}", flush=True)
-
-    if mismatches:
-        raise Exception("ETag mismatches after sync:\n" + "\n".join(mismatches))
-
-
 # =============================================================================
-# Authenticated path: S3 sync (used in CI with R2 credentials)
+# HTTP download
 # =============================================================================
 
 
-def sync_fixtures_from_r2(retries: int = 3) -> None:
-    """Sync fixtures from R2 using aws s3 sync with retry logic."""
-    cmd = [
-        "aws",
-        "s3",
-        "--region",
-        "auto",
-        "--endpoint-url",
-        R2_S3_ENDPOINT_URL,
-        "--no-progress",
-        "--cli-connect-timeout",
-        "30",
-        "--cli-read-timeout",
-        "180",
-        "sync",
-        "s3://tensorzero-fixtures/",
-        str(LARGE_FIXTURES_DIR),
-        # Only download the files in `FIXTURES`
-        "--exclude",
-        "*",
-        *[arg for f in FIXTURES for arg in ("--include", f)],
-    ]
+def download_file_http(filename, remote_etag):
+    """Download a single file from R2 via public HTTP URL."""
+    RETRIES = 3
+    for i in range(RETRIES):
+        try:
+            url = f"{R2_PUBLIC_BUCKET_URL}/{filename}"
+            response = requests.get(url, stream=True, timeout=300)
+            response.raise_for_status()
 
-    env = {
-        "PATH": os.environ.get("PATH", ""),
-        "AWS_ACCESS_KEY_ID": os.environ["R2_ACCESS_KEY_ID"],
-        "AWS_SECRET_ACCESS_KEY": os.environ["R2_SECRET_ACCESS_KEY"],
-        "AWS_MAX_ATTEMPTS": "15",
-        "AWS_RETRY_MODE": "adaptive",
-    }
+            local_file = LARGE_FIXTURES_DIR / filename
 
-    last_error = None
-    for attempt in range(retries):
-        print(f"Running aws s3 sync (attempt {attempt + 1} of {retries})...", flush=True)
-        result = subprocess.run(cmd, env=env)
+            with open(local_file, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-        if result.returncode == 0:
-            print("Sync completed successfully. Verifying ETags...", flush=True)
-            try:
-                verify_etags()
-                return
-            except Exception as exc:
-                last_error = exc
-                print(
-                    f"ETag verification failed (attempt {attempt + 1} of {retries}): {exc}",
-                    flush=True,
-                )
-        else:
-            last_error = Exception(f"aws s3 sync failed with exit code {result.returncode}")
+            local_etag = calculate_etag(local_file)
+            if local_etag != remote_etag:
+                raise Exception(f"ETag mismatch after downloading: {local_etag} != {remote_etag}")
+            return
+        except Exception as e:
             print(
-                f"aws s3 sync failed with exit code {result.returncode} (attempt {attempt + 1} of {retries})",
+                f"Error downloading `{filename}` (attempt {i + 1} of {RETRIES}): {e}",
                 flush=True,
             )
+            time.sleep(1)
+    raise Exception(f"Failed to download `{filename}` after {RETRIES} attempts")
 
-        if attempt < retries - 1:
-            sleep_time = 3**attempt  # Exponential backoff: 1, 3, 9 seconds
-            print(f"Retrying in {sleep_time} seconds...", flush=True)
-            time.sleep(sleep_time)
 
-    raise Exception(f"Fixture sync failed after {retries} attempts") from last_error
+def download_fixtures_http():
+    """Download all fixtures via public HTTP."""
+
+    def process_fixture(fixture):
+        local_file = LARGE_FIXTURES_DIR / fixture
+        remote_etag = get_remote_etag(fixture)
+
+        if not local_file.exists():
+            print(f"Downloading {fixture} (file doesn't exist locally)", flush=True)
+            download_file_http(fixture, remote_etag)
+            return
+
+        local_etag = calculate_etag(local_file)
+
+        if local_etag != remote_etag:
+            print(f"Downloading {fixture} (ETag mismatch)", flush=True)
+            print(f"Local ETag: {local_etag}", flush=True)
+            print(f"Remote ETag: {remote_etag}", flush=True)
+            download_file_http(fixture, remote_etag)
+        else:
+            print(f"Skipping {fixture} (up to date)", flush=True)
+
+    # Use ThreadPoolExecutor to download files in parallel
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Loop over the results to propagate exceptions
+        for result in executor.map(process_fixture, FIXTURES):
+            assert result is None
 
 
 # =============================================================================
@@ -190,15 +166,8 @@ def sync_fixtures_from_r2(retries: int = 3) -> None:
 
 def main():
     LARGE_FIXTURES_DIR.mkdir(exist_ok=True)
-
-    if not os.environ.get("R2_ACCESS_KEY_ID") or not os.environ.get("R2_SECRET_ACCESS_KEY"):
-        raise Exception(
-            "R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must be set. "
-            "For local development without R2 credentials, use download-large-fixtures-http.py instead."
-        )
-
-    print("R2 credentials found, downloading fixtures using `aws s3 sync`", flush=True)
-    sync_fixtures_from_r2()
+    print("Downloading fixtures via public HTTP...", flush=True)
+    download_fixtures_http()
 
     for fixture in FIXTURES:
         print(f"Fixture {fixture}:", flush=True)

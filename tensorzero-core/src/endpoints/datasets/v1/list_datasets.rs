@@ -1,20 +1,13 @@
 use axum::Json;
 use axum::extract::{Query, State};
-use serde::Deserialize;
 use tracing::instrument;
 
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::datasets::{DatasetQueries, GetDatasetMetadataParams};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
-use super::types::{DatasetMetadata, ListDatasetsResponse};
-
-#[derive(Debug, Deserialize)]
-pub struct ListDatasetsQueryParams {
-    function_name: Option<String>,
-    limit: Option<u32>,
-    offset: Option<u32>,
-}
+use super::types::{DatasetMetadata, ListDatasetsRequest, ListDatasetsResponse};
 
 /// Handler for the GET `/internal/datasets` endpoint.
 /// Returns metadata for all datasets with optional filtering and pagination.
@@ -22,17 +15,25 @@ pub struct ListDatasetsQueryParams {
 #[instrument(name = "datasets.v1.list_datasets", skip(app_state, params))]
 pub async fn list_datasets_handler(
     State(app_state): AppState,
-    Query(params): Query<ListDatasetsQueryParams>,
+    Query(params): Query<ListDatasetsRequest>,
 ) -> Result<Json<ListDatasetsResponse>, Error> {
+    let response = list_datasets(&app_state.clickhouse_connection_info, params).await?;
+    Ok(Json(response))
+}
+
+/// List datasets with optional filtering and pagination.
+///
+/// This is the non-handler function for use by the embedded client.
+pub async fn list_datasets(
+    clickhouse: &ClickHouseConnectionInfo,
+    params: ListDatasetsRequest,
+) -> Result<ListDatasetsResponse, Error> {
     let db_params = GetDatasetMetadataParams {
         function_name: params.function_name,
         limit: params.limit,
         offset: params.offset,
     };
-    let db_datasets = app_state
-        .clickhouse_connection_info
-        .get_dataset_metadata(&db_params)
-        .await?;
+    let db_datasets = clickhouse.get_dataset_metadata(&db_params).await?;
 
     // Convert from DB type to API type
     let datasets = db_datasets
@@ -44,5 +45,5 @@ pub async fn list_datasets_handler(
         })
         .collect();
 
-    Ok(Json(ListDatasetsResponse { datasets }))
+    Ok(ListDatasetsResponse { datasets })
 }

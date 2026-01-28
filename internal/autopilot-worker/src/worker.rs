@@ -28,6 +28,8 @@ pub struct AutopilotWorkerConfig {
     pub t0_client: Arc<dyn TensorZeroClient>,
     /// Default max attempts for a task in the worker
     pub default_max_attempts: u32,
+    /// Options for the durable worker (poll interval, claim timeout, etc.)
+    pub worker_options: WorkerOptions,
 }
 
 impl AutopilotWorkerConfig {
@@ -37,6 +39,8 @@ impl AutopilotWorkerConfig {
     ///
     /// * `pool` - Database pool for the durable task queue
     /// * `t0_client` - TensorZero client for inference and autopilot operations
+    /// * `default_max_attempts` - Default max attempts for a task
+    /// * `worker_options` - Options for the durable worker (poll interval, etc.)
     ///
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
@@ -44,6 +48,7 @@ impl AutopilotWorkerConfig {
         pool: PgPool,
         t0_client: Arc<dyn TensorZeroClient>,
         default_max_attempts: u32,
+        worker_options: WorkerOptions,
     ) -> Self {
         let mut queue_name = autopilot_client::DEFAULT_SPAWN_QUEUE_NAME.to_string();
         if cfg!(feature = "e2e_tests")
@@ -57,6 +62,7 @@ impl AutopilotWorkerConfig {
             queue_name,
             t0_client,
             default_max_attempts,
+            worker_options,
         }
     }
 }
@@ -64,6 +70,7 @@ impl AutopilotWorkerConfig {
 /// The autopilot worker that executes client tools.
 pub struct AutopilotWorker {
     executor: Arc<ToolExecutor>,
+    worker_options: WorkerOptions,
 }
 
 impl AutopilotWorker {
@@ -83,6 +90,7 @@ impl AutopilotWorker {
 
         Ok(Self {
             executor: Arc::new(executor),
+            worker_options: config.worker_options,
         })
     }
 
@@ -121,7 +129,7 @@ impl AutopilotWorker {
     /// migrations not applied, database connection issues).
     pub async fn start(&self) -> Result<Worker> {
         self.executor
-            .start_worker(WorkerOptions::default())
+            .start_worker(self.worker_options.clone())
             .await
             .map_err(Into::into)
     }

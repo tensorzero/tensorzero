@@ -14,11 +14,12 @@ use axum::{Extension, debug_handler};
 
 use crate::endpoints::inference::{InferenceOutput, Params, inference};
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{AppState, AppStateData};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use super::types::chat_completions::{OpenAICompatibleParams, OpenAICompatibleResponse};
 use super::types::streaming::prepare_serialized_openai_compatible_events;
+use super::{OpenAICompatibleError, OpenAIStructuredJson};
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -33,15 +34,15 @@ pub async fn chat_completions_handler(
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
-    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
-) -> Result<Response<Body>, Error> {
+    OpenAIStructuredJson(openai_compatible_params): OpenAIStructuredJson<OpenAICompatibleParams>,
+) -> Result<Response<Body>, OpenAICompatibleError> {
     // Validate `n` parameter
     if let Some(n) = openai_compatible_params.n
         && n != 1
     {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "TensorZero does not support `n` other than 1. Please omit this parameter or set it to 1.".to_string(),
-            }));
+            }).into());
     }
 
     if !openai_compatible_params.unknown_fields.is_empty() {
@@ -59,7 +60,7 @@ pub async fn chat_completions_handler(
                 message: format!(
                     "`tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [{unknown_field_names}]"
                 ),
-            }));
+            }).into());
         }
         tracing::warn!(
             "Ignoring unknown fields in OpenAI-compatible request: {:?}",
@@ -92,7 +93,7 @@ pub async fn chat_completions_handler(
     {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "`tensorzero::include_raw_usage` requires `stream_options.include_usage` to be true (or omitted) for streaming requests".to_string(),
-        }));
+        }).into());
     }
 
     // OpenAI default: no usage when stream_options is omitted
