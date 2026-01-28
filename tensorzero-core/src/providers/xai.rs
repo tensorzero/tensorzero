@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tensorzero_types_providers::xai::{XAIResponse as XAIResponseGeneric, XAIUsage};
 use tokio::time::Instant;
@@ -33,6 +33,9 @@ use crate::providers::helpers::{
 use crate::providers::openai::OpenAIMessagesConfig;
 use uuid::Uuid;
 
+use super::openai::responses::{
+    OpenAIResponsesRequest, OpenAIResponsesResponse, get_responses_url, stream_openai_responses,
+};
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponseChoice, StreamOptions, SystemOrDeveloper, get_chat_url,
     handle_openai_error, prepare_openai_messages, stream_openai,
@@ -52,6 +55,16 @@ const PROVIDER_NAME: &str = "xAI";
 pub const PROVIDER_TYPE: &str = "xai";
 
 type XAIResponse = XAIResponseGeneric<OpenAIResponseChoice>;
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum XAIAPIType {
+    #[default]
+    ChatCompletions,
+    Responses,
+}
 
 impl From<XAIUsage> for Usage {
     fn from(usage: XAIUsage) -> Self {
@@ -78,13 +91,15 @@ pub struct XAIProvider {
     model_name: String,
     #[serde(skip)]
     credentials: XAICredentials,
+    api_type: XAIAPIType,
 }
 
 impl XAIProvider {
-    pub fn new(model_name: String, credentials: XAICredentials) -> Self {
+    pub fn new(model_name: String, credentials: XAICredentials, api_type: XAIAPIType) -> Self {
         XAIProvider {
             model_name,
             credentials,
+            api_type,
         }
     }
 
@@ -163,7 +178,7 @@ impl InferenceProvider for XAIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -172,94 +187,197 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request).await?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing xAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-        let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self
             .credentials
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let request_builder = http_client
-            .post(request_url)
-            .bearer_auth(api_key.expose_secret());
 
-        let (res, raw_request) = inject_extra_request_data_and_send(
-            PROVIDER_TYPE,
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            request_body,
-            request_builder,
-        )
-        .await?;
+        match self.api_type {
+            XAIAPIType::ChatCompletions => {
+                let request_body =
+                    serde_json::to_value(XAIRequest::new(&self.model_name, request).await?)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Error serializing xAI request: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?;
+                let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
+                let request_builder = http_client
+                    .post(request_url)
+                    .bearer_auth(api_key.expose_secret());
 
-        if res.status().is_success() {
-            let raw_response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing text response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+                let (res, raw_request) = inject_extra_request_data_and_send(
+                    PROVIDER_TYPE,
+                    &request.extra_body,
+                    &request.extra_headers,
+                    model_provider,
+                    model_name,
+                    request_body,
+                    request_builder,
+                )
+                .await?;
 
-            let response = serde_json::from_str(&raw_response).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing JSON response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
+                if res.status().is_success() {
+                    let raw_response = res.text().await.map_err(|e| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: format!(
+                                "Error parsing text response: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            raw_request: Some(raw_request.clone()),
+                            raw_response: None,
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
 
-            let latency = Latency::NonStreaming {
-                response_time: start_time.elapsed(),
-            };
-            Ok(XAIResponseWithMetadata {
-                response,
-                raw_response,
-                latency,
-                raw_request,
-                generic_request: request,
-                model_inference_id,
+                    let response = serde_json::from_str(&raw_response).map_err(|e| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: format!(
+                                "Error parsing JSON response: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            raw_request: Some(raw_request.clone()),
+                            raw_response: Some(raw_response.clone()),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+
+                    let latency = Latency::NonStreaming {
+                        response_time: start_time.elapsed(),
+                    };
+                    Ok(XAIResponseWithMetadata {
+                        response,
+                        raw_response,
+                        latency,
+                        raw_request,
+                        generic_request: request,
+                        model_inference_id,
+                    }
+                    .try_into()?)
+                } else {
+                    let status = res.status();
+                    let response = res.text().await.map_err(|e| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: format!(
+                                "Error parsing error response: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            raw_request: Some(raw_request.clone()),
+                            raw_response: None,
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+                    Err(handle_openai_error(
+                        &raw_request,
+                        status,
+                        &response,
+                        PROVIDER_TYPE,
+                        None,
+                    ))
+                }
             }
-            .try_into()?)
-        } else {
-            let status = res.status();
 
-            let response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing error response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-            Err(handle_openai_error(
-                &raw_request,
-                status,
-                &response,
-                PROVIDER_TYPE,
-                None,
-            ))
+            XAIAPIType::Responses => {
+                let request_body = serde_json::to_value(
+                    OpenAIResponsesRequest::new(
+                        &self.model_name,
+                        request,
+                        false, // include_encrypted_reasoning
+                        &[],   // provider_tools
+                        model_name,
+                        provider_name,
+                    )
+                    .await?,
+                )
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing xAI Responses request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+
+                let request_url = get_responses_url(&XAI_DEFAULT_BASE_URL)?;
+                let request_builder = http_client
+                    .post(request_url)
+                    .bearer_auth(api_key.expose_secret());
+
+                let (res, raw_request) = inject_extra_request_data_and_send(
+                    PROVIDER_TYPE,
+                    &request.extra_body,
+                    &request.extra_headers,
+                    model_provider,
+                    model_name,
+                    request_body,
+                    request_builder,
+                )
+                .await?;
+
+                if res.status().is_success() {
+                    let raw_response = res.text().await.map_err(|e| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: format!(
+                                "Error parsing text response: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            raw_request: Some(raw_request.clone()),
+                            raw_response: None,
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+
+                    let response: OpenAIResponsesResponse = serde_json::from_str(&raw_response)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::InferenceServer {
+                                message: format!(
+                                    "Error parsing JSON response: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                                raw_request: Some(raw_request.clone()),
+                                raw_response: Some(raw_response.clone()),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            })
+                        })?;
+
+                    let latency = Latency::NonStreaming {
+                        response_time: start_time.elapsed(),
+                    };
+                    response.into_provider_response(
+                        latency,
+                        raw_request.clone(),
+                        raw_response.clone(),
+                        request,
+                        model_name,
+                        provider_name,
+                        model_inference_id,
+                    )
+                } else {
+                    let status = res.status();
+                    let response = res.text().await.map_err(|e| {
+                        Error::new(ErrorDetails::InferenceServer {
+                            message: format!(
+                                "Error parsing error response: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                            raw_request: Some(raw_request.clone()),
+                            raw_response: None,
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        })
+                    })?;
+                    Err(handle_openai_error(
+                        &raw_request,
+                        status,
+                        &response,
+                        PROVIDER_TYPE,
+                        None,
+                    ))
+                }
+            }
         }
     }
 
@@ -267,7 +385,7 @@ impl InferenceProvider for XAIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
             model_inference_id,
@@ -276,48 +394,106 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request).await?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing xAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
-
-        let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self
             .credentials
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let request_builder = http_client
-            .post(request_url)
-            .bearer_auth(api_key.expose_secret());
 
-        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
-            PROVIDER_TYPE,
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            request_body,
-            request_builder,
-        )
-        .await?;
+        match self.api_type {
+            XAIAPIType::ChatCompletions => {
+                let request_body =
+                    serde_json::to_value(XAIRequest::new(&self.model_name, request).await?)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Error serializing xAI request: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?;
 
-        let inner_stream = stream_openai(
-            PROVIDER_TYPE.to_string(),
-            model_inference_id,
-            event_source.map_err(TensorZeroEventError::EventSource),
-            start_time,
-            None,
-            &raw_request,
-        );
-        // Wrap with xAI-specific stream to add reasoning tokens to usage
-        let stream = stream_xai(inner_stream).peekable();
-        Ok((stream, raw_request))
+                let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
+                let request_builder = http_client
+                    .post(request_url)
+                    .bearer_auth(api_key.expose_secret());
+
+                let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                    PROVIDER_TYPE,
+                    &request.extra_body,
+                    &request.extra_headers,
+                    model_provider,
+                    model_name,
+                    request_body,
+                    request_builder,
+                )
+                .await?;
+
+                let inner_stream = stream_openai(
+                    PROVIDER_TYPE.to_string(),
+                    model_inference_id,
+                    event_source.map_err(TensorZeroEventError::EventSource),
+                    start_time,
+                    None,
+                    &raw_request,
+                );
+                // Wrap with xAI-specific stream to add reasoning tokens to usage
+                let stream = stream_xai(inner_stream).peekable();
+                Ok((stream, raw_request))
+            }
+
+            XAIAPIType::Responses => {
+                let request_body = serde_json::to_value(
+                    OpenAIResponsesRequest::new(
+                        &self.model_name,
+                        request,
+                        false, // include_encrypted_reasoning
+                        &[],   // provider_tools
+                        model_name,
+                        provider_name,
+                    )
+                    .await?,
+                )
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing xAI Responses request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+
+                let request_url = get_responses_url(&XAI_DEFAULT_BASE_URL)?;
+                let request_builder = http_client
+                    .post(request_url)
+                    .bearer_auth(api_key.expose_secret());
+
+                let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                    PROVIDER_TYPE,
+                    &request.extra_body,
+                    &request.extra_headers,
+                    model_provider,
+                    model_name,
+                    request_body,
+                    request_builder,
+                )
+                .await?;
+
+                let stream = stream_openai_responses(
+                    PROVIDER_TYPE.to_string(),
+                    model_inference_id,
+                    event_source.map_err(TensorZeroEventError::EventSource),
+                    start_time,
+                    false, // discard_unknown_chunks
+                    model_name,
+                    provider_name,
+                    None, // request_id
+                    &raw_request,
+                )
+                .peekable();
+                Ok((stream, raw_request))
+            }
+        }
     }
 
     async fn start_batch_inference<'a>(

@@ -76,7 +76,7 @@ use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
 
 pub mod grader;
-mod responses;
+pub mod responses;
 
 lazy_static! {
     pub static ref OPENAI_DEFAULT_BASE_URL: Url = {
