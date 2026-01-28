@@ -17,7 +17,6 @@ use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CommentTargetType,
     DemonstrationFeedbackInsert, FeedbackQueries, FloatMetricFeedbackInsert,
@@ -121,13 +120,7 @@ pub async fn feedback_handler(
   )
 )]
 pub async fn feedback(
-    AppStateData {
-        config,
-        clickhouse_connection_info,
-        postgres_connection_info,
-        deferred_tasks,
-        ..
-    }: AppStateData,
+    app_state: AppStateData,
     mut params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<FeedbackResponse, Error> {
@@ -138,6 +131,17 @@ pub async fn feedback(
     if let Some(episode_id) = params.episode_id {
         span.record("episode_id", episode_id.to_string());
     }
+
+    // Note: InferenceQueries is only implemented for ClickHouse currently.
+    // When Postgres implements InferenceQueries, we can use ENABLE_POSTGRES_READ to select.
+    //
+    // TODO(shuyangli): Also implement InferenceQueries for DelegatingDatabaseConnection and only pass one in
+    let read_database: Arc<dyn InferenceQueries + Send + Sync> =
+        Arc::new(app_state.clickhouse_connection_info.clone());
+    let write_database: Arc<dyn FeedbackQueries + Send + Sync> =
+        Arc::new(app_state.get_delegating_database_connection());
+    let config = app_state.config;
+    let deferred_tasks = app_state.deferred_tasks;
 
     // Automatically add internal tag when internal=true
     if params.internal {
@@ -178,18 +182,6 @@ pub async fn feedback(
         )
         .increment(1);
     }
-
-    // Note: InferenceQueries is only implemented for ClickHouse currently.
-    // When Postgres implements InferenceQueries, we can use ENABLE_POSTGRES_READ to select.
-    //
-    // TODO(shuyangli): Also implement InferenceQueries for DelegatingDatabaseConnection and only pass one in
-    let read_database: Arc<dyn InferenceQueries + Send + Sync> =
-        Arc::new(clickhouse_connection_info.clone());
-    let write_database: Arc<dyn FeedbackQueries + Send + Sync> =
-        Arc::new(DelegatingDatabaseConnection::new(
-            clickhouse_connection_info.clone(),
-            postgres_connection_info.clone(),
-        ));
 
     match feedback_metadata.r#type {
         FeedbackType::Comment => {

@@ -20,6 +20,7 @@ use crate::config::{Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::U
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::valkey::ValkeyConnectionInfo;
@@ -162,6 +163,16 @@ pub struct AppStateData {
     _private: (),
 }
 pub type AppState = axum::extract::State<AppStateData>;
+
+impl AppStateData {
+    pub fn get_delegating_database_connection(&self) -> DelegatingDatabaseConnection {
+        DelegatingDatabaseConnection::new(
+            self.clickhouse_connection_info.clone(),
+            self.postgres_connection_info.clone(),
+            self.deferred_tasks.clone(),
+        )
+    }
+}
 
 /// Creates an auth cache based on the configuration.
 /// Returns None if auth is disabled or cache is disabled.

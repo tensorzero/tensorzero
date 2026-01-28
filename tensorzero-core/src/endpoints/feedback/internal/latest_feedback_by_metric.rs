@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -33,10 +32,7 @@ pub async fn get_latest_feedback_id_by_metric_handler(
     State(app_state): AppState,
     Path(target_id): Path<Uuid>,
 ) -> Result<Json<LatestFeedbackIdByMetricResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database_connection();
     let response = get_latest_feedback_id_by_metric(&database, target_id).await?;
     Ok(Json(response))
 }

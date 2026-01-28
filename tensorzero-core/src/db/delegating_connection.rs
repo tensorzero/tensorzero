@@ -5,6 +5,7 @@
 //! feature flags.
 
 use async_trait::async_trait;
+use tokio_util::task::TaskTracker;
 use uuid::Uuid;
 
 use crate::db::TimeWindow;
@@ -40,13 +41,19 @@ use crate::function::FunctionConfig;
 pub struct DelegatingDatabaseConnection {
     pub clickhouse: ClickHouseConnectionInfo,
     pub postgres: PostgresConnectionInfo,
+    pub deferred_tasks: TaskTracker,
 }
 
 impl DelegatingDatabaseConnection {
-    pub fn new(clickhouse: ClickHouseConnectionInfo, postgres: PostgresConnectionInfo) -> Self {
+    pub fn new(
+        clickhouse: ClickHouseConnectionInfo,
+        postgres: PostgresConnectionInfo,
+        deferred_tasks: TaskTracker,
+    ) -> Self {
         Self {
             clickhouse,
             postgres,
+            deferred_tasks,
         }
     }
 
@@ -167,68 +174,93 @@ impl FeedbackQueries for DelegatingDatabaseConnection {
         &self,
         row: &BooleanMetricFeedbackInsert,
     ) -> Result<(), Error> {
-        self.clickhouse.insert_boolean_feedback(row).await?;
+        let clickhouse_future = self.clickhouse.insert_boolean_feedback(row);
 
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_boolean_feedback(row).await
-        {
-            tracing::error!("Error writing boolean feedback to Postgres: {e}");
+        // Write to Postgres in the background
+        if ENABLE_POSTGRES_WRITE.get() {
+            let postgres = self.postgres.clone();
+            let row = row.clone();
+            self.deferred_tasks.spawn(async move {
+                if let Err(e) = postgres.insert_boolean_feedback(&row).await {
+                    tracing::error!("Error writing boolean feedback to Postgres: {e}");
+                }
+            });
         }
 
-        Ok(())
+        clickhouse_future.await
     }
 
     async fn insert_float_feedback(&self, row: &FloatMetricFeedbackInsert) -> Result<(), Error> {
-        self.clickhouse.insert_float_feedback(row).await?;
+        let clickhouse_future = self.clickhouse.insert_float_feedback(row);
 
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_float_feedback(row).await
-        {
-            tracing::error!("Error writing float feedback to Postgres: {e}");
+        // Write to Postgres in the background
+        if ENABLE_POSTGRES_WRITE.get() {
+            let postgres = self.postgres.clone();
+            let row = row.clone();
+            self.deferred_tasks.spawn(async move {
+                if let Err(e) = postgres.insert_float_feedback(&row).await {
+                    tracing::error!("Error writing float feedback to Postgres: {e}");
+                }
+            });
         }
 
-        Ok(())
+        clickhouse_future.await
     }
 
     async fn insert_comment_feedback(&self, row: &CommentFeedbackInsert) -> Result<(), Error> {
-        self.clickhouse.insert_comment_feedback(row).await?;
+        let clickhouse_future = self.clickhouse.insert_comment_feedback(row);
 
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_comment_feedback(row).await
-        {
-            tracing::error!("Error writing comment feedback to Postgres: {e}");
+        // Write to Postgres in the background
+        if ENABLE_POSTGRES_WRITE.get() {
+            let postgres = self.postgres.clone();
+            let row = row.clone();
+            self.deferred_tasks.spawn(async move {
+                if let Err(e) = postgres.insert_comment_feedback(&row).await {
+                    tracing::error!("Error writing comment feedback to Postgres: {e}");
+                }
+            });
         }
 
-        Ok(())
+        clickhouse_future.await
     }
 
     async fn insert_demonstration_feedback(
         &self,
         row: &DemonstrationFeedbackInsert,
     ) -> Result<(), Error> {
-        self.clickhouse.insert_demonstration_feedback(row).await?;
+        let clickhouse_future = self.clickhouse.insert_demonstration_feedback(row);
 
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_demonstration_feedback(row).await
-        {
-            tracing::error!("Error writing demonstration feedback to Postgres: {e}");
+        // Write to Postgres in the background
+        if ENABLE_POSTGRES_WRITE.get() {
+            let postgres = self.postgres.clone();
+            let row = row.clone();
+            self.deferred_tasks.spawn(async move {
+                if let Err(e) = postgres.insert_demonstration_feedback(&row).await {
+                    tracing::error!("Error writing demonstration feedback to Postgres: {e}");
+                }
+            });
         }
 
-        Ok(())
+        clickhouse_future.await
     }
 
     async fn insert_static_eval_feedback(
         &self,
         row: &StaticEvaluationHumanFeedbackInsert,
     ) -> Result<(), Error> {
-        self.clickhouse.insert_static_eval_feedback(row).await?;
+        let clickhouse_future = self.clickhouse.insert_static_eval_feedback(row);
 
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_static_eval_feedback(row).await
-        {
-            tracing::error!("Error writing static eval feedback to Postgres: {e}");
+        // Write to Postgres in the background
+        if ENABLE_POSTGRES_WRITE.get() {
+            let postgres = self.postgres.clone();
+            let row = row.clone();
+            self.deferred_tasks.spawn(async move {
+                if let Err(e) = postgres.insert_static_eval_feedback(&row).await {
+                    tracing::error!("Error writing static eval feedback to Postgres: {e}");
+                }
+            });
         }
 
-        Ok(())
+        clickhouse_future.await
     }
 }
