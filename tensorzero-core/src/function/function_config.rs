@@ -120,8 +120,14 @@ impl FunctionConfig {
         }
     }
 
+    /// Returns the ClickHouse table name for the given function type.
     pub fn table_name(&self) -> &'static str {
         self.config_type().table_name()
+    }
+
+    /// Returns the Postgres table name for the given function type.
+    pub fn postgres_table_name(&self) -> &'static str {
+        self.config_type().postgres_table_name()
     }
 
     pub fn experimentation(&self) -> &ExperimentationConfig {

@@ -514,6 +514,14 @@ impl MetricConfigType {
             MetricConfigType::Float => "FloatMetricFeedback",
         }
     }
+
+    /// Returns the Postgres table name for the given metric type.
+    pub fn postgres_table_name(&self) -> &'static str {
+        match self {
+            MetricConfigType::Boolean => "tensorzero.boolean_metric_feedback",
+            MetricConfigType::Float => "tensorzero.float_metric_feedback",
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

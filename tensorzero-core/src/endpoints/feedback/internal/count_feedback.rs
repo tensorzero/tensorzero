@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -30,17 +31,20 @@ pub async fn count_feedback_by_target_id_handler(
     State(app_state): AppState,
     Path(target_id): Path<Uuid>,
 ) -> Result<Json<CountFeedbackByTargetIdResponse>, Error> {
-    let response =
-        count_feedback_by_target_id(&app_state.clickhouse_connection_info, target_id).await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = count_feedback_by_target_id(&database, target_id).await?;
     Ok(Json(response))
 }
 
 /// Core business logic for counting feedback by target ID
 pub async fn count_feedback_by_target_id(
-    clickhouse: &impl FeedbackQueries,
+    database: &(dyn FeedbackQueries + Sync),
     target_id: Uuid,
 ) -> Result<CountFeedbackByTargetIdResponse, Error> {
-    let count = clickhouse.count_feedback_by_target_id(target_id).await?;
+    let count = database.count_feedback_by_target_id(target_id).await?;
 
     Ok(CountFeedbackByTargetIdResponse { count })
 }
@@ -52,16 +56,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_count_feedback_by_target_id_returns_count() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
         let target_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_count_feedback_by_target_id()
             .withf(move |id| *id == target_id)
             .times(1)
             .returning(|_| Box::pin(async move { Ok(42) }));
 
-        let response = count_feedback_by_target_id(&mock_clickhouse, target_id)
+        let response = count_feedback_by_target_id(&mock_db, target_id)
             .await
             .expect("Expected count to be returned");
 
@@ -73,16 +77,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_count_feedback_by_target_id_returns_zero_for_no_feedback() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
         let target_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_count_feedback_by_target_id()
             .withf(move |id| *id == target_id)
             .times(1)
             .returning(|_| Box::pin(async move { Ok(0) }));
 
-        let response = count_feedback_by_target_id(&mock_clickhouse, target_id)
+        let response = count_feedback_by_target_id(&mock_db, target_id)
             .await
             .expect("Expected zero count response");
 
