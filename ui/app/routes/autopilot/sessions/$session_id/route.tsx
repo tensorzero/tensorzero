@@ -525,6 +525,9 @@ export default function AutopilotSessionEventsPage({
   const { toast } = useToast();
   const interruptFetcher = useFetcher();
 
+  // Track which session the interrupt was initiated for to prevent cross-session toast
+  const interruptedSessionRef = useRef<string | null>(null);
+
   // Lift optimistic messages state to parent so ChatInput can work outside Suspense
   const [optimisticMessages, setOptimisticMessages] = useState<
     OptimisticMessage[]
@@ -562,15 +565,20 @@ export default function AutopilotSessionEventsPage({
 
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
+    interruptedSessionRef.current = sessionId;
     interruptFetcher.submit(null, {
       method: "POST",
       action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/interrupt`,
     });
   }, [interruptFetcher, sessionId]);
 
-  // Show toast on interrupt result
+  // Show toast on interrupt result (only if still on the same session)
   useEffect(() => {
     if (interruptFetcher.state === "idle" && interruptFetcher.data) {
+      // Only show toast if we're still on the session that was interrupted
+      if (interruptedSessionRef.current !== sessionId) {
+        return;
+      }
       const data = interruptFetcher.data as {
         success: boolean;
         error?: string;
@@ -587,7 +595,7 @@ export default function AutopilotSessionEventsPage({
         });
       }
     }
-  }, [interruptFetcher.state, interruptFetcher.data, toast]);
+  }, [interruptFetcher.state, interruptFetcher.data, toast, sessionId]);
 
   // Interruptible when actively processing (not idle or failed)
   const isInterruptible =
