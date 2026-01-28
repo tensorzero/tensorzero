@@ -145,13 +145,26 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
             stroke="#d1d5db"
             strokeOpacity={0.8}
           />
-          <XAxis dataKey="name" hide />
+          <XAxis
+            dataKey="name"
+            tick={false}
+            axisLine={{
+              stroke: "#d1d5db",
+              strokeDasharray: "3 3",
+              strokeOpacity: 0.8,
+            }}
+            tickLine={false}
+          />
           <YAxis
             domain={[0, 1]}
             tickFormatter={formatNumber}
             tick={{ fontSize: 10, fill: "#6b7280" }}
-            axisLine={{ stroke: "#9ca3af", strokeWidth: 1 }}
-            tickLine={{ stroke: "#9ca3af" }}
+            axisLine={{
+              stroke: "#d1d5db",
+              strokeDasharray: "3 3",
+              strokeOpacity: 0.8,
+            }}
+            tickLine={{ stroke: "#d1d5db", strokeOpacity: 0.8 }}
             width={50}
           />
           <ChartTooltip content={<PerformanceTooltip />} />
@@ -195,8 +208,12 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           <XAxis
             dataKey="name"
             tick={{ fontSize: 10, fill: "#6b7280" }}
-            axisLine={{ stroke: "#9ca3af", strokeWidth: 1 }}
-            tickLine={{ stroke: "#9ca3af" }}
+            axisLine={{
+              stroke: "#d1d5db",
+              strokeDasharray: "3 3",
+              strokeOpacity: 0.8,
+            }}
+            tickLine={{ stroke: "#d1d5db", strokeOpacity: 0.8 }}
             angle={-45}
             textAnchor="end"
             height={60}
@@ -205,8 +222,12 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           <YAxis
             domain={[0, maxCount]}
             tick={{ fontSize: 10, fill: "#6b7280" }}
-            axisLine={{ stroke: "#9ca3af", strokeWidth: 1 }}
-            tickLine={{ stroke: "#9ca3af" }}
+            axisLine={{
+              stroke: "#d1d5db",
+              strokeDasharray: "3 3",
+              strokeOpacity: 0.8,
+            }}
+            tickLine={{ stroke: "#d1d5db", strokeOpacity: 0.8 }}
             width={50}
           />
           <ChartTooltip content={<CountTooltip />} />
