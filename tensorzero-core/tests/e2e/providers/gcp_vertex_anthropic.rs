@@ -9,6 +9,7 @@ use tensorzero::Input;
 use tensorzero::InputMessage;
 use tensorzero::InputMessageContent;
 use tensorzero::Role;
+use tensorzero::Unknown;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 use uuid::Uuid;
@@ -291,10 +292,9 @@ pub async fn test_redacted_thinking() {
 // Provider Tools Tests
 // =============================================================================
 
-const WEB_SEARCH_PROMPT: &str = "Tell me some good news that happened today from around the world. Don't ask me any questions, and provide markdown citations in the form [text](url)";
 const BASH_PROMPT: &str = "List the files in the current directory using the bash tool.";
 
-/// Test GCP Vertex Anthropic provider tools with web_search (non-streaming)
+/// Test GCP Vertex Anthropic provider tools with web_search (non-streaming, multi-turn)
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_gcp_vertex_anthropic_provider_tools_web_search_nonstreaming() {
     let config = r#"
@@ -321,6 +321,8 @@ model = "test-model"
     let client = make_embedded_gateway_with_config(config).await;
 
     let episode_id = Uuid::now_v7();
+
+    // === Turn 1: Ask for current news (triggers web search) ===
     let result = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
@@ -331,7 +333,7 @@ model = "test-model"
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![InputMessageContent::Text(Text {
-                        text: WEB_SEARCH_PROMPT.to_string(),
+                        text: "What's in the news today? Give me a brief summary.".to_string(),
                     })],
                 }],
             },
@@ -341,7 +343,7 @@ model = "test-model"
         .await;
 
     let response = result.unwrap();
-    println!("GCP Vertex Anthropic web_search response: {response:?}");
+    println!("GCP Vertex Anthropic web_search turn 1 response: {response:?}");
 
     let InferenceOutput::NonStreaming(response) = response else {
         panic!("Expected non-streaming inference response");
@@ -360,7 +362,7 @@ model = "test-model"
 
     assert!(
         !unknown_blocks.is_empty(),
-        "Expected at least one Unknown content block from web_search, but found none. Content blocks: {:#?}",
+        "Turn 1: Expected at least one Unknown content block from web_search, but found none. Content blocks: {:#?}",
         chat_response.content
     );
 
@@ -379,12 +381,91 @@ model = "test-model"
 
     assert!(
         !text_blocks.is_empty(),
-        "Expected at least one Text content block, but found none. Content blocks: {:#?}",
+        "Turn 1: Expected at least one Text content block, but found none. Content blocks: {:#?}",
+        chat_response.content
+    );
+
+    // === Turn 2: Follow-up question about the news ===
+    // Convert the assistant's response content to input format for the next turn
+    let assistant_content: Vec<InputMessageContent> = chat_response
+        .content
+        .iter()
+        .map(|block| match block {
+            ContentBlockChatOutput::Text(text) => InputMessageContent::Text(Text {
+                text: text.text.clone(),
+            }),
+            ContentBlockChatOutput::Unknown(unknown) => {
+                InputMessageContent::Unknown(unknown.clone())
+            }
+            _ => panic!("Unexpected content block type in response"),
+        })
+        .collect();
+
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: None,
+                messages: vec![
+                    InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: "What's in the news today? Give me a brief summary.".to_string(),
+                        })],
+                    },
+                    InputMessage {
+                        role: Role::Assistant,
+                        content: assistant_content,
+                    },
+                    InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text:
+                                "Thanks! Can you tell me more about the first story you mentioned?"
+                                    .to_string(),
+                        })],
+                    },
+                ],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    let response = result.unwrap();
+    println!("GCP Vertex Anthropic web_search turn 2 response: {response:?}");
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response for turn 2");
+    };
+
+    let InferenceResponse::Chat(chat_response) = response else {
+        panic!("Expected chat inference response for turn 2");
+    };
+
+    // Turn 2 should have a text response (may or may not have web search depending on model)
+    let text_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter_map(|block| {
+            if let ContentBlockChatOutput::Text(text) = block {
+                Some(text)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert!(
+        !text_blocks.is_empty(),
+        "Turn 2: Expected at least one Text content block, but found none. Content blocks: {:#?}",
         chat_response.content
     );
 }
 
-/// Test GCP Vertex Anthropic provider tools with web_search (streaming)
+/// Test GCP Vertex Anthropic provider tools with web_search (streaming, multi-turn)
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_gcp_vertex_anthropic_provider_tools_web_search_streaming() {
     let config = r#"
@@ -411,6 +492,8 @@ model = "test-model"
     let client = make_embedded_gateway_with_config(config).await;
 
     let episode_id = Uuid::now_v7();
+
+    // === Turn 1: Ask for current news (triggers web search) ===
     let result = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
@@ -421,7 +504,7 @@ model = "test-model"
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![InputMessageContent::Text(Text {
-                        text: WEB_SEARCH_PROMPT.to_string(),
+                        text: "What's in the news today? Give me a brief summary.".to_string(),
                     })],
                 }],
             },
@@ -431,12 +514,15 @@ model = "test-model"
         .await;
 
     let response = result.unwrap();
-    println!("GCP Vertex Anthropic web_search streaming response: {response:?}");
+    println!("GCP Vertex Anthropic web_search streaming turn 1 response: {response:?}");
 
     let InferenceOutput::Streaming(mut stream) = response else {
         panic!("Expected streaming inference response");
     };
 
+    // Collect the streamed content for turn 2
+    let mut collected_text = String::new();
+    let mut collected_unknown_blocks: Vec<Unknown> = Vec::new();
     let mut chunk_count = 0;
     let mut has_unknown_chunk = false;
     let mut has_text_chunk = false;
@@ -448,11 +534,28 @@ model = "test-model"
         if let tensorzero::InferenceResponseChunk::Chat(chat_chunk) = &chunk {
             for content_block in &chat_chunk.content {
                 match content_block {
-                    tensorzero::ContentBlockChunk::Unknown(_) => {
+                    tensorzero::ContentBlockChunk::Unknown(unknown_chunk) => {
                         has_unknown_chunk = true;
+                        // Filter out citations_delta - it's a streaming-only output type
+                        // and not valid for input in multi-turn conversations
+                        if unknown_chunk
+                            .data
+                            .get("type")
+                            .and_then(|t| t.as_str())
+                            .is_some_and(|t| t == "citations_delta")
+                        {
+                            continue;
+                        }
+                        // Convert UnknownChunk to Unknown for input
+                        collected_unknown_blocks.push(Unknown {
+                            data: unknown_chunk.data.clone(),
+                            model_name: unknown_chunk.model_name.clone(),
+                            provider_name: unknown_chunk.provider_name.clone(),
+                        });
                     }
-                    tensorzero::ContentBlockChunk::Text(_) => {
+                    tensorzero::ContentBlockChunk::Text(text) => {
                         has_text_chunk = true;
+                        collected_text.push_str(&text.text);
                     }
                     _ => {}
                 }
@@ -462,15 +565,93 @@ model = "test-model"
 
     assert!(
         chunk_count >= 3,
-        "Expected at least 3 streaming chunks, but got {chunk_count}"
+        "Turn 1: Expected at least 3 streaming chunks, but got {chunk_count}"
     );
 
     assert!(
         has_unknown_chunk,
-        "Expected at least one Unknown chunk from web_search streaming"
+        "Turn 1: Expected at least one Unknown chunk from web_search streaming"
     );
 
-    assert!(has_text_chunk, "Expected at least one Text chunk");
+    assert!(has_text_chunk, "Turn 1: Expected at least one Text chunk");
+
+    // === Turn 2: Follow-up question about the news ===
+    // Build assistant content from collected chunks
+    let mut assistant_content: Vec<InputMessageContent> = Vec::new();
+    for unknown in collected_unknown_blocks {
+        assistant_content.push(InputMessageContent::Unknown(unknown));
+    }
+    if !collected_text.is_empty() {
+        assistant_content.push(InputMessageContent::Text(Text {
+            text: collected_text,
+        }));
+    }
+
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: None,
+                messages: vec![
+                    InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: "What's in the news today? Give me a brief summary.".to_string(),
+                        })],
+                    },
+                    InputMessage {
+                        role: Role::Assistant,
+                        content: assistant_content,
+                    },
+                    InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text:
+                                "Thanks! Can you tell me more about the first story you mentioned?"
+                                    .to_string(),
+                        })],
+                    },
+                ],
+            },
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await;
+
+    let response = result.unwrap();
+    println!("GCP Vertex Anthropic web_search streaming turn 2 response: {response:?}");
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming inference response for turn 2");
+    };
+
+    let mut turn2_chunk_count = 0;
+    let mut turn2_has_text_chunk = false;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.unwrap();
+        turn2_chunk_count += 1;
+
+        if let tensorzero::InferenceResponseChunk::Chat(chat_chunk) = &chunk {
+            for content_block in &chat_chunk.content {
+                if matches!(content_block, tensorzero::ContentBlockChunk::Text(_)) {
+                    turn2_has_text_chunk = true;
+                }
+            }
+        }
+    }
+
+    assert!(
+        turn2_chunk_count >= 1,
+        "Turn 2: Expected at least 1 streaming chunk, but got {turn2_chunk_count}"
+    );
+
+    assert!(
+        turn2_has_text_chunk,
+        "Turn 2: Expected at least one Text chunk"
+    );
 }
 
 /// Test GCP Vertex Anthropic provider tools with bash tool
