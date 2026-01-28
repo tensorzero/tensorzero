@@ -205,6 +205,9 @@ export function useAutopilotEventStream({
       setIsConnected(false);
       setError(errorMessage);
       setIsRetrying(true);
+      // Reset status to idle so the user can still send messages while disconnected.
+      // The correct status will be restored when the connection is re-established.
+      setStatus({ status: "idle" });
 
       // Schedule retry
       retryTimeoutRef.current = setTimeout(() => {
