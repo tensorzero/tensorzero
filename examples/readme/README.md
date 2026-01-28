@@ -10,17 +10,16 @@ This directory contains the code used for the absolutely minimal examples in the
 docker compose up
 ```
 
-2. Install the dependencies:
+2. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
-# We recommend using Python 3.10+ and a virtual environment
-pip install -r requirements.txt
+uv sync
 ```
 
 3. Run the examples:
 
 ```bash
-python tensorzero_sync_client.py
-python tensorzero_async_client.py
-python openai_client.py
+uv run tensorzero_sync_client.py
+uv run tensorzero_async_client.py
+uv run openai_client.py
 ```

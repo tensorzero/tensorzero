@@ -135,7 +135,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Download JSONL fixtures
         env:

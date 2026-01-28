@@ -28,9 +28,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
@@ -101,17 +101,6 @@ jobs:
             }
           done
 
-      - name: Update requirements.txt files
-        run: |
-          echo "Updating requirements.txt files (following general.yml pattern)..."
-          git ls-files "**/pyproject.toml" | while read f; do
-            dir=$(dirname "$f")
-            echo "Running uv export in: $dir"
-            (cd "$dir" && uv export --project="pyproject.toml" --output-file=requirements.txt --quiet) || {
-              echo "Warning: uv export failed in $dir"
-            }
-          done
-
       - name: Check for changes
         id: check_changes
         run: |
@@ -168,7 +157,6 @@ jobs:
           ## Changes
           - Upgraded tensorzero dependency in ${{ steps.discover_projects.outputs.project_count }} projects
           - Regenerated uv.lock files using \`uv lock\`
-          - Updated requirements.txt files using \`uv export\`
 
           ## Projects Updated
           \`\`\`

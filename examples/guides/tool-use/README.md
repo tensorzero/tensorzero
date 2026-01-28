@@ -22,12 +22,12 @@ We provide a simple TensorZero configuration with a `weather_chatbot` chat funct
 
 #### Python (TensorZero Client)
 
-1. Install the dependencies with `pip install -r requirements.txt`.
+1. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 2. Run the example with `python main_tensorzero.py`.
 
 #### Python (OpenAI SDK)
 
-1. Install the dependencies with `pip install -r requirements.txt`.
+1. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 2. Run the example with `python main_openai.py`.
 
 ### Node / TypeScript (OpenAI SDK)

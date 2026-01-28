@@ -14,7 +14,7 @@ if [ -z "$R2_SECRET_ACCESS_KEY" ]; then
 fi
 
 # Install `uv`
-curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+curl -LsSf https://astral.sh/uv/0.9.27/install.sh | sh
 source $HOME/.local/bin/env
 # Download the fixtures
 uv run ./ui/fixtures/download-large-fixtures.py

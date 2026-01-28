@@ -83,7 +83,7 @@ curl \
     "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
 . "$HOME/.cargo/env"
-curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+curl -LsSf https://astral.sh/uv/0.9.27/install.sh | sh
 source $HOME/.local/bin/env
 curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
 uv run ./ui/fixtures/download-large-fixtures.py
