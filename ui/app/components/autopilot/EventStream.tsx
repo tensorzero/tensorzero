@@ -5,6 +5,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Component, type RefObject, useState } from "react";
+import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { TableItemTime } from "~/components/ui/TableItems";
@@ -147,10 +148,9 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return {
         description: payload.status_update.text,
       };
-    case "tool_call":
-      return {
-        description: JSON.stringify(payload.arguments, null, 2),
-      };
+    case "tool_call": {
+      return { description: JSON.stringify(payload.arguments, null, 2) };
+    }
     case "tool_call_authorization":
       return {
         description:
@@ -440,18 +440,25 @@ function EventItem({
         </div>
       </div>
       {shouldShowDetails && summary.description && (
-        <p
-          className={cn(
-            "text-fg-secondary whitespace-pre-wrap",
-            event.payload.type === "tool_call" ||
-              event.payload.type === "tool_result" ||
-              event.payload.type === "error"
-              ? "font-mono text-sm"
-              : "text-sm",
+        <>
+          {event.payload.type === "message" &&
+          event.payload.role === "assistant" ? (
+            <Markdown>{summary.description}</Markdown>
+          ) : event.payload.type === "tool_call" ? (
+            <ReadOnlyCodeBlock code={summary.description} language="json" />
+          ) : (
+            <p
+              className={cn(
+                "text-fg-secondary text-sm whitespace-pre-wrap",
+                (event.payload.type === "tool_result" ||
+                  event.payload.type === "error") &&
+                  "font-mono",
+              )}
+            >
+              {summary.description}
+            </p>
           )}
-        >
-          {summary.description}
-        </p>
+        </>
       )}
     </div>
   );
