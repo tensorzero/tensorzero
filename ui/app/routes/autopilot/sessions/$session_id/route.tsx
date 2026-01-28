@@ -30,6 +30,10 @@ import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import {
+  StatusBanner,
+  StatusBannerVariant,
+} from "~/components/ui/StatusBanner";
 import { getFeatureFlags } from "~/utils/feature_flags";
 import { useLocalStorage } from "~/hooks/use-local-storage";
 import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
@@ -600,19 +604,20 @@ function EventStreamContent({
   return (
     <>
       {error && isRetrying && (
-        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+        <StatusBanner variant={StatusBannerVariant.Warning} className="mt-4">
           Failed to fetch events. Retrying...
-        </div>
+        </StatusBanner>
       )}
       {yoloMode && failedAutoApprovals.size > 0 && (
-        <div className="mt-4 flex items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-4 py-2 text-sm text-orange-800">
-          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-          <span>
-            Auto-approval failed for {failedAutoApprovals.size} tool call
-            {failedAutoApprovals.size > 1 ? "s" : ""}. Retrying every 60
-            seconds...
-          </span>
-        </div>
+        <StatusBanner
+          variant={StatusBannerVariant.Error}
+          icon={AlertTriangle}
+          className="mt-4"
+        >
+          Auto-approval failed for {failedAutoApprovals.size} tool call
+          {failedAutoApprovals.size > 1 ? "s" : ""}. Retrying every 60
+          seconds...
+        </StatusBanner>
       )}
       <div
         ref={(el) => {
