@@ -36,6 +36,7 @@ pub async fn get_latest_feedback_id_by_metric_handler(
     let database = DelegatingDatabaseConnection::new(
         app_state.clickhouse_connection_info.clone(),
         app_state.postgres_connection_info.clone(),
+        app_state.deferred_tasks.clone(),
     );
     let response = get_latest_feedback_id_by_metric(&database, target_id).await?;
     Ok(Json(response))
