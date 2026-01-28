@@ -47,7 +47,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "http-status-codes": "^2.3.0",
     "isbot": "^5.1.25",
-    "lodash-es": "^4.17.21",
+    "lodash-es": "^4.17.23",
     "lucide-react": "^0.487.0",
     "match-sorter": "^8.0.3",
     "radix-ui": "^1.4.3",
