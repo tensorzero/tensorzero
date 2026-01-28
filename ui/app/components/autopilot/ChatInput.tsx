@@ -1,4 +1,4 @@
-import { SendHorizontal, Loader2 } from "lucide-react";
+import { SendHorizontal, Loader2, StopCircle } from "lucide-react";
 import {
   useState,
   useRef,
@@ -34,6 +34,9 @@ type ChatInputProps = {
   submitDisabled?: boolean;
   className?: string;
   isNewSession?: boolean;
+  isInterruptible?: boolean;
+  isInterrupting?: boolean;
+  onInterrupt?: () => void;
 };
 
 export function ChatInput({
@@ -44,6 +47,9 @@ export function ChatInput({
   submitDisabled = false,
   className,
   isNewSession = false,
+  isInterruptible = false,
+  isInterrupting = false,
+  onInterrupt,
 }: ChatInputProps) {
   const [text, setText] = useState("");
   const fetcher = useFetcher<MessageResponse>();
@@ -178,25 +184,47 @@ export function ChatInput({
         style={{ minHeight: MIN_HEIGHT, maxHeight: MAX_HEIGHT }}
         rows={1}
       />
-      <button
-        type="button"
-        onClick={handleSend}
-        disabled={!canSend}
-        className={cn(
-          "absolute right-2 bottom-1",
-          "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md",
-          "text-fg-primary hover:text-fg-secondary",
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          "transition-colors",
-        )}
-        aria-label="Send message"
-      >
-        {isSubmitting ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <SendHorizontal className="h-4 w-4" />
-        )}
-      </button>
+      {submitDisabled && isInterruptible ? (
+        <button
+          type="button"
+          onClick={onInterrupt}
+          disabled={isInterrupting}
+          className={cn(
+            "absolute right-2 bottom-1",
+            "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md",
+            "text-red-600 hover:text-red-700",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            "transition-colors",
+          )}
+          aria-label="Stop session"
+        >
+          {isInterrupting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <StopCircle className="h-4 w-4" />
+          )}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!canSend}
+          className={cn(
+            "absolute right-2 bottom-1",
+            "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md",
+            "text-fg-primary hover:text-fg-secondary",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            "transition-colors",
+          )}
+          aria-label="Send message"
+        >
+          {isSubmitting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <SendHorizontal className="h-4 w-4" />
+          )}
+        </button>
+      )}
     </div>
   );
 }

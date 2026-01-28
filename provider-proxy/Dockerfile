@@ -28,7 +28,12 @@ COPY --from=builder /release/provider-proxy /usr/local/bin/provider-proxy
 
 WORKDIR /app
 
+# Port 3003: proxy
+# Port 3004: health check
 EXPOSE 3003 3004
+
+# Usage: provider-proxy health-check [--port XXXX]
+HEALTHCHECK CMD ["provider-proxy", "health-check"]
 
 ENTRYPOINT ["provider-proxy"]
 

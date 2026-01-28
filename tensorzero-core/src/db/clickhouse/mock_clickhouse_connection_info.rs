@@ -114,6 +114,16 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
             .get_json_inference_output_schema(function_name, inference_id)
             .await
     }
+
+    async fn get_inference_output(
+        &self,
+        function_info: &FunctionInfo,
+        inference_id: Uuid,
+    ) -> Result<Option<String>, Error> {
+        self.inference_queries
+            .get_inference_output(function_info, inference_id)
+            .await
+    }
 }
 
 #[async_trait]
