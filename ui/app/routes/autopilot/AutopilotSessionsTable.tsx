@@ -16,7 +16,7 @@ import {
 } from "~/components/ui/tooltip";
 import {
   TableItemShortUuid,
-  TableItemSummary,
+  TableItemText,
   TableItemTime,
 } from "~/components/ui/TableItems";
 
@@ -150,7 +150,7 @@ export function SessionsTableRows({
             />
           </TableCell>
           <TableCell>
-            <TableItemSummary text={session.short_summary} />
+            <TableItemText text={session.short_summary} />
           </TableCell>
           <TableCell className="w-0 text-right whitespace-nowrap">
             <TableItemTime timestamp={session.created_at} />
