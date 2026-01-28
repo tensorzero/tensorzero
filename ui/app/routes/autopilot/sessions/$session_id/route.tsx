@@ -638,6 +638,7 @@ export default function AutopilotSessionEventsPage({
 
   const handleEventsLoaded = useCallback(() => {
     setIsEventsLoading(false);
+    setHasLoadError(false);
   }, []);
 
   const handleLoadError = useCallback(() => {
