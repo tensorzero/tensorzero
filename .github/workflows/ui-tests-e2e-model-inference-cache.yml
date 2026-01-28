@@ -133,7 +133,7 @@ jobs:
           sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
           version: "0.9.27"
 
