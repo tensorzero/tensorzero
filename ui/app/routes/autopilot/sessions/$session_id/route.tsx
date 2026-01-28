@@ -524,6 +524,13 @@ export default function AutopilotSessionEventsPage({
   );
   const [hasLoadError, setHasLoadError] = useState(false);
 
+  // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
+  // Covers both directions: new item jumping to top, or top item removed by external approval.
+  // Does NOT trigger when queue was empty and first item arrives (no accidental click risk).
+  const prevQueueTopRef = useRef<string | null>(null);
+  const userActionRef = useRef(false);
+  const [isInCooldown, setIsInCooldown] = useState(false);
+
   // Reset all session-specific state when session changes
   useEffect(() => {
     setOptimisticMessages([]);
@@ -533,14 +540,8 @@ export default function AutopilotSessionEventsPage({
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
+    prevQueueTopRef.current = null;
   }, [sessionId, isNewSession, eventsData]);
-
-  // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
-  // Covers both directions: new item jumping to top, or top item removed by external approval.
-  // Does NOT trigger when queue was empty and first item arrives (no accidental click risk).
-  const prevQueueTopRef = useRef<string | null>(null);
-  const userActionRef = useRef(false);
-  const [isInCooldown, setIsInCooldown] = useState(false);
 
   useEffect(() => {
     const currentTopId = oldestPendingToolCall?.id ?? null;
@@ -667,9 +668,9 @@ export default function AutopilotSessionEventsPage({
   const [headerRef, headerHeight] = useElementHeight(56);
   const [footerRef, footerHeight] = useElementHeight(120);
 
-  // State for fade overlays
+  // State for fade overlays (both start false, updated on scroll)
   const [showTopFade, setShowTopFade] = useState(false);
-  const [showBottomFade, setShowBottomFade] = useState(true);
+  const [showBottomFade, setShowBottomFade] = useState(false);
 
   // Track previous footer height for scroll adjustment (null = initial mount)
   const prevFooterHeightRef = useRef<number | null>(null);
