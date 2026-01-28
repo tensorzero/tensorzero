@@ -60,6 +60,7 @@ use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
 use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
+use crate::tool::config::ToolCallConfig;
 use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -1098,6 +1099,57 @@ impl ProviderConfig {
             ProviderConfig::Dummy(_) => false,
         }
     }
+
+    /// Returns the static provider tools configured for this provider.
+    /// This is an exhaustive match to ensure compile-time safety when adding new providers.
+    pub fn static_provider_tools(&self) -> &[Value] {
+        match self {
+            // Providers that have static provider tools
+            ProviderConfig::Anthropic(p) => p.provider_tools(),
+            ProviderConfig::GCPVertexAnthropic(p) => p.provider_tools(),
+            ProviderConfig::OpenAI(p) => p.provider_tools(),
+            // Providers that do NOT support provider tools
+            ProviderConfig::AWSBedrock(_) => &[],
+            ProviderConfig::AWSSagemaker(_) => &[],
+            ProviderConfig::Azure(_) => &[],
+            ProviderConfig::DeepSeek(_) => &[],
+            ProviderConfig::Fireworks(_) => &[],
+            ProviderConfig::GCPVertexGemini(_) => &[],
+            ProviderConfig::GoogleAIStudioGemini(_) => &[],
+            ProviderConfig::Groq(_) => &[],
+            ProviderConfig::Hyperbolic(_) => &[],
+            ProviderConfig::Mistral(_) => &[],
+            ProviderConfig::OpenRouter(_) => &[],
+            ProviderConfig::SGLang(_) => &[],
+            ProviderConfig::TGI(_) => &[],
+            ProviderConfig::Together(_) => &[],
+            ProviderConfig::VLLM(_) => &[],
+            ProviderConfig::XAI(_) => &[],
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(_) => &[],
+        }
+    }
+
+    /// Returns all provider tools (static from config + dynamic scoped from request).
+    /// This combines:
+    /// 1. Static provider tools defined in the provider's configuration
+    /// 2. Dynamic provider tools from the request's `tool_config.provider_tools` that are scoped to this model/provider
+    pub fn get_all_provider_tools<'a>(
+        &'a self,
+        model_name: &str,
+        provider_name: &str,
+        tool_config: Option<&'a ToolCallConfig>,
+    ) -> Vec<&'a Value> {
+        let mut tools: Vec<&Value> = self.static_provider_tools().iter().collect();
+        if let Some(tc) = tool_config {
+            tools.extend(
+                tc.get_scoped_provider_tools(model_name, provider_name)
+                    .iter()
+                    .map(|t| &t.tool),
+            );
+        }
+        tools
+    }
 }
 
 /// Processed AWS provider configuration.
@@ -1832,7 +1884,7 @@ impl ModelProvider {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
                         "Provider `{}` does not support `provider_tools`, but {} provider tool(s) were configured for model `{}` / provider `{}`. \
-                        Provider tools are only supported by: Anthropic, AWS Bedrock, GCP Vertex Anthropic, and OpenAI (Responses API only).",
+                        Provider tools are only supported by: Anthropic, GCP Vertex Anthropic, and OpenAI (Responses API only).",
                         self.config.thought_block_provider_type(),
                         scoped_provider_tools.len(),
                         request.model_name,

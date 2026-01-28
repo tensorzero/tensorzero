@@ -416,15 +416,13 @@ async fn test_inference_no_tool_params() {
     );
 }
 
-/// Test 5: Provider tools are LOSSY
+/// Test 5: Provider tools are persisted
 ///
-/// Documents that provider_tools are NOT persisted to database.
-/// This is a known limitation of the current implementation.
+/// Verifies that `provider_tools` survive round-trip to/from the database.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_provider_tools_not_persisted() {
+async fn test_provider_tools_persisted() {
     let episode_id = Uuid::now_v7();
 
-    // Attempt to provide provider_tools (this field exists in DynamicToolParams)
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -439,14 +437,15 @@ async fn test_provider_tools_not_persisted() {
         },
         "stream": false,
         "allowed_tools": ["get_temperature"],
-        "provider_tools": [{  // This will be lost (for now)
-            "tool":
-            {"type": "computer_20241022",
-            "name": "computer",
-            "display_width_px": 1024,
-            "display_height_px": 768,
-            "display_number": 1
-        }}],
+        "provider_tools": [{
+            "tool": {
+                "type": "computer_20241022",
+                "name": "computer",
+                "display_width_px": 1024,
+                "display_height_px": 768,
+                "display_number": 1
+            }
+        }],
     });
 
     let response = Client::new()
@@ -463,7 +462,6 @@ async fn test_provider_tools_not_persisted() {
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Retrieve via API
     let client = make_embedded_gateway().await;
     let response = client
         .get_inferences(
@@ -478,20 +476,29 @@ async fn test_provider_tools_not_persisted() {
         panic!("Expected Chat inference");
     };
 
-    // VERIFY: provider_tools should be present after round-trip
-    println!("{:?}", stored_inference.tool_params.provider_tools);
     let stored_provider_tools = &stored_inference.tool_params.provider_tools;
-    assert_eq!(stored_provider_tools.len(), 1);
+    assert_eq!(
+        stored_provider_tools.len(),
+        1,
+        "Expected 1 provider tool to be persisted"
+    );
+
     let first_tool = stored_provider_tools.first().unwrap();
-    assert_eq!(first_tool.scope, ProviderToolScope::Unscoped);
+    assert_eq!(
+        first_tool.scope,
+        ProviderToolScope::Unscoped,
+        "Provider tool scope should be Unscoped by default"
+    );
     assert_eq!(
         first_tool.tool,
-        json!({"type": "computer_20241022",
+        json!({
+            "type": "computer_20241022",
             "name": "computer",
             "display_width_px": 1024,
             "display_height_px": 768,
             "display_number": 1
-        })
+        }),
+        "Provider tool definition should match"
     );
 }
 
