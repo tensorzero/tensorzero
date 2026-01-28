@@ -2,9 +2,7 @@ import { useMemo } from "react";
 import {
   Bar,
   BarChart,
-  ComposedChart,
   ErrorBar,
-  Line,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -29,6 +27,14 @@ type ChartDataPoint = {
 
 function formatNumber(value: number): string {
   return value.toFixed(3);
+}
+
+// Custom shape that renders a dot instead of a bar
+function DotShape(props: { x?: number; y?: number; width?: number }) {
+  const { x, y, width } = props;
+  if (x === undefined || y === undefined || width === undefined) return null;
+  const cx = x + width / 2;
+  return <circle cx={cx} cy={y} r={5} fill="#3b82f6" />;
 }
 
 function PerformanceTooltip({
@@ -139,7 +145,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
         Mean Performance
       </div>
       <ChartContainer config={{}} className="h-[200px] w-full">
-        <ComposedChart data={chartData} margin={chartMargin}>
+        <BarChart data={chartData} margin={chartMargin}>
           <CartesianGrid
             strokeDasharray="3 3"
             stroke="#d1d5db"
@@ -174,14 +180,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
             strokeDasharray="3 3"
             opacity={0.5}
           />
-          <Line
-            type="linear"
-            dataKey="mean"
-            stroke="transparent"
-            dot={{ fill: "#3b82f6", r: 5 }}
-            activeDot={{ fill: "#3b82f6", r: 7 }}
-            isAnimationActive={false}
-          >
+          <Bar dataKey="mean" shape={<DotShape />} isAnimationActive={false}>
             <ErrorBar
               dataKey="error"
               direction="y"
@@ -189,8 +188,8 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
               strokeWidth={2}
               stroke="#ec4899"
             />
-          </Line>
-        </ComposedChart>
+          </Bar>
+        </BarChart>
       </ChartContainer>
 
       {/* Bottom chart: Number of evaluations */}
