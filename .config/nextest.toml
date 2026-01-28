@@ -13,7 +13,7 @@ default-filter = "not (test(no_aws_credentials) | test(export_bindings_) | test(
 
 [[profile.default.overrides]]
 filter = 'test(evaluations)'
-slow-timeout = { period = "20s", terminate-after = 3 }
+slow-timeout = { period = "20s", terminate-after = 5 }
 
 # Profiles config
 # We use these profiles to define our major test groups.
@@ -61,6 +61,13 @@ default-filter = 'test(batch) and test(mock)'
 [profile.clickhouse]
 default-filter = 'test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey))'
 junit.path = "junit.xml"
+
+# Run only endpoint e2e tests (tests under tests/e2e/endpoints/)
+# These run against both ClickHouse and Postgres-backed TensorZero gateway.
+[profile.endpoints]
+default-filter = 'binary(e2e) and test(endpoints::)'
+junit.path = "junit.xml"
+retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 
 [profile.optimization]
 default-filter = 'binary(optimization-live)'

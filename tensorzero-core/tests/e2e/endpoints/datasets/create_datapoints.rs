@@ -34,6 +34,7 @@ async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_chat_datapoint_basic() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
@@ -146,6 +147,7 @@ async fn test_create_chat_datapoint_basic() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_basic() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
@@ -249,6 +251,7 @@ async fn test_create_json_datapoint_basic() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_multiple_datapoints() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
@@ -322,6 +325,7 @@ async fn test_create_multiple_datapoints() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_chat_datapoint_with_tools() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
@@ -368,6 +372,7 @@ async fn test_create_chat_datapoint_with_tools() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_with_tags() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
@@ -407,6 +412,7 @@ async fn test_create_datapoint_with_tags() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_invalid_function() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
@@ -435,6 +441,7 @@ async fn test_create_datapoint_invalid_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_wrong_function_type() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
@@ -470,6 +477,7 @@ async fn test_create_datapoint_wrong_function_type() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_empty_list() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
@@ -489,6 +497,7 @@ async fn test_create_datapoint_empty_list() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_invalid_schema() {
+    skip_for_postgres!();
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
@@ -567,6 +576,7 @@ async fn test_create_json_datapoint_invalid_schema() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_with_episode_id() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
@@ -609,6 +619,7 @@ async fn test_create_datapoint_with_episode_id() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_without_output() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
@@ -641,6 +652,7 @@ async fn test_create_datapoint_without_output() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_default_schema() {
+    skip_for_postgres!();
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 

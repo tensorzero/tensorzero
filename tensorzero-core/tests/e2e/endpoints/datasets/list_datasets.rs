@@ -16,6 +16,7 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
 async fn test_list_datasets_no_params() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
 
@@ -106,6 +107,7 @@ async fn test_list_datasets_no_params() {
 
 #[tokio::test]
 async fn test_list_datasets_with_function_filter() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
 
@@ -238,6 +240,7 @@ async fn test_list_datasets_with_function_filter() {
 
 #[tokio::test]
 async fn test_list_datasets_with_pagination() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
 
@@ -358,6 +361,7 @@ async fn test_list_datasets_with_pagination() {
 
 #[tokio::test]
 async fn test_list_datasets_empty_result() {
+    skip_for_postgres!();
     let http_client = Client::new();
 
     // Filter by a function that doesn't exist
