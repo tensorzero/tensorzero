@@ -259,7 +259,11 @@ function EventStreamContent({
     async (
       eventId: string,
       approved: boolean,
-      options?: { silent?: boolean; onError?: () => void },
+      options?: {
+        silent?: boolean;
+        onError?: () => void;
+        onSuccess?: () => void;
+      },
     ) => {
       if (!options?.silent) {
         userActionRef.current = true;
@@ -290,6 +294,7 @@ function EventStreamContent({
         if (!response.ok) {
           throw new Error("Authorization failed");
         }
+        options?.onSuccess?.();
       } catch (err) {
         logger.error("Failed to authorize tool call:", err);
         if (options?.onError) {
@@ -315,6 +320,9 @@ function EventStreamContent({
   // YOLO mode auto-approval with retry logic
   const retryCountsRef = useRef<Map<string, number>>(new Map());
   const retryTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  // Ref-based guard to prevent duplicate initial auto-approval requests
+  // (authLoadingStates is async, so this provides synchronous protection)
+  const autoApprovalInFlightRef = useRef<Set<string>>(new Set());
   const [failedAutoApprovals, setFailedAutoApprovals] = useState<Set<string>>(
     new Set(),
   );
@@ -330,6 +338,11 @@ function EventStreamContent({
           clearTimeout(timer);
           retryTimersRef.current.delete(id);
         }
+      }
+    }
+    for (const id of autoApprovalInFlightRef.current) {
+      if (!currentIds.has(id)) {
+        autoApprovalInFlightRef.current.delete(id);
       }
     }
     setFailedAutoApprovals((prev) => {
@@ -355,6 +368,7 @@ function EventStreamContent({
     }
     retryTimersRef.current.clear();
     retryCountsRef.current.clear();
+    autoApprovalInFlightRef.current.clear();
     setFailedAutoApprovals(new Set());
   }, [yoloMode]);
 
@@ -398,14 +412,23 @@ function EventStreamContent({
     if (!yoloMode || pendingToolCalls.length === 0) return;
 
     const oldest = pendingToolCalls[0];
-    // Skip if already loading or has a pending retry timer
+    // Skip if already loading, has a pending retry timer, or initial request in flight
     if (authLoadingStates.has(oldest.id)) return;
     if (retryTimersRef.current.has(oldest.id)) return;
+    if (autoApprovalInFlightRef.current.has(oldest.id)) return;
 
-    // First attempt (no retry count yet) or retry triggered by timer
+    // Mark as in-flight synchronously to prevent duplicate requests
+    autoApprovalInFlightRef.current.add(oldest.id);
+
     handleAuthorize(oldest.id, true, {
       silent: true,
-      onError: () => scheduleAutoApprovalRetry(oldest.id),
+      onError: () => {
+        autoApprovalInFlightRef.current.delete(oldest.id);
+        scheduleAutoApprovalRetry(oldest.id);
+      },
+      onSuccess: () => {
+        autoApprovalInFlightRef.current.delete(oldest.id);
+      },
     });
   }, [
     yoloMode,
