@@ -503,9 +503,8 @@ export default function AutopilotSessionEventsPage({
   );
 
   // Track loading/error state for ChatInput - disabled until events resolve
-  const [isEventsLoading, setIsEventsLoading] = useState(
-    !isNewSession && eventsData instanceof Promise,
-  );
+  // For existing sessions, start loading until EventStreamContent calls onLoaded
+  const [isEventsLoading, setIsEventsLoading] = useState(!isNewSession);
   const [hasLoadError, setHasLoadError] = useState(false);
 
   // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
@@ -515,17 +514,18 @@ export default function AutopilotSessionEventsPage({
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
 
-  // Reset all session-specific state when session changes
+  // Reset loading/error state when navigating to a different session
+  // Note: key={sessionId} on Suspense remounts EventStreamContent, which will call onLoaded
   useEffect(() => {
     setOptimisticMessages([]);
-    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
+    setIsEventsLoading(!isNewSession);
     setHasLoadError(false);
     setAutopilotStatus({ status: "idle" });
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
-  }, [sessionId, isNewSession, eventsData]);
+  }, [sessionId, isNewSession]);
 
   useEffect(() => {
     const currentTopId = oldestPendingToolCall?.id ?? null;
