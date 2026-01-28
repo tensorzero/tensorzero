@@ -1,4 +1,4 @@
-import { useForm, useController } from "react-hook-form";
+import { useForm, useController, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form } from "~/components/ui/form";
@@ -45,6 +45,11 @@ export default function InferenceQueryBuilder({
     control: form.control,
   });
 
+  const functionName = useWatch({
+    control: form.control,
+    name: "function",
+  });
+
   return (
     <Form {...form}>
       <form className="space-y-6" onSubmit={form.handleSubmit(handleSubmit)}>
@@ -52,6 +57,7 @@ export default function InferenceQueryBuilder({
         <InferenceFilterBuilder
           inferenceFilter={inferenceFilter}
           setInferenceFilter={setInferenceFilter}
+          functionName={functionName || null}
         />
       </form>
     </Form>
