@@ -17,7 +17,7 @@ import {
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import { AlertCircle, Loader2, Plus } from "lucide-react";
+import { AlertCircle, AlertTriangle, Loader2, Plus } from "lucide-react";
 import { PageHeader, Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
@@ -30,7 +30,13 @@ import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import {
+  StatusBanner,
+  StatusBannerVariant,
+} from "~/components/ui/StatusBanner";
 import { getFeatureFlags } from "~/utils/feature_flags";
+import { useLocalStorage } from "~/hooks/use-local-storage";
+import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 
 // Nil UUID for creating new sessions
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -168,6 +174,7 @@ function EventStreamContent({
   scrollContainerRef,
   onLoaded,
   onStatusChange,
+  yoloMode,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -177,6 +184,7 @@ function EventStreamContent({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
+  yoloMode: boolean;
 }) {
   const {
     events: initialEvents,
@@ -248,8 +256,18 @@ function EventStreamContent({
 
   // Handle tool call authorization
   const handleAuthorize = useCallback(
-    async (eventId: string, approved: boolean) => {
-      userActionRef.current = true;
+    async (
+      eventId: string,
+      approved: boolean,
+      options?: {
+        silent?: boolean;
+        onError?: () => void;
+        onSuccess?: () => void;
+      },
+    ) => {
+      if (!options?.silent) {
+        userActionRef.current = true;
+      }
 
       setAuthLoadingStates((prev) =>
         new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
@@ -276,13 +294,18 @@ function EventStreamContent({
         if (!response.ok) {
           throw new Error("Authorization failed");
         }
+        options?.onSuccess?.();
       } catch (err) {
         logger.error("Failed to authorize tool call:", err);
-        toast.error({
-          title: "Authorization failed",
-          description:
-            "Failed to submit tool call authorization. Please try again.",
-        });
+        if (options?.onError) {
+          options.onError();
+        } else {
+          toast.error({
+            title: "Authorization failed",
+            description:
+              "Failed to submit tool call authorization. Please try again.",
+          });
+        }
       } finally {
         setAuthLoadingStates((prev) => {
           const next = new Map(prev);
@@ -293,6 +316,127 @@ function EventStreamContent({
     },
     [sessionId, toast],
   );
+
+  // YOLO mode auto-approval with retry logic
+  const retryCountsRef = useRef<Map<string, number>>(new Map());
+  const retryTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  // Ref-based guard to prevent duplicate initial auto-approval requests
+  // (authLoadingStates is async, so this provides synchronous protection)
+  const autoApprovalInFlightRef = useRef<Set<string>>(new Set());
+  const [failedAutoApprovals, setFailedAutoApprovals] = useState<Set<string>>(
+    new Set(),
+  );
+
+  // Clean up retry state when tool calls are no longer pending
+  useEffect(() => {
+    const currentIds = new Set(pendingToolCalls.map((tc) => tc.id));
+    for (const id of retryCountsRef.current.keys()) {
+      if (!currentIds.has(id)) {
+        retryCountsRef.current.delete(id);
+        const timer = retryTimersRef.current.get(id);
+        if (timer) {
+          clearTimeout(timer);
+          retryTimersRef.current.delete(id);
+        }
+      }
+    }
+    for (const id of autoApprovalInFlightRef.current) {
+      if (!currentIds.has(id)) {
+        autoApprovalInFlightRef.current.delete(id);
+      }
+    }
+    setFailedAutoApprovals((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const id of prev) {
+        if (!currentIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [pendingToolCalls]);
+
+  // Clean up all timers on unmount or when YOLO mode is disabled
+  useEffect(() => {
+    if (yoloMode) return;
+
+    // YOLO mode was turned off - clear all retry state
+    for (const timer of retryTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    retryTimersRef.current.clear();
+    retryCountsRef.current.clear();
+    autoApprovalInFlightRef.current.clear();
+    setFailedAutoApprovals(new Set());
+  }, [yoloMode]);
+
+  useEffect(() => {
+    const timers = retryTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
+
+  const scheduleAutoApprovalRetry = useCallback(
+    (toolCallId: string) => {
+      const retryCount = retryCountsRef.current.get(toolCallId) ?? 0;
+      retryCountsRef.current.set(toolCallId, retryCount + 1);
+
+      // Exponential backoff: 1s, 2s, 4s for first 3 retries, then 60s
+      const delay = retryCount < 3 ? Math.pow(2, retryCount) * 1000 : 60 * 1000;
+
+      // Mark as failed after 3 retries
+      if (retryCount >= 3) {
+        setFailedAutoApprovals((prev) => new Set(prev).add(toolCallId));
+      }
+
+      const timer = setTimeout(() => {
+        retryTimersRef.current.delete(toolCallId);
+        handleAuthorize(toolCallId, true, {
+          silent: true,
+          onError: () => scheduleAutoApprovalRetry(toolCallId),
+        });
+      }, delay);
+
+      retryTimersRef.current.set(toolCallId, timer);
+    },
+    [handleAuthorize],
+  );
+
+  // Auto-approve oldest pending tool call in YOLO mode
+  useEffect(() => {
+    if (!yoloMode || pendingToolCalls.length === 0) return;
+
+    const oldest = pendingToolCalls[0];
+    // Skip if already loading, has a pending retry timer, or initial request in flight
+    if (authLoadingStates.has(oldest.id)) return;
+    if (retryTimersRef.current.has(oldest.id)) return;
+    if (autoApprovalInFlightRef.current.has(oldest.id)) return;
+
+    // Mark as in-flight synchronously to prevent duplicate requests
+    autoApprovalInFlightRef.current.add(oldest.id);
+
+    handleAuthorize(oldest.id, true, {
+      silent: true,
+      onError: () => {
+        autoApprovalInFlightRef.current.delete(oldest.id);
+        scheduleAutoApprovalRetry(oldest.id);
+      },
+      onSuccess: () => {
+        autoApprovalInFlightRef.current.delete(oldest.id);
+      },
+    });
+  }, [
+    yoloMode,
+    pendingToolCalls,
+    authLoadingStates,
+    handleAuthorize,
+    scheduleAutoApprovalRetry,
+  ]);
 
   /*
    * SCROLL BEHAVIOR SPEC:
@@ -497,9 +641,20 @@ function EventStreamContent({
   return (
     <>
       {error && isRetrying && (
-        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+        <StatusBanner variant={StatusBannerVariant.Warning} className="mt-4">
           Failed to fetch events. Retrying...
-        </div>
+        </StatusBanner>
+      )}
+      {yoloMode && failedAutoApprovals.size > 0 && (
+        <StatusBanner
+          variant={StatusBannerVariant.Error}
+          icon={AlertTriangle}
+          className="mt-4"
+        >
+          Auto-approval failed for {failedAutoApprovals.size} tool call
+          {failedAutoApprovals.size > 1 ? "s" : ""}. Retrying every 60
+          seconds...
+        </StatusBanner>
       )}
       <div
         ref={(el) => {
@@ -524,8 +679,7 @@ function EventStreamContent({
         />
       </div>
 
-      {/* Pinned approval card - outside scroll container */}
-      {oldestPendingToolCall && (
+      {oldestPendingToolCall && !yoloMode && (
         <div className="mt-4">
           <PendingToolCallCard
             key={oldestPendingToolCall.id}
@@ -620,6 +774,11 @@ export default function AutopilotSessionEventsPage({
     autopilotStatus.status !== "idle" &&
     autopilotStatus.status !== "failed";
 
+  const [yoloMode, setYoloMode] = useLocalStorage<boolean>(
+    "autopilot-yolo-mode",
+    false,
+  );
+
   // Disable submit unless status is idle or failed
   const submitDisabled =
     autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
@@ -698,25 +857,31 @@ export default function AutopilotSessionEventsPage({
 
   return (
     <div className="container mx-auto flex h-full flex-col px-8 py-8">
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[{ label: "Autopilot", href: "/autopilot/sessions" }]}
-          />
-        }
-        name={isNewSession ? "New Session" : sessionId}
-        tag={
-          !isNewSession ? (
-            <Link
-              to="/autopilot/sessions/new"
-              className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              New Session
-            </Link>
-          ) : undefined
-        }
-      />
+      <div className="flex items-start justify-between">
+        <PageHeader
+          eyebrow={
+            <Breadcrumbs
+              segments={[{ label: "Autopilot", href: "/autopilot/sessions" }]}
+            />
+          }
+          name={isNewSession ? "New Session" : sessionId}
+          tag={
+            !isNewSession ? (
+              <Link
+                to="/autopilot/sessions/new"
+                className="text-fg-tertiary hover:text-fg-secondary ml-2 inline-flex items-center gap-1 text-sm font-medium transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                New Session
+              </Link>
+            ) : undefined
+          }
+        />
+        <YoloModeToggle
+          checked={Boolean(yoloMode)}
+          onCheckedChange={setYoloMode}
+        />
+      </div>
 
       <Suspense key={sessionId} fallback={<EventStreamSkeleton />}>
         <Await
@@ -733,6 +898,7 @@ export default function AutopilotSessionEventsPage({
               scrollContainerRef={scrollContainerRef}
               onLoaded={handleEventsLoaded}
               onStatusChange={handleStatusChange}
+              yoloMode={Boolean(yoloMode)}
             />
           )}
         </Await>
@@ -755,7 +921,6 @@ export default function AutopilotSessionEventsPage({
   );
 }
 
-// Wrapper that passes the scroll container ref back to parent
 function EventStreamContentWrapper({
   sessionId,
   eventsData,
@@ -765,6 +930,7 @@ function EventStreamContentWrapper({
   scrollContainerRef,
   onLoaded,
   onStatusChange,
+  yoloMode,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -774,6 +940,7 @@ function EventStreamContentWrapper({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
+  yoloMode: boolean;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -786,6 +953,7 @@ function EventStreamContentWrapper({
         scrollContainerRef={scrollContainerRef}
         onLoaded={onLoaded}
         onStatusChange={onStatusChange}
+        yoloMode={yoloMode}
       />
     </div>
   );
