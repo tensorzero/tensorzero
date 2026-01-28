@@ -15,7 +15,7 @@ use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
-use durable_tools::EmbeddedClient;
+use durable_tools::{EmbeddedClient, WorkerOptions};
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
@@ -564,7 +564,12 @@ async fn spawn_autopilot_worker_if_configured(
 
     // TODO: decide how we want to do autopilot config.
     let default_max_attempts = 5;
-    let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts);
+    let worker_options = WorkerOptions {
+        poll_interval: Duration::from_secs(1),
+        concurrency: 8,
+        ..Default::default()
+    };
+    let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts, worker_options);
 
     Ok(Some(
         spawn_autopilot_worker(

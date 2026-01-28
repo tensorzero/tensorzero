@@ -1,10 +1,11 @@
-import { AlertTriangle, ChevronRight } from "lucide-react";
-import { type RefObject, useState } from "react";
+import { AlertCircle, AlertTriangle, ChevronRight } from "lucide-react";
+import { Component, type RefObject, useState } from "react";
 import {
   AnimatedEllipsis,
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Skeleton } from "~/components/ui/skeleton";
+import { logger } from "~/utils/logger";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
   Tooltip,
@@ -190,7 +191,7 @@ function renderEventTitle(event: GatewayEvent) {
           : payload.role === "assistant"
             ? "Assistant"
             : "Message";
-      return `${roleLabel} Message`;
+      return roleLabel;
     }
     case "status_update":
       return "Status Update";
@@ -322,6 +323,58 @@ function renderEventTitle(event: GatewayEvent) {
   }
 }
 
+/**
+ * Error boundary for individual event items.
+ * Prevents a single malformed event from crashing the entire chat.
+ */
+interface EventErrorBoundaryState {
+  hasError: boolean;
+}
+
+interface EventErrorBoundaryProps {
+  eventId: string;
+  children: React.ReactNode;
+}
+
+class EventErrorBoundary extends Component<
+  EventErrorBoundaryProps,
+  EventErrorBoundaryState
+> {
+  constructor(props: EventErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): EventErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    logger.error(
+      `Event ${this.props.eventId} failed to render:`,
+      error,
+      errorInfo,
+    );
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="border-border bg-bg-secondary rounded-md border px-4 py-3">
+          <div className="flex items-center gap-2 text-sm">
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+            <span className="text-fg-muted">
+              Failed to display event. The event data may be corrupted.
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function EventItem({
   event,
   isPending = false,
@@ -442,7 +495,7 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
   return (
     <div className="border-border bg-bg-secondary flex flex-col gap-2 rounded-md border px-4 py-3">
       <div className="flex items-center justify-between gap-4">
-        <span className="text-sm font-medium">User Message</span>
+        <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
       <p className="text-fg-secondary text-sm whitespace-pre-wrap">
@@ -509,11 +562,12 @@ export default function EventStream({
       {isLoadingOlder && <EventSkeletons count={3} />}
 
       {events.map((event) => (
-        <EventItem
-          key={event.id}
-          event={event}
-          isPending={pendingToolCallIds?.has(event.id)}
-        />
+        <EventErrorBoundary key={event.id} eventId={event.id}>
+          <EventItem
+            event={event}
+            isPending={pendingToolCallIds?.has(event.id)}
+          />
+        </EventErrorBoundary>
       ))}
 
       {/* Optimistic messages at the end */}

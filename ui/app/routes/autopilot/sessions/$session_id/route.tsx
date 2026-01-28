@@ -1,7 +1,6 @@
 import type { Route } from "./+types/route";
 import {
   Suspense,
-  use,
   useCallback,
   useEffect,
   useMemo,
@@ -9,13 +8,15 @@ import {
   useState,
 } from "react";
 import {
+  Await,
   data,
   isRouteErrorResponse,
+  useAsyncError,
   useFetcher,
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
@@ -29,6 +30,7 @@ import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { getFeatureFlags } from "~/utils/feature_flags";
 
 // Nil UUID for creating new sessions
@@ -141,7 +143,32 @@ function ErrorBanner({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Main content component that resolves the promise and renders the event stream with SSE
+/**
+ * Error state shown when initial event stream load fails.
+ * Preserves the chat container layout so the page doesn't completely break.
+ */
+function EventStreamLoadError({ onError }: { onError: () => void }) {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load session events";
+
+  // Notify parent that we're in error state (disables ChatInput)
+  useEffect(() => {
+    onError();
+  }, [onError]);
+
+  return (
+    <div className="flex min-h-[50vh] items-center justify-center">
+      <SectionErrorNotice
+        icon={AlertCircle}
+        title="Error loading session"
+        description={message}
+      />
+    </div>
+  );
+}
+
+// Main content component that renders the event stream with SSE
 function EventStreamContent({
   sessionId,
   eventsData,
@@ -155,7 +182,7 @@ function EventStreamContent({
   onErrorChange,
 }: {
   sessionId: string;
-  eventsData: EventsData | Promise<EventsData>;
+  eventsData: EventsData;
   isNewSession: boolean;
   optimisticMessages: OptimisticMessage[];
   onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
@@ -165,13 +192,12 @@ function EventStreamContent({
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
 }) {
-  // Resolve promise (or use direct data for new session)
   const {
     events: initialEvents,
     hasMoreEvents: initialHasMore,
     pendingToolCalls: initialPendingToolCalls,
     status: initialStatus,
-  } = eventsData instanceof Promise ? use(eventsData) : eventsData;
+  } = eventsData;
 
   // Signal that loading is complete (this runs after promise resolves)
   useEffect(() => {
@@ -452,12 +478,6 @@ export default function AutopilotSessionEventsPage({
     OptimisticMessage[]
   >([]);
 
-  // Track if events are still loading (for disabling chat input)
-  // New sessions have direct data (not a promise), so they're not loading
-  const [isEventsLoading, setIsEventsLoading] = useState(
-    !isNewSession && eventsData instanceof Promise,
-  );
-
   // Track autopilot status for disabling submit
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
     status: "idle",
@@ -498,10 +518,17 @@ export default function AutopilotSessionEventsPage({
     [],
   );
 
+  // Track loading/error state for ChatInput - disabled until events resolve
+  const [isEventsLoading, setIsEventsLoading] = useState(
+    !isNewSession && eventsData instanceof Promise,
+  );
+  const [hasLoadError, setHasLoadError] = useState(false);
+
   // Reset all session-specific state when session changes
   useEffect(() => {
     setOptimisticMessages([]);
     setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
+    setHasLoadError(false);
     setAutopilotStatus({ status: "idle" });
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
@@ -623,6 +650,15 @@ export default function AutopilotSessionEventsPage({
   // Disable submit unless status is idle or failed
   const submitDisabled =
     autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
+
+  const handleEventsLoaded = useCallback(() => {
+    setIsEventsLoading(false);
+  }, []);
+
+  const handleLoadError = useCallback(() => {
+    setIsEventsLoading(false);
+    setHasLoadError(true);
+  }, []);
 
   // Ref for scroll container - shared between parent and EventStreamContent
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -774,19 +810,26 @@ export default function AutopilotSessionEventsPage({
           style={{ paddingTop: headerHeight, paddingBottom: footerHeight }}
         >
           <Suspense fallback={<EventStreamSkeleton />}>
-            <EventStreamContent
-              key={sessionId}
-              sessionId={sessionId}
-              eventsData={eventsData}
-              isNewSession={isNewSession}
-              optimisticMessages={optimisticMessages}
-              onOptimisticMessagesChange={setOptimisticMessages}
-              scrollContainerRef={scrollContainerRef}
-              onLoaded={() => setIsEventsLoading(false)}
-              onStatusChange={handleStatusChange}
-              onPendingToolCallsChange={handlePendingToolCallsChange}
-              onErrorChange={handleErrorChange}
-            />
+            <Await
+              resolve={eventsData}
+              errorElement={<EventStreamLoadError onError={handleLoadError} />}
+            >
+              {(resolvedData) => (
+                <EventStreamContent
+                  key={sessionId}
+                  sessionId={sessionId}
+                  eventsData={resolvedData}
+                  isNewSession={isNewSession}
+                  optimisticMessages={optimisticMessages}
+                  onOptimisticMessagesChange={setOptimisticMessages}
+                  scrollContainerRef={scrollContainerRef}
+                  onLoaded={handleEventsLoaded}
+                  onStatusChange={handleStatusChange}
+                  onPendingToolCallsChange={handlePendingToolCallsChange}
+                  onErrorChange={handleErrorChange}
+                />
+              )}
+            </Await>
           </Suspense>
         </div>
       </div>
@@ -822,7 +865,7 @@ export default function AutopilotSessionEventsPage({
                 onMessageSent={handleMessageSent}
                 onMessageFailed={handleMessageFailed}
                 isNewSession={isNewSession}
-                disabled={isEventsLoading}
+                disabled={isEventsLoading || hasLoadError}
                 submitDisabled={submitDisabled}
                 isInterruptible={isInterruptible}
                 isInterrupting={interruptFetcher.state !== "idle"}
