@@ -630,14 +630,22 @@ export default function AutopilotSessionEventsPage({
   );
   const [hasLoadError, setHasLoadError] = useState(false);
 
+  // Track which session we've successfully loaded to avoid resetting loading state
+  // when eventsData reference changes within the same session (e.g., revalidation)
+  const loadedSessionRef = useRef<string | null>(null);
+
   useEffect(() => {
-    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
-    setHasLoadError(false);
+    // Only reset loading state when navigating to a different session
+    if (loadedSessionRef.current !== sessionId) {
+      setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
+      setHasLoadError(false);
+    }
   }, [sessionId, isNewSession, eventsData]);
 
   const handleEventsLoaded = useCallback(() => {
+    loadedSessionRef.current = sessionId;
     setIsEventsLoading(false);
-  }, []);
+  }, [sessionId]);
 
   const handleLoadError = useCallback(() => {
     setIsEventsLoading(false);
