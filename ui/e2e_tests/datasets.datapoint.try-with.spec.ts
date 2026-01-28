@@ -77,7 +77,7 @@ test.describe("Try with on datapoint page", () => {
       await deleteButton.click();
 
       // Wait for the dialog to appear and click the Delete button
-      const dialog = page.locator('div[role="dialog"]');
+      const dialog = page.getByRole("alertdialog");
       await dialog.waitFor({ state: "visible" });
       await dialog.getByRole("button", { name: /Delete/ }).click();
 

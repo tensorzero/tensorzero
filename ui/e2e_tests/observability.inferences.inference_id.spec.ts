@@ -553,7 +553,7 @@ test("should be able to add a datapoint from the inference page", async ({
   await deleteButton.click();
 
   // Wait for the shadcn dialog to appear and click the Delete button
-  const dialog = page.locator('div[role="dialog"]');
+  const dialog = page.getByRole("alertdialog");
   await dialog.waitFor({ state: "visible" });
 
   // Click the destructive "Delete" button in the dialog
@@ -618,7 +618,7 @@ test("should handle model inference with null input and output tokens", async ({
   await page.getByText("01954435-76ab-78b1-a76e-d5676b0dd2f9").click();
 
   // Wait for the sheet/dialog to appear
-  const sheet = page.locator('[role="dialog"]');
+  const sheet = page.getByRole("dialog");
   await sheet.waitFor({ state: "visible" });
 
   // Verify we're on the model inference page (use exact match to avoid matching "Model Inferences")

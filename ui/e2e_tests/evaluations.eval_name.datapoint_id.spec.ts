@@ -33,9 +33,7 @@ test("should be able to add float feedback from the evaluation datapoint result 
   await page.getByRole("button", { name: "Edit" }).first().click();
 
   // Wait for the modal to appear
-  await page.locator('div[role="dialog"]').waitFor({
-    state: "visible",
-  });
+  await page.getByRole("dialog").waitFor({ state: "visible" });
   // sleep for 500ms
   await page.waitForTimeout(500);
 
@@ -73,9 +71,7 @@ test("should be able to add bool feedback from the evaluation datapoint result p
   await page.getByRole("button", { name: "Edit" }).first().click();
 
   // Wait for the modal to appear
-  await page.locator('div[role="dialog"]').waitFor({
-    state: "visible",
-  });
+  await page.getByRole("dialog").waitFor({ state: "visible" });
 
   // Click on the "True" button
   await page.getByRole("radio", { name: /True/i }).click();
@@ -184,8 +180,8 @@ test("should be able to add a datapoint from the evaluation page", async ({
     .filter({ has: page.locator("svg") });
   await deleteButton.click();
 
-  // Wait for the shadcn dialog to appear and click the Delete button
-  const dialog = page.locator('div[role="dialog"]');
+  // Wait for the dialog to appear and click the Delete button
+  const dialog = page.getByRole("alertdialog");
   await dialog.waitFor({ state: "visible" });
 
   // Click the destructive "Delete" button in the dialog
