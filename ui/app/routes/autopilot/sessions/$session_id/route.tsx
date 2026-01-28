@@ -625,15 +625,13 @@ export default function AutopilotSessionEventsPage({
     autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
 
   // Track loading/error state for ChatInput - disabled until events resolve
-  const [isEventsLoading, setIsEventsLoading] = useState(
-    !isNewSession && eventsData instanceof Promise,
-  );
+  const [isEventsLoading, setIsEventsLoading] = useState(!isNewSession);
   const [hasLoadError, setHasLoadError] = useState(false);
 
   useEffect(() => {
-    setIsEventsLoading(!isNewSession && eventsData instanceof Promise);
+    setIsEventsLoading(!isNewSession);
     setHasLoadError(false);
-  }, [sessionId, isNewSession, eventsData]);
+  }, [sessionId, isNewSession]);
 
   const handleEventsLoaded = useCallback(() => {
     setIsEventsLoading(false);
