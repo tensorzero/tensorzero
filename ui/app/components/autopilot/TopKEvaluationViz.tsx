@@ -4,8 +4,8 @@ import {
   BarChart,
   ComposedChart,
   ErrorBar,
+  Line,
   ReferenceLine,
-  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -114,21 +114,6 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
     });
   }, [data.variant_summaries]);
 
-  // Calculate Y-axis domain for performance chart with padding
-  const { minY, maxY } = useMemo(() => {
-    if (chartData.length === 0) {
-      return { minY: 0, maxY: 1 };
-    }
-    const allValues = chartData.flatMap((d) => [d.lower, d.upper]);
-    const min = Math.min(...allValues);
-    const max = Math.max(...allValues);
-    const padding = (max - min) * 0.15 || 0.1;
-    return {
-      minY: Math.max(0, min - padding),
-      maxY: Math.min(1, max + padding),
-    };
-  }, [chartData]);
-
   // Calculate max count for bar chart domain
   const maxCount = useMemo(() => {
     if (chartData.length === 0) return 100;
@@ -162,7 +147,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           />
           <XAxis dataKey="name" hide />
           <YAxis
-            domain={[minY, maxY]}
+            domain={[0, 1]}
             tickFormatter={formatNumber}
             tick={{ fontSize: 10 }}
             axisLine={{ stroke: "var(--border)" }}
@@ -176,15 +161,22 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
             strokeDasharray="3 3"
             opacity={0.5}
           />
-          <Scatter dataKey="mean" fill="var(--blue-500)">
+          <Line
+            type="linear"
+            dataKey="mean"
+            stroke="transparent"
+            dot={{ fill: "#3b82f6", r: 5 }}
+            activeDot={{ fill: "#3b82f6", r: 7 }}
+            isAnimationActive={false}
+          >
             <ErrorBar
               dataKey="error"
               direction="y"
-              width={6}
+              width={8}
               strokeWidth={2}
-              stroke="var(--pink-500)"
+              stroke="#ec4899"
             />
-          </Scatter>
+          </Line>
         </ComposedChart>
       </ChartContainer>
 
