@@ -176,6 +176,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     };
   });
 
+  // Add config variants that have no inferences yet (not applicable to DEFAULT_FUNCTION)
+  if (function_name !== DEFAULT_FUNCTION) {
+    const existingVariants = new Set(
+      variant_counts_with_metadata.map((v) => v.variant_name),
+    );
+    const missingVariants = Object.entries(function_config.variants)
+      .filter(([name]) => !existingVariants.has(name))
+      .map(([name, config]) => ({
+        variant_name: name,
+        inference_count: 0,
+        last_used_at: null,
+        type: config.inner.type,
+        weight: config.inner.weight,
+      }));
+    variant_counts_with_metadata.push(...missingVariants);
+  }
+
   // Handle pagination from listInferenceMetadata response
   const {
     items: inferences,
