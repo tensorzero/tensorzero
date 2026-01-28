@@ -158,7 +158,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
                 && params.tags.get("tensorzero::autopilot::tool_call_event_id") == Some(&expected_tool_call_event_id.to_string())
                 && params.tags.get("tensorzero::autopilot::session_id") == Some(&expected_session_id.to_string())
                 && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"1234567".to_string())
-                && params.tags.get("tensorzero::autopilot") == Some(&String::new())
+                && params.tags.get("tensorzero::autopilot") == Some(&"true".to_string())
         })
         .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
@@ -238,7 +238,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
                 && params.tags.get("tensorzero::autopilot::tool_call_event_id") == Some(&expected_tool_call_event_id.to_string())
                 && params.tags.get("tensorzero::autopilot::session_id") == Some(&expected_session_id.to_string())
                 && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"1234567".to_string())
-                && params.tags.get("tensorzero::autopilot") == Some(&String::new())
+                && params.tags.get("tensorzero::autopilot") == Some(&"true".to_string())
         })
         .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
