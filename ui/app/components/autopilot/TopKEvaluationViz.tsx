@@ -136,7 +136,6 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
   }
 
   const chartMargin = { top: 10, right: 20, left: 10, bottom: 5 };
-  const bottomChartMargin = { top: 10, right: 20, left: 10, bottom: 60 };
 
   return (
     <div className="flex flex-col gap-0">
@@ -193,11 +192,11 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
       </ChartContainer>
 
       {/* Bottom chart: Number of evaluations */}
-      <div className="text-fg-secondary mt-2 mb-1 text-xs font-medium">
+      <div className="text-fg-secondary mb-1 text-xs font-medium">
         Number of Evaluations
       </div>
-      <ChartContainer config={{}} className="h-[180px] w-full">
-        <BarChart data={chartData} margin={bottomChartMargin}>
+      <ChartContainer config={{}} className="h-[260px] w-full">
+        <BarChart data={chartData} margin={chartMargin}>
           <CartesianGrid
             strokeDasharray="3 3"
             stroke="#d1d5db"
