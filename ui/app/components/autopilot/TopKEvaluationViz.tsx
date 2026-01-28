@@ -142,16 +142,16 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
         <ComposedChart data={chartData} margin={chartMargin}>
           <CartesianGrid
             strokeDasharray="3 3"
-            stroke="var(--border)"
-            opacity={0.5}
+            stroke="#d1d5db"
+            strokeOpacity={0.8}
           />
           <XAxis dataKey="name" hide />
           <YAxis
             domain={[0, 1]}
             tickFormatter={formatNumber}
-            tick={{ fontSize: 10 }}
-            axisLine={{ stroke: "var(--border)" }}
-            tickLine={{ stroke: "var(--border)" }}
+            tick={{ fontSize: 10, fill: "#6b7280" }}
+            axisLine={{ stroke: "#9ca3af", strokeWidth: 1 }}
+            tickLine={{ stroke: "#9ca3af" }}
             width={50}
           />
           <ChartTooltip content={<PerformanceTooltip />} />
@@ -188,15 +188,15 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
         <BarChart data={chartData} margin={bottomChartMargin}>
           <CartesianGrid
             strokeDasharray="3 3"
-            stroke="var(--border)"
-            opacity={0.5}
+            stroke="#d1d5db"
+            strokeOpacity={0.8}
             vertical={false}
           />
           <XAxis
             dataKey="name"
-            tick={{ fontSize: 10 }}
-            axisLine={{ stroke: "var(--border)" }}
-            tickLine={{ stroke: "var(--border)" }}
+            tick={{ fontSize: 10, fill: "#6b7280" }}
+            axisLine={{ stroke: "#9ca3af", strokeWidth: 1 }}
+            tickLine={{ stroke: "#9ca3af" }}
             angle={-45}
             textAnchor="end"
             height={60}
@@ -204,9 +204,9 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           />
           <YAxis
             domain={[0, maxCount]}
-            tick={{ fontSize: 10 }}
-            axisLine={{ stroke: "var(--border)" }}
-            tickLine={{ stroke: "var(--border)" }}
+            tick={{ fontSize: 10, fill: "#6b7280" }}
+            axisLine={{ stroke: "#9ca3af", strokeWidth: 1 }}
+            tickLine={{ stroke: "#9ca3af" }}
             width={50}
           />
           <ChartTooltip content={<CountTooltip />} />
