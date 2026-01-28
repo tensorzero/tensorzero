@@ -45,9 +45,11 @@ slow-timeout = { period = "30s", terminate-after = 2 }
 
 [profile.live-batch]
 default-filter = 'test(batch) and not test(mock)'
+junit.path = "junit.xml"
 
 [profile.mock-batch]
 default-filter = 'test(batch) and test(mock)'
+junit.path = "junit.xml"
 
 # ClickHouse-only tests are running across multiple Clickhouse versions and setups, so this is limited to only Clickhouse-specific tests:
 # - test_dummy_only: basic sanity check
@@ -71,9 +73,11 @@ retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max
 
 [profile.optimization]
 default-filter = 'binary(optimization-live)'
+junit.path = "junit.xml"
 
 [profile.optimization-mock]
 default-filter = 'binary(optimization-mock)'
+junit.path = "junit.xml"
 
 [profile.ci-unit.junit]
 path = "junit.xml"

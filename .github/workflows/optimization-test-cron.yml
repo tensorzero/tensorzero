@@ -77,6 +77,34 @@ jobs:
         if: github.event.schedule == '0 2 * * 0'
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast ${{ env.WEEKLY_TESTS }}
 
+      - name: Upload JUnit to R2
+        if: always()
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          if [ ! -f junit.xml ]; then
+            echo "No junit.xml found; skipping upload."
+            exit 0
+          fi
+
+          R2_ENDPOINT_URL="https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/"
+          BUCKET="tensorzero-fixtures"
+          PREFIX="cron-test-results"
+          SUITE="optimization"
+          TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+
+          WORKFLOW_SLUG=$(echo "${GITHUB_WORKFLOW}" | tr ' ' '-' | tr -cd 'A-Za-z0-9._-')
+          JOB_SLUG=$(echo "${GITHUB_JOB}" | tr ' ' '-' | tr -cd 'A-Za-z0-9._-')
+          REMOTE_KEY="${PREFIX}/junit/${SUITE}/${WORKFLOW_SLUG}/${JOB_SLUG}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TIMESTAMP}.xml"
+
+          if ! AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY \
+            aws s3 --endpoint-url "${R2_ENDPOINT_URL}" \
+            cp junit.xml "s3://${BUCKET}/${REMOTE_KEY}"; then
+            echo "Failed to upload junit.xml to R2."
+            exit 0
+          fi
+
       - name: Print ClickHouse container logs
         if: always()
         continue-on-error: true
