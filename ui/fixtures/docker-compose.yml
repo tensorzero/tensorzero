@@ -71,6 +71,7 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
     depends_on:

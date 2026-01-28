@@ -87,6 +87,14 @@ test-clickhouse-fast = [
     "0",
     "--no-fail-fast",
 ]
+test-endpoints = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "endpoints",
+]
 test-rate-limit-load = [
     "run",
     "--release",

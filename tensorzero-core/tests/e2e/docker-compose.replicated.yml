@@ -181,6 +181,7 @@ services:
       start_interval: 1s
       timeout: 1s
   fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
       context: ../../..
