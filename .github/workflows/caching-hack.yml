@@ -54,9 +54,9 @@ jobs:
           shared-key: "build-gateway-cache"
       - name: Install uv
         if: runner.os == 'windows'
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
       - name: Install Python 3.10
         if: runner.os == 'windows'
         run: |
