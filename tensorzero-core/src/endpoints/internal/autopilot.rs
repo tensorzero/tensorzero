@@ -138,11 +138,24 @@ pub async fn approve_all_tool_calls(
 
 /// Cancel an autopilot session via the Autopilot API.
 ///
+/// This cancels all durable tasks associated with the session (best effort),
+/// then cancels the session via the Autopilot API.
+///
 /// This is the core function called by both the HTTP handler and embedded client.
 pub async fn cancel_session(
     autopilot_client: &AutopilotClient,
     session_id: Uuid,
 ) -> Result<(), Error> {
+    // Cancel durable tasks first (best effort - log warning on failure)
+    if let Err(e) = autopilot_client.cancel_tasks_for_session(session_id).await {
+        tracing::warn!(
+            session_id = %session_id,
+            error = %e,
+            "Failed to cancel durable tasks for session"
+        );
+    }
+
+    // Then cancel the session via autopilot API
     autopilot_client
         .cancel_session(session_id)
         .await

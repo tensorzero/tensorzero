@@ -412,6 +412,25 @@ impl AutopilotClient {
         Ok(())
     }
 
+    /// Cancel all durable tasks associated with a session ID.
+    ///
+    /// This cancels any running durable tasks (and their recursive children)
+    /// that were spawned for the given session.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of tasks that were cancelled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the cancellation fails.
+    pub async fn cancel_tasks_for_session(&self, session_id: Uuid) -> Result<u64, AutopilotError> {
+        self.spawn_client
+            .cancel_tasks_by_session_id(session_id)
+            .await
+            .map_err(AutopilotError::from)
+    }
+
     // -------------------------------------------------------------------------
     // Event Endpoints
     // -------------------------------------------------------------------------

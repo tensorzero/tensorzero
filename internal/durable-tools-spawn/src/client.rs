@@ -154,6 +154,48 @@ impl SpawnClient {
     pub fn pool(&self) -> &PgPool {
         self.durable.pool()
     }
+
+    /// Cancel all durable tasks associated with a session ID.
+    ///
+    /// This queries for non-terminal tasks where `params->'side_info'->>'session_id'`
+    /// matches the provided session ID, then cancels each one. The durable framework's
+    /// `cancel_task` function automatically cascades cancellation to child tasks.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of tasks that were cancelled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any database operation fails.
+    pub async fn cancel_tasks_by_session_id(&self, session_id: Uuid) -> Result<u64, SpawnError> {
+        let queue_name = self.queue_name();
+
+        // Find all non-terminal tasks with this session_id
+        // Using QueryBuilder for dynamic table name (queue_name is a trusted internal value)
+        let mut query_builder: sqlx::QueryBuilder<Postgres> =
+            sqlx::QueryBuilder::new("SELECT task_id FROM durable.t_");
+        query_builder.push(queue_name);
+        query_builder.push(" WHERE params->'side_info'->>'session_id' = ");
+        query_builder.push_bind(session_id.to_string());
+        query_builder.push(" AND state NOT IN ('completed', 'failed', 'cancelled')");
+
+        let task_ids: Vec<(Uuid,)> = query_builder
+            .build_query_as()
+            .fetch_all(self.pool())
+            .await?;
+
+        // Cancel each task (cascade to children handled by durable.cancel_task)
+        for (task_id,) in &task_ids {
+            sqlx::query("SELECT durable.cancel_task($1, $2)")
+                .bind(queue_name)
+                .bind(task_id)
+                .execute(self.pool())
+                .await?;
+        }
+
+        Ok(task_ids.len() as u64)
+    }
 }
 
 /// Builder for creating a [`SpawnClient`].
