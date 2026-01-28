@@ -169,9 +169,9 @@ export function ChatInput({
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled}
+        disabled={disabled || isSubmitting}
         className={cn(
-          "resize-none overflow-y-auto",
+          "bg-bg-secondary resize-none overflow-y-auto",
           "rounded-md py-[11px] pr-14 pl-4 text-sm",
           "focus-visible:border-fg-muted focus-visible:ring-0",
         )}
