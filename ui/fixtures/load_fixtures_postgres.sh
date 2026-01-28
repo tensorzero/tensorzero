@@ -10,11 +10,18 @@ set -euo pipefail
 # Environment variables:
 #   TENSORZERO_POSTGRES_URL - Postgres connection URL (default: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures)
 #   TENSORZERO_SKIP_TRUNCATE - Set to 1 to skip truncating tables before loading
+#   TENSORZERO_FIXTURES_DIR - Path to fixtures directory as seen by postgres server (default: /fixtures for docker, or $SCRIPT_DIR for local)
 
 POSTGRES_URL="${TENSORZERO_POSTGRES_URL:-postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$SCRIPT_DIR"
+
+# Determine fixtures directory path as seen by the postgres server
+# In docker: /fixtures (mounted volume)
+# Locally: Use client-side \copy with local paths
+USE_SERVER_COPY="${TENSORZERO_USE_SERVER_COPY:-0}"
+SERVER_FIXTURES_DIR="${TENSORZERO_FIXTURES_DIR:-/fixtures}"
 
 # Helper function to load JSONL into a table via temp TEXT table
 load_jsonl() {
@@ -29,7 +36,24 @@ load_jsonl() {
 
     echo "Loading $file into $table..."
 
-    psql -q "$POSTGRES_URL" <<EOF
+    if [ "$USE_SERVER_COPY" = "1" ]; then
+        # Server-side COPY (file must be accessible to postgres server)
+        local server_file="${SERVER_FIXTURES_DIR}/${file}"
+        psql -q "$POSTGRES_URL" <<EOF
+-- Create temp table for raw text (each line is a JSON string)
+CREATE TEMP TABLE tmp_jsonl (data TEXT);
+
+-- Load JSONL data using server-side COPY
+COPY tmp_jsonl (data) FROM '${server_file}' WITH (FORMAT csv, QUOTE E'\x01', DELIMITER E'\x02');
+
+-- Insert into target table (cast text to jsonb for parsing)
+$insert_sql
+
+DROP TABLE tmp_jsonl;
+EOF
+    else
+        # Client-side \copy (default for local development)
+        psql -q "$POSTGRES_URL" <<EOF
 -- Create temp table for raw text (each line is a JSON string)
 CREATE TEMP TABLE tmp_jsonl (data TEXT);
 
@@ -41,6 +65,7 @@ $insert_sql
 
 DROP TABLE tmp_jsonl;
 EOF
+    fi
 
     echo "  Done"
 }
@@ -252,6 +277,7 @@ else
     uv run ./load_large_fixtures_postgres.py
 
     CSV_DIR="$SCRIPT_DIR/large-fixtures/postgres-csv"
+    SERVER_CSV_DIR="${SERVER_FIXTURES_DIR}/large-fixtures/postgres-csv"
 
     # Helper function to load a CSV file directly into a feedback table
     load_large_feedback() {
@@ -259,7 +285,13 @@ else
         local col_names="$2"  # column names in CSV order
 
         echo "Loading large fixtures into $table..."
-        psql -q "$POSTGRES_URL" -c "\copy tensorzero.${table} ($col_names) FROM '$CSV_DIR/${table}.csv' WITH (FORMAT csv)"
+        if [ "$USE_SERVER_COPY" = "1" ]; then
+            # Server-side COPY
+            psql -q "$POSTGRES_URL" -c "COPY tensorzero.${table} ($col_names) FROM '${SERVER_CSV_DIR}/${table}.csv' WITH (FORMAT csv)"
+        else
+            # Client-side \copy
+            psql -q "$POSTGRES_URL" -c "\copy tensorzero.${table} ($col_names) FROM '$CSV_DIR/${table}.csv' WITH (FORMAT csv)"
+        fi
         echo "  Done"
     }
 

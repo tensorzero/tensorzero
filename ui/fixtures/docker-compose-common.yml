@@ -7,6 +7,9 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
+    volumes:
+      # Mount fixtures directory for server-side COPY FROM commands
+      - .:/fixtures:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero_ui_fixtures"]
       start_period: 30s
