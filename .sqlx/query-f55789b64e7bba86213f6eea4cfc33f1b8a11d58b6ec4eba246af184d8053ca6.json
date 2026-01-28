@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO tensorzero.inference_evaluation_human_feedback\n                (feedback_id, metric_name, datapoint_id, output, value, evaluator_inference_id)\n            VALUES ($1, $2, $3, $4, $5, $6)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f55789b64e7bba86213f6eea4cfc33f1b8a11d58b6ec4eba246af184d8053ca6"
+}
