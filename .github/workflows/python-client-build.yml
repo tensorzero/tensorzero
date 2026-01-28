@@ -120,8 +120,7 @@ jobs:
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
-    # TODO (#5873): Temporarily disabled - re-enable when ready
-    if: false && github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
@@ -255,8 +254,7 @@ jobs:
           uv run twine check ./clients/python/dist/tensorzero-*.tar.gz
 
   check-artifacts:
-    # TODO (#5873): Add windows back when re-enabled
-    needs: [linux, musllinux, macos, sdist]
+    needs: [linux, musllinux, windows, macos, sdist]
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -268,5 +266,4 @@ jobs:
           ls -lh ./wheels-*/*
           # Count the number of files named 'tensorzero-*.whl', and verify that it equals 5
           # If we add new platforms / python versions, update this number
-          # TODO (#5873): Update to 6 when windows is re-enabled
-          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 5
+          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 6
