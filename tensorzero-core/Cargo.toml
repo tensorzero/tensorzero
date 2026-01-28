@@ -28,7 +28,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
-aws-smithy-types = { version = "1.3.6", features = [
+aws-smithy-types = { version = "1.4.0", features = [
     "serde-deserialize",
     "serde-serialize",
 ] }
@@ -38,7 +38,7 @@ aws-credential-types = { version = "1.2.2", features = [
 ] }
 aws-sigv4 = "1.3"
 aws-smithy-eventstream = "0.60"
-aws-smithy-runtime-api = "1.10.0"
+aws-smithy-runtime-api = "1.11.0"
 axum = { workspace = true }
 backon = { version = "1.6.0", features = ["tokio-sleep"] }
 blake3 = { workspace = true }
@@ -51,7 +51,7 @@ futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
 jsonschema = "0.40.0"
-jsonwebtoken = { version = "10.2", features = ["aws_lc_rs"] }
+jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
 metrics-exporter-prometheus = { workspace = true }
