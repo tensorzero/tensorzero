@@ -493,16 +493,6 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
 
     std::fs::create_dir_all(&args.cache_path).expect("Failed to create cache directory");
 
-    // Start health check server
-    let health_port = args.health_port;
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(async move {
-        if let Err(e) = run_health_server(health_port).await {
-            tracing::error!("Health check server failed: {:?}", e);
-        }
-    });
-
     let _ = rustls::crypto::ring::default_provider()
         .install_default()
         .inspect_err(|e| tracing::error!("Failed to install rustls ring provider: {e:?}"));
@@ -591,6 +581,16 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
         )
         .await
         .unwrap();
+
+    // Start health check server
+    let health_port = args.health_port;
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
+    tokio::spawn(async move {
+        if let Err(e) = run_health_server(health_port).await {
+            tracing::error!("Health check server failed: {:?}", e);
+        }
+    });
 
     tracing::info!(?args, "HTTP Proxy is listening on http://{server_addr}");
     server_started

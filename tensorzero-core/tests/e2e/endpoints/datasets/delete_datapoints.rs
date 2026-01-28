@@ -20,6 +20,7 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
 async fn test_delete_datapoints_single_chat() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-delete-dp-single-chat-{}", Uuid::now_v7());
@@ -142,6 +143,7 @@ async fn test_delete_datapoints_single_chat() {
 
 #[tokio::test]
 async fn test_delete_datapoints_multiple_mixed() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-delete-dp-multiple-{}", Uuid::now_v7());
@@ -292,6 +294,7 @@ async fn test_delete_datapoints_multiple_mixed() {
 
 #[tokio::test]
 async fn test_delete_datapoints_empty_ids_list() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let dataset_name = format!("test-delete-dp-empty-{}", Uuid::now_v7());
 
@@ -310,6 +313,7 @@ async fn test_delete_datapoints_empty_ids_list() {
 
 #[tokio::test]
 async fn test_delete_datapoints_non_existent_id() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-delete-dp-non-existent-{}", Uuid::now_v7());
@@ -392,6 +396,7 @@ async fn test_delete_datapoints_non_existent_id() {
 
 #[tokio::test]
 async fn test_delete_datapoints_invalid_dataset_name() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let datapoint_id = Uuid::now_v7();
 
@@ -413,6 +418,7 @@ async fn test_delete_datapoints_invalid_dataset_name() {
 
 #[tokio::test]
 async fn test_delete_datapoints_from_empty_dataset() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let dataset_name = format!("test-delete-dp-empty-dataset-{}", Uuid::now_v7());
     let non_existent_id = Uuid::now_v7();
@@ -437,6 +443,7 @@ async fn test_delete_datapoints_from_empty_dataset() {
 
 #[tokio::test]
 async fn test_delete_datapoints_already_stale() {
+    skip_for_postgres!();
     let http_client = Client::new();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("test-delete-dp-already-stale-{}", Uuid::now_v7());

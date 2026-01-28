@@ -452,7 +452,7 @@ fn make_stream_from_non_stream(
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: json.output.raw,
-            thought: None,
+            thought_chunks: Vec::new(),
             usage,
             raw_usage: raw_usage_entries,
             raw_response: None, // Not used for fused stream chunks

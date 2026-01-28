@@ -154,6 +154,7 @@ pub async fn action(
                 app_state.postgres_connection_info.clone(),
                 app_state.valkey_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
+                app_state.shutdown_token.clone(),
             )?;
 
             let response = feedback(snapshot_app_state, *feedback_params, None).await?;
@@ -168,6 +169,7 @@ pub async fn action(
                 app_state.postgres_connection_info.clone(),
                 app_state.valkey_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
+                app_state.shutdown_token.clone(),
             )?;
 
             // Run the evaluation using the shared helper
