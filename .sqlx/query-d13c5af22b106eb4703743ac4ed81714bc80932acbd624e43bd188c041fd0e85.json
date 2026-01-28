@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT output\n                    FROM tensorzero.json_inferences\n                    WHERE id = $1\n                      AND episode_id = $2\n                      AND function_name = $3\n                      AND variant_name = $4\n                    LIMIT 1\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "output",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.json_inferences",
+            "name": "output"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d13c5af22b106eb4703743ac4ed81714bc80932acbd624e43bd188c041fd0e85"
+}
