@@ -345,7 +345,19 @@ function EventStreamContent({
     });
   }, [pendingToolCalls]);
 
-  // Clean up all timers on unmount
+  // Clean up all timers on unmount or when YOLO mode is disabled
+  useEffect(() => {
+    if (yoloMode) return;
+
+    // YOLO mode was turned off - clear all retry state
+    for (const timer of retryTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    retryTimersRef.current.clear();
+    retryCountsRef.current.clear();
+    setFailedAutoApprovals(new Set());
+  }, [yoloMode]);
+
   useEffect(() => {
     const timers = retryTimersRef.current;
     return () => {
@@ -370,8 +382,10 @@ function EventStreamContent({
 
       const timer = setTimeout(() => {
         retryTimersRef.current.delete(toolCallId);
-        // Trigger retry by calling handleAuthorize directly
-        handleAuthorize(toolCallId, true);
+        handleAuthorize(toolCallId, true, {
+          silent: true,
+          onError: () => scheduleAutoApprovalRetry(toolCallId),
+        });
       }, delay);
 
       retryTimersRef.current.set(toolCallId, timer);
