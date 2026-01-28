@@ -161,6 +161,12 @@ impl OpenAIProvider {
     pub fn api_type(&self) -> OpenAIAPIType {
         self.api_type
     }
+
+    /// Returns whether this OpenAI provider supports provider tools.
+    /// Only the Responses API supports provider tools.
+    pub fn supports_provider_tools(&self) -> bool {
+        matches!(self.api_type, OpenAIAPIType::Responses)
+    }
 }
 
 /// Checks if the provided OpenAI API base URL has `/chat/completions` suffix and warns if it does.

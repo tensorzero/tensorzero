@@ -10,7 +10,7 @@ use tensorzero::InputMessage;
 use tensorzero::InputMessageContent;
 use tensorzero::Role;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
-use tensorzero_core::inference::types::Text;
+use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 use uuid::Uuid;
 
 use crate::providers::anthropic::test_redacted_thinking_helper;
@@ -285,4 +285,361 @@ pub async fn test_redacted_thinking() {
         "gcp_vertex_anthropic",
     )
     .await;
+}
+
+// =============================================================================
+// Provider Tools Tests
+// =============================================================================
+
+const WEB_SEARCH_PROMPT: &str = "Tell me some good news that happened today from around the world. Don't ask me any questions, and provide markdown citations in the form [text](url)";
+const BASH_PROMPT: &str = "List the files in the current directory using the bash tool.";
+
+/// Test GCP Vertex Anthropic provider tools with web_search (non-streaming)
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_gcp_vertex_anthropic_provider_tools_web_search_nonstreaming() {
+    let config = r#"
+gateway.debug = true
+
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
+provider_tools = [{type = "web_search_20250305", name = "web_search", max_uses = 1}]
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: WEB_SEARCH_PROMPT.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    let response = result.unwrap();
+    println!("GCP Vertex Anthropic web_search response: {response:?}");
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let InferenceResponse::Chat(chat_response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    // Assert that we have at least one Unknown content block (server_tool_use or web_search_tool_result)
+    let unknown_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter(|block| matches!(block, ContentBlockChatOutput::Unknown(_)))
+        .collect();
+
+    assert!(
+        !unknown_blocks.is_empty(),
+        "Expected at least one Unknown content block from web_search, but found none. Content blocks: {:#?}",
+        chat_response.content
+    );
+
+    // Assert that we have at least one Text content block
+    let text_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter_map(|block| {
+            if let ContentBlockChatOutput::Text(text) = block {
+                Some(text)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert!(
+        !text_blocks.is_empty(),
+        "Expected at least one Text content block, but found none. Content blocks: {:#?}",
+        chat_response.content
+    );
+}
+
+/// Test GCP Vertex Anthropic provider tools with web_search (streaming)
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_gcp_vertex_anthropic_provider_tools_web_search_streaming() {
+    let config = r#"
+gateway.debug = true
+
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
+provider_tools = [{type = "web_search_20250305", name = "web_search", max_uses = 1}]
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: WEB_SEARCH_PROMPT.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await;
+
+    let response = result.unwrap();
+    println!("GCP Vertex Anthropic web_search streaming response: {response:?}");
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming inference response");
+    };
+
+    let mut chunk_count = 0;
+    let mut has_unknown_chunk = false;
+    let mut has_text_chunk = false;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.unwrap();
+        chunk_count += 1;
+
+        if let tensorzero::InferenceResponseChunk::Chat(chat_chunk) = &chunk {
+            for content_block in &chat_chunk.content {
+                match content_block {
+                    tensorzero::ContentBlockChunk::Unknown(_) => {
+                        has_unknown_chunk = true;
+                    }
+                    tensorzero::ContentBlockChunk::Text(_) => {
+                        has_text_chunk = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    assert!(
+        chunk_count >= 3,
+        "Expected at least 3 streaming chunks, but got {chunk_count}"
+    );
+
+    assert!(
+        has_unknown_chunk,
+        "Expected at least one Unknown chunk from web_search streaming"
+    );
+
+    assert!(has_text_chunk, "Expected at least one Text chunk");
+}
+
+/// Test GCP Vertex Anthropic provider tools with bash tool
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_gcp_vertex_anthropic_provider_tools_bash_nonstreaming() {
+    let config = r#"
+gateway.debug = true
+
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
+provider_tools = [{type = "bash_20250124", name = "bash"}]
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: BASH_PROMPT.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    let response = result.unwrap();
+    println!("GCP Vertex Anthropic bash tool response: {response:?}");
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let InferenceResponse::Chat(chat_response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    // For bash tool, we expect a tool_use block with name "bash"
+    let tool_call_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter_map(|block| {
+            if let ContentBlockChatOutput::ToolCall(tool_call) = block {
+                Some(tool_call)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Expected at least one ToolCall content block for bash tool, but found none. Content blocks: {:#?}",
+        chat_response.content
+    );
+
+    // Verify the tool call is for "bash"
+    let bash_tool_call = tool_call_blocks.iter().find(|tc| tc.raw_name == "bash");
+
+    assert!(
+        bash_tool_call.is_some(),
+        "Expected a tool call with name 'bash', but found: {:?}",
+        tool_call_blocks
+            .iter()
+            .map(|tc| &tc.raw_name)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Test GCP Vertex Anthropic provider tools with bash tool (streaming)
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_gcp_vertex_anthropic_provider_tools_bash_streaming() {
+    let config = r#"
+gateway.debug = true
+
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
+provider_tools = [{type = "bash_20250124", name = "bash"}]
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: BASH_PROMPT.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await;
+
+    let response = result.unwrap();
+    println!("GCP Vertex Anthropic bash tool streaming response: {response:?}");
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming inference response");
+    };
+
+    let mut chunk_count = 0;
+    let mut has_tool_call_chunk = false;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.unwrap();
+        chunk_count += 1;
+
+        if let tensorzero::InferenceResponseChunk::Chat(chat_chunk) = &chunk {
+            for content_block in &chat_chunk.content {
+                if let tensorzero::ContentBlockChunk::ToolCall(tool_call) = content_block
+                    && tool_call.raw_name.as_deref() == Some("bash")
+                {
+                    has_tool_call_chunk = true;
+                }
+            }
+        }
+    }
+
+    assert!(
+        chunk_count >= 3,
+        "Expected at least 3 streaming chunks, but got {chunk_count}"
+    );
+
+    assert!(
+        has_tool_call_chunk,
+        "Expected at least one ToolCall chunk with name 'bash'"
+    );
 }
