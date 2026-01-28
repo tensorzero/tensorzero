@@ -120,11 +120,18 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
     });
   }, [data.variant_summaries]);
 
-  // Calculate max count for bar chart domain
-  const maxCount = useMemo(() => {
-    if (chartData.length === 0) return 100;
+  // Calculate max count for bar chart domain and evenly spaced ticks
+  const { maxCount, countTicks } = useMemo(() => {
+    if (chartData.length === 0)
+      return { maxCount: 100, countTicks: [0, 25, 50, 75, 100] };
     const max = Math.max(...chartData.map((d) => d.count));
-    return Math.ceil(max * 1.15); // Add 15% padding for labels
+    const paddedMax = Math.ceil(max * 1.15); // Add 15% padding for labels
+    // Generate 5 evenly spaced tick values
+    const tickCount = 5;
+    const ticks = Array.from({ length: tickCount }, (_, i) =>
+      Math.round((paddedMax * i) / (tickCount - 1)),
+    );
+    return { maxCount: paddedMax, countTicks: ticks };
   }, [chartData]);
 
   if (chartData.length === 0) {
@@ -141,7 +148,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
     <div className="flex flex-col gap-0">
       {/* Top chart: Mean performance with confidence intervals */}
       <div className="text-fg-secondary mb-1 text-xs font-medium">
-        Mean Performance
+        Mean Performance by Variant
       </div>
       <ChartContainer config={{}} className="h-[200px] w-full">
         <BarChart data={chartData} margin={chartMargin}>
@@ -193,7 +200,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
 
       {/* Bottom chart: Number of evaluations */}
       <div className="text-fg-secondary mb-1 text-xs font-medium">
-        Number of Evaluations
+        Number of Evaluations by Variant
       </div>
       <ChartContainer config={{}} className="h-[260px] w-full">
         <BarChart data={chartData} margin={chartMargin}>
@@ -219,6 +226,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           />
           <YAxis
             domain={[0, maxCount]}
+            ticks={countTicks}
             tick={{ fontSize: 10, fill: "#6b7280" }}
             axisLine={{
               stroke: "#d1d5db",
