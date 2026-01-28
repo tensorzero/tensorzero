@@ -10,6 +10,7 @@ use crate::error::{Error, ErrorDetails};
 
 use super::HealthCheckable;
 
+pub mod dataset_queries;
 pub mod experimentation;
 pub mod feedback;
 pub mod inference_count;

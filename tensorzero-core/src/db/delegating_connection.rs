@@ -9,6 +9,10 @@ use uuid::Uuid;
 
 use crate::db::TimeWindow;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::datasets::{
+    DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
+    GetDatasetMetadataParams,
+};
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
     DemonstrationFeedbackInsert, DemonstrationFeedbackRow, FeedbackBounds, FeedbackByVariant,
@@ -17,6 +21,7 @@ use crate::db::feedback::{
     VariantPerformanceRow,
 };
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::stored_datapoint::StoredDatapoint;
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
@@ -42,6 +47,12 @@ pub struct DelegatingDatabaseConnection {
     pub postgres: PostgresConnectionInfo,
 }
 
+/// A trait that allows us to express "The returned database supports all these queries"
+/// via &(dyn DelegatingDatabaseQueries).
+pub trait DelegatingDatabaseQueries: FeedbackQueries + DatasetQueries {}
+impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
+impl DelegatingDatabaseQueries for PostgresConnectionInfo {}
+
 impl DelegatingDatabaseConnection {
     pub fn new(clickhouse: ClickHouseConnectionInfo, postgres: PostgresConnectionInfo) -> Self {
         Self {
@@ -50,7 +61,7 @@ impl DelegatingDatabaseConnection {
         }
     }
 
-    fn get_read_database(&self) -> &(dyn FeedbackQueries + Sync) {
+    fn get_read_database(&self) -> &(dyn DelegatingDatabaseQueries + Sync) {
         if ENABLE_POSTGRES_READ.get() {
             &self.postgres
         } else {
@@ -230,5 +241,96 @@ impl FeedbackQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl DatasetQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn get_dataset_metadata(
+        &self,
+        params: &GetDatasetMetadataParams,
+    ) -> Result<Vec<DatasetMetadata>, Error> {
+        self.get_read_database().get_dataset_metadata(params).await
+    }
+
+    async fn count_datapoints_for_dataset(
+        &self,
+        dataset_name: &str,
+        function_name: Option<&str>,
+    ) -> Result<u64, Error> {
+        self.get_read_database()
+            .count_datapoints_for_dataset(dataset_name, function_name)
+            .await
+    }
+
+    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
+        self.get_read_database().get_datapoint(params).await
+    }
+
+    async fn get_datapoints(
+        &self,
+        params: &GetDatapointsParams,
+    ) -> Result<Vec<StoredDatapoint>, Error> {
+        self.get_read_database().get_datapoints(params).await
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {
+        let count = self.clickhouse.insert_datapoints(datapoints).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_datapoints(datapoints).await
+        {
+            tracing::error!("Error writing datapoints to Postgres: {e}");
+        }
+
+        Ok(count)
+    }
+
+    async fn delete_datapoints(
+        &self,
+        dataset_name: &str,
+        datapoint_ids: Option<&[Uuid]>,
+    ) -> Result<u64, Error> {
+        let count = self
+            .clickhouse
+            .delete_datapoints(dataset_name, datapoint_ids)
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .delete_datapoints(dataset_name, datapoint_ids)
+                .await
+        {
+            tracing::error!("Error deleting datapoints from Postgres: {e}");
+        }
+
+        Ok(count)
+    }
+
+    async fn clone_datapoints(
+        &self,
+        target_dataset_name: &str,
+        source_datapoint_ids: &[Uuid],
+    ) -> Result<Vec<Option<Uuid>>, Error> {
+        let results = self
+            .clickhouse
+            .clone_datapoints(target_dataset_name, source_datapoint_ids)
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .clone_datapoints(target_dataset_name, source_datapoint_ids)
+                .await
+        {
+            tracing::error!("Error cloning datapoints in Postgres: {e}");
+        }
+
+        Ok(results)
     }
 }

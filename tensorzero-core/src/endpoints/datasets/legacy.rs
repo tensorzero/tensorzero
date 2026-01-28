@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::datasets::{DatasetQueries, GetDatapointParams};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -479,8 +480,11 @@ pub async fn update_datapoint_handler(
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
             };
-            let rows_written = app_state
-                .clickhouse_connection_info
+            let database = DelegatingDatabaseConnection::new(
+                app_state.clickhouse_connection_info.clone(),
+                app_state.postgres_connection_info.clone(),
+            );
+            let rows_written = database
                 .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
                 .await?;
             if rows_written == 0 {
@@ -569,8 +573,11 @@ pub async fn update_datapoint_handler(
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
             };
-            let rows_written = app_state
-                .clickhouse_connection_info
+            let database = DelegatingDatabaseConnection::new(
+                app_state.clickhouse_connection_info.clone(),
+                app_state.postgres_connection_info.clone(),
+            );
+            let rows_written = database
                 .insert_datapoints(&[StoredDatapoint::Json(datapoint)])
                 .await?;
             if rows_written == 0 {
@@ -621,12 +628,16 @@ pub async fn create_datapoints_handler(
         "The `/datasets/{}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.",
         path_params.dataset_name, path_params.dataset_name
     ));
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
         &app_state.config,
         &app_state.http_client,
-        &app_state.clickhouse_connection_info,
+        &database,
     )
     .await?;
     Ok(Json(datapoint_ids))
@@ -647,12 +658,16 @@ pub async fn bulk_insert_datapoints_handler(
         "The `/datasets/{}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.",
         path_params.dataset_name, path_params.dataset_name
     ));
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
         &app_state.config,
         &app_state.http_client,
-        &app_state.clickhouse_connection_info,
+        &database,
     )
     .await?;
     Ok(Json(datapoint_ids))
@@ -663,7 +678,7 @@ pub async fn insert_datapoint(
     params: InsertDatapointParams,
     config: &Config,
     http_client: &TensorzeroHttpClient,
-    clickhouse: &ClickHouseConnectionInfo,
+    database: &(dyn DatasetQueries + Sync),
 ) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
 
@@ -840,7 +855,7 @@ pub async fn insert_datapoint(
     };
 
     let response =
-        create_datapoints(config, http_client, clickhouse, &dataset_name, v1_request).await?;
+        create_datapoints(config, http_client, database, &dataset_name, v1_request).await?;
 
     Ok(response.ids)
 }
@@ -1115,8 +1130,11 @@ pub async fn get_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<GetDatapointPathParams>,
 ) -> Result<Json<Datapoint>, Error> {
-    let datapoint = app_state
-        .clickhouse_connection_info
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: path_params.dataset_name,
             datapoint_id: path_params.datapoint_id,
@@ -1804,10 +1822,10 @@ pub struct StaleDatasetResponse {
 
 /// Helper function for staling a dataset. Used by the Rust client.
 pub async fn stale_dataset(
-    clickhouse: &impl DatasetQueries,
+    database: &(dyn DatasetQueries + Sync),
     dataset_name: &str,
 ) -> Result<StaleDatasetResponse, Error> {
-    let num_staled_datapoints = clickhouse.delete_datapoints(dataset_name, None).await?;
+    let num_staled_datapoints = database.delete_datapoints(dataset_name, None).await?;
     Ok(StaleDatasetResponse {
         num_staled_datapoints,
     })
@@ -1820,11 +1838,11 @@ pub async fn stale_dataset_handler(
     // These are the same as the path params for `list_datapoints_handler`
     Path(path_params): Path<ListDatapointsPathParams>,
 ) -> Result<Json<StaleDatasetResponse>, Error> {
-    let response = stale_dataset(
-        &app_state.clickhouse_connection_info,
-        &path_params.dataset_name,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = stale_dataset(&database, &path_params.dataset_name).await?;
     Ok(Json(response))
 }
 

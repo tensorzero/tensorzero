@@ -102,6 +102,13 @@ impl SnapshotHash {
         Self { decimal_str, bytes }
     }
 
+    /// Creates a SnapshotHash from big-endian bytes.
+    /// This is used when reading from Postgres BYTEA.
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let big_int = BigUint::from_bytes_be(bytes);
+        Self::from_biguint(big_int)
+    }
+
     /// Returns the big-endian bytes representation.
     /// This is used for storing in Postgres as BYTEA.
     pub fn as_bytes(&self) -> &[u8] {
