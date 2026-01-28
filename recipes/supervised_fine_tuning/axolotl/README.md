@@ -10,27 +10,14 @@ You will need to set a few environment variables in the shell your notebook will
 
 ## Setup
 
+We recommend using Python 3.11+ and [`uv`](https://github.com/astral-sh/uv).
+
+```bash
+export UV_TORCH_BACKEND=cu126
+uv sync
+```
+
 ### Optional: Dev Container
 
 We have provided a Dev Container config in `.devcontainer` to help users of VS Code who want to run the notebook on a remote server.
 To use our container, follow the [VS Code Instructions](https://code.visualstudio.com/docs/devcontainers/containers#_open-a-folder-on-a-remote-ssh-host-in-a-container), then proceed with the "Using `uv`" instructions below.
-
-### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
-
-```bash
-export UV_TORCH_BACKEND=cu126
-uv venv  # Create a new virtual environment
-source .venv/bin/activate # Activate environment
-uv pip sync requirements.txt # Install the dependencies
-uv pip install --no-build-isolation axolotl[flash-attn,deepspeed]
-```
-
-### Using `pip`
-
-We recommend using Python 3.11+ and a virtual environment.
-
-```bash
-export UV_TORCH_BACKEND=cu126
-pip install -r requirements.txt
-pip install --no-build-isolation axolotl[flash-attn,deepspeed]
-```

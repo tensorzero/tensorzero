@@ -51,7 +51,7 @@ The function includes a baseline variant with GPT-4o Mini (OpenAI), as well as b
 
 1. Install Docker.
 2. Install Python 3.9+.
-3. Install the Python dependencies with `pip install -r requirements.txt`.
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 4. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 
 ### Setup

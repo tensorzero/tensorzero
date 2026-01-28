@@ -157,11 +157,10 @@ cargo test-unit
 
 2. Go to the relevant directory (e.g. `cd clients/python`)
 
-3. Create a virtual environment and install the dependencies
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv).
 
    ```bash
-   uv venv
-   uv pip sync requirements.txt
+   uv sync
    ```
 
 4. Run the tests
