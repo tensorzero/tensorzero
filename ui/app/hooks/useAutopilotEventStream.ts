@@ -169,7 +169,13 @@ export function useAutopilotEventStream({
                   });
 
                   // Update autopilot status
-                  setStatus(streamUpdate.status);
+                  // Force status to "failed" when an error event arrives,
+                  // in case the backend didn't send the correct status
+                  if (event.payload.type === "error") {
+                    setStatus({ status: "failed" });
+                  } else {
+                    setStatus(streamUpdate.status);
+                  }
                 } catch {
                   // Skip invalid JSON
                 }
