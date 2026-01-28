@@ -10,11 +10,17 @@ import { logger } from "~/utils/logger";
 export async function action({ params, request }: ActionFunctionArgs) {
   const sessionId = params.session_id;
   if (!sessionId) {
-    return new Response("Session ID is required", { status: 400 });
+    return Response.json(
+      { success: false, error: "Session ID is required" },
+      { status: 400 },
+    );
   }
 
   if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return Response.json(
+      { success: false, error: "Method not allowed" },
+      { status: 405 },
+    );
   }
 
   const client = getAutopilotClient();
