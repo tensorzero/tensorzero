@@ -159,7 +159,7 @@ slow-timeout = { period = "30s", terminate-after = 3 }
 
 [[profile.default.overrides]]
 # Web search is very slow
-filter = 'test(websearch)'
+filter = 'test(web_search)'
 slow-timeout = { period = "120s", terminate-after = 2 }
 
 # Image inference seems to be slow on many providers, so we give it a longer timeout
