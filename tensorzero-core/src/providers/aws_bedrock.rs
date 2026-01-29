@@ -43,10 +43,10 @@ use crate::tool::{
 use tensorzero_types_providers::aws_bedrock::{
     self as types, AdditionalModelRequestFields, ContentBlock as BedrockContentBlock,
     ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStart, ContentBlockStartEvent,
-    ConverseRequest, ConverseResponse, FunctionTool, InferenceConfig, Message, MessageStopEvent,
-    MetadataEvent, ResponseContentBlock, ResponseReasoningContent, Role, StopReason,
-    SystemContentBlock, ThinkingConfig, ThinkingType, ToolChoice, ToolConfig, ToolInputSchema,
-    ToolResultContent, ToolSpec,
+    ConverseRequest, ConverseResponse, InferenceConfig, Message, MessageStopEvent, MetadataEvent,
+    ResponseContentBlock, ResponseReasoningContent, Role, StopReason, SystemContentBlock,
+    ThinkingConfig, ThinkingType, Tool, ToolChoice, ToolConfig, ToolInputSchema, ToolResultContent,
+    ToolSpec,
 };
 use uuid::Uuid;
 
@@ -400,7 +400,7 @@ async fn build_converse_request(
         if matches!(tc.tool_choice, TensorZeroToolChoice::None) {
             None
         } else {
-            let tools: Vec<FunctionTool> = tc.strict_tools_available()?.map(convert_tool).collect();
+            let tools: Vec<Tool> = tc.strict_tools_available()?.map(convert_tool).collect();
 
             let tool_choice = convert_tool_choice(tc.tool_choice.clone());
 
@@ -628,8 +628,8 @@ async fn convert_content_block_to_bedrock(
 }
 
 /// Convert a FunctionToolConfig to a Bedrock Tool
-fn convert_tool(tool_config: &FunctionToolConfig) -> FunctionTool {
-    FunctionTool {
+fn convert_tool(tool_config: &FunctionToolConfig) -> Tool {
+    Tool {
         tool_spec: ToolSpec {
             name: tool_config.name().to_string(),
             description: tool_config.description().to_string(),
