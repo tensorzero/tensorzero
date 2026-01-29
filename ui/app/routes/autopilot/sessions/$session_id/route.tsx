@@ -30,7 +30,7 @@ import {
 } from "~/components/autopilot/AutopilotStatusBanner";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
-import { approveAllToolCalls } from "~/utils/autopilot-api";
+import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
 import { logger } from "~/utils/logger";
 import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { approveAllToolCalls } from "~/utils/autopilot-api";
+import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
 import { useLatest } from "./use-latest";
 
 // Retry configuration
