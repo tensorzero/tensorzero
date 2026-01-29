@@ -329,7 +329,11 @@ impl From<RateLimitingConfigRule> for StoredRateLimitingConfigRule {
 }
 
 /// Stored version of `UninitializedRateLimitingConfig`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+///
+/// Note: We implement `Default` manually to match `UninitializedRateLimitingConfig::default()`,
+/// which sets `enabled: true`. Using `#[derive(Default)]` would set `enabled: false` (bool's default),
+/// causing historical config snapshots without a `rate_limiting` field to unexpectedly disable rate limiting.
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StoredUninitializedRateLimitingConfig {
     #[serde(default)]
     pub rules: Vec<StoredRateLimitingConfigRule>,
@@ -337,6 +341,16 @@ pub struct StoredUninitializedRateLimitingConfig {
     pub enabled: bool,
     #[serde(default)]
     pub backend: RateLimitingBackend,
+}
+
+impl Default for StoredUninitializedRateLimitingConfig {
+    fn default() -> Self {
+        Self {
+            rules: Vec::new(),
+            enabled: true,
+            backend: RateLimitingBackend::default(),
+        }
+    }
 }
 
 fn default_rate_limiting_enabled() -> bool {
@@ -908,5 +922,35 @@ mod tests {
                 serde_json::from_str(&json).expect("should deserialize");
             assert_eq!(stored.backend, expected, "backend should be {expected:?}");
         }
+    }
+
+    /// Test that StoredConfig without a rate_limiting field defaults to enabled: true.
+    ///
+    /// This is a regression test: the struct-level Default (used when the entire field is missing)
+    /// must match UninitializedRateLimitingConfig::default() which has enabled: true.
+    /// A derived Default would incorrectly set enabled: false (bool's default).
+    #[test]
+    fn test_stored_config_missing_rate_limiting_defaults_to_enabled() {
+        // Minimal StoredConfig JSON without rate_limiting field
+        let json = r#"{
+            "gateway": {},
+            "postgres": {},
+            "models": {},
+            "functions": {},
+            "metrics": {},
+            "tools": {},
+            "evaluations": {},
+            "provider_types": {},
+            "optimizers": {},
+            "embedding_models": {}
+        }"#;
+
+        let stored: StoredConfig = serde_json::from_str(json)
+            .expect("should deserialize StoredConfig without rate_limiting");
+
+        assert!(
+            stored.rate_limiting.enabled,
+            "rate_limiting.enabled should default to true when rate_limiting field is missing"
+        );
     }
 }
