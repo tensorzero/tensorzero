@@ -672,32 +672,12 @@ impl AutopilotClient {
                 .append_pair("last_event_id", &last_event_id.to_string());
         }
 
-        let request = self.sse_http_client.get(url).headers(self.auth_headers());
-
-        let event_source =
-            SseStream::from_byte_stream(request.send().await?.error_for_status()?.bytes_stream());
-
         // Wait for connection to be established or fail.
-        // The first event should be Open on success, or an error on failure.
-        match event_source.next().await {
-            Some(Ok(Sse::Open)) => {
-                // Connection established successfully
-            }
-            Some(Err(e)) => {
-                // Convert SSE error to appropriate AutopilotError
-                return Err(Self::convert_sse_error(e));
-            }
-            Some(Ok(SseEvent::Message(_))) => {
-                return Err(AutopilotError::Sse(
-                    "Received message before connection was established".to_string(),
-                ));
-            }
-            None => {
-                return Err(AutopilotError::Sse(
-                    "Connection closed unexpectedly".to_string(),
-                ));
-            }
-        }
+        let event_source = reqwest_sse_stream::into_sse_stream(
+            self.sse_http_client.get(url).headers(self.auth_headers()),
+        )
+        .await
+        .map_err(|e| Self::convert_sse_error(e))?;
 
         // Connection is good, return the stream
         let cache = self.tool_call_cache.clone();
@@ -710,10 +690,16 @@ impl AutopilotClient {
             let spawn_client = spawn_client.clone();
             async move {
                 match result {
-                    Ok(SseEvent::Open) => None,
-                    Ok(SseEvent::Message(message)) => {
-                        if message.event == "event" {
-                            match serde_json::from_str::<StreamUpdate>(&message.data) {
+                    Ok(sse) => {
+                        if sse.event.as_deref() == Some("event") {
+                            let data = sse.data.as_ref().ok_or_else(|| {
+                                AutopilotError::Sse(format!("Missing data for event: {sse:?}"))
+                            });
+                            let data = match data {
+                                Ok(data) => data,
+                                Err(e) => return Some(Err(AutopilotError::Sse(e.to_string()))),
+                            };
+                            match serde_json::from_str::<StreamUpdate>(data) {
                                 Ok(update) => {
                                     // Cache tool calls for later lookup
                                     if let EventPayload::ToolCall(tool_call) = &update.event.payload
@@ -758,16 +744,18 @@ impl AutopilotClient {
 
     /// Converts an SSE error to the appropriate AutopilotError.
     /// HTTP errors are converted to AutopilotError::Http for consistency.
-    fn convert_sse_error(e: reqwest_eventsource::Error) -> AutopilotError {
-        use reqwest_eventsource::Error as SseError;
+    fn convert_sse_error(e: reqwest_sse_stream::ReqwestSseStreamError) -> AutopilotError {
         match e {
-            SseError::InvalidStatusCode(status, _response) => AutopilotError::Http {
-                status_code: status.as_u16(),
-                message: status
-                    .canonical_reason()
-                    .unwrap_or("Unknown error")
-                    .to_string(),
-            },
+            reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_status() => {
+                AutopilotError::Http {
+                    status_code: e.status().map(|s| s.as_u16()).unwrap_or(0),
+                    message: e
+                        .status()
+                        .and_then(|s| s.canonical_reason())
+                        .unwrap_or("Unknown error")
+                        .to_string(),
+                }
+            }
             other => AutopilotError::Sse(other.to_string()),
         }
     }
