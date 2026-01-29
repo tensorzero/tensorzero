@@ -261,13 +261,10 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="name"
-            tick={{
-              fontSize: 12,
-              fill: "var(--color-fg-tertiary)",
-              fontFamily: "var(--font-mono)",
-            }}
+            tick={{ fontFamily: "var(--font-mono)" }}
             axisLine={true}
             tickLine={false}
+            tickMargin={10}
             angle={-45}
             textAnchor="end"
             height={70}
@@ -279,7 +276,6 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
             tickLine={false}
             tickMargin={10}
             axisLine={true}
-            width={50}
           />
           <ChartTooltip content={<CountTooltip />} />
           <Bar
