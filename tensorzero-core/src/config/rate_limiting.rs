@@ -45,13 +45,40 @@ enum CapacityHelper {
     Amount(u64),
 }
 
+// Helper struct for deserializing the stored/serialized format from the database
+#[derive(Deserialize)]
+struct StoredRateLimitingConfigRule {
+    // Deserialize as Vec<RateLimit> first, then wrap in Arc
+    limits: Vec<RateLimit>,
+    // Deserialize as Vec first, then convert to RateLimitingConfigScopes
+    scope: Vec<RateLimitingConfigScope>,
+    priority: RateLimitingConfigPriority,
+}
+
 impl<'de> Deserialize<'de> for RateLimitingConfigRule {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         // First deserialize to a TOML table
-        let mut table = toml::map::Map::deserialize(deserializer)?;
+        let table = toml::map::Map::deserialize(deserializer)?;
+
+        // Check if this is the stored format (has explicit `limits` field)
+        // or the TOML shorthand format (has keys like `tokens_per_minute`)
+        if table.contains_key("limits") {
+            // This is the stored/serialized format from the database
+            let stored = StoredRateLimitingConfigRule::deserialize(toml::Value::Table(table))
+                .map_err(serde::de::Error::custom)?;
+            return Ok(RateLimitingConfigRule {
+                limits: stored.limits.into_iter().map(Arc::new).collect(),
+                scope: RateLimitingConfigScopes::new(stored.scope)
+                    .map_err(serde::de::Error::custom)?,
+                priority: stored.priority,
+            });
+        }
+
+        // Otherwise, use the TOML shorthand format
+        let mut table = table;
 
         // Extract and parse all rate limit fields
         let mut limits = Vec::new();
@@ -137,11 +164,18 @@ fn parse_resource(resource_str: &str) -> Result<RateLimitResource, String> {
     }
 }
 
-// Helper struct for deserialization
+// Helper struct for TOML shorthand deserialization (e.g., `priority = 0` or `always = true`)
 #[derive(Deserialize)]
 struct PriorityHelper {
     always: Option<bool>,
     priority: Option<usize>,
+}
+
+// Helper struct for stored/serialized format deserialization (e.g., `{ "Priority": 0 }` or `"Always"`)
+#[derive(Deserialize)]
+enum StoredPriorityHelper {
+    Priority(usize),
+    Always,
 }
 
 impl<'de> Deserialize<'de> for RateLimitingConfigPriority {
@@ -149,7 +183,33 @@ impl<'de> Deserialize<'de> for RateLimitingConfigPriority {
     where
         D: Deserializer<'de>,
     {
-        let helper = PriorityHelper::deserialize(deserializer)?;
+        // First, deserialize into a generic Value to inspect the format
+        let value = toml::Value::deserialize(deserializer)?;
+
+        // Try to detect which format we're dealing with:
+        // - Stored format: `{ "Priority": 0 }` or `"Always"` (externally tagged enum)
+        // - TOML shorthand: `{ "priority": 0 }` or `{ "always": true }` (flat fields)
+
+        // Check for stored format (externally tagged enum)
+        if let Some(table) = value.as_table()
+            && (table.contains_key("Priority") || table.contains_key("Always"))
+        {
+            // This looks like the stored/serialized format
+            let stored: StoredPriorityHelper =
+                StoredPriorityHelper::deserialize(value).map_err(serde::de::Error::custom)?;
+            return Ok(match stored {
+                StoredPriorityHelper::Priority(p) => RateLimitingConfigPriority::Priority(p),
+                StoredPriorityHelper::Always => RateLimitingConfigPriority::Always,
+            });
+        }
+
+        // Check for stored format as a string (e.g., `"Always"`)
+        if value.as_str() == Some("Always") {
+            return Ok(RateLimitingConfigPriority::Always);
+        }
+
+        // Otherwise, try the TOML shorthand format
+        let helper = PriorityHelper::deserialize(value).map_err(serde::de::Error::custom)?;
 
         match (helper.always, helper.priority) {
             (Some(true), None) => Ok(RateLimitingConfigPriority::Always),
@@ -1171,5 +1231,102 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err_message.contains("Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with \"tensorzero::\"."));
+    }
+
+    /// Test that a config can be serialized and then deserialized back (roundtrip).
+    /// This is important for database storage where configs are serialized to TOML
+    /// and then read back later.
+    #[test]
+    fn test_roundtrip_serialization_deserialization() {
+        // Start with the TOML shorthand format
+        let toml_str = r#"
+            [[rules]]
+            model_inferences_per_second = 10
+            tokens_per_minute = 100
+            priority = 5
+            scope = [
+                { tag_key = "user_id", tag_value = "tensorzero::each" }
+            ]
+
+            [[rules]]
+            tokens_per_hour = 5000
+            always = true
+        "#;
+
+        // Parse from TOML shorthand
+        let original: UninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+
+        // Serialize to TOML (this produces the stored/serialized format)
+        let serialized = toml::to_string(&original).unwrap();
+
+        // Deserialize back from the stored format
+        let roundtripped: UninitializedRateLimitingConfig = toml::from_str(&serialized).unwrap();
+
+        // Verify the roundtripped config matches the original
+        assert_eq!(original.rules.len(), roundtripped.rules.len());
+        assert_eq!(original.enabled, roundtripped.enabled);
+
+        // Check first rule
+        assert_eq!(
+            original.rules[0].limits.len(),
+            roundtripped.rules[0].limits.len()
+        );
+        assert_eq!(original.rules[0].priority, roundtripped.rules[0].priority);
+
+        // Check second rule
+        assert_eq!(
+            original.rules[1].limits.len(),
+            roundtripped.rules[1].limits.len()
+        );
+        assert_eq!(original.rules[1].priority, roundtripped.rules[1].priority);
+    }
+
+    /// Test deserializing the stored/serialized format directly.
+    /// This simulates what happens when reading a config from the database.
+    #[test]
+    fn test_deserialize_stored_format() {
+        // This is the format that gets stored in the database after serialization
+        let stored_format = r#"
+            enabled = true
+            [[rules]]
+            limits = [
+                { resource = "token", interval = "day", capacity = 10000000, refill_rate = 10000000 }
+            ]
+            scope = [
+                { tag_key = "organization_id", tag_value = "tensorzero::each" }
+            ]
+            priority = { Priority = 0 }
+        "#;
+
+        let config: UninitializedRateLimitingConfig =
+            toml::from_str(stored_format).expect("Failed to parse stored format");
+
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].limits.len(), 1);
+        assert_eq!(config.rules[0].limits[0].capacity, 10000000);
+        assert_eq!(
+            config.rules[0].priority,
+            RateLimitingConfigPriority::Priority(0)
+        );
+    }
+
+    /// Test deserializing the "Always" priority in stored format.
+    #[test]
+    fn test_deserialize_stored_format_always_priority() {
+        let stored_format = r#"
+            enabled = true
+            [[rules]]
+            limits = [
+                { resource = "model_inference", interval = "second", capacity = 10, refill_rate = 10 }
+            ]
+            scope = []
+            priority = "Always"
+        "#;
+
+        let config: UninitializedRateLimitingConfig = toml::from_str(stored_format)
+            .expect("Failed to parse stored format with Always priority");
+
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].priority, RateLimitingConfigPriority::Always);
     }
 }
