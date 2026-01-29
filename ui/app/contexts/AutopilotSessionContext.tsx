@@ -2,9 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useLocalStorage } from "~/hooks/use-local-storage";
 
 interface AutopilotSessionContextValue {
-  /** Whether YOLO mode (auto-approve all tool calls) is enabled */
   yoloMode: boolean;
-  /** Toggle YOLO mode on/off */
   setYoloMode: (value: boolean) => void;
 }
 
