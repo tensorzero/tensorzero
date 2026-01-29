@@ -1,5 +1,5 @@
 import { AlertTriangle } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Switch, SwitchSize } from "~/components/ui/switch";
 import {
   Tooltip,
@@ -18,14 +18,25 @@ export function YoloModeToggle({
   onCheckedChange,
 }: YoloModeToggleProps) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
+  const suppressUntilRef = useRef<number>(0);
 
   const handleCheckedChange = (value: boolean) => {
+    // Suppress tooltip for 500ms after clicking to prevent flicker
+    suppressUntilRef.current = Date.now() + 500;
     setTooltipOpen(false);
     onCheckedChange(value);
   };
 
+  const handleOpenChange = (open: boolean) => {
+    // Ignore open requests during suppression window
+    if (open && Date.now() < suppressUntilRef.current) {
+      return;
+    }
+    setTooltipOpen(open);
+  };
+
   return (
-    <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
+    <Tooltip open={tooltipOpen} onOpenChange={handleOpenChange}>
       <TooltipTrigger asChild>
         <label className="flex cursor-pointer items-center gap-2 select-none">
           <span
