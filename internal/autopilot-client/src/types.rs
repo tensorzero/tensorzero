@@ -537,8 +537,8 @@ pub enum VisualizationType {
     TopKEvaluation(TopKEvaluationVisualization),
     /// Unknown visualization type for forward compatibility.
     /// Old clients can gracefully handle new visualization types they don't recognize.
-    #[serde(other)]
-    Unknown,
+    #[serde(untagged)]
+    Unknown(serde_json::Value),
 }
 
 /// Visualization payload for an event.

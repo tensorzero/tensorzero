@@ -669,6 +669,61 @@ export const WithVisualization: Story = {
   },
 };
 
+const unknownVisualizationEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "uv1-user-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Run an analysis on the data.",
+          },
+        ],
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "uv2-visualization",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "visualization",
+        tool_execution_id: "some-task-id",
+        // Unknown visualization type - simulates a future visualization type
+        // that the current UI doesn't know how to render
+        visualization: {
+          type: "future_analysis",
+          data: {
+            metric_a: 0.95,
+            metric_b: 0.87,
+            samples: 1000,
+          },
+          metadata: {
+            version: "2.0",
+            algorithm: "advanced_analysis",
+          },
+        } as GatewayEvent["payload"] extends { visualization: infer V }
+          ? V
+          : never,
+      },
+    },
+    1,
+  ),
+];
+
+export const WithUnknownVisualization: Story = {
+  args: {
+    events: unknownVisualizationEvents,
+  },
+};
+
 export const MarkdownContent: Story = {
   args: {
     events: markdownEvents,

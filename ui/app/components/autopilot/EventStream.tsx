@@ -141,12 +141,17 @@ function getMessageText(content: EventPayloadMessageContent[]) {
  * Get the title for a visualization based on its type.
  */
 function getVisualizationTitle(visualization: VisualizationType): string {
-  switch (visualization.type) {
-    case "top_k_evaluation":
-      return "Top-K Evaluation Results";
-    case "unknown":
-      return "Visualization";
+  if (typeof visualization !== "object" || visualization === null) {
+    return "Visualization";
   }
+  if ("type" in visualization) {
+    if (visualization.type === "top_k_evaluation") {
+      return "Top-K Evaluation Results";
+    }
+    // Unknown visualization type with a type field
+    return `Visualization (${String(visualization.type)})`;
+  }
+  return "Visualization";
 }
 
 /**
@@ -157,20 +162,32 @@ function VisualizationRenderer({
 }: {
   visualization: VisualizationType;
 }) {
-  switch (visualization.type) {
-    case "top_k_evaluation":
-      return <TopKEvaluationViz data={visualization} />;
-    case "unknown":
-      return (
-        <div className="text-fg-muted flex items-center gap-2 text-sm">
-          <AlertTriangle className="h-4 w-4 text-yellow-600" />
-          <span>
-            Unknown visualization type. Your TensorZero deployment may be
-            outdated.
-          </span>
-        </div>
-      );
+  // Check for known visualization types
+  if (
+    typeof visualization === "object" &&
+    visualization !== null &&
+    "type" in visualization &&
+    visualization.type === "top_k_evaluation"
+  ) {
+    return <TopKEvaluationViz data={visualization} />;
   }
+
+  // Unknown or malformed visualization - show raw JSON with a warning
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-fg-muted flex items-center gap-2 text-sm">
+        <AlertTriangle className="h-4 w-4 text-yellow-600" />
+        <span>
+          Unknown visualization type. Your TensorZero deployment may be
+          outdated.
+        </span>
+      </div>
+      <ReadOnlyCodeBlock
+        code={JSON.stringify(visualization, null, 2)}
+        language="json"
+      />
+    </div>
+  );
 }
 
 /**
