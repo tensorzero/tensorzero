@@ -103,7 +103,7 @@ export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tenso
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
 SQLX_OFFLINE=1 cargo build-e2e
-cargo run-e2e -- --run-postgres-migrations
+cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
 
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
