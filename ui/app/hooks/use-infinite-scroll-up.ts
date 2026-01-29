@@ -44,14 +44,28 @@ export type UseInfiniteScrollUpResult = {
 /**
  * Hook for infinite scroll pagination that loads older items when scrolling up.
  *
- * Features:
- * - Race condition prevention via synchronous ref guards
- * - Stable debounced function that doesn't recreate on dependency changes
- * - IntersectionObserver that doesn't reconnect on state changes
- * - Automatic scroll position preservation when new items are prepended
- * - Automatic retry with exponential backoff on transient errors
- * - Manual retry function for user-initiated recovery
- * - Cleanup on unmount
+ * ## Algorithm Overview
+ *
+ * **Trigger Flow:**
+ * 1. IntersectionObserver watches a sentinel element at the top of the scroll container
+ * 2. When sentinel becomes visible (user scrolled near top), observer fires
+ * 3. Debounced handler checks guards (not loading, not at start, no error) and calls loadOlderItems()
+ *
+ * **Load Flow:**
+ * 1. Set loading guard synchronously (prevents concurrent loads)
+ * 2. Capture current scroll position for later restoration
+ * 3. Fetch older items via provided fetchOlder callback
+ * 4. On success: prepend items, update hasReachedStart if no more
+ * 5. On error: auto-retry with exponential backoff (up to maxRetries), then show error
+ *
+ * **Scroll Preservation:**
+ * 1. Before fetch: save scrollHeight and scrollTop
+ * 2. After items prepended: calculate height difference, adjust scrollTop to maintain position
+ *
+ * **State Management:**
+ * - Refs (isLoadingOlderRef, hasReachedStartRef, hasErrorRef) for synchronous guards
+ * - State (isLoadingOlder, hasReachedStart, loadError) for UI rendering
+ * - Refs are checked/set synchronously to prevent race conditions between rapid calls
  *
  * @example
  * ```tsx
@@ -228,11 +242,15 @@ export function useInfiniteScrollUp<T>({
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
       retryTimeoutRef.current = null;
+      // Reset loading ref since we're canceling the pending retry
+      isLoadingOlderRef.current = false;
     }
+
+    // Prevent concurrent loads from rapid clicks
+    if (isLoadingOlderRef.current) return;
 
     // Reset retry count for fresh attempt
     retryCountRef.current = 0;
-    isLoadingOlderRef.current = false;
 
     // Trigger load with isRetry=true to bypass error guard
     loadOlderItems(true);
