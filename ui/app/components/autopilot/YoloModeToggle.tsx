@@ -23,7 +23,7 @@ export function YoloModeToggle({
           <span
             className={cn(
               "flex items-center gap-1.5 text-xs font-medium",
-              checked ? "text-orange-600" : "text-fg-muted",
+              checked ? "text-orange-500" : "text-fg-muted",
             )}
           >
             {checked && <AlertTriangle className="h-3.5 w-3.5" />}
