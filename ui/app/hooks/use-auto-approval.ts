@@ -11,33 +11,35 @@ interface UseAutoApprovalResult {
   reset: () => void;
 }
 
-async function authorizeToolCall(
+async function approveAllToolCalls(
   sessionId: string,
-  eventId: string,
+  lastToolCallEventId: string,
   signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch(
-    `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/authorize`,
+    `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/approve_all`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        tool_call_event_id: eventId,
-        status: { type: "approved" },
+        last_tool_call_event_id: lastToolCallEventId,
       }),
       signal,
     },
   );
   if (!response.ok) {
-    throw new Error("Authorization failed");
+    throw new Error("Batch approval failed");
   }
 }
 
 /**
- * Hook to handle auto-approval of tool calls with exponential backoff retry.
+ * Hook to handle auto-approval of tool calls using batch approval with retry.
+ *
+ * Uses approve_all endpoint to batch-approve all pending tool calls up to
+ * the highest pending ID.
  *
  * Retry schedule: 1s, 2s, 4s, then 60s forever after showing error.
- * After 3 retries, the tool call ID is added to `failedIds`.
+ * After 3 retries, all pending tool call IDs are added to `failedIds`.
  *
  * Requests are cancelled when disabled, session changes, or on unmount.
  */
@@ -57,21 +59,23 @@ export function useAutoApproval({
     pendingToolCallIdsRef.current = pendingToolCallIds;
   }, [pendingToolCallIds]);
 
-  const retryCountsRef = useRef<Map<string, number>>(new Map());
-  const retryTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const inFlightRef = useRef<Set<string>>(new Set());
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const inFlightRef = useRef(false);
+  const lastAttemptedIdRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
 
   // Clear timers and tracking state (does not touch AbortController)
   const clearState = useCallback(() => {
-    for (const timer of retryTimersRef.current.values()) {
-      clearTimeout(timer);
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
     }
-    retryTimersRef.current.clear();
-    retryCountsRef.current.clear();
-    inFlightRef.current.clear();
+    retryCountRef.current = 0;
+    inFlightRef.current = false;
+    lastAttemptedIdRef.current = null;
     setFailedIds(new Set());
   }, []);
 
@@ -82,25 +86,25 @@ export function useAutoApproval({
     clearState();
   }, [clearState]);
 
-  // Cleanup when pending tool calls change (tool call resolved externally)
+  // Cleanup when pending tool calls change (tool calls resolved)
   useEffect(() => {
     const pendingSet = new Set(pendingToolCallIds);
 
-    for (const [eventId, timer] of retryTimersRef.current) {
-      if (!pendingSet.has(eventId)) {
-        clearTimeout(timer);
-        retryTimersRef.current.delete(eventId);
-        retryCountsRef.current.delete(eventId);
+    // If the ID we were trying to approve is no longer pending, it succeeded
+    // Clear the retry state
+    if (
+      lastAttemptedIdRef.current &&
+      !pendingSet.has(lastAttemptedIdRef.current)
+    ) {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
       }
+      retryCountRef.current = 0;
+      lastAttemptedIdRef.current = null;
     }
 
-    for (const eventId of inFlightRef.current) {
-      if (!pendingSet.has(eventId)) {
-        inFlightRef.current.delete(eventId);
-        retryCountsRef.current.delete(eventId);
-      }
-    }
-
+    // Update failedIds - remove any that are no longer pending
     setFailedIds((prev) => {
       const next = new Set(prev);
       let changed = false;
@@ -114,7 +118,7 @@ export function useAutoApproval({
     });
   }, [pendingToolCallIds]);
 
-  // Manage AbortController lifecycle: create when enabled, abort on disable/session change/unmount
+  // Manage AbortController lifecycle
   useEffect(() => {
     if (!enabled) {
       abortControllerRef.current?.abort();
@@ -139,62 +143,60 @@ export function useAutoApproval({
     return 60000;
   };
 
-  const attemptApproval = useCallback(
-    (eventId: string) => {
-      const controller = abortControllerRef.current;
-      if (!controller) return;
+  const attemptBatchApproval = useCallback(() => {
+    const controller = abortControllerRef.current;
+    if (!controller) return;
 
-      inFlightRef.current.add(eventId);
+    const currentPendingIds = pendingToolCallIdsRef.current;
+    if (currentPendingIds.length === 0) return;
 
-      authorizeToolCall(sessionId, eventId, controller.signal).then(
-        () => {
-          inFlightRef.current.delete(eventId);
-        },
-        (error: Error) => {
-          inFlightRef.current.delete(eventId);
+    // Get the highest ID (most recent) to approve all up to it
+    const lastId = currentPendingIds[currentPendingIds.length - 1];
 
-          // Don't retry if request was aborted (disabled/session change/unmount)
-          if (error.name === "AbortError") return;
+    inFlightRef.current = true;
+    lastAttemptedIdRef.current = lastId;
+
+    approveAllToolCalls(sessionId, lastId, controller.signal).then(
+      () => {
+        inFlightRef.current = false;
+        retryCountRef.current = 0;
+      },
+      (error: Error) => {
+        inFlightRef.current = false;
+
+        if (error.name === "AbortError") return;
+        if (!enabledRef.current) return;
+
+        const newRetryCount = retryCountRef.current + 1;
+        retryCountRef.current = newRetryCount;
+
+        // After 3 failures, mark all current pending IDs as failed
+        if (newRetryCount === 3) {
+          setFailedIds(new Set(pendingToolCallIdsRef.current));
+        }
+
+        const delay = getRetryDelay(newRetryCount);
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
 
           if (!enabledRef.current) return;
-          if (!pendingToolCallIdsRef.current.includes(eventId)) return;
+          if (pendingToolCallIdsRef.current.length === 0) return;
 
-          const retryCount = (retryCountsRef.current.get(eventId) ?? 0) + 1;
-          retryCountsRef.current.set(eventId, retryCount);
+          attemptBatchApproval();
+        }, delay);
+      },
+    );
+  }, [sessionId]);
 
-          if (retryCount === 3) {
-            setFailedIds((prev) => new Set(prev).add(eventId));
-          }
-
-          const delay = getRetryDelay(retryCount);
-          const timer = setTimeout(() => {
-            retryTimersRef.current.delete(eventId);
-
-            if (!enabledRef.current) return;
-            if (!pendingToolCallIdsRef.current.includes(eventId)) return;
-
-            attemptApproval(eventId);
-          }, delay);
-          retryTimersRef.current.set(eventId, timer);
-        },
-      );
-    },
-    [sessionId],
-  );
-
+  // Trigger batch approval when pending IDs change
   useEffect(() => {
     if (!enabled || pendingToolCallIds.length === 0) return;
 
-    for (const eventId of pendingToolCallIds) {
-      if (
-        inFlightRef.current.has(eventId) ||
-        retryTimersRef.current.has(eventId)
-      ) {
-        continue;
-      }
-      attemptApproval(eventId);
-    }
-  }, [enabled, pendingToolCallIds, attemptApproval]);
+    // Don't start a new attempt if one is in-flight or scheduled
+    if (inFlightRef.current || retryTimerRef.current) return;
+
+    attemptBatchApproval();
+  }, [enabled, pendingToolCallIds, attemptBatchApproval]);
 
   return { failedIds, reset };
 }
