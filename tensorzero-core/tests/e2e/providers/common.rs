@@ -2608,7 +2608,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
         let _ = res.unwrap();
     }
 
-    if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic"]
+    if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic", "xai"]
         .contains(&provider.model_provider_name.as_str())
         || ["openai-responses"].contains(&provider.variant_name.as_str())
     {
