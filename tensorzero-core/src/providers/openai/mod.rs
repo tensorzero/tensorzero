@@ -2560,6 +2560,15 @@ impl From<OpenAIUsage> for Usage {
     }
 }
 
+impl From<Option<OpenAIUsage>> for Usage {
+    fn from(usage: Option<OpenAIUsage>) -> Self {
+        match usage {
+            Some(u) => u.into(),
+            None => Usage::default(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenAIEmbeddingUsage {
     pub prompt_tokens: Option<u32>,
@@ -2666,7 +2675,8 @@ pub(super) struct OpenAIResponseChoice {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIResponse {
     pub(super) choices: Vec<OpenAIResponseChoice>,
-    pub(super) usage: OpenAIUsage,
+    #[serde(default)]
+    pub(super) usage: Option<OpenAIUsage>,
 }
 
 struct OpenAIResponseWithMetadata<'a> {
@@ -3634,10 +3644,10 @@ mod tests {
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
-            },
+            }),
         };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -3727,10 +3737,10 @@ mod tests {
                     }]),
                 },
             }],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(15),
                 completion_tokens: Some(25),
-            },
+            }),
         };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -3812,10 +3822,10 @@ mod tests {
         // Test case 3: Invalid response with no choices
         let invalid_response_no_choices = OpenAIResponse {
             choices: vec![],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(0),
-            },
+            }),
         };
         let request_body = OpenAIRequest {
             messages: vec![],
@@ -3866,10 +3876,10 @@ mod tests {
                     },
                 },
             ],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(10),
-            },
+            }),
         };
 
         let request_body = OpenAIRequest {
@@ -5704,5 +5714,83 @@ mod tests {
         } else {
             panic!("Expected InvalidRequest");
         }
+    }
+
+    #[test]
+    fn test_openai_response_with_null_usage() {
+        let json = r#"{
+            "choices": [{
+                "index": 0,
+                "message": {"content": "Hello"},
+                "finish_reason": "stop"
+            }],
+            "usage": null
+        }"#;
+        let response: OpenAIResponse =
+            serde_json::from_str(json).expect("Should deserialize response with null usage");
+        assert!(
+            response.usage.is_none(),
+            "usage should be None when JSON has null"
+        );
+    }
+
+    #[test]
+    fn test_openai_response_with_missing_usage() {
+        let json = r#"{
+            "choices": [{
+                "index": 0,
+                "message": {"content": "Hello"},
+                "finish_reason": "stop"
+            }]
+        }"#;
+        let response: OpenAIResponse = serde_json::from_str(json)
+            .expect("Should deserialize response with missing usage field");
+        assert!(
+            response.usage.is_none(),
+            "usage should be None when field is missing"
+        );
+    }
+
+    #[test]
+    fn test_usage_from_none_openai_usage() {
+        let usage: Usage = None::<OpenAIUsage>.into();
+        assert_eq!(usage.input_tokens, None, "input_tokens should be None");
+        assert_eq!(usage.output_tokens, None, "output_tokens should be None");
+    }
+
+    #[test]
+    fn test_usage_from_some_openai_usage() {
+        let openai_usage = Some(OpenAIUsage {
+            prompt_tokens: Some(10),
+            completion_tokens: Some(20),
+        });
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.input_tokens, Some(10), "input_tokens should be 10");
+        assert_eq!(usage.output_tokens, Some(20), "output_tokens should be 20");
+    }
+
+    #[test]
+    fn test_openai_response_with_partial_null_usage() {
+        let json = r#"{
+            "choices": [{
+                "index": 0,
+                "message": {"content": "Hello"},
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": null,
+                "completion_tokens": 50
+            }
+        }"#;
+        let response: OpenAIResponse = serde_json::from_str(json)
+            .expect("Should deserialize response with partial null usage");
+        assert!(response.usage.is_some(), "usage should be Some");
+        let usage = response.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, None, "prompt_tokens should be None");
+        assert_eq!(
+            usage.completion_tokens,
+            Some(50),
+            "completion_tokens should be 50"
+        );
     }
 }
