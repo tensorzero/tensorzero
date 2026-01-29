@@ -8,7 +8,6 @@ import {
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
   PageLayout,
@@ -18,42 +17,40 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import type { StoredInference } from "~/types/tensorzero";
 import { BasicInfoLayoutSkeleton } from "~/components/layout/BasicInfoLayout";
 import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
-import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "./InferenceParameters";
 import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
-import BasicInfo from "./InferenceBasicInfo";
-import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 
-// Local imports
+// Local imports - data fetching
 import {
   fetchModelInferences,
   fetchActionBarData,
   fetchInput,
   fetchFeedbackData,
-  type ModelInferencesData,
-  type FeedbackData,
 } from "./inference-data.server";
+
+// Local imports - section components (content, skeleton, error colocated)
+import { BasicInfoContent, BasicInfoError } from "./BasicInfoSection";
 import {
-  ActionsSkeleton,
-  InputSkeleton,
-  FeedbackTableSkeleton,
-  ModelInferencesTableSkeleton,
-} from "./InferenceSkeletons";
+  InferenceActionBar,
+  ActionBarSkeleton,
+  ActionBarError,
+} from "./InferenceActionBar";
+import { InputSkeleton, InputSectionError } from "./InputSection";
 import {
-  BasicInfoError,
-  ActionsError,
+  FeedbackSectionContent,
+  FeedbackSectionSkeleton,
   FeedbackSectionError,
+} from "./FeedbackSection";
+import {
+  ModelInferencesSkeleton,
   ModelInferencesSectionError,
-  InputSectionError,
-} from "./InferenceSectionErrors";
-import { InferenceActionBar } from "./InferenceActionBar";
+} from "./ModelInferencesSection";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
@@ -104,91 +101,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       limit,
     }),
   };
-}
-
-// Content components for each streamed section
-function BasicInfoContent({
-  inference,
-  modelInferences,
-}: {
-  inference: StoredInference;
-  modelInferences: ModelInferencesData;
-}) {
-  const inferenceUsage = getTotalInferenceUsage(modelInferences);
-  return (
-    <BasicInfo
-      inference={inference}
-      inferenceUsage={inferenceUsage}
-      modelInferences={modelInferences}
-    />
-  );
-}
-
-function FeedbackSectionContent({
-  data,
-  onCountUpdate,
-}: {
-  data: FeedbackData;
-  onCountUpdate: (count: number) => void;
-}) {
-  const { feedback, feedback_bounds, latestFeedbackByMetric } = data;
-  const navigate = useNavigate();
-
-  // Update count when data loads
-  useEffect(() => {
-    onCountUpdate(feedback.length);
-  }, [feedback.length, onCountUpdate]);
-
-  const topFeedback = feedback[0] as { id: string } | undefined;
-  const bottomFeedback = feedback[feedback.length - 1] as
-    | { id: string }
-    | undefined;
-
-  const handleNextPage = () => {
-    if (!bottomFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterFeedback");
-    searchParams.delete("newFeedbackId");
-    searchParams.set("beforeFeedback", bottomFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousPage = () => {
-    if (!topFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeFeedback");
-    searchParams.delete("newFeedbackId");
-    searchParams.set("afterFeedback", topFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  // These are swapped because the table is sorted in descending order
-  const disablePrevious =
-    !topFeedback?.id ||
-    !feedback_bounds.last_id ||
-    feedback_bounds.last_id === topFeedback.id;
-
-  const disableNext =
-    !bottomFeedback?.id ||
-    !feedback_bounds.first_id ||
-    feedback_bounds.first_id === bottomFeedback.id;
-
-  return (
-    <>
-      <FeedbackTable
-        feedback={feedback}
-        latestCommentId={feedback_bounds.by_type.comment.last_id!}
-        latestDemonstrationId={feedback_bounds.by_type.demonstration.last_id!}
-        latestFeedbackIdByMetric={latestFeedbackByMetric}
-      />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={disablePrevious}
-        disableNext={disableNext}
-      />
-    </>
-  );
 }
 
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
@@ -271,9 +183,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         {/* ActionBar - streams when actionBarData resolves */}
         <Suspense
           key={`actions-${location.key}`}
-          fallback={<ActionsSkeleton />}
+          fallback={<ActionBarSkeleton />}
         >
-          <Await resolve={actionBarData} errorElement={<ActionsError />}>
+          <Await resolve={actionBarData} errorElement={<ActionBarError />}>
             {(resolvedActionBarData) => (
               <InferenceActionBar
                 inference={inference}
@@ -324,12 +236,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           />
           <Suspense
             key={`feedback-${location.key}`}
-            fallback={
-              <>
-                <FeedbackTableSkeleton />
-                <PageButtons disabled />
-              </>
-            }
+            fallback={<FeedbackSectionSkeleton />}
           >
             <Await
               resolve={feedbackData}
@@ -385,7 +292,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           <SectionHeader heading="Model Inferences" />
           <Suspense
             key={`model-inferences-${location.key}`}
-            fallback={<ModelInferencesTableSkeleton />}
+            fallback={<ModelInferencesSkeleton />}
           >
             <Await
               resolve={modelInferences}

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
+import { useAsyncError } from "react-router";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useToast } from "~/hooks/use-toast";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithSelect } from "~/components/inference/TryWithSelect";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
@@ -23,6 +25,30 @@ import type {
   ActionBarData,
   ModelInferencesData,
 } from "./inference-data.server";
+
+// Skeleton
+export function ActionBarSkeleton() {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Skeleton className="h-8 w-36" />
+      <Skeleton className="h-8 w-36" />
+      <Skeleton className="h-8 w-8" />
+    </div>
+  );
+}
+
+// Error
+export function ActionBarError() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load actions";
+
+  return (
+    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+      {message}
+    </div>
+  );
+}
 
 type ActionData =
   | { redirectTo: string; error?: never }

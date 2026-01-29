@@ -1,0 +1,158 @@
+import { useEffect } from "react";
+import { useAsyncError, useNavigate } from "react-router";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
+import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertCircle } from "lucide-react";
+import PageButtons from "~/components/utils/PageButtons";
+import FeedbackTable from "~/components/feedback/FeedbackTable";
+import type { FeedbackData } from "./inference-data.server";
+
+// Content
+export function FeedbackSectionContent({
+  data,
+  onCountUpdate,
+}: {
+  data: FeedbackData;
+  onCountUpdate: (count: number) => void;
+}) {
+  const { feedback, feedback_bounds, latestFeedbackByMetric } = data;
+  const navigate = useNavigate();
+
+  // Update count when data loads
+  useEffect(() => {
+    onCountUpdate(feedback.length);
+  }, [feedback.length, onCountUpdate]);
+
+  const topFeedback = feedback[0] as { id: string } | undefined;
+  const bottomFeedback = feedback[feedback.length - 1] as
+    | { id: string }
+    | undefined;
+
+  const handleNextPage = () => {
+    if (!bottomFeedback?.id) return;
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.delete("afterFeedback");
+    searchParams.delete("newFeedbackId");
+    searchParams.set("beforeFeedback", bottomFeedback.id);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handlePreviousPage = () => {
+    if (!topFeedback?.id) return;
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.delete("beforeFeedback");
+    searchParams.delete("newFeedbackId");
+    searchParams.set("afterFeedback", topFeedback.id);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  // These are swapped because the table is sorted in descending order
+  const disablePrevious =
+    !topFeedback?.id ||
+    !feedback_bounds.last_id ||
+    feedback_bounds.last_id === topFeedback.id;
+
+  const disableNext =
+    !bottomFeedback?.id ||
+    !feedback_bounds.first_id ||
+    feedback_bounds.first_id === bottomFeedback.id;
+
+  return (
+    <>
+      <FeedbackTable
+        feedback={feedback}
+        latestCommentId={feedback_bounds.by_type.comment.last_id!}
+        latestDemonstrationId={feedback_bounds.by_type.demonstration.last_id!}
+        latestFeedbackIdByMetric={latestFeedbackByMetric}
+      />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={disablePrevious}
+        disableNext={disableNext}
+      />
+    </>
+  );
+}
+
+// Skeleton
+function FeedbackTableHeaders() {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead>ID</TableHead>
+        <TableHead>Metric</TableHead>
+        <TableHead>Value</TableHead>
+        <TableHead>Tags</TableHead>
+        <TableHead>Time</TableHead>
+      </TableRow>
+    </TableHeader>
+  );
+}
+
+export function FeedbackSectionSkeleton() {
+  return (
+    <>
+      <Table>
+        <FeedbackTableHeaders />
+        <TableBody>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <Skeleton className="h-4 w-24" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-16" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-24" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-28" />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <PageButtons disabled />
+    </>
+  );
+}
+
+// Error
+export function FeedbackSectionError() {
+  const error = useAsyncError();
+  const message =
+    error instanceof Error ? error.message : "Failed to load feedback";
+
+  return (
+    <>
+      <Table>
+        <FeedbackTableHeaders />
+        <TableBody>
+          <TableRow>
+            <TableCell colSpan={5}>
+              <TableErrorNotice
+                icon={AlertCircle}
+                title="Error loading data"
+                description={message}
+              />
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <PageButtons disabled />
+    </>
+  );
+}
