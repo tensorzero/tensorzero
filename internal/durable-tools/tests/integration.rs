@@ -20,7 +20,7 @@ use durable_tools::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{AssertSqlSafe, PgPool};
 use tensorzero::{
     ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
     Usage,
@@ -886,13 +886,16 @@ async fn task_tool_inference_fails_on_empty_chat_response(pool: PgPool) -> sqlx:
     // Shutdown worker
     worker.shutdown().await;
 
-    // Check task status by querying the database directly
-    let task_record: (Option<chrono::DateTime<chrono::Utc>>, Option<String>) =
-        sqlx::query_as("SELECT failed_at, error FROM durable_tasks WHERE id = $1")
-            .bind(spawn_result.task_id)
-            .fetch_one(&pool)
-            .await
-            .expect("Failed to query task status");
+    // Check task status by querying the runs table directly
+    let task_record: (Option<chrono::DateTime<chrono::Utc>>, Option<String>) = sqlx::query_as(
+        AssertSqlSafe(format!(
+            "SELECT failed_at, failure_reason::text FROM durable.\"r_{queue_name}\" WHERE task_id = $1 AND failed_at IS NOT NULL",
+        )),
+    )
+    .bind(spawn_result.task_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to query task status");
 
     assert!(
         task_record.0.is_some(),
@@ -962,13 +965,16 @@ async fn task_tool_inference_fails_on_empty_json_response(pool: PgPool) -> sqlx:
     // Shutdown worker
     worker.shutdown().await;
 
-    // Check task status by querying the database directly
-    let task_record: (Option<chrono::DateTime<chrono::Utc>>, Option<String>) =
-        sqlx::query_as("SELECT failed_at, error FROM durable_tasks WHERE id = $1")
-            .bind(spawn_result.task_id)
-            .fetch_one(&pool)
-            .await
-            .expect("Failed to query task status");
+    // Check task status by querying the runs table directly
+    let task_record: (Option<chrono::DateTime<chrono::Utc>>, Option<String>) = sqlx::query_as(
+        AssertSqlSafe(format!(
+            "SELECT failed_at, failure_reason::text FROM durable.\"r_{queue_name}\" WHERE task_id = $1 AND failed_at IS NOT NULL",
+        )),
+    )
+    .bind(spawn_result.task_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to query task status");
 
     assert!(
         task_record.0.is_some(),
