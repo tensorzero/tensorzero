@@ -339,7 +339,7 @@ function EventStreamContent({
     <EventStream
       events={events}
       isLoadingOlder={isLoadingOlder}
-      hasReachedStart={isNewSession ? false : hasReachedStart}
+      hasReachedStart={isNewSession ? true : hasReachedStart}
       loadError={isNewSession ? null : paginationError}
       onRetryLoad={retryPagination}
       topSentinelRef={topSentinelRef}
