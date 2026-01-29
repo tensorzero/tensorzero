@@ -12,11 +12,11 @@ use crate::{
 };
 
 const PROVIDER_NAME: &str = "OpenAI Responses";
+use crate::http::Event;
 use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
 use futures::{Stream, future::try_join_all};
-use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::time::Instant;
@@ -1197,10 +1197,13 @@ pub fn stream_openai_responses(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
                         // OpenAI Responses API does not send [DONE] marker
                         // Instead, we check for terminal events: completed, failed, or incomplete
                         let data: Result<OpenAIResponsesStreamEvent, serde_json::Error> =
-                            serde_json::from_str(&message.data);
+                            serde_json::from_str(&message_data);
 
                         // If we can't parse the event at all, log and skip it
                         let event = match data {
@@ -1209,7 +1212,7 @@ pub fn stream_openai_responses(
                                 tracing::warn!(
                                     "Failed to parse OpenAI Responses stream event, skipping. Error: {}, Data: {}",
                                     e,
-                                    message.data
+                                    message_data
                                 );
                                 continue;
                             }
@@ -1225,7 +1228,7 @@ pub fn stream_openai_responses(
 
                         let latency = start_time.elapsed();
                         let stream_message = openai_responses_to_tensorzero_chunk(
-                            message.data,
+                            message_data,
                             event,
                             latency,
                             &mut current_tool_id,

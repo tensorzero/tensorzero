@@ -7,7 +7,7 @@ mod openai_compatible;
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -226,27 +226,26 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
         "include_raw_usage": true
     });
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let mut chunks = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
     let mut last_chunk_with_usage: Option<Value> = None;
     let mut all_chunks: Vec<Value> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
+        let sse = chunk.expect("Failed to receive chunk from stream");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
 
         all_chunks.push(chunk_json.clone());
 
@@ -373,27 +372,26 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
         "include_raw_usage": true
     });
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let mut chunks = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
     let mut last_chunk_with_usage: Option<Value> = None;
     let mut all_chunks: Vec<Value> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
+        let sse = chunk.expect("Failed to receive chunk from stream");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
 
         all_chunks.push(chunk_json.clone());
 
@@ -493,22 +491,22 @@ async fn e2e_test_raw_usage_not_requested_streaming() {
         // include_raw_usage is NOT set
     });
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut chunks = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.unwrap();
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
+        let sse = chunk.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
+        let chunk_json: Value = serde_json::from_str(&data).unwrap();
 
         // raw_usage should NOT be present at chunk level when not requested
         assert!(
@@ -615,26 +613,25 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
         "include_raw_usage": true
     });
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let mut chunks = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
     let mut raw_usage_count = 0;
 
     while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
+        let sse = chunk.expect("Failed to receive chunk from stream");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
 
         // Check if this chunk has raw_usage (sibling to usage at chunk level)
         if let Some(raw_usage) = chunk_json.get("raw_usage") {
@@ -768,27 +765,26 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
         "include_raw_usage": true
     });
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let mut chunks = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
     let mut raw_usage_count = 0;
     let mut all_chunks: Vec<Value> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
+        let sse = chunk.expect("Failed to receive chunk from stream");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
 
         all_chunks.push(chunk_json.clone());
 
@@ -937,26 +933,25 @@ async fn e2e_test_raw_usage_dicl_streaming() {
         "include_raw_usage": true
     });
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let mut chunks = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
     let mut api_types: Vec<String> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
+        let sse = chunk.expect("Failed to receive chunk from stream");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
 
         // Check if this chunk has raw_usage (sibling to usage at chunk level)
         if let Some(raw_usage) = chunk_json.get("raw_usage") {
@@ -1119,26 +1114,25 @@ async fn e2e_test_raw_usage_json_function_streaming() {
         "include_raw_usage": true
     });
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let mut chunks = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
     let mut last_chunk_with_usage: Option<Value> = None;
 
     while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
+        let sse = chunk.expect("Failed to receive chunk from stream");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
 
         // Check if this chunk has raw_usage (sibling to usage at chunk level)
         if chunk_json.get("raw_usage").is_some() {

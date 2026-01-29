@@ -10,6 +10,7 @@ use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingRespo
 use crate::feature_flags;
 use crate::http::TensorzeroResponseWrapper;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
+use crate::http::{Event, ReqwestEventSourceError};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::observability::{
     TENSORZERO_OTLP_ATTRIBUTE_PREFIX, TENSORZERO_OTLP_HEADERS_PREFIX,
@@ -25,7 +26,6 @@ use crate::{
     utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey},
 };
 use reqwest::header::HeaderMap;
-use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
 use tokio::time::error::Elapsed;
@@ -206,15 +206,16 @@ impl HTTPGateway {
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<InferenceStream, TensorZeroError> {
-        let event_source =
-            self.customize_builder(builder)
-                .eventsource()
-                .map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::JsonRequest {
-                        message: format!("Error constructing event stream: {e:?}"),
-                    })
-                    .into(),
-                })?;
+        let event_source = self
+            .customize_builder(builder)
+            .eventsource()
+            .await
+            .map_err(|e| TensorZeroError::Other {
+                source: Error::new(ErrorDetails::JsonRequest {
+                    message: format!("Error constructing event stream: {e:?}"),
+                })
+                .into(),
+            })?;
 
         let mut event_source = event_source.peekable();
         let first = event_source.peek().await;
@@ -229,7 +230,7 @@ impl HTTPGateway {
             let inner_err = Error::new(ErrorDetails::StreamError {
                 source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
             });
-            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = *e {
+            if let ReqwestEventSourceError::InvalidStatusCode(code, resp) = *e {
                 return Err(TensorZeroError::Http {
                     status_code: code.as_u16(),
                     text: resp.text().await.ok(),
@@ -248,7 +249,7 @@ impl HTTPGateway {
             while let Some(ev) = event_source.next().await {
                 match ev {
                     Err(e) => {
-                        if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
+                        if matches!(*e, ReqwestEventSourceError::StreamEnded) {
                             break;
                         }
                         yield Err(Error::new(ErrorDetails::StreamError {
@@ -263,10 +264,13 @@ impl HTTPGateway {
                     Ok(e) => match e {
                         Event::Open => continue,
                         Event::Message(message) => {
-                            if message.data == "[DONE]" {
+                            let Some(data) = message.data else {
+                                continue;
+                            };
+                            if data == "[DONE]" {
                                 break;
                             }
-                            let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
+                            let json: serde_json::Value = serde_json::from_str(&data).map_err(|e| {
                                 Error::new(ErrorDetails::Serialization {
                                     message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
                                         val: e,

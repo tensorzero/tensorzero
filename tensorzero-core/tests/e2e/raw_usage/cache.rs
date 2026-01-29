@@ -7,7 +7,7 @@
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Map, Value, json};
 use tensorzero::test_helpers::{
     make_embedded_gateway_e2e_with_unique_db, start_http_gateway_with_unique_db,
@@ -412,25 +412,21 @@ async fn make_openai_request_to_gateway(
     let url = format!("{base_url}/openai/v1/chat/completions");
 
     if stream {
-        let mut chunks = Client::new()
-            .post(&url)
-            .json(&payload)
-            .eventsource()
+        let mut chunks = into_sse_stream(Client::new().post(&url).json(&payload))
+            .await
             .unwrap();
 
         // Collect raw_usage entries from all chunks, similar to native API
         let mut raw_usage_entries: Vec<Value> = Vec::new();
 
         while let Some(chunk) = chunks.next().await {
-            let chunk = chunk.unwrap();
-            let Event::Message(chunk) = chunk else {
-                continue;
-            };
-            if chunk.data == "[DONE]" {
+            let sse = chunk.unwrap();
+            let Some(data) = sse.data else { continue };
+            if data == "[DONE]" {
                 break;
             }
 
-            let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
+            let chunk_json: Value = serde_json::from_str(&data).unwrap();
             // Check for tensorzero_raw_usage at chunk level (sibling to usage)
             if let Some(ru) = chunk_json.get("tensorzero_raw_usage")
                 && let Some(arr) = ru.as_array()

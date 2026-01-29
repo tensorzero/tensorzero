@@ -5,7 +5,7 @@ use crate::providers::common::E2ETestProvider;
 use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use uuid::Uuid;
@@ -139,38 +139,38 @@ pub async fn test_reasoning_output_tokens_streaming_with_provider(provider: E2ET
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to create eventsource for streaming request for provider {}: {e}",
-                provider.variant_name
-            )
-        });
+    let mut chunks = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        panic!(
+            "Failed to create eventsource for streaming request for provider {}: {e}",
+            provider.variant_name
+        )
+    });
 
     let mut output_tokens: Option<u64> = None;
     let mut all_chunks: Vec<Value> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.unwrap_or_else(|e| {
+        let sse = chunk.unwrap_or_else(|e| {
             panic!(
                 "Failed to receive chunk from stream for provider {}: {e}",
                 provider.variant_name
             )
         });
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap_or_else(|e| {
+        let chunk_json: Value = serde_json::from_str(&data).unwrap_or_else(|e| {
             panic!(
                 "Failed to parse chunk as JSON for provider {}: {e}. Data: {}",
-                provider.variant_name, chunk.data
+                provider.variant_name, data
             )
         });
 

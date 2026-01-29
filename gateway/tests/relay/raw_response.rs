@@ -6,7 +6,7 @@
 use crate::common::relay::start_relay_test_environment;
 use futures::StreamExt;
 use reqwest::Client;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -130,44 +130,44 @@ async fn test_relay_raw_response_streaming() {
     let env = start_relay_test_environment(downstream_config, relay_config).await;
 
     let client = Client::new();
-    let mut stream = client
-        .post(format!("http://{}/inference", env.relay.addr))
-        .json(&json!({
-            "model_name": "openai::gpt-5-nano",
-            "episode_id": Uuid::now_v7(),
-            "input": {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Hello"
+    let mut stream = into_sse_stream(
+        client
+            .post(format!("http://{}/inference", env.relay.addr))
+            .json(&json!({
+                "model_name": "openai::gpt-5-nano",
+                "episode_id": Uuid::now_v7(),
+                "input": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Hello"
+                        }
+                    ]
+                },
+                "stream": true,
+                "include_raw_response": true,
+                "params": {
+                    "chat_completion": {
+                        "reasoning_effort": "minimal"
                     }
-                ]
-            },
-            "stream": true,
-            "include_raw_response": true,
-            "params": {
-                "chat_completion": {
-                    "reasoning_effort": "minimal"
                 }
-            }
-        }))
-        .eventsource()
-        .unwrap();
+            })),
+    )
+    .await
+    .unwrap();
 
     let mut found_raw_chunk = false;
     let mut content_chunks_count: usize = 0;
     let mut chunks_with_raw_chunk: usize = 0;
 
     while let Some(event) = stream.next().await {
-        let event = event.unwrap();
-        let Event::Message(message) = event else {
-            continue;
-        };
-        if message.data == "[DONE]" {
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+        let chunk: Value = serde_json::from_str(&data).unwrap();
 
         // Count content chunks (chunks with content delta)
         if chunk.get("content").is_some() {
@@ -254,40 +254,40 @@ async fn test_relay_raw_response_not_requested_streaming() {
     let env = start_relay_test_environment(downstream_config, relay_config).await;
 
     let client = Client::new();
-    let mut stream = client
-        .post(format!("http://{}/inference", env.relay.addr))
-        .json(&json!({
-            "model_name": "openai::gpt-5-nano",
-            "episode_id": Uuid::now_v7(),
-            "input": {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Hello"
+    let mut stream = into_sse_stream(
+        client
+            .post(format!("http://{}/inference", env.relay.addr))
+            .json(&json!({
+                "model_name": "openai::gpt-5-nano",
+                "episode_id": Uuid::now_v7(),
+                "input": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Hello"
+                        }
+                    ]
+                },
+                "stream": true,
+                "include_raw_response": false,
+                "params": {
+                    "chat_completion": {
+                        "reasoning_effort": "minimal"
                     }
-                ]
-            },
-            "stream": true,
-            "include_raw_response": false,
-            "params": {
-                "chat_completion": {
-                    "reasoning_effort": "minimal"
                 }
-            }
-        }))
-        .eventsource()
-        .unwrap();
+            })),
+    )
+    .await
+    .unwrap();
 
     while let Some(event) = stream.next().await {
-        let event = event.unwrap();
-        let Event::Message(message) = event else {
-            continue;
-        };
-        if message.data == "[DONE]" {
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+        let chunk: Value = serde_json::from_str(&data).unwrap();
 
         // raw_response and raw_chunk should NOT be present when not requested
         assert!(
@@ -440,39 +440,39 @@ reasoning_effort = "minimal"
     let env = start_relay_test_environment(downstream_config, relay_config).await;
 
     let client = Client::new();
-    let mut stream = client
-        .post(format!("http://{}/inference", env.relay.addr))
-        .json(&json!({
-            "function_name": "best_of_n_test",
-            "variant_name": "best_of_n",
-            "episode_id": Uuid::now_v7(),
-            "input": {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Hello"
-                    }
-                ]
-            },
-            "stream": true,
-            "include_raw_response": true
-        }))
-        .eventsource()
-        .unwrap();
+    let mut stream = into_sse_stream(
+        client
+            .post(format!("http://{}/inference", env.relay.addr))
+            .json(&json!({
+                "function_name": "best_of_n_test",
+                "variant_name": "best_of_n",
+                "episode_id": Uuid::now_v7(),
+                "input": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Hello"
+                        }
+                    ]
+                },
+                "stream": true,
+                "include_raw_response": true
+            })),
+    )
+    .await
+    .unwrap();
 
     let mut raw_response_entries: Vec<Value> = Vec::new();
     let mut found_raw_chunk = false;
 
     while let Some(event) = stream.next().await {
-        let event = event.unwrap();
-        let Event::Message(message) = event else {
-            continue;
-        };
-        if message.data == "[DONE]" {
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+        let chunk: Value = serde_json::from_str(&data).unwrap();
 
         // Check if this chunk has raw_response (previous inferences for best-of-n)
         if let Some(raw_response) = chunk.get("raw_response")

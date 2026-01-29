@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use tensorzero_core::{
     inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text},
@@ -189,23 +189,21 @@ async fn e2e_test_streaming_flaky() {
         }}
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
     let mut inference_id = None;
     for (i, chunk) in chunks.iter().enumerate() {

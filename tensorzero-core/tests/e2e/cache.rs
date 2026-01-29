@@ -3,8 +3,7 @@
 use futures::StreamExt;
 use rand::Rng;
 use reqwest::Client;
-use reqwest_eventsource::Event;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::Value;
 use serde_json::json;
 use std::time::Duration;
@@ -525,33 +524,31 @@ pub async fn check_test_streaming_cache_with_err(
         "cache_options": {"enabled": "on", "lookback_s": 10}
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                if serde_json::from_str::<Value>(&message.data)
-                    .unwrap()
-                    .get("error")
-                    .is_some()
-                {
-                    continue;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        if serde_json::from_str::<Value>(&data)
+            .unwrap()
+            .get("error")
+            .is_some()
+        {
+            continue;
+        }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -913,10 +910,8 @@ async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
 
         let url = format!("{base_url}/openai/v1/chat/completions");
 
-        let mut chunks = Client::new()
-            .post(&url)
-            .json(&payload)
-            .eventsource()
+        let mut chunks = into_sse_stream(Client::new().post(&url).json(&payload))
+            .await
             .unwrap();
 
         let mut chunks_with_usage = 0;
@@ -925,17 +920,15 @@ async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
         let mut total_completion_tokens = 0u64;
 
         while let Some(chunk) = chunks.next().await {
-            let chunk = chunk.unwrap();
-            let Event::Message(chunk) = chunk else {
-                continue;
-            };
-            if chunk.data == "[DONE]" {
+            let sse = chunk.unwrap();
+            let Some(data) = sse.data else { continue };
+            if data == "[DONE]" {
                 break;
             }
 
             total_chunks += 1;
 
-            let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
+            let chunk_json: Value = serde_json::from_str(&data).unwrap();
             if let Some(usage) = chunk_json.get("usage")
                 && !usage.is_null()
             {

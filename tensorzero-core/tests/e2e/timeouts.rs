@@ -1,8 +1,9 @@
 use std::time::{Duration, Instant};
 
+use futures::StreamExt;
 use http::StatusCode;
 use reqwest::Client;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::{
@@ -12,7 +13,6 @@ use tensorzero_core::{
     },
     inference::types::Text,
 };
-use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -167,24 +167,25 @@ async fn test_json_inference_ttft_ms() {
 }
 
 async fn test_inference_ttft_ms(payload: Value, json: bool) {
-    let mut response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut response = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut inference_id = None;
 
     while let Some(event) = response.next().await {
-        let chunk = event.unwrap();
-        println!("chunk: {chunk:?}");
-        if let Event::Message(event) = chunk {
-            if event.data == "[DONE]" {
-                break;
-            }
-            let event = serde_json::from_str::<Value>(&event.data).unwrap();
-            inference_id = Some(event["inference_id"].as_str().unwrap().parse().unwrap());
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        println!("chunk: {data:?}");
+        if data == "[DONE]" {
+            break;
         }
+        let event = serde_json::from_str::<Value>(&data).unwrap();
+        inference_id = Some(event["inference_id"].as_str().unwrap().parse().unwrap());
     }
 
     // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -515,24 +516,25 @@ async fn best_of_n_judge_timeout(payload: Value) {
 
 async fn slow_second_chunk_streaming(payload: Value) {
     let start = Instant::now();
-    let mut response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut response = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut inference_id = None;
 
     while let Some(event) = response.next().await {
-        let chunk = event.unwrap();
-        println!("chunk: {chunk:?}");
-        if let Event::Message(event) = chunk {
-            if event.data == "[DONE]" {
-                break;
-            }
-            let event = serde_json::from_str::<Value>(&event.data).unwrap();
-            inference_id = Some(event["inference_id"].as_str().unwrap().parse().unwrap());
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        println!("chunk: {data:?}");
+        if data == "[DONE]" {
+            break;
         }
+        let event = serde_json::from_str::<Value>(&data).unwrap();
+        inference_id = Some(event["inference_id"].as_str().unwrap().parse().unwrap());
     }
 
     // The overall stream duration should be at least 2 seconds, because we used the 'slow_second_chunk' model

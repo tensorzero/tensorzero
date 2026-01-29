@@ -5,7 +5,7 @@
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -254,27 +254,26 @@ async fn test_openai_compatible_raw_usage_streaming() {
         "tensorzero::include_raw_usage": true
     });
 
-    let mut response = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut response = into_sse_stream(
+        client
+            .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut all_chunks: Vec<Value> = Vec::new();
     // Track which chunk indices have raw_usage
     let mut chunks_with_raw_usage: Vec<usize> = Vec::new();
 
     while let Some(event) = response.next().await {
-        let event = event.expect("Failed to receive event");
-        let Event::Message(message) = event else {
-            continue;
-        };
-        if message.data == "[DONE]" {
+        let sse = event.expect("Failed to receive event");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
         let chunk_index = all_chunks.len();
         all_chunks.push(chunk_json.clone());
 
@@ -364,27 +363,26 @@ async fn test_openai_compatible_streaming_usage_only_in_last_chunk() {
         "tensorzero::episode_id": episode_id.to_string()
     });
 
-    let mut response = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut response = into_sse_stream(
+        client
+            .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut all_chunks: Vec<Value> = Vec::new();
     // Track which chunk indices have usage populated (not null)
     let mut chunks_with_usage: Vec<usize> = Vec::new();
 
     while let Some(event) = response.next().await {
-        let event = event.expect("Failed to receive event");
-        let Event::Message(message) = event else {
-            continue;
-        };
-        if message.data == "[DONE]" {
+        let sse = event.expect("Failed to receive event");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
         let chunk_index = all_chunks.len();
         all_chunks.push(chunk_json.clone());
 
@@ -460,26 +458,25 @@ async fn test_openai_compatible_streaming_no_usage_when_disabled() {
         "tensorzero::episode_id": episode_id.to_string()
     });
 
-    let mut response = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut response = into_sse_stream(
+        client
+            .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut all_chunks: Vec<Value> = Vec::new();
     let mut chunks_with_usage: Vec<usize> = Vec::new();
 
     while let Some(event) = response.next().await {
-        let event = event.expect("Failed to receive event");
-        let Event::Message(message) = event else {
-            continue;
-        };
-        if message.data == "[DONE]" {
+        let sse = event.expect("Failed to receive event");
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value =
-            serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
+        let chunk_json: Value = serde_json::from_str(&data).expect("Failed to parse chunk as JSON");
         let chunk_index = all_chunks.len();
         all_chunks.push(chunk_json.clone());
 

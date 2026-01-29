@@ -1,9 +1,9 @@
+use crate::http::Event;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use lazy_static::lazy_static;
 use mime::MediaType;
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -507,15 +507,18 @@ fn stream_anthropic(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
                         let data: Result<AnthropicStreamMessage, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                            serde_json::from_str(&message_data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing message: {}, Data: {}",
-                                    e, message.data
+                                    e, message_data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: Some(raw_request.to_string()),
-                                raw_response: Some(message.data.clone()),
+                                raw_response: Some(message_data.clone()),
                             }));
                         // Anthropic streaming API docs specify that this is the last message
                         if let Ok(AnthropicStreamMessage::MessageStop) = data {
@@ -524,7 +527,7 @@ fn stream_anthropic(
 
                         let response = data.and_then(|data| {
                             anthropic_to_tensorzero_stream_message(
-                                message.data,
+                                message_data,
                                 data,
                                 start_time.elapsed(),
                                 &mut tool_state,

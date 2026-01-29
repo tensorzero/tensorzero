@@ -1,12 +1,14 @@
 #![expect(clippy::print_stdout)]
 
 use std::collections::HashSet;
-use tensorzero::ClientExt;
 
 use axum::extract::State;
+use futures::StreamExt;
 use http_body_util::BodyExt;
 use reqwest::{Client, StatusCode};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
+use tensorzero::ClientExt;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -766,7 +768,7 @@ async fn test_openai_compatible_route_with_json_schema() {
 #[tokio::test]
 async fn test_openai_compatible_streaming_tool_call() {
     use futures::StreamExt;
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::into_sse_stream;
 
     let client = Client::new();
     let episode_id = Uuid::now_v7();
@@ -809,27 +811,25 @@ async fn test_openai_compatible_streaming_tool_call() {
         "tensorzero::episode_id": episode_id.to_string(),
     });
 
-    let mut response = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .eventsource()
-        .unwrap();
+    let mut response = into_sse_stream(
+        client
+            .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+            .header("Content-Type", "application/json")
+            .json(&body),
+    )
+    .await
+    .unwrap();
 
-    let mut chunks = vec![];
+    let mut chunks: Vec<String> = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = response.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
     let first_chunk = chunks.first().unwrap();
@@ -933,8 +933,6 @@ async fn test_openai_compatible_deny_unknown_fields() {
 
 #[tokio::test]
 async fn test_openai_compatible_streaming() {
-    use futures::StreamExt;
-    use reqwest_eventsource::{Event, RequestBuilderExt};
 
     let client = Client::new();
     let episode_id = Uuid::now_v7();
@@ -950,27 +948,25 @@ async fn test_openai_compatible_streaming() {
         "tensorzero::episode_id": episode_id.to_string(),
     });
 
-    let mut response = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .eventsource()
-        .unwrap();
+    let mut response = into_sse_stream(
+        client
+            .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+            .header("Content-Type", "application/json")
+            .json(&body),
+    )
+    .await
+    .unwrap();
 
-    let mut chunks = vec![];
+    let mut chunks: Vec<String> = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = response.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
     let first_chunk = chunks.first().unwrap();

@@ -1,11 +1,11 @@
 #![expect(clippy::print_stdout, clippy::unwrap_used)]
 use std::time::{Duration, Instant};
 
+use futures::StreamExt;
 use reqwest::Client;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use tensorzero::test_helpers::get_metrics;
 use tokio::task::JoinSet;
-use tokio_stream::StreamExt;
 
 use crate::common::start_gateway_on_random_port;
 
@@ -69,12 +69,11 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
                 .json(&inference_payload);
 
             if stream {
-                let mut event_source = builder.eventsource().unwrap();
+                let mut event_source = into_sse_stream(builder).await.unwrap();
                 while let Some(event) = event_source.next().await {
-                    let event = event.unwrap();
-                    if let Event::Message(event) = event
-                        && event.data == "[DONE]"
-                    {
+                    let sse = event.unwrap();
+                    let Some(data) = sse.data else { continue };
+                    if data == "[DONE]" {
                         break;
                     }
                 }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use futures::StreamExt;
 use indexmap::IndexMap;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use tensorzero::{
     ClientInferenceParams, File, InferenceOutput, InferenceResponse, Input, InputMessage,
@@ -255,23 +255,19 @@ async fn test_empty_chunks_success() {
 
     let client = Client::new();
 
-    let mut event_source = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        client.post(get_gateway_endpoint("/inference")).json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
 
     println!("Chunks: {chunks:?}");
@@ -724,28 +720,24 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
     });
 
     let inference_id = if stream {
-        let mut event_source = client
-            .post(get_gateway_endpoint("/inference"))
-            .json(&payload)
-            .eventsource()
-            .unwrap();
+        let mut event_source = into_sse_stream(
+            client.post(get_gateway_endpoint("/inference")).json(&payload),
+        )
+        .await
+        .unwrap();
         let mut first_inference_id = None;
         while let Some(event) = event_source.next().await {
-            let event = event.unwrap();
-            match event {
-                Event::Open => continue,
-                Event::Message(message) => {
-                    if message.data == "[DONE]" {
-                        break;
-                    }
-                    let chunk_json: Value = serde_json::from_str(&message.data).unwrap();
-                    if let Some(inference_id) = chunk_json
-                        .get("inference_id")
-                        .and_then(|id| id.as_str().map(|id| Uuid::parse_str(id).unwrap()))
-                    {
-                        first_inference_id = Some(inference_id);
-                    }
-                }
+            let sse = event.unwrap();
+            let Some(data) = sse.data else { continue };
+            if data == "[DONE]" {
+                break;
+            }
+            let chunk_json: Value = serde_json::from_str(&data).unwrap();
+            if let Some(inference_id) = chunk_json
+                .get("inference_id")
+                .and_then(|id| id.as_str().map(|id| Uuid::parse_str(id).unwrap()))
+            {
+                first_inference_id = Some(inference_id);
             }
         }
         first_inference_id.unwrap()
@@ -825,28 +817,24 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
     });
 
     let inference_id = if stream {
-        let mut event_source = client
-            .post(get_gateway_endpoint("/inference"))
-            .json(&payload)
-            .eventsource()
-            .unwrap();
+        let mut event_source = into_sse_stream(
+            client.post(get_gateway_endpoint("/inference")).json(&payload),
+        )
+        .await
+        .unwrap();
         let mut first_inference_id = None;
         while let Some(event) = event_source.next().await {
-            let event = event.unwrap();
-            match event {
-                Event::Open => continue,
-                Event::Message(message) => {
-                    if message.data == "[DONE]" {
-                        break;
-                    }
-                    let chunk_json: Value = serde_json::from_str(&message.data).unwrap();
-                    if let Some(inference_id) = chunk_json
-                        .get("inference_id")
-                        .and_then(|id| id.as_str().map(|id| Uuid::parse_str(id).unwrap()))
-                    {
-                        first_inference_id = Some(inference_id);
-                    }
-                }
+            let sse = event.unwrap();
+            let Some(data) = sse.data else { continue };
+            if data == "[DONE]" {
+                break;
+            }
+            let chunk_json: Value = serde_json::from_str(&data).unwrap();
+            if let Some(inference_id) = chunk_json
+                .get("inference_id")
+                .and_then(|id| id.as_str().map(|id| Uuid::parse_str(id).unwrap()))
+            {
+                first_inference_id = Some(inference_id);
             }
         }
         first_inference_id.unwrap()
@@ -951,23 +939,19 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
 
     let client = Client::new();
 
-    let mut event_source = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        client.post(get_gateway_endpoint("/inference")).json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
     let mut inference_id = None;
     let mut content_blocks: IndexMap<(String, String), String> = IndexMap::new();

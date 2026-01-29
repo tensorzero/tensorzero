@@ -1,7 +1,7 @@
+use crate::http::Event;
 use futures::future::try_join_all;
 use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -353,23 +353,26 @@ pub fn stream_groq(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        if message.data == "[DONE]" {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
+                        if message_data == "[DONE]" {
                             break;
                         }
                         let data: Result<GroqChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                            serde_json::from_str(&message_data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                     ),
                                 raw_request: Some(raw_request.clone()),
-                                raw_response: Some(message.data.clone()),
+                                raw_response: Some(message_data.clone()),
                                 provider_type: provider_type.clone(),
                             }));
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             groq_to_tensorzero_chunk(
-                                message.data.clone(),
+                                message_data.clone(),
                                 d,
                                 latency,
                                 &mut tool_call_ids,

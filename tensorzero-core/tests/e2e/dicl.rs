@@ -1,7 +1,7 @@
 use crate::common::get_gateway_endpoint;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -737,25 +737,23 @@ pub async fn test_dicl_inference_request_simple() {
             ]
         }
     });
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
     let mut inference_id: Option<Uuid> = None;

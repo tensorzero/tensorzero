@@ -8,7 +8,10 @@ use uuid::Uuid;
 
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
-    http::{TensorZeroEventSource, TensorzeroRequestBuilder, TensorzeroResponseWrapper},
+    http::{
+        ReqwestEventSourceError, TensorZeroEventSource, TensorzeroRequestBuilder,
+        TensorzeroResponseWrapper,
+    },
     inference::types::{
         ProviderInferenceResponseChunk,
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
@@ -29,7 +32,7 @@ pub struct JsonlBatchFileInfo {
 pub async fn convert_stream_error(
     raw_request: String,
     provider_type: String,
-    e: reqwest_eventsource::Error,
+    e: ReqwestEventSourceError,
     request_id: Option<&str>,
 ) -> Error {
     let base_message = e.to_string();
@@ -39,8 +42,8 @@ pub async fn convert_stream_error(
     // to avoid holding open a broken stream (which will delay gateway shutdown when we
     // wait on the parent `Span` to finish)
     match e {
-        reqwest_eventsource::Error::InvalidStatusCode(_, resp)
-        | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+        ReqwestEventSourceError::InvalidStatusCode(_, resp)
+        | ReqwestEventSourceError::InvalidContentType(_, resp) => {
             let raw_response = resp.text().await.ok();
             let message = match (&raw_response, request_id) {
                 (Some(body), Some(id)) => format!("{base_message}: {body} [request_id: {id}]"),
@@ -56,7 +59,7 @@ pub async fn convert_stream_error(
             }
             .into()
         }
-        reqwest_eventsource::Error::Transport(inner) => {
+        ReqwestEventSourceError::Transport(inner) => {
             // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
             // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
             // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
@@ -345,7 +348,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
         Err((e, headers)) => {
             // Extract status code first (by borrowing), then consume Response to read body
             let (message, raw_response) = match e {
-                reqwest_eventsource::Error::InvalidStatusCode(status, resp) => {
+                ReqwestEventSourceError::InvalidStatusCode(status, resp) => {
                     let body = resp.text().await.ok();
                     let message = match &body {
                         Some(b) => {
@@ -355,7 +358,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                     };
                     (message, body)
                 }
-                reqwest_eventsource::Error::InvalidContentType(content_type, resp) => {
+                ReqwestEventSourceError::InvalidContentType(content_type, resp) => {
                     let body = resp.text().await.ok();
                     let message = match &body {
                         Some(b) => format!(
@@ -373,7 +376,8 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                     // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
                     // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
                     // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
-                    let is_timeout = matches!(&other, reqwest_eventsource::Error::Transport(e) if e.is_timeout());
+                    let is_timeout =
+                        matches!(&other, ReqwestEventSourceError::Transport(e) if e.is_timeout());
                     let message = if is_timeout {
                         format!(
                             "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({})",

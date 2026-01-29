@@ -11,7 +11,6 @@ use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::{ExposeSecret, SecretString};
 use sqlx::PgPool;
-use sse_stream::{Sse, SseStream};
 use url::Url;
 use uuid::Uuid;
 

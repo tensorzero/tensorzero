@@ -11,7 +11,7 @@ use base64::prelude::{BASE64_STANDARD, Engine as Base64Engine};
 use futures::StreamExt;
 use opentelemetry_sdk::trace::SpanData;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
@@ -326,24 +326,22 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
         "stream": true,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
 
     let chunk_json: serde_json::Value = serde_json::from_str(chunks.last().unwrap()).unwrap();
@@ -1561,23 +1559,21 @@ async fn e2e_test_streaming() {
         }}
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
     let mut inference_id = None;
     for (i, chunk) in chunks.iter().enumerate() {
@@ -1738,23 +1734,21 @@ async fn e2e_test_streaming_dryrun() {
         "dryrun": true,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
     let mut inference_id = None;
     for (i, chunk) in chunks.iter().enumerate() {
@@ -2241,23 +2235,21 @@ async fn e2e_test_tool_call_streaming() {
             ]},
         "stream": true,
     });
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
     let mut inference_id = None;
     let mut id: Option<String> = None;
@@ -2468,23 +2460,21 @@ async fn e2e_test_tool_call_streaming_split_tool_name() {
         "stream": true,
         "variant_name": "split_tool_name",
     });
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
     let mut inference_id = None;
     let mut id: Option<String> = None;

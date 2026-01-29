@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
@@ -779,11 +779,13 @@ async fn test_run_evaluation_streaming_success() {
     });
 
     // Make the SSE request
-    let mut event_stream = http_client
-        .post(get_gateway_endpoint("/internal/evaluations/run"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_stream = into_sse_stream(
+        http_client
+            .post(get_gateway_endpoint("/internal/evaluations/run"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut events: Vec<Value> = Vec::new();
     let mut start_received = false;
@@ -793,64 +795,62 @@ async fn test_run_evaluation_streaming_success() {
 
     // Collect events from the stream
     while let Some(event_result) = event_stream.next().await {
-        match event_result {
-            Ok(Event::Open) => continue,
-            Ok(Event::Message(message)) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-
-                let event: Value = serde_json::from_str(&message.data).unwrap();
-                let event_type = event.get("type").and_then(|t| t.as_str());
-
-                match event_type {
-                    Some("start") => {
-                        start_received = true;
-                        assert!(
-                            event.get("evaluation_run_id").is_some(),
-                            "Start event should have evaluation_run_id"
-                        );
-                        assert!(
-                            event.get("num_datapoints").is_some(),
-                            "Start event should have num_datapoints"
-                        );
-                    }
-                    Some("success") => {
-                        success_count += 1;
-                        assert!(
-                            event.get("datapoint").is_some(),
-                            "Success event should have datapoint"
-                        );
-                        assert!(
-                            event.get("response").is_some(),
-                            "Success event should have response"
-                        );
-                        assert!(
-                            event.get("evaluations").is_some(),
-                            "Success event should have evaluations"
-                        );
-                    }
-                    Some("error") => {
-                        error_count += 1;
-                    }
-                    Some("complete") => {
-                        complete_received = true;
-                        assert!(
-                            event.get("evaluation_run_id").is_some(),
-                            "Complete event should have evaluation_run_id"
-                        );
-                    }
-                    Some("fatal_error") => {
-                        panic!("Received fatal_error event: {:?}", event.get("message"));
-                    }
-                    _ => {}
-                }
-
-                events.push(event);
-            }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
-            Err(e) => panic!("SSE stream error: {e:?}"),
+        let sse = match event_result {
+            Ok(sse) => sse,
+            Err(_) => break,
+        };
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+
+        let event: Value = serde_json::from_str(&data).unwrap();
+        let event_type = event.get("type").and_then(|t| t.as_str());
+
+        match event_type {
+            Some("start") => {
+                start_received = true;
+                assert!(
+                    event.get("evaluation_run_id").is_some(),
+                    "Start event should have evaluation_run_id"
+                );
+                assert!(
+                    event.get("num_datapoints").is_some(),
+                    "Start event should have num_datapoints"
+                );
+            }
+            Some("success") => {
+                success_count += 1;
+                assert!(
+                    event.get("datapoint").is_some(),
+                    "Success event should have datapoint"
+                );
+                assert!(
+                    event.get("response").is_some(),
+                    "Success event should have response"
+                );
+                assert!(
+                    event.get("evaluations").is_some(),
+                    "Success event should have evaluations"
+                );
+            }
+            Some("error") => {
+                error_count += 1;
+            }
+            Some("complete") => {
+                complete_received = true;
+                assert!(
+                    event.get("evaluation_run_id").is_some(),
+                    "Complete event should have evaluation_run_id"
+                );
+            }
+            Some("fatal_error") => {
+                panic!("Received fatal_error event: {:?}", event.get("message"));
+            }
+            _ => {}
+        }
+
+        events.push(event);
     }
 
     assert!(start_received, "Should receive start event");
@@ -923,47 +923,47 @@ async fn test_run_evaluation_streaming_nonexistent_dataset() {
 
     // The request should start streaming. We should get a start event with 0 datapoints,
     // then a complete event.
-    let mut event_stream = http_client
-        .post(get_gateway_endpoint("/internal/evaluations/run"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_stream = into_sse_stream(
+        http_client
+            .post(get_gateway_endpoint("/internal/evaluations/run"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut found_error_or_empty = false;
 
     while let Some(event_result) = event_stream.next().await {
-        match event_result {
-            Ok(Event::Open) => continue,
-            Ok(Event::Message(message)) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                let event: Value = serde_json::from_str(&message.data).unwrap();
-                let event_type = event.get("type").and_then(|t| t.as_str());
-
-                match event_type {
-                    Some("start") => {
-                        let num_datapoints = event.get("num_datapoints").and_then(|n| n.as_u64());
-                        if num_datapoints == Some(0) {
-                            found_error_or_empty = true;
-                        }
-                    }
-                    Some("fatal_error") => {
-                        found_error_or_empty = true;
-                        break;
-                    }
-                    Some("complete") => {
-                        found_error_or_empty = true;
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
+        let sse = match event_result {
+            Ok(sse) => sse,
             Err(_) => {
                 found_error_or_empty = true;
                 break;
             }
+        };
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
+        }
+        let event: Value = serde_json::from_str(&data).unwrap();
+        let event_type = event.get("type").and_then(|t| t.as_str());
+
+        match event_type {
+            Some("start") => {
+                let num_datapoints = event.get("num_datapoints").and_then(|n| n.as_u64());
+                if num_datapoints == Some(0) {
+                    found_error_or_empty = true;
+                }
+            }
+            Some("fatal_error") => {
+                found_error_or_empty = true;
+                break;
+            }
+            Some("complete") => {
+                found_error_or_empty = true;
+                break;
+            }
+            _ => {}
         }
     }
 
@@ -1012,41 +1012,40 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
         "inference_cache": "off",
     });
 
-    let mut event_stream = http_client
-        .post(get_gateway_endpoint("/internal/evaluations/run"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_stream = into_sse_stream(
+        http_client
+            .post(get_gateway_endpoint("/internal/evaluations/run"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut num_datapoints_reported = None;
     let mut start_received = false;
 
     while let Some(event_result) = event_stream.next().await {
-        match event_result {
-            Ok(Event::Open) => continue,
-            Ok(Event::Message(message)) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-
-                let event: Value = serde_json::from_str(&message.data).unwrap();
-                let event_type = event.get("type").and_then(|t| t.as_str());
-
-                match event_type {
-                    Some("start") => {
-                        start_received = true;
-                        num_datapoints_reported =
-                            event.get("num_datapoints").and_then(|n| n.as_u64());
-                    }
-                    Some("complete") => break,
-                    Some("fatal_error") => {
-                        panic!("Received fatal_error event: {:?}", event.get("message"));
-                    }
-                    _ => {}
-                }
-            }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
+        let sse = match event_result {
+            Ok(sse) => sse,
             Err(e) => panic!("SSE stream error: {e:?}"),
+        };
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
+        }
+
+        let event: Value = serde_json::from_str(&data).unwrap();
+        let event_type = event.get("type").and_then(|t| t.as_str());
+
+        match event_type {
+            Some("start") => {
+                start_received = true;
+                num_datapoints_reported = event.get("num_datapoints").and_then(|n| n.as_u64());
+            }
+            Some("complete") => break,
+            Some("fatal_error") => {
+                panic!("Received fatal_error event: {:?}", event.get("message"));
+            }
+            _ => {}
         }
     }
 

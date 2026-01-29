@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::json;
 use tensorzero::{
     Client, ClientInferenceParams, InferenceOutput, InferenceResponseChunk, Input, InputMessage,
@@ -7,7 +8,6 @@ use tensorzero::{
 use tensorzero_core::inference::types::{Arguments, System, Text};
 
 use crate::common::get_gateway_endpoint;
-use reqwest_eventsource::{Event, RequestBuilderExt};
 
 #[tokio::test]
 async fn test_client_stream_with_error_http_gateway() {
@@ -79,47 +79,37 @@ async fn test_stream_with_error() {
         "stream": true,
     });
 
-    let mut event_stream = reqwest::Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_stream = into_sse_stream(
+        reqwest::Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut good_chunks = 0;
     // Check we receive all client chunks correctly
-    loop {
-        match event_stream.next().await {
-            Some(Ok(e)) => match e {
-                Event::Open => continue,
-                Event::Message(message) => {
-                    if message.data == "[DONE]" {
-                        break;
-                    }
-                    let obj: serde_json::Value = serde_json::from_str(&message.data).unwrap();
-                    if let Some(error) = obj.get("error") {
-                        let error_str: &str = error.as_str().unwrap();
-                        assert!(
-                            error_str.contains("Dummy error in stream"),
-                            "Unexpected error: {error_str}"
-                        );
-                        assert_eq!(good_chunks, 3);
-                    } else {
-                        let _chunk: InferenceResponseChunk =
-                            serde_json::from_str(&message.data).unwrap();
-                    }
-                    good_chunks += 1;
-                }
-            },
-            Some(Err(e)) => {
-                if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                    break;
-                }
-                panic!("Unexpected error: {e:?}");
-            }
-            None => {
-                panic!("Stream ended unexpectedly");
-            }
+    while let Some(event) = event_stream.next().await {
+        let sse = match event {
+            Ok(sse) => sse,
+            Err(_) => break,
+        };
+        let Some(data) = sse.data else { continue };
+        if data == "[DONE]" {
+            break;
         }
+        let obj: serde_json::Value = serde_json::from_str(&data).unwrap();
+        if let Some(error) = obj.get("error") {
+            let error_str: &str = error.as_str().unwrap();
+            assert!(
+                error_str.contains("Dummy error in stream"),
+                "Unexpected error: {error_str}"
+            );
+            assert_eq!(good_chunks, 3);
+        } else {
+            let _chunk: InferenceResponseChunk = serde_json::from_str(&data).unwrap();
+        }
+        good_chunks += 1;
     }
     assert_eq!(good_chunks, 17);
 }

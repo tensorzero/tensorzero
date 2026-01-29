@@ -5,6 +5,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use crate::error::DelayedError;
+use crate::http::{Event, ReqwestEventSourceError};
 use axum::http;
 use futures::StreamExt;
 use futures::future::try_join_all;
@@ -15,7 +16,6 @@ use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
 use object_store::{ObjectStore, ObjectStoreExt, StaticCredentialProvider};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1587,7 +1587,7 @@ fn stream_gcp_vertex_gemini(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
+                    if matches!(*e, ReqwestEventSourceError::StreamEnded) {
                         break;
                     }
                     yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
@@ -1595,12 +1595,15 @@ fn stream_gcp_vertex_gemini(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
+                        let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message_data).map_err(|e| {
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: Some(raw_request.clone()),
-                                raw_response: Some(message.data.clone()),
+                                raw_response: Some(message_data.clone()),
                             })
                         });
                         let data = match data {
@@ -1611,7 +1614,7 @@ fn stream_gcp_vertex_gemini(
                             }
                         };
                         yield convert_stream_response_with_metadata_to_chunk(
-                            message.data,
+                            message_data,
                             data,
                             start_time.elapsed(),
                             &mut last_tool_name,

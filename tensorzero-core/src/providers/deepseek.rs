@@ -1,6 +1,6 @@
+use crate::http::Event;
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -495,23 +495,26 @@ fn stream_deepseek(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        if message.data == "[DONE]" {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
+                        if message_data == "[DONE]" {
                             break;
                         }
                         let data: Result<DeepSeekChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                            serde_json::from_str(&message_data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                 ),
                                 raw_request: Some(raw_request.clone()),
-                                raw_response: Some(message.data.clone()),
+                                raw_response: Some(message_data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
                             }));
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             deepseek_to_tensorzero_chunk(
-                                message.data,
+                                message_data,
                                 d,
                                 latency,
                                 &mut tool_call_ids,

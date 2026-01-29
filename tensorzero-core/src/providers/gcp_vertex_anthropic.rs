@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 
+use crate::http::Event;
 use futures::StreamExt;
 use futures::future::try_join_all;
-use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use tensorzero_derive::TensorZeroDeserialize;
@@ -412,11 +412,14 @@ fn stream_anthropic(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
                         let data: Result<AnthropicStreamMessage, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                            serde_json::from_str(&message_data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing message: {}, Data: {}",
-                                    e, message.data
+                                    e, message_data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: Some(raw_request.clone()),
@@ -429,7 +432,7 @@ fn stream_anthropic(
 
                         let response = data.and_then(|data| {
                             anthropic_to_tensorzero_stream_message(
-                                message.data,
+                                message_data,
                                 data,
                                 start_time.elapsed(),
                                 &mut tool_state,

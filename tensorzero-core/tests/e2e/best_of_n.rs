@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use tensorzero_core::{
     inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text, Unknown},
@@ -60,19 +60,18 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
         .json(&payload);
 
     let inference_id = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = into_sse_stream(builder).await.unwrap();
         let mut first_inference_id = None;
         while let Some(chunk) = chunks.next().await {
             println!("chunk: {chunk:?}");
-            let chunk = chunk.unwrap();
-            let Event::Message(chunk) = chunk else {
+            let sse = chunk.unwrap();
+            let Some(data) = sse.data else {
                 continue;
             };
-            if chunk.data == "[DONE]" {
+            if data == "[DONE]" {
                 break;
             }
-            let chunk_json = chunk.data;
-            let chunk_json: Value = serde_json::from_str(&chunk_json).unwrap();
+            let chunk_json: Value = serde_json::from_str(&data).unwrap();
             let inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
             let inference_id = Uuid::parse_str(inference_id).unwrap();
             if first_inference_id.is_none() {

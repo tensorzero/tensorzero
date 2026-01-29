@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
+use crate::http::{Event, ReqwestEventSourceError};
 use futures::{StreamExt, future::try_join_all};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -369,7 +369,7 @@ fn stream_google_ai_studio_gemini(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
+                    if matches!(*e, ReqwestEventSourceError::StreamEnded) {
                         break;
                     }
                     yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
@@ -377,12 +377,15 @@ fn stream_google_ai_studio_gemini(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        let data: Result<GeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
+                        let data: Result<GeminiResponse, Error> = serde_json::from_str(&message_data).map_err(|e| {
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: Some(raw_request.clone()),
-                                raw_response: Some(message.data.clone()),
+                                raw_response: Some(message_data.clone()),
                             })
                         });
                         let data = match data {
@@ -394,7 +397,7 @@ fn stream_google_ai_studio_gemini(
                         };
                         yield convert_stream_response_with_metadata_to_chunk(
                             ConvertStreamResponseArgs {
-                                raw_response: message.data,
+                                raw_response: message_data,
                                 response: data,
                                 latency: start_time.elapsed(),
                                 last_tool_name: &mut last_tool_name,

@@ -1,5 +1,6 @@
 use std::{borrow::Cow, time::Duration};
 
+use crate::http::Event;
 use crate::{
     http::{TensorZeroEventSource, TensorzeroHttpClient},
     providers::openai::OpenAIMessagesConfig,
@@ -7,7 +8,6 @@ use crate::{
 use futures::{StreamExt, future::try_join_all};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -372,14 +372,17 @@ pub fn stream_mistral(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        if message.data == "[DONE]" {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
+                        if message_data == "[DONE]" {
                             break;
                         }
                         let data: Result<MistralChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| ErrorDetails::InferenceServer {
+                            serde_json::from_str(&message_data).map_err(|e| ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing chunk. Error: {}, Data: {}",
-                                    e, message.data
+                                    e, message_data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: Some(raw_request.clone()),
@@ -388,7 +391,7 @@ pub fn stream_mistral(
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             mistral_to_tensorzero_chunk(
-                                message.data,
+                                message_data,
                                 d,
                                 latency,
                                 &mut last_tool_name,

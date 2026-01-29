@@ -27,7 +27,7 @@ use object_store::path::Path;
 
 use rand::Rng;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::into_sse_stream;
 use serde_json::{Value, json};
 use std::future::IntoFuture;
 use tensorzero::{
@@ -1997,26 +1997,26 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
     });
 
     let inference_id = if stream {
-        let mut event_source = Client::new()
-            .post(get_gateway_endpoint("/inference"))
-            .json(&payload)
-            .eventsource()
-            .unwrap();
+        let mut event_source = into_sse_stream(
+            Client::new()
+                .post(get_gateway_endpoint("/inference"))
+                .json(&payload),
+        )
+        .await
+        .unwrap();
 
         let mut chunks = vec![];
         let mut found_done_chunk = false;
         while let Some(event) = event_source.next().await {
-            let event = event.unwrap();
-            match event {
-                Event::Open => continue,
-                Event::Message(message) => {
-                    if message.data == "[DONE]" {
-                        found_done_chunk = true;
-                        break;
-                    }
-                    chunks.push(message.data);
-                }
+            let sse = event.unwrap();
+            let Some(data) = sse.data else {
+                continue;
+            };
+            if data == "[DONE]" {
+                found_done_chunk = true;
+                break;
             }
+            chunks.push(data);
         }
         assert!(found_done_chunk);
 
@@ -2201,26 +2201,26 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     });
 
     let inference_id = if stream {
-        let mut event_source = Client::new()
-            .post(get_gateway_endpoint("/inference"))
-            .json(&payload)
-            .eventsource()
-            .unwrap();
+        let mut event_source = into_sse_stream(
+            Client::new()
+                .post(get_gateway_endpoint("/inference"))
+                .json(&payload),
+        )
+        .await
+        .unwrap();
 
         let mut chunks = vec![];
         let mut found_done_chunk = false;
         while let Some(event) = event_source.next().await {
-            let event = event.unwrap();
-            match event {
-                Event::Open => continue,
-                Event::Message(message) => {
-                    if message.data == "[DONE]" {
-                        found_done_chunk = true;
-                        break;
-                    }
-                    chunks.push(message.data);
-                }
+            let sse = event.unwrap();
+            let Some(data) = sse.data else {
+                continue;
+            };
+            if data == "[DONE]" {
+                found_done_chunk = true;
+                break;
             }
+            chunks.push(data);
         }
         assert!(found_done_chunk);
 
@@ -3729,33 +3729,27 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
+    // This test expects an error response, so we make the request manually
+    // instead of using into_sse_stream which calls error_for_status()
+    let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
-        .eventsource()
+        .send()
+        .await
         .unwrap();
 
-    while let Some(event) = event_source.next().await {
-        if let Ok(reqwest_eventsource::Event::Open) = event {
-            continue;
-        }
-        let err = event.unwrap_err();
-        let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = err else {
-            panic!("Unexpected error: {err:?}")
-        };
-        assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
-        let resp: Value = resp.json().await.unwrap();
-        let err_msg = resp.get("error").unwrap().as_str().unwrap();
-        println!("Error message: {err_msg}");
-        assert!(
-            err_msg.contains("top_p")
-                || err_msg.contains("topP")
-                || err_msg.contains("temperature")
-                || err_msg.contains("presence_penalty")
-                || err_msg.contains("frequency_penalty"),
-            "Unexpected error message: {resp}"
-        );
-    }
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let resp: Value = response.json().await.unwrap();
+    let err_msg = resp.get("error").unwrap().as_str().unwrap();
+    println!("Error message: {err_msg}");
+    assert!(
+        err_msg.contains("top_p")
+            || err_msg.contains("topP")
+            || err_msg.contains("temperature")
+            || err_msg.contains("presence_penalty")
+            || err_msg.contains("frequency_penalty"),
+        "Unexpected error message: {resp}"
+    );
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
@@ -3854,26 +3848,26 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -4432,26 +4426,26 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -5076,26 +5070,26 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         "extra_headers": extra_headers
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -5693,26 +5687,26 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -6296,26 +6290,26 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -6909,26 +6903,26 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -7573,26 +7567,26 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -8236,26 +8230,26 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -8920,26 +8914,26 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         "stream": true,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -10398,26 +10392,26 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -11346,26 +11340,26 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         "extra_headers": extra_headers.extra_headers,
     });
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -12266,26 +12260,26 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     payload["stream"] = json!(true);
 
     // Make the second inference request
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
 
     let mut chunks = vec![];
     let mut found_done_chunk = false;
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            found_done_chunk = true;
+            break;
         }
+        chunks.push(data);
     }
     assert!(found_done_chunk);
 
@@ -12911,23 +12905,23 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
         "stream": true,
     });
 
-    let mut event_source = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let mut event_source = into_sse_stream(
+        client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
+    )
+    .await
+    .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-                chunks.push(message.data);
-            }
+        let sse = event.unwrap();
+        let Some(data) = sse.data else {
+            continue;
+        };
+        if data == "[DONE]" {
+            break;
         }
+        chunks.push(data);
     }
 
     let mut inference_id = None;
@@ -13023,23 +13017,23 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
         });
         println!("Payload (iteration {iteration}): {payload}");
 
-        let mut event_source = client
-            .post(get_gateway_endpoint("/inference"))
-            .json(&payload)
-            .eventsource()
-            .unwrap();
+        let mut event_source = into_sse_stream(
+            client
+                .post(get_gateway_endpoint("/inference"))
+                .json(&payload),
+        )
+        .await
+        .unwrap();
         let mut chunks = vec![];
         while let Some(event) = event_source.next().await {
-            let event = event.unwrap();
-            match event {
-                Event::Open => continue,
-                Event::Message(message) => {
-                    if message.data == "[DONE]" {
-                        break;
-                    }
-                    chunks.push(message.data);
-                }
+            let sse = event.unwrap();
+            let Some(data) = sse.data else {
+                continue;
+            };
+            if data == "[DONE]" {
+                break;
             }
+            chunks.push(data);
         }
 
         // Validate we got chunks and extract inference_id

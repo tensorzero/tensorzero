@@ -4,6 +4,7 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::http::TensorzeroHttpClient;
+use crate::http::{Event, ReqwestEventSourceError};
 use crate::inference::types::Latency;
 use crate::inference::types::ModelInferenceRequest;
 use crate::inference::types::PeekableProviderInferenceResponseStream;
@@ -16,19 +17,19 @@ use crate::model::ModelProvider;
 use async_trait::async_trait;
 use futures::Future;
 use futures::Stream;
-use reqwest_eventsource::Event;
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::pin::Pin;
 use tokio::time::Instant;
 use uuid::Uuid;
 
-/// A helper type for preserving custom errors when working with `reqwest_eventsource`
+/// A helper type for preserving custom errors when working with SSE event streams.
 /// This is currently used by `stream_openai` to allow using it with a provider
 /// that needs to do additional validation when streaming (e.g. Sagemaker)
+#[derive(Debug)]
 pub enum TensorZeroEventError {
     TensorZero(Error),
-    EventSource(Box<reqwest_eventsource::Error>),
+    EventSource(Box<ReqwestEventSourceError>),
 }
 
 pub trait InferenceProvider {

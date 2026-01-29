@@ -20,9 +20,45 @@ use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest::{Body, Response, StatusCode};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
 use serde::{Serialize, de::DeserializeOwned};
+pub use sse_stream::Sse;
 use sse_stream::SseStream;
 
 use crate::endpoints::status::TENSORZERO_VERSION;
+
+/// An SSE event, compatible with the API of `reqwest_eventsource::Event`.
+/// This allows us to use the same code paths that were written for `reqwest_eventsource`
+/// while using the `sse-stream` crate instead.
+#[derive(Debug, Clone)]
+pub enum Event {
+    /// The event source has been opened.
+    Open,
+    /// A message was received.
+    Message(Sse),
+}
+
+/// An error type for SSE event streams, compatible with `reqwest_eventsource::Error`.
+/// This provides the same error variants that the rest of the codebase expects.
+#[derive(Debug, thiserror::Error)]
+pub enum ReqwestEventSourceError {
+    #[error("Invalid status code: {0}")]
+    InvalidStatusCode(StatusCode, Response),
+    #[error("Invalid content type: {0:?}")]
+    InvalidContentType(HeaderValue, Response),
+    #[error("Transport error: {0}")]
+    Transport(#[source] reqwest::Error),
+    #[error("Stream ended")]
+    StreamEnded,
+    #[error("UTF-8 error: {0}")]
+    Utf8(#[source] std::str::Utf8Error),
+    #[error("Parser error: {0}")]
+    Parser(#[source] sse_stream::Error),
+}
+
+impl From<sse_stream::Error> for ReqwestEventSourceError {
+    fn from(e: sse_stream::Error) -> Self {
+        ReqwestEventSourceError::Parser(e)
+    }
+}
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::{
@@ -311,7 +347,7 @@ pub struct TensorZeroEventSource {
 }
 
 impl Stream for TensorZeroEventSource {
-    type Item = Result<Event, Box<reqwest_eventsource::Error>>;
+    type Item = Result<Event, Box<ReqwestEventSourceError>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -549,9 +585,18 @@ impl<'a> TensorzeroRequestBuilder<'a> {
             .await?
             .error_for_status()?;
 
+        let ticket = self.ticket.into_owned();
+        // Wrap SSE items in Event::Message and emit an initial Event::Open
+        let stream = SseStream::from_byte_stream(response.bytes_stream()).map(|event| {
+            event
+                .map(Event::Message)
+                .map_err(|e| Box::new(ReqwestEventSourceError::from(e)))
+        });
+        let stream = futures::stream::once(async { Ok(Event::Open) }).chain(stream);
+
         Ok(TensorZeroEventSource {
-            stream: SseStream::new(response.body()).pin(),
-            ticket: self.ticket.into_owned(),
+            stream: Box::pin(stream),
+            ticket,
             span: tensorzero_h2_workaround_span(),
             tensorzero_external_span: tracing::debug_span!(
                 "eventsource",
@@ -578,7 +623,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         let headers = response.headers().clone();
         let response =
             validate_event_stream_response(response).map_err(|e| (e, Some(headers.clone())))?;
-        let stream = response.bytes_stream().eventsource().map(|event| {
+        let stream = SseStream::from_byte_stream(response.bytes_stream()).map(|event| {
             event
                 .map(Event::Message)
                 .map_err(|e| Box::new(ReqwestEventSourceError::from(e)))
@@ -794,7 +839,9 @@ mod tests {
     use reqwest::Proxy;
     use tokio::task::{JoinHandle, JoinSet};
 
-    use crate::http::{CONCURRENCY_LIMIT, LimitedClient, TensorZeroEventSource};
+    use crate::http::{
+        CONCURRENCY_LIMIT, LimitedClient, ReqwestEventSourceError, TensorZeroEventSource,
+    };
 
     async fn start_target_server() -> (SocketAddr, JoinHandle<Result<(), std::io::Error>>) {
         let app = Router::new()
@@ -827,7 +874,7 @@ mod tests {
             match event {
                 Ok(_) => {}
                 Err(e) => {
-                    if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
+                    if matches!(*e, ReqwestEventSourceError::StreamEnded) {
                         break;
                     }
                     panic!("Error in streaming response: {e:?}");
@@ -883,6 +930,7 @@ mod tests {
         let mut event_source = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
         process_stream(&mut event_source).await;
         drop(event_source);
@@ -922,6 +970,7 @@ mod tests {
                     let mut stream = client
                         .get(format!("http://{addr}/hello-stream"))
                         .eventsource()
+                        .await
                         .unwrap();
                     process_stream(&mut stream).await;
                 });
@@ -974,6 +1023,7 @@ mod tests {
         let mut stream = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
         process_stream(&mut stream).await;
         drop(stream);
@@ -1021,6 +1071,7 @@ mod tests {
                     let mut stream = client
                         .get(format!("http://{addr}/hello-stream"))
                         .eventsource()
+                        .await
                         .unwrap();
                     process_stream(&mut stream).await;
                 });
@@ -1038,6 +1089,7 @@ mod tests {
         let mut stream = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
 
         process_stream(&mut stream).await;

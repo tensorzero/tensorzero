@@ -1,10 +1,10 @@
+use crate::http::{Event, ReqwestEventSourceError};
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest::multipart::{Form, Part};
-use reqwest_eventsource::Event;
 use responses::stream_openai_responses;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
@@ -1062,11 +1062,14 @@ pub fn stream_openai(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        if message.data == "[DONE]" {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
+                        if message_data == "[DONE]" {
                             break;
                         }
                         let data: Result<OpenAIChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| {
+                            serde_json::from_str(&message_data).map_err(|e| {
                                 let error_message = match &request_id {
                                     Some(id) => format!("Error parsing chunk. Error: {e} [request_id: {id}]"),
                                     None => format!("Error parsing chunk. Error: {e}"),
@@ -1074,7 +1077,7 @@ pub fn stream_openai(
                                 Error::new(ErrorDetails::InferenceServer {
                                     message: error_message,
                                     raw_request: Some(raw_request.clone()),
-                                    raw_response: Some(message.data.clone()),
+                                    raw_response: Some(message_data.clone()),
                                     provider_type: provider_type.clone(),
                                 })
                             });
@@ -1082,7 +1085,7 @@ pub fn stream_openai(
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             openai_to_tensorzero_chunk(
-                                message.data,
+                                message_data,
                                 d,
                                 latency,
                                 &mut tool_call_ids,
@@ -1237,11 +1240,11 @@ fn extract_request_id(headers: &reqwest::header::HeaderMap) -> Option<String> {
 }
 
 pub(super) fn request_id_from_event_source_error(
-    error: &reqwest_eventsource::Error,
+    error: &ReqwestEventSourceError,
 ) -> Option<String> {
     match error {
-        reqwest_eventsource::Error::InvalidStatusCode(_, resp)
-        | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+        ReqwestEventSourceError::InvalidStatusCode(_, resp)
+        | ReqwestEventSourceError::InvalidContentType(_, resp) => {
             extract_request_id(resp.headers())
         }
         _ => None,

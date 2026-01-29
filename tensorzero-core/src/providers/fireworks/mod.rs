@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::http::TensorzeroHttpClient;
+use crate::http::{Event, ReqwestEventSourceError};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
@@ -11,7 +12,6 @@ use crate::{
 };
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -691,7 +691,7 @@ fn stream_fireworks(
                 Err(e) => {
                     let message = e.to_string();
                     let mut raw_response = None;
-                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = *e {
+                    if let ReqwestEventSourceError::InvalidStatusCode(_, resp) = *e {
                         raw_response = resp.text().await.ok();
                     }
                     yield Err(ErrorDetails::InferenceServer {
@@ -704,21 +704,24 @@ fn stream_fireworks(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        if message.data == "[DONE]" {
+                        let Some(message_data) = message.data else {
+                            continue;
+                        };
+                        if message_data == "[DONE]" {
                             break;
                         }
                         let data: Result<FireworksChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                            serde_json::from_str(&message_data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing chunk. Error: {e}"),
                                 raw_request: None,
-                                raw_response: Some(message.data.clone()),
+                                raw_response: Some(message_data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
                             }));
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             fireworks_to_tensorzero_chunk(
-                                message.data,
+                                message_data,
                                 d,
                                 latency,
                                 &mut tool_call_ids,
