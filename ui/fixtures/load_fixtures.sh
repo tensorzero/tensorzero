@@ -21,14 +21,14 @@ else
   CLICKHOUSE_SECURE_FLAG=""
 fi
 
-# Truncate all tables before loading fixtures (dynamically query all tables, excluding views)
+# Truncate all tables before loading fixtures (dynamically query all tables, excluding views and internal .inner.* tables)
 echo "Truncating all tables before loading fixtures..."
 tables=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
-    --query "SELECT name FROM system.tables WHERE database = '$DATABASE_NAME' AND engine NOT LIKE '%View%'")
+    --query "SELECT name FROM system.tables WHERE database = '$DATABASE_NAME' AND engine NOT LIKE '%View%' AND name NOT LIKE '.inner%'")
 for table in $tables; do
     echo "Truncating table: $table"
     clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
-        --database "$DATABASE_NAME" --query "TRUNCATE TABLE $table"
+        --database "$DATABASE_NAME" --query "TRUNCATE TABLE \`$table\`"
 done
 
 # Download JSONL fixtures from R2
