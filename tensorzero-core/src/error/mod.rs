@@ -243,6 +243,12 @@ impl Error {
                     data: data.clone(),
                 });
             }
+            ErrorDetails::Relay {
+                relay_raw_responses: Some(relay_entries),
+                ..
+            } => {
+                entries.extend(relay_entries.iter().cloned());
+            }
             _ => {}
         }
     }
@@ -652,6 +658,9 @@ pub enum ErrorDetails {
     },
     Relay {
         message: String,
+        /// Raw response entries from downstream relay errors (for passthrough)
+        #[serde(skip)]
+        relay_raw_responses: Option<Vec<RawResponseEntry>>,
     },
     RateLimitMissingMaxTokens,
     Serialization {
@@ -1153,7 +1162,7 @@ impl std::fmt::Display for ErrorDetails {
                     "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration."
                 )
             }
-            ErrorDetails::Relay { message } => {
+            ErrorDetails::Relay { message, .. } => {
                 write!(f, "Error forwarding request in relay mode: {message}")
             }
             ErrorDetails::UnsupportedContentBlockType {

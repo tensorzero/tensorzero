@@ -489,7 +489,7 @@ pub async fn inference(
                 })
             })?;
 
-        let output = infer_variant(InferVariantArgs {
+        let output = Box::pin(infer_variant(InferVariantArgs {
             variant_name: variant_name.clone(),
             variant,
             function: &function,
@@ -514,7 +514,7 @@ pub async fn inference(
             include_original_response: params.include_original_response,
             include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
-        })
+        }))
         .await?;
         return Ok(InferenceOutputData {
             output,
@@ -547,7 +547,7 @@ pub async fn inference(
             }
         };
 
-        let result = infer_variant(InferVariantArgs {
+        let result = Box::pin(infer_variant(InferVariantArgs {
             variant_name: variant_name.clone(),
             variant,
             function: &function,
@@ -572,7 +572,7 @@ pub async fn inference(
             include_original_response: params.include_original_response,
             include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
-        })
+        }))
         .await;
 
         match result {

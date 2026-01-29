@@ -3,9 +3,7 @@
 //! Tests that raw provider-specific response data is correctly returned in errors
 //! when `include_raw_response=true` is set.
 
-use futures::StreamExt;
 use reqwest::Client;
-use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -112,7 +110,10 @@ async fn e2e_test_raw_response_direct_error_non_streaming() {
     }
 }
 
-/// Test that streaming errors include raw_response when include_raw_response=true
+/// Test that streaming request errors include raw_response when include_raw_response=true
+/// Note: When an error happens before streaming starts, the server returns a regular HTTP error
+/// response instead of starting SSE. This test verifies that even with stream=true, the error
+/// response includes raw_response.
 #[tokio::test]
 async fn e2e_test_raw_response_direct_error_streaming() {
     let episode_id = Uuid::now_v7();
@@ -129,54 +130,46 @@ async fn e2e_test_raw_response_direct_error_streaming() {
         "include_raw_response": true
     });
 
-    let mut chunks = Client::new()
+    // When the error happens before streaming starts, we get a regular HTTP response
+    let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource");
+        .send()
+        .await
+        .unwrap();
 
-    let mut found_error_with_raw_response = false;
-
-    while let Some(chunk) = chunks.next().await {
-        let chunk = match chunk {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-        let Event::Message(message) = chunk else {
-            continue;
-        };
-        if message.data == "[DONE]" {
-            break;
-        }
-
-        let chunk_json: Value = serde_json::from_str(&message.data).unwrap();
-
-        // Check for error with raw_response
-        if chunk_json.get("error").is_some()
-            && let Some(raw_response) = chunk_json.get("raw_response")
-        {
-            found_error_with_raw_response = true;
-            assert!(raw_response.is_array(), "raw_response should be an array");
-
-            let entries = raw_response.as_array().unwrap();
-            assert!(
-                !entries.is_empty(),
-                "Error should have raw_response entries"
-            );
-
-            // Verify entry contains error data
-            let has_error_data = entries.iter().any(|e| {
-                e.get("data")
-                    .and_then(|d| d.as_str())
-                    .map(|s| s.contains("test_error"))
-                    .unwrap_or(false)
-            });
-            assert!(has_error_data, "raw_response should contain error data");
-        }
-    }
-
+    // Should be an error status
     assert!(
-        found_error_with_raw_response,
-        "Streaming error should include raw_response"
+        !response.status().is_success(),
+        "Response should be an error status"
     );
+
+    let body: Value = response.json().await.unwrap();
+
+    // raw_response should be included in the error response
+    let raw_response = body
+        .get("raw_response")
+        .expect("Streaming error should include raw_response");
+    assert!(raw_response.is_array(), "raw_response should be an array");
+
+    let entries = raw_response.as_array().unwrap();
+    assert!(
+        !entries.is_empty(),
+        "Error should have raw_response entries"
+    );
+
+    // Verify entry contains error data
+    let has_error_data = entries.iter().any(|e| {
+        e.get("data")
+            .and_then(|d| d.as_str())
+            .map(|s| s.contains("test_error"))
+            .unwrap_or(false)
+    });
+    assert!(has_error_data, "raw_response should contain error data");
+
+    // Provider should be dummy
+    for entry in entries {
+        let provider_type = entry.get("provider_type").and_then(|v| v.as_str()).unwrap();
+        assert_eq!(provider_type, "dummy", "Provider type should be 'dummy'");
+    }
 }

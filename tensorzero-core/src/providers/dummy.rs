@@ -1,5 +1,6 @@
 #![expect(clippy::unwrap_used)]
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -222,6 +223,9 @@ lazy_static! {
     // Since that field is an enum, this should fail validation
     pub static ref DUMMY_BAD_TOOL_RESPONSE: Value = json!({"location": "Brooklyn", "units": "Celsius"});
     static ref FLAKY_COUNTERS: Mutex<HashMap<String, u16>> = Mutex::new(HashMap::new());
+    /// Tracks request hashes that have been seen for the `retry_once_with_raw_response` model.
+    /// First call with a given hash fails, subsequent calls succeed.
+    static ref RETRY_ONCE_SEEN: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
@@ -267,6 +271,22 @@ pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
     [r#"{"name""#, r#":"John""#, r#","age""#, r":30", r"}"];
 
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
+
+/// Creates a hash of the request messages for use as a unique key.
+/// This allows the `retry_once_with_raw_response` model to track which requests
+/// have been seen, ensuring first call fails and subsequent calls succeed.
+fn hash_request_messages(request: &ModelInferenceRequest<'_>) -> u64 {
+    let mut hasher = std::hash::DefaultHasher::new();
+    for message in &request.messages {
+        // Hash role as debug string since Role doesn't implement Hash
+        format!("{:?}", message.role).hash(&mut hasher);
+        for block in &message.content {
+            // Hash the debug representation of content blocks
+            format!("{block:?}").hash(&mut hasher);
+        }
+    }
+    hasher.finish()
+}
 
 /// Like `tokio::time::sleep`, but attaches a span that excludes
 /// this time for our `tensorzero_inference_latency_overhead_seconds` metric
@@ -349,6 +369,35 @@ impl InferenceProvider for DummyProvider {
                 }
                 .into());
             }
+        }
+
+        // Check for retry_once_with_raw_response model
+        // First call with a given request hash fails, subsequent calls succeed
+        if self.model_name == "retry_once_with_raw_response" {
+            let request_hash = hash_request_messages(request);
+            #[expect(clippy::expect_used)]
+            let mut seen = RETRY_ONCE_SEEN
+                .lock()
+                .expect("RETRY_ONCE_SEEN mutex is poisoned");
+
+            if !seen.contains(&request_hash) {
+                // First time seeing this request - fail with raw_response
+                seen.insert(request_hash);
+                return Err(ErrorDetails::InferenceClient {
+                    raw_request: Some(DUMMY_RAW_REQUEST.to_string()),
+                    raw_response: Some(
+                        r#"{"error": "retry_once_failure", "message": "First attempt always fails"}"#
+                            .to_string(),
+                    ),
+                    relay_raw_responses: None,
+                    message: "retry_once_with_raw_response: First attempt failed".to_string(),
+                    status_code: Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
+                }
+                .into());
+            }
+            // Already seen this request - succeed (fall through to normal response)
         }
 
         // Check for error_with_raw_response before generic error check
@@ -701,7 +750,7 @@ impl InferenceProvider for DummyProvider {
     async fn infer_stream<'a>(
         &'a self,
         ModelProviderRequest {
-            request: _,
+            request,
             provider_name: _,
             model_name: _,
             otlp_config: _,
@@ -751,6 +800,36 @@ impl InferenceProvider for DummyProvider {
                 .into());
             }
         }
+
+        // Check for retry_once_with_raw_response model
+        // First call with a given request hash fails, subsequent calls succeed
+        if self.model_name == "retry_once_with_raw_response" {
+            let request_hash = hash_request_messages(request);
+            #[expect(clippy::expect_used)]
+            let mut seen = RETRY_ONCE_SEEN
+                .lock()
+                .expect("RETRY_ONCE_SEEN mutex is poisoned");
+
+            if !seen.contains(&request_hash) {
+                // First time seeing this request - fail with raw_response
+                seen.insert(request_hash);
+                return Err(ErrorDetails::InferenceClient {
+                    raw_request: Some(DUMMY_RAW_REQUEST.to_string()),
+                    raw_response: Some(
+                        r#"{"error": "retry_once_failure", "message": "First attempt always fails"}"#
+                            .to_string(),
+                    ),
+                    relay_raw_responses: None,
+                    message: "retry_once_with_raw_response: First attempt failed".to_string(),
+                    status_code: Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
+                }
+                .into());
+            }
+            // Already seen this request - succeed (fall through to normal response)
+        }
+
         if self.model_name == "reasoner" {
             return Ok(self.create_streaming_reasoning_response(
                 DUMMY_STREAMING_THINKING.to_vec(),

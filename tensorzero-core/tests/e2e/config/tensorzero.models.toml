@@ -670,6 +670,13 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "flaky_with_raw_response"
 
+[models.retry_once_with_raw_response]
+routing = ["dummy"]
+
+[models.retry_once_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "retry_once_with_raw_response"
+
 [models.test_fallback]
 routing = ["error", "good"]
 

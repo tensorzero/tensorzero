@@ -473,8 +473,16 @@ impl ModelConfig {
                     .relay_non_streaming(model_name, request, clients)
                     .await
                     .map_err(|e| {
+                        // Collect raw_responses from the error for passthrough
+                        let relay_raw_responses = e.collect_raw_responses();
+                        let relay_raw_responses = if relay_raw_responses.is_empty() {
+                            None
+                        } else {
+                            Some(relay_raw_responses)
+                        };
                         Error::new(ErrorDetails::Relay {
                             message: e.to_string(),
+                            relay_raw_responses,
                         })
                     })?;
                 return Ok(ModelInferenceResponse::new(
@@ -606,8 +614,16 @@ impl ModelConfig {
                     .relay_streaming(model_name, request, clients)
                     .await
                     .map_err(|e| {
+                        // Collect raw_responses from the error for passthrough
+                        let relay_raw_responses = e.collect_raw_responses();
+                        let relay_raw_responses = if relay_raw_responses.is_empty() {
+                            None
+                        } else {
+                            Some(relay_raw_responses)
+                        };
                         Error::new(ErrorDetails::Relay {
                             message: e.to_string(),
+                            relay_raw_responses,
                         })
                     })?;
                 return Ok(StreamResponseAndMessages {
