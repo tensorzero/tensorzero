@@ -246,7 +246,7 @@ impl AnthropicCredentials {
 }
 
 /// Collects all provider tools (static from config + dynamic scoped from request).
-fn collect_all_provider_tools(
+pub(super) fn collect_all_provider_tools(
     static_tools: &[Value],
     request: &ModelInferenceRequest<'_>,
     model_name: &str,

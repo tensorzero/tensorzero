@@ -47,7 +47,7 @@ use uuid::Uuid;
 use super::anthropic::{
     AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole,
     AnthropicStopReason, AnthropicSystemBlock, AnthropicTool, build_anthropic_tools,
-    prefill_json_chunk_response, prefill_json_response,
+    collect_all_provider_tools, prefill_json_chunk_response, prefill_json_response,
 };
 use super::gcp_vertex_gemini::{GCPVertexCredentials, ShorthandUrl, parse_shorthand_url};
 use super::helpers::{convert_stream_error, peek_first_chunk};
@@ -195,24 +195,6 @@ impl GCPVertexAnthropicProvider {
 }
 
 const ANTHROPIC_API_VERSION: &str = "vertex-2023-10-16";
-
-/// Collects all provider tools (static from config + dynamic scoped from request).
-fn collect_all_provider_tools(
-    static_tools: &[serde_json::Value],
-    request: &ModelInferenceRequest<'_>,
-    model_name: &str,
-    provider_name: &str,
-) -> Vec<serde_json::Value> {
-    let mut all_tools: Vec<serde_json::Value> = static_tools.to_vec();
-    if let Some(tc) = request.tool_config.as_deref() {
-        all_tools.extend(
-            tc.get_scoped_provider_tools(model_name, provider_name)
-                .into_iter()
-                .map(|pt| pt.tool.clone()),
-        );
-    }
-    all_tools
-}
 
 impl InferenceProvider for GCPVertexAnthropicProvider {
     /// Anthropic non-streaming API request
