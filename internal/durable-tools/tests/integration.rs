@@ -20,7 +20,7 @@ use durable_tools::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{AssertSqlSafe, PgPool};
 use tensorzero::{
     ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role, Tool,
     Usage,
@@ -774,5 +774,221 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
     );
     let spawn_result = result.unwrap();
     assert!(!spawn_result.task_id.is_nil());
+    Ok(())
+}
+
+// ============================================================================
+// Empty Inference Output Tests
+// ============================================================================
+
+/// Create a mock that returns an empty chat response (no content blocks).
+fn mock_client_with_empty_chat_response() -> MockTensorZeroClient {
+    let mut mock = MockTensorZeroClient::new();
+    mock.expect_inference().returning(|_| {
+        Box::pin(async {
+            Ok(InferenceResponse::Chat(ChatInferenceResponse {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+                variant_name: "test_variant".to_string(),
+                content: vec![], // Empty content
+                usage: Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(0),
+                },
+                raw_usage: None,
+                original_response: None,
+                raw_response: None,
+                finish_reason: None,
+            }))
+        })
+    });
+    mock
+}
+
+/// Create a mock that returns a JSON response with None raw output.
+fn mock_client_with_empty_json_response() -> MockTensorZeroClient {
+    use tensorzero_core::endpoints::inference::JsonInferenceResponse;
+    use tensorzero_core::inference::types::JsonInferenceOutput;
+
+    let mut mock = MockTensorZeroClient::new();
+    mock.expect_inference().returning(|_| {
+        Box::pin(async {
+            Ok(InferenceResponse::Json(JsonInferenceResponse {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+                variant_name: "test_variant".to_string(),
+                output: JsonInferenceOutput {
+                    raw: None, // Empty raw output
+                    parsed: None,
+                },
+                usage: Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(0),
+                },
+                raw_usage: None,
+                original_response: None,
+                raw_response: None,
+                finish_reason: None,
+            }))
+        })
+    });
+    mock
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn task_tool_inference_fails_on_empty_chat_response(pool: PgPool) -> sqlx::Result<()> {
+    let queue_name = format!("test_queue_{}", Uuid::now_v7());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_empty_chat_response());
+
+    let executor = ToolExecutor::builder()
+        .pool(pool.clone())
+        .queue_name(&queue_name)
+        .t0_client(t0_client)
+        .build()
+        .await
+        .expect("Failed to build executor");
+
+    executor
+        .durable()
+        .create_queue(None)
+        .await
+        .expect("Failed to create queue");
+
+    executor
+        .register_task_tool_instance(InferenceTaskTool)
+        .await
+        .unwrap();
+
+    let episode_id = Uuid::now_v7();
+    let spawn_result = executor
+        .spawn_tool_by_name(
+            "inference_task",
+            serde_json::json!({"prompt": "This should fail"}),
+            serde_json::json!(null),
+            episode_id,
+        )
+        .await
+        .expect("Failed to spawn task");
+
+    // Start a worker to execute the task
+    let worker = executor
+        .start_worker(WorkerOptions {
+            poll_interval: Duration::from_millis(50),
+            claim_timeout: Duration::from_secs(30),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Wait for task to be processed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Shutdown worker
+    worker.shutdown().await;
+
+    // Check task status by querying the runs table directly
+    let task_record: (Option<chrono::DateTime<chrono::Utc>>, Option<String>) = sqlx::query_as(
+        AssertSqlSafe(format!(
+            "SELECT failed_at, failure_reason::text FROM durable.\"r_{queue_name}\" WHERE task_id = $1 AND failed_at IS NOT NULL",
+        )),
+    )
+    .bind(spawn_result.task_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to query task status");
+
+    assert!(
+        task_record.0.is_some(),
+        "Task should have failed due to empty inference output"
+    );
+    assert!(
+        task_record
+            .1
+            .as_ref()
+            .map(|e| e.contains("empty output"))
+            .unwrap_or(false),
+        "Error message should mention empty output, got: {:?}",
+        task_record.1
+    );
+
+    Ok(())
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn task_tool_inference_fails_on_empty_json_response(pool: PgPool) -> sqlx::Result<()> {
+    let queue_name = format!("test_queue_{}", Uuid::now_v7());
+    let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_empty_json_response());
+
+    let executor = ToolExecutor::builder()
+        .pool(pool.clone())
+        .queue_name(&queue_name)
+        .t0_client(t0_client)
+        .build()
+        .await
+        .expect("Failed to build executor");
+
+    executor
+        .durable()
+        .create_queue(None)
+        .await
+        .expect("Failed to create queue");
+
+    executor
+        .register_task_tool_instance(InferenceTaskTool)
+        .await
+        .unwrap();
+
+    let episode_id = Uuid::now_v7();
+    let spawn_result = executor
+        .spawn_tool_by_name(
+            "inference_task",
+            serde_json::json!({"prompt": "This should fail with JSON"}),
+            serde_json::json!(null),
+            episode_id,
+        )
+        .await
+        .expect("Failed to spawn task");
+
+    // Start a worker to execute the task
+    let worker = executor
+        .start_worker(WorkerOptions {
+            poll_interval: Duration::from_millis(50),
+            claim_timeout: Duration::from_secs(30),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Wait for task to be processed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Shutdown worker
+    worker.shutdown().await;
+
+    // Check task status by querying the runs table directly
+    let task_record: (Option<chrono::DateTime<chrono::Utc>>, Option<String>) = sqlx::query_as(
+        AssertSqlSafe(format!(
+            "SELECT failed_at, failure_reason::text FROM durable.\"r_{queue_name}\" WHERE task_id = $1 AND failed_at IS NOT NULL",
+        )),
+    )
+    .bind(spawn_result.task_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to query task status");
+
+    assert!(
+        task_record.0.is_some(),
+        "Task should have failed due to empty JSON inference output"
+    );
+    assert!(
+        task_record
+            .1
+            .as_ref()
+            .map(|e| e.contains("empty output"))
+            .unwrap_or(false),
+        "Error message should mention empty output, got: {:?}",
+        task_record.1
+    );
+
     Ok(())
 }
