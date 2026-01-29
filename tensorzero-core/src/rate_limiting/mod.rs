@@ -563,6 +563,12 @@ impl RateLimitingConfigScopes {
         Ok(RateLimitingConfigScopes(scopes))
     }
 
+    /// Consumes self and returns the inner Vec.
+    /// Used by stored config serialization.
+    pub(crate) fn into_inner(self) -> Vec<RateLimitingConfigScope> {
+        self.0
+    }
+
     /// Returns the key (as a Vec) if the scope matches the given info, or None if it does not.
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<Vec<RateLimitingScopeKey>> {
         self.0
@@ -614,6 +620,20 @@ pub struct TagRateLimitingConfigScope {
 }
 
 impl TagRateLimitingConfigScope {
+    /// Creates a new `TagRateLimitingConfigScope`.
+    ///
+    /// Note: This is primarily for internal use by stored config deserialization.
+    pub(crate) fn new(tag_key: String, tag_value: TagValueScope) -> Self {
+        Self { tag_key, tag_value }
+    }
+
+    /// Consumes self and returns the (tag_key, tag_value) tuple.
+    ///
+    /// Note: This is primarily for internal use by stored config serialization.
+    pub(crate) fn into_parts(self) -> (String, TagValueScope) {
+        (self.tag_key, self.tag_value)
+    }
+
     #[cfg(test)]
     pub fn tag_key(&self) -> &str {
         &self.tag_key
@@ -657,6 +677,20 @@ pub struct ApiKeyPublicIdConfigScope {
 }
 
 impl ApiKeyPublicIdConfigScope {
+    /// Creates a new `ApiKeyPublicIdConfigScope`.
+    ///
+    /// Note: This is primarily for internal use by stored config deserialization.
+    pub(crate) fn new(api_key_public_id: ApiKeyPublicIdValueScope) -> Self {
+        Self { api_key_public_id }
+    }
+
+    /// Consumes self and returns the inner `ApiKeyPublicIdValueScope`.
+    ///
+    /// Note: This is primarily for internal use by stored config serialization.
+    pub(crate) fn into_inner(self) -> ApiKeyPublicIdValueScope {
+        self.api_key_public_id
+    }
+
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
         match self.api_key_public_id {
             ApiKeyPublicIdValueScope::Concrete(ref key) => {
