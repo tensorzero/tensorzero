@@ -8,6 +8,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
@@ -502,7 +503,7 @@ fn stream_anthropic(
     let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
         // Track tool state per content block index for robust handling of interleaved blocks
-        let mut tool_state: std::collections::HashMap<u32, (String, String)> = std::collections::HashMap::new();
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
 
         while let Some(ev) = event_source.next().await {
             match ev {
@@ -659,8 +660,10 @@ pub(super) fn build_anthropic_tools<'a>(
     // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
     // request payload to achieve the same effect.
     match tool_config {
-        Some(c) if !matches!(c.tool_choice, ToolChoice::None) => {
-            // Build function tools
+        // ToolChoice::None - don't send any tools (function or provider)
+        Some(c) if matches!(c.tool_choice, ToolChoice::None) => Ok(None),
+        // Other tool choices - send both function and provider tools
+        Some(c) => {
             let mut all_tools: Vec<AnthropicTool<'a>> = c
                 .strict_tools_available()?
                 .map(|tool| {
@@ -670,12 +673,11 @@ pub(super) fn build_anthropic_tools<'a>(
                     ))
                 })
                 .collect();
-            // Add provider tools from config
             all_tools.extend(provider_tools.iter().map(AnthropicTool::Provider));
             Ok(Some(all_tools))
         }
-        _ => {
-            // Even if no function tools, we may have provider tools
+        // No tool_config - only send provider tools if any exist
+        None => {
             if provider_tools.is_empty() {
                 Ok(None)
             } else {
@@ -1493,7 +1495,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
     raw_message: String,
     message: AnthropicStreamMessage,
     message_latency: Duration,
-    tool_state: &mut std::collections::HashMap<u32, (String, String)>, // index -> (tool_id, tool_name)
+    tool_state: &mut HashMap<u32, (String, String)>, // index -> (tool_id, tool_name)
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
@@ -2793,7 +2795,6 @@ mod tests {
     #[test]
     fn test_anthropic_to_tensorzero_stream_message() {
         use serde_json::json;
-        use std::collections::HashMap;
 
         // Test ContentBlockDelta with TextDelta
         let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
