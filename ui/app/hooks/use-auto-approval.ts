@@ -139,8 +139,9 @@ function createInitialState(): ApprovalState {
 
 /** Check if we can start a new approval attempt. */
 function canStartAttempt(status: ApprovalStatus): boolean {
-  // Can start from idle or waiting_retry (preempts backoff timer)
-  return status === "idle" || status === "waiting_retry";
+  // Can start from idle, waiting_retry, or failed (keeps retrying in background)
+  // Only "attempting" blocks (request already in flight)
+  return status !== "attempting";
 }
 
 /** Calculate retry delay with exponential backoff: 1s, 2s, 4s, then 60s forever. */
