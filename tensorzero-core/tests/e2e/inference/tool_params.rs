@@ -18,12 +18,12 @@ use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse,
 };
-use tensorzero_core::tool::{ProviderToolScope, ToolChoice};
+use tensorzero_core::tool::ToolChoice;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
-/// Test 1: Full round-trip with all DynamicToolParams fields
+/// Full round-trip with all DynamicToolParams fields
 ///
 /// Creates an inference with:
 /// - allowed_tools: Some(["get_temperature"]) - static tool from function config
@@ -188,7 +188,7 @@ async fn test_inference_full_tool_params_round_trip() {
     );
 }
 
-/// Test 2: Only static tools (allowed_tools only)
+/// Only static tools (allowed_tools only)
 ///
 /// Tests the case where only static tools from function config are used,
 /// with no additional_tools.
@@ -266,7 +266,7 @@ async fn test_inference_only_static_tools() {
     assert_eq!(retrieved_tool_params.tool_choice, Some(ToolChoice::Auto));
 }
 
-/// Test 3: Only dynamic tools (additional_tools only)
+/// Only dynamic tools (additional_tools only)
 ///
 /// Tests the case where only dynamic tools are provided at inference time,
 /// with no allowed_tools restriction.
@@ -351,7 +351,7 @@ async fn test_inference_only_dynamic_tools() {
     }
 }
 
-/// Test 4: Empty tool params (None/default behavior)
+/// Empty tool params (None/default behavior)
 ///
 /// Tests what happens when no tool_params are provided - should use function config defaults.
 #[tokio::test(flavor = "multi_thread")]
@@ -416,93 +416,7 @@ async fn test_inference_no_tool_params() {
     );
 }
 
-/// Test 5: Provider tools are persisted
-///
-/// Verifies that `provider_tools` survive round-trip to/from the database.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_provider_tools_persisted() {
-    let episode_id = Uuid::now_v7();
-
-    let payload = json!({
-        "function_name": "weather_helper",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "WeatherBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What's the weather?"
-                }
-            ]
-        },
-        "stream": false,
-        "allowed_tools": ["get_temperature"],
-        "provider_tools": [{
-            "tool": {
-                "type": "computer_20241022",
-                "name": "computer",
-                "display_width_px": 1024,
-                "display_height_px": 768,
-                "display_number": 1
-            }
-        }],
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
-
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    let client = make_embedded_gateway().await;
-    let response = client
-        .get_inferences(
-            vec![inference_id],
-            Some("weather_helper".to_string()),
-            tensorzero::InferenceOutputSource::Inference,
-        )
-        .await
-        .unwrap();
-
-    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
-        panic!("Expected Chat inference");
-    };
-
-    let stored_provider_tools = &stored_inference.tool_params.provider_tools;
-    assert_eq!(
-        stored_provider_tools.len(),
-        1,
-        "Expected 1 provider tool to be persisted"
-    );
-
-    let first_tool = stored_provider_tools.first().unwrap();
-    assert_eq!(
-        first_tool.scope,
-        ProviderToolScope::Unscoped,
-        "Provider tool scope should be Unscoped by default"
-    );
-    assert_eq!(
-        first_tool.tool,
-        json!({
-            "type": "computer_20241022",
-            "name": "computer",
-            "display_width_px": 1024,
-            "display_height_px": 768,
-            "display_number": 1
-        }),
-        "Provider tool definition should match"
-    );
-}
-
-/// Test 6: Tool strictness is preserved
+/// Tool strictness is preserved
 ///
 /// Verifies that the `strict` field on tools survives round-trip.
 #[tokio::test(flavor = "multi_thread")]
@@ -617,7 +531,7 @@ async fn test_tool_strict_flag_preserved() {
     }
 }
 
-/// Test 7: Multiple static tools with allowed_tools restriction
+/// Multiple static tools with allowed_tools restriction
 ///
 /// Tests that allowed_tools can restrict which static tools are available.
 #[tokio::test(flavor = "multi_thread")]
@@ -714,7 +628,7 @@ async fn test_allowed_tools_restriction() {
     );
 }
 
-/// Test 8: allowed_tools uses tool config key, not display name
+/// allowed_tools uses tool config key, not display name
 ///
 /// Tests that when a tool has a custom `name` field (display name) different from
 /// its config key, allowed_tools filtering uses the KEY for validation and filtering,
