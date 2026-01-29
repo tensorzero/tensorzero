@@ -45,7 +45,7 @@ export const handle: RouteHandle = {
   ],
 };
 
-const EVENTS_PER_PAGE = 20;
+const EVENTS_PER_PAGE = 25;
 
 export type EventsData = {
   events: GatewayEvent[];
