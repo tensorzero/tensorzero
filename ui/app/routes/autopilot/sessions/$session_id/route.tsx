@@ -26,9 +26,9 @@ import EventStream, {
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
 import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 import {
-  StatusBanner,
-  StatusBannerVariant,
-} from "~/components/ui/StatusBanner";
+  AutopilotStatusBanner,
+  AutopilotStatusBannerVariant,
+} from "~/components/autopilot/AutopilotStatusBanner";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
 import { logger } from "~/utils/logger";
@@ -368,16 +368,6 @@ function EventStreamContent({
   );
 }
 
-export default function AutopilotSessionEventsPage(
-  props: Route.ComponentProps,
-) {
-  return (
-    <AutopilotSessionProvider>
-      <AutopilotSessionEventsPageContent {...props} />
-    </AutopilotSessionProvider>
-  );
-}
-
 function AutopilotSessionEventsPageContent({
   loaderData,
 }: Route.ComponentProps) {
@@ -485,36 +475,14 @@ function AutopilotSessionEventsPageContent({
     return undefined;
   }, [oldestPendingToolCall?.id]);
 
-  // Silent authorize for auto-approval (throws on error, no UI feedback)
-  const silentAuthorize = useCallback(
-    async (eventId: string) => {
-      const response = await fetch(
-        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/authorize`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tool_call_event_id: eventId,
-            status: { type: "approved" },
-          }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error("Authorization failed");
-      }
-    },
-    [sessionId],
-  );
-
-  // Auto-approval hook for YOLO mode
   const { failedIds: failedAutoApprovals, reset: resetAutoApproval } =
     useAutoApproval({
       enabled: yoloMode && !isNewSession,
+      sessionId,
       pendingToolCallIds: useMemo(
         () => pendingToolCalls.map((tc) => tc.id),
         [pendingToolCalls],
       ),
-      onAuthorize: silentAuthorize,
     });
 
   // Handle tool call authorization (manual)
@@ -767,12 +735,12 @@ function AutopilotSessionEventsPageContent({
               />
             </div>
             {sseError.error && sseError.isRetrying && (
-              <StatusBanner
-                variant={StatusBannerVariant.Warning}
+              <AutopilotStatusBanner
+                variant={AutopilotStatusBannerVariant.Warning}
                 className="mt-3"
               >
                 Failed to fetch events. Retrying...
-              </StatusBanner>
+              </AutopilotStatusBanner>
             )}
           </div>
           <FadeGradient
@@ -831,14 +799,14 @@ function AutopilotSessionEventsPageContent({
           <div ref={footerRef} className="bg-bg-secondary -mx-2 px-2">
             <div className="pointer-events-auto flex flex-col gap-4 pt-4 pb-8">
               {yoloMode && failedAutoApprovals.size > 0 && (
-                <StatusBanner
-                  variant={StatusBannerVariant.Warning}
+                <AutopilotStatusBanner
+                  variant={AutopilotStatusBannerVariant.Warning}
                   icon={AlertTriangle}
                 >
                   Auto-approval failed for {failedAutoApprovals.size} tool
                   {failedAutoApprovals.size === 1 ? " call" : " calls"}.
                   Retrying in background...
-                </StatusBanner>
+                </AutopilotStatusBanner>
               )}
               {oldestPendingToolCall && !yoloMode && (
                 <PendingToolCallCard
@@ -871,6 +839,16 @@ function AutopilotSessionEventsPageContent({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AutopilotSessionEventsPage(
+  props: Route.ComponentProps,
+) {
+  return (
+    <AutopilotSessionProvider>
+      <AutopilotSessionEventsPageContent {...props} />
+    </AutopilotSessionProvider>
   );
 }
 

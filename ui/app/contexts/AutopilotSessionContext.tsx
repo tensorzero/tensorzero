@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { useLocalStorage } from "~/hooks/use-local-storage";
 
 interface AutopilotSessionContextValue {
@@ -9,25 +9,18 @@ interface AutopilotSessionContextValue {
 const AutopilotSessionContext =
   createContext<AutopilotSessionContextValue | null>(null);
 
-interface AutopilotSessionProviderProps {
-  children: ReactNode;
-}
-
 export function AutopilotSessionProvider({
   children,
-}: AutopilotSessionProviderProps) {
+}: {
+  children: ReactNode;
+}) {
   const [yoloMode, setYoloMode] = useLocalStorage<boolean>(
     "tensorzero-yolo-mode",
     false,
   );
 
-  const value = useMemo(
-    () => ({ yoloMode, setYoloMode }),
-    [yoloMode, setYoloMode],
-  );
-
   return (
-    <AutopilotSessionContext.Provider value={value}>
+    <AutopilotSessionContext.Provider value={{ yoloMode, setYoloMode }}>
       {children}
     </AutopilotSessionContext.Provider>
   );

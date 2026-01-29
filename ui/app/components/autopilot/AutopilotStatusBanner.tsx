@@ -1,29 +1,30 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "~/utils/common";
 
-export enum StatusBannerVariant {
+export enum AutopilotStatusBannerVariant {
   Warning = "warning",
   Error = "error",
 }
 
 const variantStyles = {
-  [StatusBannerVariant.Warning]: "border-amber-200 bg-amber-50 text-amber-800",
-  [StatusBannerVariant.Error]: "border-red-200 bg-red-50 text-red-800",
+  [AutopilotStatusBannerVariant.Warning]:
+    "border-amber-200 bg-amber-50 text-amber-800",
+  [AutopilotStatusBannerVariant.Error]: "border-red-200 bg-red-50 text-red-800",
 };
 
-interface StatusBannerProps {
-  variant: StatusBannerVariant;
+interface AutopilotStatusBannerProps {
+  variant: AutopilotStatusBannerVariant;
   icon?: LucideIcon;
   children: React.ReactNode;
   className?: string;
 }
 
-export function StatusBanner({
+export function AutopilotStatusBanner({
   variant,
   icon: Icon,
   children,
   className,
-}: StatusBannerProps) {
+}: AutopilotStatusBannerProps) {
   return (
     <div
       className={cn(
