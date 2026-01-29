@@ -513,8 +513,7 @@ fn stream_anthropic(
                         let data: Result<AnthropicStreamMessage, Error> =
                             serde_json::from_str(&message_data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
-                                    "Error parsing message: {}, Data: {}",
-                                    e, message_data
+                                    "Error parsing message: {e}, Data: {message_data}"
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: Some(raw_request.to_string()),

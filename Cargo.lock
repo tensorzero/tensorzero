@@ -2444,6 +2444,7 @@ dependencies = [
  "metrics-exporter-prometheus",
  "mimalloc",
  "reqwest 0.12.28",
+ "reqwest-sse-stream",
  "secrecy",
  "serde",
  "serde_json",

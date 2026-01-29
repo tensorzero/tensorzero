@@ -256,7 +256,9 @@ async fn test_empty_chunks_success() {
     let client = Client::new();
 
     let mut event_source = into_sse_stream(
-        client.post(get_gateway_endpoint("/inference")).json(&payload),
+        client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
     )
     .await
     .unwrap();
@@ -721,7 +723,9 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
 
     let inference_id = if stream {
         let mut event_source = into_sse_stream(
-            client.post(get_gateway_endpoint("/inference")).json(&payload),
+            client
+                .post(get_gateway_endpoint("/inference"))
+                .json(&payload),
         )
         .await
         .unwrap();
@@ -818,7 +822,9 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
 
     let inference_id = if stream {
         let mut event_source = into_sse_stream(
-            client.post(get_gateway_endpoint("/inference")).json(&payload),
+            client
+                .post(get_gateway_endpoint("/inference"))
+                .json(&payload),
         )
         .await
         .unwrap();
@@ -940,7 +946,9 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
     let client = Client::new();
 
     let mut event_source = into_sse_stream(
-        client.post(get_gateway_endpoint("/inference")).json(&payload),
+        client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload),
     )
     .await
     .unwrap();

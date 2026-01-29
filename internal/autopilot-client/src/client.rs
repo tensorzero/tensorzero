@@ -676,7 +676,7 @@ impl AutopilotClient {
             self.sse_http_client.get(url).headers(self.auth_headers()),
         )
         .await
-        .map_err(|e| Self::convert_sse_error(e))?;
+        .map_err(Self::convert_sse_error)?;
 
         // Connection is good, return the stream
         let cache = self.tool_call_cache.clone();

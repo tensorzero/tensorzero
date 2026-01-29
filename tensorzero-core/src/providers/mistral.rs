@@ -381,8 +381,7 @@ pub fn stream_mistral(
                         let data: Result<MistralChatChunk, Error> =
                             serde_json::from_str(&message_data).map_err(|e| ErrorDetails::InferenceServer {
                                 message: format!(
-                                    "Error parsing chunk. Error: {}, Data: {}",
-                                    e, message_data
+                                    "Error parsing chunk. Error: {e}, Data: {message_data}"
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: Some(raw_request.clone()),

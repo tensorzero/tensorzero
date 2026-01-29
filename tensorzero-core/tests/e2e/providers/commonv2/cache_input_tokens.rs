@@ -261,13 +261,17 @@ async fn get_streaming_input_tokens(
     payload: &Value,
     variant_name: &str,
 ) -> Option<u64> {
-    let mut chunks = into_sse_stream(client.post(get_gateway_endpoint("/inference")).json(payload))
-        .await
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to create eventsource for streaming request for provider {variant_name}: {e}",
-            )
-        });
+    let mut chunks = into_sse_stream(
+        client
+            .post(get_gateway_endpoint("/inference"))
+            .json(payload),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        panic!(
+            "Failed to create eventsource for streaming request for provider {variant_name}: {e}",
+        )
+    });
 
     let mut input_tokens: Option<u64> = None;
     let mut all_chunks: Vec<Value> = Vec::new();

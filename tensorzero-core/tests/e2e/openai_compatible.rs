@@ -933,7 +933,6 @@ async fn test_openai_compatible_deny_unknown_fields() {
 
 #[tokio::test]
 async fn test_openai_compatible_streaming() {
-
     let client = Client::new();
     let episode_id = Uuid::now_v7();
     let body = json!({

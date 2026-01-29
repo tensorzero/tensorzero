@@ -41,6 +41,7 @@ ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings", "tensorzero-optimizer
 
 [dev-dependencies]
 reqwest.workspace = true
+reqwest-sse-stream = { path = "../internal/reqwest-sse-stream" }
 tempfile = "3.21.0"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 serde_json = { workspace = true }
