@@ -283,7 +283,7 @@ fn build_tracer<T: SpanExporter + 'static>(
         })?;
 
     let mut builder = SdkTracerProvider::builder().with_resource(
-        Resource::builder_empty()
+        Resource::builder()
             .with_attribute(KeyValue::new(
                 opentelemetry_semantic_conventions::resource::SERVICE_NAME,
                 "tensorzero-gateway",
