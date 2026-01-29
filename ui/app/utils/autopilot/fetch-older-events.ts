@@ -19,7 +19,7 @@ type FetchOlderEventsResult = {
  * @param beforeEventId - Fetch events before this event ID
  * @param limit - Number of events to return (default: 20)
  * @returns Object with items array and hasMore boolean
- * @throws Never - returns empty result on error (caller handles via hasMore: false)
+ * @throws Error on HTTP errors (enables retry mechanism in useInfiniteScrollUp)
  */
 export async function fetchOlderAutopilotEvents(
   sessionId: string,
@@ -31,10 +31,8 @@ export async function fetchOlderAutopilotEvents(
   );
 
   if (!response.ok) {
-    logger.debug(
-      `API returned ${response.status} when fetching older events, treating as session start`,
-    );
-    return { items: [], hasMore: false };
+    logger.debug(`API returned ${response.status} when fetching older events`);
+    throw new Error(`Failed to fetch older events: ${response.status}`);
   }
 
   const responseData = (await response.json()) as {
