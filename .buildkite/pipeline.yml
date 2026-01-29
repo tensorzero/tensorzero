@@ -1,6 +1,10 @@
 agents:
   queue: "t0-merge-queue"
 
+# Priority based on merge queue position (negative so earlier positions have higher priority)
+# Set via MERGE_QUEUE_PRIORITY env var from GitHub Actions
+priority: ${MERGE_QUEUE_PRIORITY:-0}
+
 # We need to use individual steps instead of a build matrix, as we can't use matrix keys
 # inside concurrency_group
 steps:
