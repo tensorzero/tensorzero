@@ -31,6 +31,7 @@ import {
 } from "~/components/autopilot/AutopilotStatusBanner";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
+import { approveAllToolCalls } from "~/utils/autopilot-api";
 import { logger } from "~/utils/logger";
 import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
@@ -548,20 +549,7 @@ function AutopilotSessionEventsPageContent({
     );
 
     try {
-      const response = await fetch(
-        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/approve_all`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            last_tool_call_event_id: lastEventId,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Batch approval failed");
-      }
+      await approveAllToolCalls(sessionId, lastEventId);
     } catch (err) {
       logger.error("Failed to approve all tool calls:", err);
       toast.error({

@@ -1,4 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { approveAllToolCalls } from "~/utils/autopilot-api";
+import { useLatest } from "./use-latest";
+
+// Retry configuration
+const RETRY_BASE_DELAY_MS = 1000;
+const RETRY_MAX_DELAY_MS = 60000;
+const RETRY_SHOW_ERROR_THRESHOLD = 3;
 
 interface UseAutoApprovalOptions {
   enabled: boolean;
@@ -10,35 +17,14 @@ interface UseAutoApprovalResult {
   failedIds: Set<string>;
 }
 
-async function approveAllToolCalls(
-  sessionId: string,
-  lastToolCallEventId: string,
-  signal: AbortSignal,
-): Promise<void> {
-  const response = await fetch(
-    `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/approve_all`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        last_tool_call_event_id: lastToolCallEventId,
-      }),
-      signal,
-    },
-  );
-  if (!response.ok) {
-    throw new Error("Batch approval failed");
-  }
-}
-
 /**
  * Hook to handle auto-approval of tool calls using batch approval with retry.
  *
  * Uses approve_all endpoint to batch-approve all pending tool calls up to
- * the highest pending ID.
+ * the most recent pending ID.
  *
  * Retry schedule: 1s, 2s, 4s, then 60s forever after showing error.
- * After 3 retries, all pending tool call IDs are added to `failedIds`.
+ * After RETRY_SHOW_ERROR_THRESHOLD failures, all pending IDs are added to `failedIds`.
  *
  * Requests are cancelled when disabled, session changes, or on unmount.
  */
@@ -48,15 +34,8 @@ export function useAutoApproval({
   pendingToolCallIds,
 }: UseAutoApprovalOptions): UseAutoApprovalResult {
   // Refs to access current values in async callbacks (avoid stale closures)
-  const enabledRef = useRef(enabled);
-  useEffect(() => {
-    enabledRef.current = enabled;
-  }, [enabled]);
-
-  const pendingToolCallIdsRef = useRef(pendingToolCallIds);
-  useEffect(() => {
-    pendingToolCallIdsRef.current = pendingToolCallIds;
-  }, [pendingToolCallIds]);
+  const enabledRef = useLatest(enabled);
+  const pendingToolCallIdsRef = useLatest(pendingToolCallIds);
 
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -129,10 +108,10 @@ export function useAutoApproval({
 
   // Exponential backoff: 1s, 2s, 4s, then 60s forever
   const getRetryDelay = (retryCount: number): number => {
-    if (retryCount < 3) {
-      return 1000 * Math.pow(2, retryCount);
+    if (retryCount < RETRY_SHOW_ERROR_THRESHOLD) {
+      return RETRY_BASE_DELAY_MS * Math.pow(2, retryCount);
     }
-    return 60000;
+    return RETRY_MAX_DELAY_MS;
   };
 
   const attemptBatchApproval = useCallback(() => {
@@ -162,8 +141,8 @@ export function useAutoApproval({
         const newRetryCount = retryCountRef.current + 1;
         retryCountRef.current = newRetryCount;
 
-        // After 3 failures, mark all current pending IDs as failed
-        if (newRetryCount === 3) {
+        // After threshold failures, mark all current pending IDs as failed
+        if (newRetryCount === RETRY_SHOW_ERROR_THRESHOLD) {
           setFailedIds(new Set(pendingToolCallIdsRef.current));
         }
 
@@ -178,7 +157,7 @@ export function useAutoApproval({
         }, delay);
       },
     );
-  }, [sessionId]);
+  }, [sessionId, enabledRef, pendingToolCallIdsRef]);
 
   // Trigger batch approval when pending IDs change
   useEffect(() => {
