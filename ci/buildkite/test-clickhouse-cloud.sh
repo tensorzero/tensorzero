@@ -103,7 +103,7 @@ export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tenso
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
 SQLX_OFFLINE=1 cargo build-e2e
-cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
+cargo run-e2e -- --run-postgres-migrations
 
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
@@ -119,6 +119,11 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
         fi
     done
     export GATEWAY_PID=$!
+
+# Start test compilation in background while we load fixtures
+echo "Starting background test compilation..."
+SQLX_OFFLINE=1 cargo test-clickhouse --no-run &
+TEST_BUILD_PID=$!
 
 export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
 export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
@@ -138,6 +143,10 @@ for attempt in $(seq 1 $max_retries); do
 done
 cd ../..
 sleep 2
+
+# Wait for background test compilation to finish
+echo "Waiting for test compilation to complete..."
+wait $TEST_BUILD_PID
 
 cargo test-clickhouse --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
 cat e2e_logs.txt
