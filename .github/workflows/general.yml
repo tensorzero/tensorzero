@@ -744,7 +744,7 @@ jobs:
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
       # Use extreme disk cleanup script that frees up ~26GB of space (11-phase cleanup)
       - name: "Free up disk space"
-        run: ./ci/free-disk-space.sh
+        run: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
@@ -1002,7 +1002,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        run: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Install Rust toolchain
         run: |
@@ -1146,7 +1146,7 @@ jobs:
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
           version: "0.9.27"
-          # Without this, the post-install hook tries to prune and save the cache, but ./ci/free-disk-space.sh already nukes /opt/hostedtoolcache/*, so it fails.
+          # Without this, the post-install hook tries to prune and save the cache, but jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be already nukes /opt/hostedtoolcache/*, so it fails.
           enable-cache: "false"
 
       - name: Download ClickHouse fixtures
@@ -1155,7 +1155,7 @@ jobs:
           uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        run: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |

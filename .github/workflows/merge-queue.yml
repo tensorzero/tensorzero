@@ -127,7 +127,7 @@ jobs:
           wait-for-builder: true
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        run: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Restore provider-proxy cache
         if: github.event_name != 'schedule'
@@ -235,7 +235,7 @@ jobs:
           # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        run: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Restore client-tests provider-proxy cache
         if: github.event_name != 'schedule'
