@@ -417,9 +417,9 @@ async fn tensorzero_to_xai_message<'a>(
         Role::Assistant => {
             let msg =
                 tensorzero_to_xai_assistant_message(&message.content, messages_config).await?;
-            // Skip empty assistant messages
-            if msg.content.is_none() && msg.tool_calls.is_none() && msg.reasoning_content.is_none()
-            {
+            // Skip assistant messages without content or tool_calls.
+            // xAI requires at least one content element, so reasoning_content alone is not enough.
+            if msg.content.is_none() && msg.tool_calls.is_none() {
                 Ok(vec![])
             } else {
                 Ok(vec![XAIRequestMessage::Assistant(msg)])
