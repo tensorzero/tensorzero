@@ -197,17 +197,25 @@ impl Error {
                 }
             }
             ErrorDetails::InferenceClient {
-                raw_response: Some(data),
+                raw_response,
                 provider_type,
                 api_type,
+                relay_raw_responses,
                 ..
             } => {
-                entries.push(RawResponseEntry {
-                    model_inference_id: None,
-                    provider_type: provider_type.clone(),
-                    api_type: *api_type,
-                    data: data.clone(),
-                });
+                // Include relay passthrough entries first
+                if let Some(relay_entries) = relay_raw_responses {
+                    entries.extend(relay_entries.iter().cloned());
+                }
+                // Then include the direct raw_response if present
+                if let Some(data) = raw_response {
+                    entries.push(RawResponseEntry {
+                        model_inference_id: None,
+                        provider_type: provider_type.clone(),
+                        api_type: *api_type,
+                        data: data.clone(),
+                    });
+                }
             }
             ErrorDetails::InferenceServer {
                 raw_response: Some(data),
@@ -418,6 +426,9 @@ pub enum ErrorDetails {
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_response: Option<String>,
+        /// Raw response entries from downstream relay errors (for passthrough)
+        #[serde(skip)]
+        relay_raw_responses: Option<Vec<RawResponseEntry>>,
     },
     InferenceNotFound {
         inference_id: Uuid,
@@ -1950,6 +1961,7 @@ mod tests {
             api_type: ApiType::Responses,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
+            relay_raw_responses: None,
         });
 
         let entries = error.collect_raw_responses();

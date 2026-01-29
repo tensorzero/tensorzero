@@ -33,6 +33,10 @@ pub struct ProviderInferenceResponseChunk {
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw response entries passed through from relay.
+    /// When present, these should be passed to ChatInferenceResultChunk/JsonInferenceResultChunk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
     pub raw_response: String,
     /// Time elapsed between making the request to the model provider and receiving this chunk.
     /// Important: this is NOT latency from the start of the TensorZero request.
@@ -204,7 +208,7 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
             content: chunk.content,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
-            raw_response: None, // Only populated via artificial chunks from TensorZero
+            raw_response: chunk.relay_raw_response,
             provider_latency: Some(chunk.provider_latency),
             finish_reason: chunk.finish_reason,
             raw_chunk: chunk.raw_response,
@@ -240,7 +244,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
             thought_chunks,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
-            raw_response: None, // Only populated via artificial chunks from TensorZero
+            raw_response: chunk.relay_raw_response,
             provider_latency: Some(chunk.provider_latency),
             raw_chunk: chunk.raw_response,
             finish_reason: chunk.finish_reason,
@@ -334,6 +338,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     });
     // Collect raw_usage entries from chunks (relay or provider streaming)
     let mut raw_usage: Option<Vec<RawUsageEntry>> = None;
+    // Collect relay_raw_response entries from chunks (relay streaming)
+    let mut relay_raw_response: Option<Vec<RawResponseEntry>> = None;
 
     // Extract provider-level TTFT from the first real chunk (with provider_latency set).
     // This is used for ModelInference timing.
@@ -354,12 +360,17 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     for chunk in value {
         // Only collect raw_usage from real provider chunks (not artificial chunks).
         // Artificial chunks have provider_latency: None.
-        if chunk.provider_latency().is_some()
-            && let Some(chunk_raw_usage) = chunk.raw_usage()
-        {
-            raw_usage
-                .get_or_insert_with(Vec::new)
-                .extend(chunk_raw_usage.iter().cloned());
+        if chunk.provider_latency().is_some() {
+            if let Some(chunk_raw_usage) = chunk.raw_usage() {
+                raw_usage
+                    .get_or_insert_with(Vec::new)
+                    .extend(chunk_raw_usage.iter().cloned());
+            }
+            if let Some(chunk_raw_response) = chunk.raw_response() {
+                relay_raw_response
+                    .get_or_insert_with(Vec::new)
+                    .extend(chunk_raw_response.iter().cloned());
+            }
         }
         match chunk {
             InferenceResultChunk::Chat(chunk) => {
@@ -730,7 +741,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         raw_response,
         usage: model_inference_usage,
         raw_usage,
-        relay_raw_response: None,
+        relay_raw_response,
         provider_latency,
         finish_reason,
         id: model_inference_id,
@@ -849,8 +860,8 @@ mod tests {
         experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            ContentBlockChatOutput, ContentBlockOutputType, InferenceResult, Text, Thought,
-            current_timestamp,
+            ApiType, ContentBlockChatOutput, ContentBlockOutputType, InferenceResult, Text,
+            Thought, current_timestamp,
         },
         jsonschema_util::JSONSchema,
         tool::InferenceResponseToolCall,
@@ -2506,6 +2517,7 @@ mod tests {
                 output_tokens: Some(20),
             }),
             raw_usage: None,
+            relay_raw_response: None,
             raw_response: "raw response".to_string(),
             provider_latency: Duration::from_secs(1),
             finish_reason: Some(FinishReason::ToolCall),
@@ -2533,6 +2545,7 @@ mod tests {
             })],
             usage: None,
             raw_usage: None,
+            relay_raw_response: None,
             raw_response: "raw response".to_string(),
             provider_latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2555,6 +2568,7 @@ mod tests {
             })],
             usage: None,
             raw_usage: None,
+            relay_raw_response: None,
             raw_response: "raw response".to_string(),
             provider_latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2599,6 +2613,7 @@ mod tests {
             ],
             usage: None,
             raw_usage: None,
+            relay_raw_response: None,
             raw_response: "raw response".to_string(),
             provider_latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2624,6 +2639,7 @@ mod tests {
             content: vec![],
             usage: None,
             raw_usage: None,
+            relay_raw_response: None,
             raw_response: "raw response".to_string(),
             provider_latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2648,6 +2664,7 @@ mod tests {
             })],
             usage: None,
             raw_usage: None,
+            relay_raw_response: None,
             raw_response: "raw response".to_string(),
             provider_latency: Duration::from_secs(1),
             finish_reason: None,
@@ -2666,6 +2683,77 @@ mod tests {
                 extra_data: None,
             }],
             "ThoughtChunk should be preserved when text is None"
+        );
+    }
+
+    #[test]
+    fn test_provider_chunk_to_chat_chunk_preserves_relay_raw_response() {
+        use std::time::Duration;
+
+        let raw_response_entry = RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "downstream_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: r#"{"raw": "response"}"#.to_string(),
+        };
+
+        let provider_chunk = ProviderInferenceResponseChunk {
+            content: vec![],
+            usage: None,
+            raw_usage: None,
+            relay_raw_response: Some(vec![raw_response_entry.clone()]),
+            raw_response: "raw_chunk".to_string(),
+            provider_latency: Duration::from_millis(100),
+            finish_reason: None,
+        };
+
+        let chat_chunk: ChatInferenceResultChunk = provider_chunk.into();
+
+        assert!(
+            chat_chunk.raw_response.is_some(),
+            "relay_raw_response should be passed through to ChatInferenceResultChunk"
+        );
+        assert_eq!(
+            chat_chunk.raw_response.as_ref().unwrap()[0].provider_type,
+            "downstream_provider",
+            "Provider type should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_provider_chunk_to_json_chunk_preserves_relay_raw_response() {
+        use std::time::Duration;
+
+        let raw_response_entry = RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "downstream_provider".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: r#"{"raw": "response"}"#.to_string(),
+        };
+
+        let provider_chunk = ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                id: "0".to_string(),
+                text: "some text".to_string(),
+            })],
+            usage: None,
+            raw_usage: None,
+            relay_raw_response: Some(vec![raw_response_entry.clone()]),
+            raw_response: "raw_chunk".to_string(),
+            provider_latency: Duration::from_millis(100),
+            finish_reason: None,
+        };
+
+        let json_chunk: JsonInferenceResultChunk = provider_chunk.into();
+
+        assert!(
+            json_chunk.raw_response.is_some(),
+            "relay_raw_response should be passed through to JsonInferenceResultChunk"
+        );
+        assert_eq!(
+            json_chunk.raw_response.as_ref().unwrap()[0].provider_type,
+            "downstream_provider",
+            "Provider type should be preserved"
         );
     }
 }

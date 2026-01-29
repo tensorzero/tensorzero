@@ -2094,6 +2094,7 @@ impl ProviderInferenceResponseChunk {
             content,
             usage,
             raw_usage: None,
+            relay_raw_response: None,
             raw_response,
             provider_latency: latency,
             finish_reason,
@@ -2113,6 +2114,28 @@ impl ProviderInferenceResponseChunk {
             content,
             usage,
             raw_usage,
+            relay_raw_response: None,
+            raw_response,
+            provider_latency: latency,
+            finish_reason,
+        }
+    }
+
+    /// Creates a new chunk with relay_raw_response passthrough (streaming relay)
+    pub fn new_with_relay_raw_response(
+        content: Vec<ContentBlockChunk>,
+        usage: Option<Usage>,
+        raw_response: String,
+        latency: Duration,
+        finish_reason: Option<FinishReason>,
+        raw_usage: Option<Vec<RawUsageEntry>>,
+        relay_raw_response: Option<Vec<RawResponseEntry>>,
+    ) -> Self {
+        Self {
+            content,
+            usage,
+            raw_usage,
+            relay_raw_response,
             raw_response,
             provider_latency: latency,
             finish_reason,

@@ -3339,6 +3339,7 @@ mod tests {
             api_type: ApiType::ChatCompletions,
             raw_request: Some(r#"{"prompt":"test"}"#.to_string()),
             raw_response: Some(r#"{"error": "rate_limit"}"#.to_string()),
+            relay_raw_responses: None,
         });
 
         let error2 = Error::new(ErrorDetails::InferenceClient {
@@ -3348,6 +3349,7 @@ mod tests {
             api_type: ApiType::ChatCompletions,
             raw_request: Some(r#"{"messages":[]}"#.to_string()),
             raw_response: Some(r#"{"type":"error"}"#.to_string()),
+            relay_raw_responses: None,
         });
 
         // 2. Aggregate into ModelProvidersExhausted

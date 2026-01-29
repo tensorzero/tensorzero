@@ -153,6 +153,7 @@ impl Optimizer for OpenAIRFTConfig {
                 api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
 
@@ -167,6 +168,7 @@ impl Optimizer for OpenAIRFTConfig {
                 api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
         let job: OpenAIFineTuningJob = serde_json::from_str(&raw_response).map_err(|e| {
@@ -231,6 +233,7 @@ impl JobHandle for OpenAIRFTJobHandle {
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
         let raw_response = res.text().await.map_err(|e| {
@@ -244,6 +247,7 @@ impl JobHandle for OpenAIRFTJobHandle {
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
         let job: OpenAIFineTuningJob = serde_json::from_str(&raw_response).map_err(|e| {

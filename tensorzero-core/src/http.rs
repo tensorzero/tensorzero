@@ -628,6 +628,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
         let url = request.url().clone();
@@ -650,6 +651,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     api_type: ApiType::ChatCompletions,
                     raw_request: raw_body.clone(),
                     raw_response: None,
+                    relay_raw_responses: None,
                 })
             })?;
 
@@ -671,6 +673,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     api_type: ApiType::ChatCompletions,
                     raw_request: raw_body.clone(),
                     raw_response: None,
+                    relay_raw_responses: None,
                 })
             })?;
 
@@ -682,6 +685,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 api_type: ApiType::ChatCompletions,
                 raw_request: raw_body.clone(),
                 raw_response: Some(raw_response.clone()),
+                relay_raw_responses: None,
             }));
         }
 

@@ -656,6 +656,7 @@ async fn convert_non_thought_content_block(
                     api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
+                    relay_raw_responses: None,
                 })
             })?;
 
@@ -667,6 +668,7 @@ async fn convert_non_thought_content_block(
                     api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
+                    relay_raw_responses: None,
                 }
                 .into());
             }
@@ -1538,6 +1540,7 @@ fn handle_google_ai_studio_error(
             message: response_body.clone(),
             raw_request: None,
             raw_response: Some(response_body.clone()),
+            relay_raw_responses: None,
             provider_type: PROVIDER_TYPE.to_string(),
             api_type: ApiType::ChatCompletions,
         }

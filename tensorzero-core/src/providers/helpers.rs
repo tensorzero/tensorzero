@@ -311,6 +311,7 @@ pub async fn inject_extra_request_data_and_send_with_headers(
                     api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
+                    relay_raw_responses: None,
                 }),
                 None,
             )
@@ -1131,6 +1132,7 @@ mod tests {
             })],
             usage: None,
             raw_usage: None,
+            relay_raw_response: None,
             raw_response: "My raw response".to_string(),
             provider_latency: Duration::from_secs(0),
             finish_reason: None,

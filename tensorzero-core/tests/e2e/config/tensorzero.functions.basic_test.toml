@@ -21,6 +21,18 @@ type = "chat_completion"
 model = "error"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.basic_test.variants.error_with_raw_response]
+type = "chat_completion"
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.flaky_with_raw_response]
+type = "chat_completion"
+model = "flaky_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+retries = { num_retries = 5, max_delay_s = 0.1 }
+
 [functions.basic_test.variants.slow]
 type = "chat_completion"
 model = "slow"

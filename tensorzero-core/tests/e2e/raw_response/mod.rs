@@ -4,7 +4,9 @@
 
 mod cache;
 mod embeddings;
+mod errors;
 mod openai_compatible;
+mod retries;
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};

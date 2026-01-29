@@ -656,6 +656,20 @@ routing = ["error"]
 type = "dummy"
 model_name = "error"
 
+[models.error_with_raw_response]
+routing = ["dummy"]
+
+[models.error_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[models.flaky_with_raw_response]
+routing = ["dummy"]
+
+[models.flaky_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "flaky_with_raw_response"
+
 [models.test_fallback]
 routing = ["error", "good"]
 

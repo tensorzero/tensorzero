@@ -8,6 +8,7 @@ use futures::future::try_join_all;
 use secrecy::SecretString;
 use url::Url;
 
+use crate::client::TensorZeroError;
 use crate::client::{
     ClientBuilder, ClientBuilderMode, ClientSecretString, ContentBlockChunk, InferenceResponseChunk,
 };
@@ -19,6 +20,7 @@ use crate::endpoints::openai_compatible::types::embeddings::{
 };
 use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
+use crate::inference::types::usage::RawResponseEntry;
 use crate::inference::types::{
     ApiType, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, TextChunk, Usage,
@@ -137,6 +139,38 @@ impl TensorzeroRelay {
     }
 }
 
+/// Extracts raw_response entries from a downstream error response body.
+/// The downstream error body has the format: {"error": "...", "raw_response": [...]}
+fn extract_raw_responses_from_error(error: &TensorZeroError) -> Option<Vec<RawResponseEntry>> {
+    match error {
+        TensorZeroError::Http {
+            text: Some(body), ..
+        } => {
+            // Try to parse the error body as JSON and extract raw_response array
+            let json: serde_json::Value = serde_json::from_str(body).ok()?;
+            let raw_response = json.get("raw_response")?;
+            let entries: Vec<RawResponseEntry> =
+                serde_json::from_value(raw_response.clone()).ok()?;
+            if entries.is_empty() {
+                None
+            } else {
+                Some(entries)
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Extracts the HTTP status code from a TensorZeroError if available
+fn extract_status_code_from_error(error: &TensorZeroError) -> Option<reqwest::StatusCode> {
+    match error {
+        TensorZeroError::Http { status_code, .. } => {
+            reqwest::StatusCode::from_u16(*status_code).ok()
+        }
+        _ => None,
+    }
+}
+
 impl TensorzeroRelay {
     pub async fn relay_embeddings(
         &self,
@@ -164,14 +198,16 @@ impl TensorzeroRelay {
             .http_embeddings(params, api_key)
             .await
             .map_err(|e| {
-                // TODO - include `raw_request`/`raw_response` here
+                let relay_raw_responses = extract_raw_responses_from_error(&e);
+                let status_code = extract_status_code_from_error(&e);
                 Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
-                    status_code: None,
+                    status_code,
                     provider_type: "tensorzero_relay".to_string(),
-                    api_type: ApiType::ChatCompletions,
+                    api_type: ApiType::Embeddings,
                     raw_request: None,
                     raw_response: None,
+                    relay_raw_responses,
                 })
             })?;
         match res.response {
@@ -220,8 +256,16 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                Error::new(ErrorDetails::Inference {
+                let relay_raw_responses = extract_raw_responses_from_error(&e);
+                let status_code = extract_status_code_from_error(&e);
+                Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
+                    status_code,
+                    provider_type: "tensorzero_relay".to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    raw_request: None,
+                    raw_response: None,
+                    relay_raw_responses,
                 })
             })?;
 
@@ -239,7 +283,7 @@ impl TensorzeroRelay {
                     let raw_chunk = serde_json::to_string(&chunk).unwrap_or_default();
                     match chunk {
                         InferenceResponseChunk::Chat(c) => {
-                            Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
+                            Ok(ProviderInferenceResponseChunk::new_with_relay_raw_response(
                                 c.content,
                                 c.usage,
                                 // TODO - get the original chunk as a string
@@ -247,10 +291,11 @@ impl TensorzeroRelay {
                                 start_time.elapsed(),
                                 c.finish_reason,
                                 c.raw_usage,
+                                c.raw_response,
                             ))
                         }
                         InferenceResponseChunk::Json(c) => {
-                            Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
+                            Ok(ProviderInferenceResponseChunk::new_with_relay_raw_response(
                                 vec![ContentBlockChunk::Text(TextChunk {
                                     id: "0".to_string(),
                                     text: c.raw,
@@ -261,6 +306,7 @@ impl TensorzeroRelay {
                                 start_time.elapsed(),
                                 c.finish_reason,
                                 c.raw_usage,
+                                c.raw_response,
                             ))
                         }
                     }
@@ -289,8 +335,16 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                Error::new(ErrorDetails::Inference {
+                let relay_raw_responses = extract_raw_responses_from_error(&e);
+                let status_code = extract_status_code_from_error(&e);
+                Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
+                    status_code,
+                    provider_type: "tensorzero_relay".to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    raw_request: None,
+                    raw_response: None,
+                    relay_raw_responses,
                 })
             })?;
 

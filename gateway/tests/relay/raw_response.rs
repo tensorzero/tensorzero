@@ -822,3 +822,255 @@ model_name = "test-embeddings"
         .unwrap();
     assert_eq!(api_type, "embeddings");
 }
+
+// =============================================================================
+// Relay Error Tests
+// =============================================================================
+
+/// Test that relay passes through raw_response from downstream errors (non-streaming)
+#[tokio::test]
+async fn test_relay_raw_response_error_non_streaming() {
+    // Configure downstream with error_with_raw_response model
+    let downstream_config = r#"
+[models.error_with_raw_response]
+routing = ["dummy"]
+
+[models.error_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[functions.error_test]
+type = "chat"
+
+[functions.error_test.variants.error_variant]
+type = "chat_completion"
+weight = 1
+model = "error_with_raw_response"
+"#;
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let response = Client::new()
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "error_test",
+            "variant_name": "error_variant",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [{"role": "user", "content": "Hello"}]
+            },
+            "stream": false,
+            "include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Should be an error status
+    assert!(
+        !response.status().is_success(),
+        "Response should be an error status"
+    );
+
+    let body: Value = response.json().await.unwrap();
+
+    // raw_response should be passed through from downstream
+    let raw_response = body
+        .get("raw_response")
+        .expect("Relay error should pass through raw_response from downstream");
+    assert!(raw_response.is_array(), "raw_response should be an array");
+
+    let entries = raw_response.as_array().unwrap();
+    assert!(
+        !entries.is_empty(),
+        "Should have raw_response entries from downstream error"
+    );
+
+    // provider_type should be "dummy" (from downstream), not "relay"
+    for entry in entries {
+        let provider_type = entry.get("provider_type").and_then(|v| v.as_str()).unwrap();
+        assert_eq!(
+            provider_type, "dummy",
+            "raw_response should be from downstream provider, not relay"
+        );
+
+        // Verify error data is present
+        let data = entry.get("data").and_then(|d| d.as_str()).unwrap();
+        assert!(
+            data.contains("test_error"),
+            "raw_response should contain downstream error data"
+        );
+    }
+}
+
+/// Test that relay passes through raw_response from downstream errors (streaming)
+#[tokio::test]
+async fn test_relay_raw_response_error_streaming() {
+    // Configure downstream with error_with_raw_response model
+    let downstream_config = r#"
+[models.error_with_raw_response]
+routing = ["dummy"]
+
+[models.error_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[functions.error_test]
+type = "chat"
+
+[functions.error_test.variants.error_variant]
+type = "chat_completion"
+weight = 1
+model = "error_with_raw_response"
+"#;
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let mut stream = Client::new()
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "error_test",
+            "variant_name": "error_variant",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [{"role": "user", "content": "Hello"}]
+            },
+            "stream": true,
+            "include_raw_response": true
+        }))
+        .eventsource()
+        .unwrap();
+
+    let mut found_error_with_raw_response = false;
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        // Check for error with raw_response
+        if chunk.get("error").is_some()
+            && let Some(raw_response) = chunk.get("raw_response")
+        {
+            found_error_with_raw_response = true;
+            assert!(raw_response.is_array(), "raw_response should be an array");
+
+            let entries = raw_response.as_array().unwrap();
+            assert!(
+                !entries.is_empty(),
+                "Relay error should pass through raw_response"
+            );
+
+            // Verify provider_type is from downstream
+            for entry in entries {
+                let provider_type = entry.get("provider_type").and_then(|v| v.as_str()).unwrap();
+                assert_eq!(
+                    provider_type, "dummy",
+                    "raw_response should be from downstream"
+                );
+            }
+        }
+    }
+
+    assert!(
+        found_error_with_raw_response,
+        "Streaming relay error should include raw_response from downstream"
+    );
+}
+
+// =============================================================================
+// Relay Streaming Passthrough Tests
+// =============================================================================
+
+/// Test that relay streaming correctly passes through raw_response entries from downstream
+/// This tests the fix for streaming relay to pass through downstream raw_response entries.
+#[tokio::test]
+async fn test_relay_streaming_passes_through_downstream_raw_response() {
+    // Downstream runs best-of-n (generates raw_response entries in streaming)
+    let downstream_config = r#"
+[functions.best_of_n_downstream]
+type = "chat"
+
+[functions.best_of_n_downstream.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.best_of_n_downstream.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.best_of_n_downstream.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.best_of_n_downstream.variants.best_of_n.evaluator]
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+"#;
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let mut stream = Client::new()
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "best_of_n_downstream",
+            "variant_name": "best_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [{"role": "user", "content": "Hello"}]
+            },
+            "stream": true,
+            "include_raw_response": true
+        }))
+        .eventsource()
+        .unwrap();
+
+    let mut raw_response_entries: Vec<Value> = Vec::new();
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+        if let Some(raw_response) = chunk.get("raw_response")
+            && let Some(arr) = raw_response.as_array()
+        {
+            raw_response_entries.extend(arr.clone());
+        }
+    }
+
+    // Should have raw_response entries from downstream best-of-n
+    assert!(
+        raw_response_entries.len() >= 2,
+        "Relay should pass through raw_response entries from downstream streaming, got {}",
+        raw_response_entries.len()
+    );
+
+    // All entries should have provider_type from downstream
+    for entry in &raw_response_entries {
+        let provider_type = entry.get("provider_type").and_then(|v| v.as_str()).unwrap();
+        assert_eq!(
+            provider_type, "openai",
+            "raw_response should be from downstream provider"
+        );
+    }
+}

@@ -588,6 +588,7 @@ pub(super) fn handle_openrouter_error(
             message: response_body.to_string(),
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
+            relay_raw_responses: None,
             provider_type: provider_type.to_string(),
             api_type: ApiType::ChatCompletions,
         }
@@ -2133,6 +2134,7 @@ mod tests {
             raw_response,
             provider_type: provider,
             api_type,
+            ..
         } = details
         {
             assert_eq!(message, "Unauthorized access");
@@ -2159,6 +2161,7 @@ mod tests {
             raw_response,
             provider_type: provider,
             api_type,
+            ..
         } = details
         {
             assert_eq!(message, "Forbidden access");
@@ -2185,6 +2188,7 @@ mod tests {
             raw_response,
             provider_type: provider,
             api_type,
+            ..
         } = details
         {
             assert_eq!(message, "Rate limit exceeded");

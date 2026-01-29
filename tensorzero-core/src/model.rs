@@ -193,6 +193,8 @@ impl StreamResponse {
                         usage: c.usage,
                         // raw_usage is not cached
                         raw_usage: None,
+                        // relay_raw_response is not cached (only relevant for relay streaming)
+                        relay_raw_response: None,
                         // We didn't make any network calls to the model provider, so the latency is 0
                         provider_latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
@@ -2924,6 +2926,7 @@ mod tests {
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
+                        relay_raw_responses: None,
                     }
                     .into()
                 )])
@@ -3310,6 +3313,7 @@ mod tests {
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
+                        relay_raw_responses: None,
                     }
                     .into()
                 )])
@@ -3579,6 +3583,7 @@ mod tests {
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
+                        relay_raw_responses: None,
                     }
                     .into()
                 )])

@@ -137,6 +137,7 @@ impl DummyProvider {
                     content: vec![chunk],
                     usage: None,
                     raw_usage: None,
+                    relay_raw_response: None,
                     raw_response: String::new(),
                     provider_latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     finish_reason: None,
@@ -151,6 +152,7 @@ impl DummyProvider {
                     api_type: ApiType::ChatCompletions,
                     data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
                 }]),
+                relay_raw_response: None,
                 finish_reason: Some(FinishReason::Stop),
                 raw_response: String::new(),
                 provider_latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
@@ -324,9 +326,19 @@ impl InferenceProvider for DummyProvider {
                     }
                     .into());
                 }
+                // Check for flaky_with_raw_response variant
+                let raw_response = if self.model_name.contains("with_raw_response") {
+                    Some(format!(
+                        r#"{{"error": "flaky_failure", "attempt": {}}}"#,
+                        *counter
+                    ))
+                } else {
+                    None
+                };
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
-                    raw_response: None,
+                    raw_response,
+                    relay_raw_responses: None,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
@@ -339,6 +351,23 @@ impl InferenceProvider for DummyProvider {
             }
         }
 
+        // Check for error_with_raw_response before generic error check
+        if self.model_name == "error_with_raw_response" {
+            return Err(ErrorDetails::InferenceClient {
+                message: format!("Error from Dummy provider for model '{}'.", self.model_name),
+                raw_request: Some(DUMMY_RAW_REQUEST.to_string()),
+                raw_response: Some(
+                    r#"{"error": {"message": "Intentional test error", "type": "test_error"}}"#
+                        .to_string(),
+                ),
+                relay_raw_responses: None,
+                status_code: Some(reqwest::StatusCode::BAD_REQUEST),
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+            }
+            .into());
+        }
+
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
                 message: format!(
@@ -347,6 +376,7 @@ impl InferenceProvider for DummyProvider {
                 ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
@@ -366,6 +396,7 @@ impl InferenceProvider for DummyProvider {
                     message: "First message must have exactly two text blocks".to_string(),
                     raw_request: Some("raw request".to_string()),
                     raw_response: None,
+                    relay_raw_responses: None,
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     api_type: ApiType::ChatCompletions,
@@ -386,6 +417,7 @@ impl InferenceProvider for DummyProvider {
                 message: "Invalid API key for Dummy provider".to_string(),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
@@ -571,6 +603,7 @@ impl InferenceProvider for DummyProvider {
                         message: "PDF must be provided for require_pdf model".to_string(),
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
+                        relay_raw_responses: None,
                         status_code: None,
                         provider_type: PROVIDER_TYPE.to_string(),
                         api_type: ApiType::ChatCompletions,
@@ -610,6 +643,7 @@ impl InferenceProvider for DummyProvider {
                     message: "Dummy error in inference".to_string(),
                     raw_request: Some("raw request".to_string()),
                     raw_response: None,
+                    relay_raw_responses: None,
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     api_type: ApiType::ChatCompletions,
@@ -693,9 +727,19 @@ impl InferenceProvider for DummyProvider {
 
             // Fail on even-numbered calls
             if counter.is_multiple_of(2) {
+                // Check for flaky_with_raw_response variant
+                let raw_response = if self.model_name.contains("with_raw_response") {
+                    Some(format!(
+                        r#"{{"error": "flaky_failure", "attempt": {}}}"#,
+                        *counter
+                    ))
+                } else {
+                    None
+                };
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
-                    raw_response: None,
+                    raw_response,
+                    relay_raw_responses: None,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
@@ -729,6 +773,23 @@ impl InferenceProvider for DummyProvider {
             ));
         }
 
+        // Check for error_with_raw_response before generic error check
+        if self.model_name == "error_with_raw_response" {
+            return Err(ErrorDetails::InferenceClient {
+                message: format!("Error from Dummy provider for model '{}'.", self.model_name),
+                raw_request: Some(DUMMY_RAW_REQUEST.to_string()),
+                raw_response: Some(
+                    r#"{"error": {"message": "Intentional test error", "type": "test_error"}}"#
+                        .to_string(),
+                ),
+                relay_raw_responses: None,
+                status_code: Some(reqwest::StatusCode::BAD_REQUEST),
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+            }
+            .into());
+        }
+
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
                 message: format!(
@@ -737,6 +798,7 @@ impl InferenceProvider for DummyProvider {
                 ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::ChatCompletions,
@@ -783,6 +845,7 @@ impl InferenceProvider for DummyProvider {
                         message: "Dummy error in stream".to_string(),
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
+                        relay_raw_responses: None,
                         status_code: None,
                         provider_type: PROVIDER_TYPE.to_string(),
                         api_type: ApiType::ChatCompletions,
@@ -818,6 +881,7 @@ impl InferenceProvider for DummyProvider {
                     }],
                     usage: None,
                     raw_usage: None,
+                    relay_raw_response: None,
                     finish_reason: None,
                     raw_response: chunk.to_string(),
                     provider_latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
@@ -834,6 +898,7 @@ impl InferenceProvider for DummyProvider {
                 api_type: ApiType::ChatCompletions,
                 data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
             }]),
+            relay_raw_response: None,
             finish_reason,
             raw_response: String::new(),
             provider_latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
@@ -909,6 +974,7 @@ impl EmbeddingProvider for DummyProvider {
                 ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::Embeddings,
@@ -931,6 +997,7 @@ impl EmbeddingProvider for DummyProvider {
                 message: "Invalid API key for Dummy provider".to_string(),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
                 api_type: ApiType::Embeddings,

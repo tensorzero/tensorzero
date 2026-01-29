@@ -347,6 +347,7 @@ fn handle_mistral_error(
             api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         }
         .into()),
         _ => Err(ErrorDetails::InferenceServer {
@@ -1547,6 +1548,7 @@ mod tests {
             api_type,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Unauthorized access");
@@ -1569,6 +1571,7 @@ mod tests {
             api_type,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Forbidden access");
@@ -1591,6 +1594,7 @@ mod tests {
             api_type,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Rate limit exceeded");

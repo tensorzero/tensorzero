@@ -193,6 +193,7 @@ impl Optimizer for FireworksSFTConfig {
                 api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
 
@@ -207,6 +208,7 @@ impl Optimizer for FireworksSFTConfig {
                 api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
         let job: FireworksFineTuningJobResponse =
@@ -590,6 +592,7 @@ async fn poll_dataset_read(
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
     let raw_response = res.text().await.map_err(|e| {
@@ -603,6 +606,7 @@ async fn poll_dataset_read(
                 "Error checking dataset status: {}",
                 DisplayOrDebugGateway::new(e)
             ),
+            relay_raw_responses: None,
         })
     })?;
     let response: FireworksDatasetResponse = serde_json::from_str(&raw_response).map_err(|e| {
@@ -656,6 +660,7 @@ async fn create_and_upload_dataset<'a>(
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
     let status = res.status();
@@ -667,6 +672,7 @@ async fn create_and_upload_dataset<'a>(
             api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     if !status.is_success() {
@@ -677,6 +683,7 @@ async fn create_and_upload_dataset<'a>(
             api_type: ApiType::Other,
             raw_request: None,
             raw_response: Some(raw_response),
+            relay_raw_responses: None,
         }));
     }
 
@@ -722,6 +729,7 @@ async fn create_and_upload_dataset<'a>(
             api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     if !res.status().is_success() {
@@ -735,6 +743,7 @@ async fn create_and_upload_dataset<'a>(
             api_type: ApiType::Other,
             raw_request: None,
             raw_response: res.text().await.ok(),
+            relay_raw_responses: None,
         }));
     }
     while !poll_dataset_read(client, api_key, api_base, account_id, &dataset_id).await? {
@@ -766,6 +775,7 @@ async fn get_model(
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
     if res.status() == StatusCode::NOT_FOUND {
@@ -779,6 +789,7 @@ async fn get_model(
             api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     let model: FireworksModelResponse = serde_json::from_str(&raw_response).map_err(|e| {
@@ -840,6 +851,7 @@ async fn deploy_or_poll_model(
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
 
@@ -851,6 +863,7 @@ async fn deploy_or_poll_model(
             api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     let response: FireworksDeployedModelResponse =
@@ -893,6 +906,7 @@ async fn poll_job(
             api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     let raw_response = res.text().await.map_err(|e| {
@@ -906,6 +920,7 @@ async fn poll_job(
             api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     let job: FireworksFineTuningJobResponse = serde_json::from_str(&raw_response).map_err(|e| {
