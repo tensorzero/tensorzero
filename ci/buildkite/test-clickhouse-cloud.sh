@@ -38,7 +38,7 @@ echo "Updated ClickHouse URL with database: $TENSORZERO_CLICKHOUSE_URL"
 # Fire off a background request to wake up the ClickHouse Cloud instance
 # (idle instances take ~4-5 min to wake up, so start this early while we install dependencies)
 echo "Starting background ClickHouse wake-up..."
-curl --retry 3 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 90 \
+curl --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
     "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SELECT 1' > /dev/null 2>&1 &
 
 # Set up cleanup function to run on exit
@@ -85,7 +85,7 @@ sudo apt-get update
 sudo apt-get install -y clickhouse-client
 
 curl \
-    --retry 3 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 90 \
+    --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
     "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
 curl --proto '=https' --tlsv1.2 -sSf --retry 3 --retry-delay 5 --retry-all-errors https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
