@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { useState } from "react";
 import { Switch, SwitchSize } from "~/components/ui/switch";
 import {
   Tooltip,
@@ -16,8 +17,15 @@ export function YoloModeToggle({
   checked,
   onCheckedChange,
 }: YoloModeToggleProps) {
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+
+  const handleCheckedChange = (value: boolean) => {
+    setTooltipOpen(false);
+    onCheckedChange(value);
+  };
+
   return (
-    <Tooltip>
+    <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
       <TooltipTrigger asChild>
         <label className="flex cursor-pointer items-center gap-2 select-none">
           <span
@@ -31,7 +39,7 @@ export function YoloModeToggle({
           </span>
           <Switch
             checked={checked}
-            onCheckedChange={onCheckedChange}
+            onCheckedChange={handleCheckedChange}
             size={SwitchSize.Small}
           />
         </label>

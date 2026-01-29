@@ -37,8 +37,11 @@ import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
-import { useLocalStorage } from "~/hooks/use-local-storage";
 import { useAutoApproval } from "~/hooks/use-auto-approval";
+import {
+  AutopilotSessionProvider,
+  useAutopilotSession,
+} from "~/contexts/AutopilotSessionContext";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -365,10 +368,21 @@ function EventStreamContent({
   );
 }
 
-export default function AutopilotSessionEventsPage({
+export default function AutopilotSessionEventsPage(
+  props: Route.ComponentProps,
+) {
+  return (
+    <AutopilotSessionProvider>
+      <AutopilotSessionEventsPageContent {...props} />
+    </AutopilotSessionProvider>
+  );
+}
+
+function AutopilotSessionEventsPageContent({
   loaderData,
 }: Route.ComponentProps) {
   const { sessionId, eventsData, isNewSession } = loaderData;
+  const { yoloMode, setYoloMode } = useAutopilotSession();
   const navigate = useNavigate();
   const { toast } = useToast();
   const interruptFetcher = useFetcher();
@@ -407,12 +421,6 @@ export default function AutopilotSessionEventsPage({
   const [authLoadingStates, setAuthLoadingStates] = useState<
     Map<string, "approving" | "rejecting">
   >(new Map());
-
-  // YOLO mode: auto-approve all tool calls without review
-  const [yoloMode, setYoloMode] = useLocalStorage<boolean>(
-    "tensorzero-yolo-mode",
-    false,
-  );
 
   // State for SSE connection error
   const [sseError, setSseError] = useState<{
@@ -832,7 +840,7 @@ export default function AutopilotSessionEventsPage({
                   Retrying in background...
                 </StatusBanner>
               )}
-              {oldestPendingToolCall && (
+              {oldestPendingToolCall && !yoloMode && (
                 <PendingToolCallCard
                   key={oldestPendingToolCall.id}
                   event={oldestPendingToolCall}
