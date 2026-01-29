@@ -744,7 +744,7 @@ jobs:
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
       # Use extreme disk cleanup script that frees up ~26GB of space (11-phase cleanup)
       - name: "Free up disk space"
-        run: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
@@ -1002,7 +1002,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        run: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Install Rust toolchain
         run: |
@@ -1155,7 +1155,7 @@ jobs:
           uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Cleanup disk space
-        run: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
