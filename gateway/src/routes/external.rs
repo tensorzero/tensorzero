@@ -9,6 +9,7 @@ use axum::{
     routing::{delete, get, patch, post},
 };
 use metrics_exporter_prometheus::PrometheusHandle;
+use tensorzero_core::endpoints::anthropic_compatible::build_anthropic_compatible_routes;
 use tensorzero_core::endpoints::openai_compatible::build_openai_compatible_routes;
 use tensorzero_core::observability::OtelEnabledRoutes;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
@@ -34,6 +35,7 @@ pub fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) 
         ("/feedback", post(endpoints::feedback::feedback_handler)),
     ];
     routes.extend(build_openai_compatible_routes().routes);
+    routes.extend(build_anthropic_compatible_routes().routes);
     let mut router = Router::new();
     let mut route_names = Vec::with_capacity(routes.len());
     for (path, handler) in routes {

@@ -24,6 +24,7 @@ use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
+use crate::endpoints::anthropic_compatible::RouterExt as AnthropicRouterExt;
 use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
@@ -720,6 +721,7 @@ pub async fn start_openai_compatible_gateway(
 
     let router = Router::new()
         .register_openai_compatible_routes()
+        .register_anthropic_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         .layer(axum::middleware::from_fn_with_state(

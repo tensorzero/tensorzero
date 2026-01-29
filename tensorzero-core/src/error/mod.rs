@@ -451,6 +451,9 @@ pub enum ErrorDetails {
     InvalidOpenAICompatibleRequest {
         message: String,
     },
+    InvalidAnthropicCompatibleRequest {
+        message: String,
+    },
     InvalidProviderConfig {
         message: String,
     },
@@ -724,6 +727,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidAnthropicCompatibleRequest { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
@@ -882,6 +886,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidModelProvider { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidAnthropicCompatibleRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidRenderedStoredInference { .. } => StatusCode::BAD_REQUEST,
@@ -1411,6 +1416,12 @@ impl std::fmt::Display for ErrorDetails {
                 f,
                 "Invalid request to OpenAI-compatible endpoint: {message}"
             ),
+            ErrorDetails::InvalidAnthropicCompatibleRequest { message } => {
+                write!(
+                    f,
+                    "Invalid request to Anthropic-compatible endpoint: {message}"
+                )
+            }
             ErrorDetails::InvalidProviderConfig { message } => write!(f, "{message}"),
             ErrorDetails::InvalidRequest { message } => write!(f, "{message}"),
             ErrorDetails::InvalidRenderedStoredInference { message } => {
