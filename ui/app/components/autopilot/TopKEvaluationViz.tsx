@@ -319,7 +319,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
             }}
           >
             {chartData.map((entry) => (
-              <Cell key={entry.name} fill={entry.color} fillOpacity={0.8} />
+              <Cell key={entry.name} fill={entry.color} />
             ))}
           </Bar>
         </BarChart>
