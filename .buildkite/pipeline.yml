@@ -5,11 +5,17 @@ agents:
 # inside concurrency_group
 steps:
   - label: "Clickhouse Cloud tests - normal release channel"
+    plugins:
+      - peakon/git-shallow-clone#006b6c0e9e5c73a95c8ac62a60f10cb9ca3c455f:
+          depth: 1
     concurrency: 1
     concurrency_group: "clickhouse-cloud-normal-${CLICKHOUSE_ID}"
     command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-instance-" ./ci/buildkite/test-clickhouse-cloud.sh
   # Temporarily disabled - see https://github.com/tensorzero/tensorzero/issues/5887
   # - label: "Clickhouse Cloud tests - fast release channel"
+  #   plugins:
+  #     - peakon/git-shallow-clone#006b6c0e9e5c73a95c8ac62a60f10cb9ca3c455f:
+  #         depth: 1
   #   concurrency: 1
   #   concurrency_group: "clickhouse-cloud-fast-${CLICKHOUSE_ID}"
   #   command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-fast-instance-" TENSORZERO_CLICKHOUSE_FAST_CHANNEL=1 ./ci/buildkite/test-clickhouse-cloud.sh
