@@ -542,8 +542,10 @@ pub enum VisualizationType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadVisualization {
-    /// The tool call event ID that generated this visualization.
-    pub tool_call_event_id: Uuid,
+    /// The ID of the tool execution that generated this visualization.
+    /// For client-side tools, this is the ToolCall event ID.
+    /// For server-side tools, this is the task ID.
+    pub tool_execution_id: Uuid,
     /// The visualization data.
     pub visualization: VisualizationType,
 }
