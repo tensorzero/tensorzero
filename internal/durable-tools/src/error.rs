@@ -103,8 +103,8 @@ pub enum NonControlToolError {
     SubtaskSpawnFailed { name: String, error: String },
 
     /// Error occurred while trying to emit an event.
-    #[error("failed to emit event `{name}`: {error}")]
-    EmitEventFailed { name: String, error: String },
+    #[error("failed to emit event `{event_name}`: {error}")]
+    EmitEventFailed { event_name: String, error: String },
 }
 
 /// Result type alias for tool operations.
@@ -173,9 +173,9 @@ impl From<TaskError> for ToolError {
                     error: error.to_string(),
                 })
             }
-            TaskError::EmitEventFailed { name, error } => {
+            TaskError::EmitEventFailed { event_name, error } => {
                 ToolError::NonControl(NonControlToolError::EmitEventFailed {
-                    name,
+                    event_name,
                     error: error.to_string(),
                 })
             }
