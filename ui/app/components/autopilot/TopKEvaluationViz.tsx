@@ -283,7 +283,11 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           />
           <XAxis
             dataKey="name"
-            tick={{ fontSize: 10, fill: "var(--color-fg-tertiary)" }}
+            tick={{
+              fontSize: 12,
+              fill: "var(--color-fg-tertiary)",
+              fontFamily: "var(--font-mono)",
+            }}
             axisLine={{
               stroke: "var(--color-border)",
               strokeDasharray: "3 3",
@@ -292,7 +296,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
             tickLine={{ stroke: "var(--color-border)", strokeOpacity: 0.8 }}
             angle={-45}
             textAnchor="end"
-            height={60}
+            height={70}
             interval={0}
           />
           <YAxis
