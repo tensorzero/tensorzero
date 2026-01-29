@@ -9,6 +9,7 @@ export interface TryWithSelectProps {
   onSelect: (option: string) => void;
   isLoading: boolean;
   isDefaultFunction?: boolean;
+  disabled?: boolean;
 }
 
 export function TryWithSelect({
@@ -16,9 +17,10 @@ export function TryWithSelect({
   onSelect,
   isLoading,
   isDefaultFunction,
+  disabled,
 }: TryWithSelectProps) {
   const isReadOnly = useReadOnly();
-  const isDisabled = isLoading || isReadOnly;
+  const isDisabled = disabled || isLoading || isReadOnly;
 
   const label = isDefaultFunction ? "model" : "variant";
 
