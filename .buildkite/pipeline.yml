@@ -1,6 +1,9 @@
 agents:
   queue: "t0-merge-queue"
 
+env:
+  BUILDKITE_GIT_CLONE_FLAGS: "-v --depth=1"
+
 # We need to use individual steps instead of a build matrix, as we can't use matrix keys
 # inside concurrency_group
 steps:
