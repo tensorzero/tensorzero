@@ -15,6 +15,7 @@ import {
   useFetcher,
   useNavigate,
   type RouteHandle,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import debounce from "lodash-es/debounce";
 import { AlertCircle, Loader2 } from "lucide-react";
@@ -44,6 +45,21 @@ export const handle: RouteHandle = {
       : { label: match.params.session_id!, isIdentifier: true },
   ],
 };
+
+/**
+ * Prevent revalidation of this route when API actions are submitted.
+ * The event stream already supplies fresh data, so revalidation can
+ * overwrite SSE-delivered events with a short loader snapshot.
+ */
+export function shouldRevalidate({
+  formAction,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (formAction?.startsWith("/api/autopilot/sessions/")) {
+    return false;
+  }
+  return defaultShouldRevalidate;
+}
 
 const EVENTS_PER_PAGE = 20;
 
