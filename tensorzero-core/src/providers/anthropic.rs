@@ -270,7 +270,7 @@ impl InferenceProvider for AnthropicProvider {
         ModelProviderRequest {
             request,
             provider_name,
-            model_name: tensorzero_model_name,
+            model_name,
             otlp_config: _,
             model_inference_id,
         }: ModelProviderRequest<'a>,
@@ -278,13 +278,8 @@ impl InferenceProvider for AnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        // Collect all provider tools (static from config + dynamic scoped from request)
-        let all_provider_tools = collect_all_provider_tools(
-            &self.provider_tools,
-            request,
-            tensorzero_model_name,
-            provider_name,
-        );
+        let all_provider_tools =
+            collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
             AnthropicRequestBody::new(
                 &self.model_name,
@@ -325,7 +320,7 @@ impl InferenceProvider for AnthropicProvider {
             &request.extra_body,
             &request.extra_headers,
             model_provider,
-            tensorzero_model_name,
+            model_name,
             request_body,
             builder,
         )
@@ -365,7 +360,7 @@ impl InferenceProvider for AnthropicProvider {
                 generic_request: request,
                 input_messages: request.messages.clone(),
                 raw_response,
-                model_name: tensorzero_model_name,
+                model_name,
                 provider_name: &model_provider.name,
                 model_inference_id,
             };
@@ -398,7 +393,6 @@ impl InferenceProvider for AnthropicProvider {
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        // Collect all provider tools (static from config + dynamic scoped from request)
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(

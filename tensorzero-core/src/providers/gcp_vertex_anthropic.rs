@@ -211,7 +211,6 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        // Collect all provider tools (static from config + dynamic scoped from request)
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
@@ -305,7 +304,6 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        // Collect all provider tools (static from config + dynamic scoped from request)
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
