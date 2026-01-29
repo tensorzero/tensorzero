@@ -374,7 +374,7 @@ impl AutopilotSideInfo {
             "tensorzero::autopilot::config_snapshot_hash".to_string(),
             self.config_snapshot_hash.clone(),
         );
-        tags.insert("tensorzero::autopilot".to_string(), String::new());
+        tags.insert("tensorzero::autopilot".to_string(), "true".to_string());
         tags
     }
 }

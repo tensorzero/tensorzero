@@ -175,13 +175,10 @@ impl SimpleTool for RunEvaluationTool {
         //     .await
         //     .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
 
-        let snapshot_hash: SnapshotHash =
-            side_info
-                .config_snapshot_hash
-                .parse()
-                .map_err(|_: std::convert::Infallible| {
-                    AutopilotToolError::validation("Invalid snapshot hash")
-                })?;
+        let snapshot_hash: SnapshotHash = side_info
+            .config_snapshot_hash
+            .parse()
+            .map_err(|_| AutopilotToolError::validation("Invalid snapshot hash"))?;
 
         let response = ctx
             .client()

@@ -32,7 +32,11 @@
   - Use `.push()` for trusted SQL fragments (table names, SQL keywords).
   - Use `.push_bind()` for user-provided values (prevents SQL injection, handles types).
   - Use `.build_query_scalar()` for scalar results, `.build()` for row results.
-- For static queries, use `sqlx::query!` directly.
+- **Prefer `sqlx::query!` for static queries** (queries where only values change, not structure). This provides compile-time verification and typed field access (`row.field_name` instead of `row.get("field_name")`).
+  - Use `QueryBuilder` only when the query structure is dynamic (e.g., optional WHERE clauses, dynamic table names, conditional JOINs, pagination with optional before/after).
+  - For columns that sqlx infers as nullable but are guaranteed non-null by your query logic, use type overrides: `SELECT column as "column!"` to get a non-optional type.
+  - For aggregates that should be non-null, use the same pattern: `SELECT COUNT(*)::BIGINT as "total!"`.
+- After adding or modifying `sqlx::query!` / `sqlx::query_as!` / `sqlx::query_scalar!` macros, run `cargo sqlx prepare --workspace` to regenerate the query cache. This requires a running Postgres database with up-to-date migrations. The generated `.sqlx` directory must be committed to version control.
 
 # Python Dependencies
 

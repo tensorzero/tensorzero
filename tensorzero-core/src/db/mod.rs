@@ -16,6 +16,7 @@ use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 pub mod batch_inference;
 pub mod clickhouse;
 pub mod datasets;
+pub mod delegating_connection;
 pub mod evaluation_queries;
 pub mod feedback;
 pub mod inference_count;

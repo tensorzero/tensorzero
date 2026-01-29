@@ -1221,7 +1221,7 @@ mod tests {
                 "tensorzero::datapoint_id".to_string(),
                 "external-dp-id".to_string(),
             ),
-            ("tensorzero::autopilot".to_string(), String::new()),
+            ("tensorzero::autopilot".to_string(), "true".to_string()),
         ]);
 
         let internal_tags = HashMap::from([

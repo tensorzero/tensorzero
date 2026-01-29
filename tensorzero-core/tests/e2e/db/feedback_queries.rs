@@ -1,4 +1,9 @@
 #![expect(clippy::print_stdout)]
+//! Shared test logic for FeedbackQueries implementations (ClickHouse and Postgres).
+//!
+//! Each test function accepts a connection implementing `FeedbackQueries`.
+//! Tests use `>=` assertions since ClickHouse may accumulate data from other tests.
+
 use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero_core::config::snapshot::SnapshotHash;
@@ -6,7 +11,6 @@ use tensorzero_core::config::{
     MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
 };
 use tensorzero_core::db::TimeWindow;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::evaluation_queries::EvaluationQueries;
 use tensorzero_core::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CommentTargetType,
@@ -16,14 +20,13 @@ use tensorzero_core::db::feedback::{
 use tensorzero_core::function::FunctionConfigType;
 use uuid::Uuid;
 
-#[tokio::test]
-async fn test_query_feedback_by_target_id_basic() {
-    let clickhouse = get_clickhouse().await;
+// ===== SHARED READ TEST IMPLEMENTATIONS =====
 
+async fn test_query_feedback_by_target_id_basic(conn: impl FeedbackQueries) {
     // Use a known inference ID from the test database
     let target_id = Uuid::parse_str("0aaedb76-b442-7a94-830d-5c8202975950").unwrap();
 
-    let feedback = clickhouse
+    let feedback = conn
         .query_feedback_by_target_id(target_id, None, None, Some(100))
         .await
         .unwrap();
@@ -53,16 +56,14 @@ async fn test_query_feedback_by_target_id_basic() {
         assert!(id_a >= id_b, "Feedback should be sorted by ID descending");
     }
 }
+make_db_test!(test_query_feedback_by_target_id_basic);
 
-#[tokio::test]
-async fn test_query_feedback_by_target_id_pagination() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_query_feedback_by_target_id_pagination(conn: impl FeedbackQueries) {
     // Use a known inference ID with multiple feedback items
     let target_id = Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d721").unwrap();
 
     // Get first page
-    let first_page = clickhouse
+    let first_page = conn
         .query_feedback_by_target_id(target_id, None, None, Some(5))
         .await
         .unwrap();
@@ -79,7 +80,7 @@ async fn test_query_feedback_by_target_id_pagination() {
         FeedbackRow::Demonstration(f) => f.id,
     };
 
-    let second_page = clickhouse
+    let second_page = conn
         .query_feedback_by_target_id(target_id, Some(second_id), None, Some(5))
         .await
         .unwrap();
@@ -95,15 +96,13 @@ async fn test_query_feedback_by_target_id_pagination() {
         assert!(item_id < second_id, "Second page should have older items");
     }
 }
+make_db_test!(test_query_feedback_by_target_id_pagination);
 
-#[tokio::test]
-async fn test_query_feedback_bounds_by_target_id() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_query_feedback_bounds_by_target_id(conn: impl FeedbackQueries) {
     // Use a known inference ID
     let target_id = Uuid::parse_str("019634c7-768e-7630-8d51-b9a93e79911e").unwrap();
 
-    let bounds = clickhouse
+    let bounds = conn
         .query_feedback_bounds_by_target_id(target_id)
         .await
         .unwrap();
@@ -111,10 +110,7 @@ async fn test_query_feedback_bounds_by_target_id() {
     println!("Feedback bounds: {bounds:#?}");
 
     // If there's feedback, bounds should exist
-    let feedback_count = clickhouse
-        .count_feedback_by_target_id(target_id)
-        .await
-        .unwrap();
+    let feedback_count = conn.count_feedback_by_target_id(target_id).await.unwrap();
 
     assert!(feedback_count > 0, "Should have feedback for target");
 
@@ -165,23 +161,18 @@ async fn test_query_feedback_bounds_by_target_id() {
         "Aggregate last_id should be max of per-type bounds"
     );
 }
+make_db_test!(test_query_feedback_bounds_by_target_id);
 
-#[tokio::test]
-async fn test_count_feedback_by_target_id() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_feedback_by_target_id(conn: impl FeedbackQueries) {
     // Use a known inference ID
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
 
-    let count = clickhouse
-        .count_feedback_by_target_id(target_id)
-        .await
-        .unwrap();
+    let count = conn.count_feedback_by_target_id(target_id).await.unwrap();
 
     println!("Total feedback count: {count}");
 
     // Get actual feedback to verify count
-    let feedback = clickhouse
+    let feedback = conn
         .query_feedback_by_target_id(target_id, None, None, Some(1000))
         .await
         .unwrap();
@@ -192,14 +183,12 @@ async fn test_count_feedback_by_target_id() {
         "Count should match actual feedback items"
     );
 }
+make_db_test!(test_count_feedback_by_target_id);
 
-#[tokio::test]
-async fn test_query_feedback_by_target_id_empty() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_query_feedback_by_target_id_empty(conn: impl FeedbackQueries) {
     let nonexistent_id = Uuid::now_v7();
 
-    let feedback = clickhouse
+    let feedback = conn
         .query_feedback_by_target_id(nonexistent_id, None, None, Some(100))
         .await
         .unwrap();
@@ -209,21 +198,19 @@ async fn test_query_feedback_by_target_id_empty() {
         "Should have no feedback for nonexistent target"
     );
 
-    let count = clickhouse
+    let count = conn
         .count_feedback_by_target_id(nonexistent_id)
         .await
         .unwrap();
 
     assert_eq!(count, 0, "Count should be 0 for nonexistent target");
 }
+make_db_test!(test_query_feedback_by_target_id_empty);
 
-#[tokio::test]
-async fn test_query_feedback_bounds_by_target_id_empty() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_query_feedback_bounds_by_target_id_empty(conn: impl FeedbackQueries) {
     let nonexistent_id = Uuid::now_v7();
 
-    let bounds = clickhouse
+    let bounds = conn
         .query_feedback_bounds_by_target_id(nonexistent_id)
         .await
         .unwrap();
@@ -240,17 +227,15 @@ async fn test_query_feedback_bounds_by_target_id_empty() {
         "Expected all per-type bounds to be empty for nonexistent target"
     );
 }
+make_db_test!(test_query_feedback_bounds_by_target_id_empty);
 
 // ==================== Get Cumulative Feedback Timeseries Tests ====================
 
-#[tokio::test]
-async fn test_get_cumulative_feedback_timeseries_basic() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_cumulative_feedback_timeseries_basic(conn: impl FeedbackQueries) {
     let function_name = "basic_test".to_string();
     let metric_name = "task_success".to_string();
 
-    let timeseries = clickhouse
+    let timeseries = conn
         .get_cumulative_feedback_timeseries(function_name, metric_name, None, TimeWindow::Day, 30)
         .await
         .unwrap();
@@ -302,16 +287,14 @@ async fn test_get_cumulative_feedback_timeseries_basic() {
         *prev_count = point.count;
     }
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_basic);
 
-#[tokio::test]
-async fn test_get_cumulative_feedback_timeseries_with_variant_filter() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_cumulative_feedback_timeseries_with_variant_filter(conn: impl FeedbackQueries) {
     let function_name = "basic_test".to_string();
     let metric_name = "task_success".to_string();
 
     // First get all data to find variant names
-    let all_data = clickhouse
+    let all_data = conn
         .get_cumulative_feedback_timeseries(
             function_name.clone(),
             metric_name.clone(),
@@ -326,7 +309,7 @@ async fn test_get_cumulative_feedback_timeseries_with_variant_filter() {
         let variant_name = all_data[0].variant_name.clone();
         let variant_filter = vec![variant_name.clone()];
 
-        let filtered = clickhouse
+        let filtered = conn
             .get_cumulative_feedback_timeseries(
                 function_name,
                 metric_name,
@@ -348,11 +331,11 @@ async fn test_get_cumulative_feedback_timeseries_with_variant_filter() {
         }
     }
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_with_variant_filter);
 
-#[tokio::test]
-async fn test_get_cumulative_feedback_timeseries_different_time_windows() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_cumulative_feedback_timeseries_different_time_windows(
+    conn: impl FeedbackQueries,
+) {
     let function_name = "basic_test".to_string();
     let metric_name = "task_success".to_string();
 
@@ -366,7 +349,7 @@ async fn test_get_cumulative_feedback_timeseries_different_time_windows() {
     ];
 
     for (name, time_window) in time_windows {
-        let timeseries = clickhouse
+        let timeseries = conn
             .get_cumulative_feedback_timeseries(
                 function_name.clone(),
                 metric_name.clone(),
@@ -385,16 +368,16 @@ async fn test_get_cumulative_feedback_timeseries_different_time_windows() {
         }
     }
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_different_time_windows);
 
-#[tokio::test]
-async fn test_get_cumulative_feedback_timeseries_cumulative_window_not_supported() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_cumulative_feedback_timeseries_cumulative_window_not_supported(
+    conn: impl FeedbackQueries,
+) {
     let function_name = "basic_test".to_string();
     let metric_name = "task_success".to_string();
 
     // Cumulative time window is not supported for feedback timeseries
-    let result = clickhouse
+    let result = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -409,16 +392,14 @@ async fn test_get_cumulative_feedback_timeseries_cumulative_window_not_supported
         "Cumulative time window should return an error"
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_cumulative_window_not_supported);
 
-#[tokio::test]
-async fn test_get_cumulative_feedback_timeseries_empty_result() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_cumulative_feedback_timeseries_empty_result(conn: impl FeedbackQueries) {
     // Use a nonexistent function/metric combination
     let function_name = "nonexistent_function_xyz".to_string();
     let metric_name = "nonexistent_metric_xyz".to_string();
 
-    let timeseries = clickhouse
+    let timeseries = conn
         .get_cumulative_feedback_timeseries(function_name, metric_name, None, TimeWindow::Day, 30)
         .await
         .unwrap();
@@ -428,16 +409,14 @@ async fn test_get_cumulative_feedback_timeseries_empty_result() {
         "Should have no timeseries data for nonexistent function/metric"
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_empty_result);
 
-#[tokio::test]
-async fn test_get_cumulative_feedback_timeseries_max_periods() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_cumulative_feedback_timeseries_max_periods(conn: impl FeedbackQueries) {
     let function_name = "basic_test".to_string();
     let metric_name = "task_success".to_string();
 
     // Request only 1 period
-    let timeseries = clickhouse
+    let timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name.clone(),
             metric_name.clone(),
@@ -459,7 +438,7 @@ async fn test_get_cumulative_feedback_timeseries_max_periods() {
     );
 
     // Request more periods
-    let timeseries_more = clickhouse
+    let timeseries_more = conn
         .get_cumulative_feedback_timeseries(function_name, metric_name, None, TimeWindow::Day, 30)
         .await
         .unwrap();
@@ -478,15 +457,13 @@ async fn test_get_cumulative_feedback_timeseries_max_periods() {
         "More max_periods should give equal or more unique time periods"
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_max_periods);
 
 // =====================================================================
 // Tests for get_variant_performances
 // =====================================================================
 
-#[tokio::test]
-async fn test_get_variant_performances_inference_level_cumulative() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_variant_performances_inference_level_cumulative(conn: impl FeedbackQueries) {
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -503,7 +480,7 @@ async fn test_get_variant_performances_inference_level_cumulative() {
         variant_name: None,
     };
 
-    let results = clickhouse.get_variant_performances(params).await.unwrap();
+    let results = conn.get_variant_performances(params).await.unwrap();
 
     println!("Variant performance results (cumulative):");
     for result in &results {
@@ -520,11 +497,9 @@ async fn test_get_variant_performances_inference_level_cumulative() {
         assert!(result.count > 0, "Count should be positive");
     }
 }
+make_db_test!(test_get_variant_performances_inference_level_cumulative);
 
-#[tokio::test]
-async fn test_get_variant_performances_inference_level_week() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_variant_performances_inference_level_week(conn: impl FeedbackQueries) {
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -541,7 +516,7 @@ async fn test_get_variant_performances_inference_level_week() {
         variant_name: None,
     };
 
-    let results = clickhouse.get_variant_performances(params).await.unwrap();
+    let results = conn.get_variant_performances(params).await.unwrap();
 
     println!("Variant performance results (weekly):");
     for result in &results {
@@ -558,11 +533,9 @@ async fn test_get_variant_performances_inference_level_week() {
         );
     }
 }
+make_db_test!(test_get_variant_performances_inference_level_week);
 
-#[tokio::test]
-async fn test_get_variant_performances_episode_level_cumulative() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_variant_performances_episode_level_cumulative(conn: impl FeedbackQueries) {
     // Use episode-level metric
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
@@ -580,7 +553,7 @@ async fn test_get_variant_performances_episode_level_cumulative() {
         variant_name: None,
     };
 
-    let results = clickhouse.get_variant_performances(params).await.unwrap();
+    let results = conn.get_variant_performances(params).await.unwrap();
 
     println!("Episode-level variant performance results (cumulative):");
     for result in &results {
@@ -596,11 +569,50 @@ async fn test_get_variant_performances_episode_level_cumulative() {
         );
     }
 }
+make_db_test!(test_get_variant_performances_episode_level_cumulative);
 
-#[tokio::test]
-async fn test_get_variant_performances_with_variant_filter() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_variant_performances_episode_level_week(conn: impl FeedbackQueries) {
+    // Use episode-level metric with time window to test ordering
+    // Uses haiku_rating_episode on write_haiku which has data across multiple weeks
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Episode,
+        description: None,
+    };
 
+    let params = GetVariantPerformanceParams {
+        function_name: "write_haiku",
+        function_type: FunctionConfigType::Chat,
+        metric_name: "haiku_rating_episode",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Week,
+        variant_name: None,
+    };
+
+    let results = conn.get_variant_performances(params).await.unwrap();
+
+    println!("Episode-level variant performance results (weekly):");
+    for result in &results {
+        println!("  {result:?}");
+    }
+
+    assert!(results.len() > 1, "Should have at least two results");
+
+    // Results should be ordered by period_start ASC, then variant_name ASC
+    for window in results.windows(2) {
+        assert!(
+            window[0].period_start <= window[1].period_start
+                || (window[0].period_start == window[1].period_start
+                    && window[0].variant_name <= window[1].variant_name),
+            "Results should be ordered by period_start ASC, variant_name ASC"
+        );
+    }
+}
+make_db_test!(test_get_variant_performances_episode_level_week);
+
+async fn test_get_variant_performances_with_variant_filter(conn: impl FeedbackQueries) {
+    // Uses haiku_rating on write_haiku which has fixture data in both ClickHouse and Postgres
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -610,52 +622,47 @@ async fn test_get_variant_performances_with_variant_filter() {
 
     // First get all variants
     let params_all = GetVariantPerformanceParams {
-        function_name: "weather_helper",
+        function_name: "write_haiku",
         function_type: FunctionConfigType::Chat,
-        metric_name: "user_rating",
+        metric_name: "haiku_rating",
         metric_config: &metric_config,
         time_window: TimeWindow::Cumulative,
         variant_name: None,
     };
 
-    let all_results = clickhouse
-        .get_variant_performances(params_all)
+    let all_results = conn.get_variant_performances(params_all).await.unwrap();
+
+    assert!(!all_results.is_empty(), "Should have at least one result");
+
+    // Filter by specific variant
+    let target_variant = &all_results[0].variant_name;
+    let params_filtered = GetVariantPerformanceParams {
+        function_name: "write_haiku",
+        function_type: FunctionConfigType::Chat,
+        metric_name: "haiku_rating",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Cumulative,
+        variant_name: Some(target_variant.as_str()),
+    };
+
+    let filtered_results = conn
+        .get_variant_performances(params_filtered)
         .await
         .unwrap();
 
-    if !all_results.is_empty() {
-        // Filter by specific variant
-        let target_variant = &all_results[0].variant_name;
-        let params_filtered = GetVariantPerformanceParams {
-            function_name: "weather_helper",
-            function_type: FunctionConfigType::Chat,
-            metric_name: "user_rating",
-            metric_config: &metric_config,
-            time_window: TimeWindow::Cumulative,
-            variant_name: Some(target_variant.as_str()),
-        };
+    println!("Filtered results for variant '{target_variant}': {filtered_results:?}");
 
-        let filtered_results = clickhouse
-            .get_variant_performances(params_filtered)
-            .await
-            .unwrap();
-
-        println!("Filtered results for variant '{target_variant}': {filtered_results:?}");
-
-        // All filtered results should be for the target variant
-        for result in &filtered_results {
-            assert_eq!(
-                &result.variant_name, target_variant,
-                "Filtered results should only contain target variant"
-            );
-        }
+    // All filtered results should be for the target variant
+    for result in &filtered_results {
+        assert_eq!(
+            &result.variant_name, target_variant,
+            "Filtered results should only contain target variant"
+        );
     }
 }
+make_db_test!(test_get_variant_performances_with_variant_filter);
 
-#[tokio::test]
-async fn test_get_variant_performances_empty_for_nonexistent_function() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_variant_performances_empty_for_nonexistent_function(conn: impl FeedbackQueries) {
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -672,18 +679,16 @@ async fn test_get_variant_performances_empty_for_nonexistent_function() {
         variant_name: None,
     };
 
-    let results = clickhouse.get_variant_performances(params).await.unwrap();
+    let results = conn.get_variant_performances(params).await.unwrap();
 
     assert!(
         results.is_empty(),
         "Should return empty results for nonexistent function"
     );
 }
+make_db_test!(test_get_variant_performances_empty_for_nonexistent_function);
 
-#[tokio::test]
-async fn test_get_variant_performances_different_time_windows() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_variant_performances_different_time_windows(conn: impl FeedbackQueries) {
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -710,7 +715,7 @@ async fn test_get_variant_performances_different_time_windows() {
             variant_name: None,
         };
 
-        let results = clickhouse.get_variant_performances(params).await;
+        let results = conn.get_variant_performances(params).await;
         assert!(
             results.is_ok(),
             "Query should succeed for time window {time_window:?}"
@@ -723,11 +728,9 @@ async fn test_get_variant_performances_different_time_windows() {
         );
     }
 }
+make_db_test!(test_get_variant_performances_different_time_windows);
 
-#[tokio::test]
-async fn test_get_variant_performances_boolean_metric() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_variant_performances_boolean_metric(conn: impl FeedbackQueries) {
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
@@ -744,7 +747,7 @@ async fn test_get_variant_performances_boolean_metric() {
         variant_name: None,
     };
 
-    let results = clickhouse.get_variant_performances(params).await.unwrap();
+    let results = conn.get_variant_performances(params).await.unwrap();
 
     println!("Boolean metric variant performance results:");
     for result in &results {
@@ -757,11 +760,37 @@ async fn test_get_variant_performances_boolean_metric() {
         );
     }
 }
+make_db_test!(test_get_variant_performances_boolean_metric);
 
-#[tokio::test]
-async fn test_get_variant_performances_ask_question_solved_with_variant() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_variant_performances_empty_for_nonexistent_metric(conn: impl FeedbackQueries) {
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+        description: None,
+    };
 
+    let params = GetVariantPerformanceParams {
+        function_name: "extract_entities",
+        function_type: FunctionConfigType::Json,
+        metric_name: "non_existent_metric",
+        metric_config: &metric_config,
+        time_window: TimeWindow::Week,
+        variant_name: Some("gpt4o_initial_prompt"),
+    };
+
+    let results = conn.get_variant_performances(params).await.unwrap();
+
+    assert!(
+        results.is_empty(),
+        "Should return empty results for non-existent metric"
+    );
+}
+make_db_test!(test_get_variant_performances_empty_for_nonexistent_metric);
+
+async fn test_get_variant_performances_ask_question_solved_with_variant(
+    conn: impl FeedbackQueries,
+) {
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
@@ -778,7 +807,7 @@ async fn test_get_variant_performances_ask_question_solved_with_variant() {
         variant_name: Some("baseline"),
     };
 
-    let results = clickhouse.get_variant_performances(params).await.unwrap();
+    let results = conn.get_variant_performances(params).await.unwrap();
 
     // Find the expected data points
     let dec30_result = results
@@ -848,12 +877,12 @@ async fn test_get_variant_performances_ask_question_solved_with_variant() {
         );
     }
 }
+make_db_test!(test_get_variant_performances_ask_question_solved_with_variant);
 
 /// Matches TypeScript test: "getVariantPerformances for ask_question and num_questions with specific variant"
-#[tokio::test]
-async fn test_get_variant_performances_ask_question_num_questions_with_variant() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_variant_performances_ask_question_num_questions_with_variant(
+    conn: impl FeedbackQueries,
+) {
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Min,
@@ -870,7 +899,7 @@ async fn test_get_variant_performances_ask_question_num_questions_with_variant()
         variant_name: Some("baseline"),
     };
 
-    let results = clickhouse.get_variant_performances(params).await.unwrap();
+    let results = conn.get_variant_performances(params).await.unwrap();
 
     // Find the expected data point
     let dec30_result = results
@@ -910,43 +939,9 @@ async fn test_get_variant_performances_ask_question_num_questions_with_variant()
         );
     }
 }
+make_db_test!(test_get_variant_performances_ask_question_num_questions_with_variant);
 
-#[tokio::test]
-async fn test_get_variant_performances_empty_for_nonexistent_metric() {
-    let clickhouse = get_clickhouse().await;
-
-    let metric_config = MetricConfig {
-        r#type: MetricConfigType::Float,
-        optimize: MetricConfigOptimize::Max,
-        level: MetricConfigLevel::Inference,
-        description: None,
-    };
-
-    let params = GetVariantPerformanceParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
-        metric_name: "non_existent_metric",
-        metric_config: &metric_config,
-        time_window: TimeWindow::Week,
-        variant_name: Some("gpt4o_initial_prompt"),
-    };
-
-    let results = clickhouse.get_variant_performances(params).await.unwrap();
-
-    assert!(
-        results.is_empty(),
-        "Should return empty results for non-existent metric"
-    );
-}
-
-// =====================================================================
-// Tests for feedback write methods
-// =====================================================================
-
-#[tokio::test]
-async fn test_insert_boolean_feedback() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_boolean_feedback(conn: impl FeedbackQueries) {
     let feedback_id = Uuid::now_v7();
     // Use a known inference ID from the test database
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
@@ -966,8 +961,7 @@ async fn test_insert_boolean_feedback() {
     };
 
     // Insert should succeed
-    clickhouse
-        .insert_boolean_feedback(&insert)
+    conn.insert_boolean_feedback(&insert)
         .await
         .expect("Boolean feedback insert should succeed");
 
@@ -975,7 +969,7 @@ async fn test_insert_boolean_feedback() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Read back the feedback
-    let feedback = clickhouse
+    let feedback = conn
         .query_feedback_by_target_id(target_id, None, None, Some(1000))
         .await
         .expect("Query should succeed");
@@ -987,11 +981,9 @@ async fn test_insert_boolean_feedback() {
     });
     assert!(found, "Should find the inserted boolean feedback");
 }
+make_db_test!(test_insert_boolean_feedback);
 
-#[tokio::test]
-async fn test_insert_float_feedback() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_float_feedback(conn: impl FeedbackQueries) {
     let feedback_id = Uuid::now_v7();
     // Use a known inference ID from the test database
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
@@ -1007,8 +999,7 @@ async fn test_insert_float_feedback() {
     };
 
     // Insert should succeed
-    clickhouse
-        .insert_float_feedback(&insert)
+    conn.insert_float_feedback(&insert)
         .await
         .expect("Float feedback insert should succeed");
 
@@ -1016,7 +1007,7 @@ async fn test_insert_float_feedback() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Read back the feedback
-    let feedback = clickhouse
+    let feedback = conn
         .query_feedback_by_target_id(target_id, None, None, Some(1000))
         .await
         .expect("Query should succeed");
@@ -1028,11 +1019,9 @@ async fn test_insert_float_feedback() {
     });
     assert!(found, "Should find the inserted float feedback");
 }
+make_db_test!(test_insert_float_feedback);
 
-#[tokio::test]
-async fn test_insert_comment_feedback_inference_level() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_comment_feedback_inference_level(conn: impl FeedbackQueries) {
     let feedback_id = Uuid::now_v7();
     // Use a known inference ID from the test database
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
@@ -1048,8 +1037,7 @@ async fn test_insert_comment_feedback_inference_level() {
     };
 
     // Insert should succeed
-    clickhouse
-        .insert_comment_feedback(&insert)
+    conn.insert_comment_feedback(&insert)
         .await
         .expect("Comment feedback insert should succeed");
 
@@ -1057,7 +1045,7 @@ async fn test_insert_comment_feedback_inference_level() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Read back the feedback
-    let feedback = clickhouse
+    let feedback = conn
         .query_feedback_by_target_id(target_id, None, None, Some(1000))
         .await
         .expect("Query should succeed");
@@ -1069,11 +1057,9 @@ async fn test_insert_comment_feedback_inference_level() {
     });
     assert!(found, "Should find the inserted comment feedback");
 }
+make_db_test!(test_insert_comment_feedback_inference_level);
 
-#[tokio::test]
-async fn test_insert_comment_feedback_episode_level() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_comment_feedback_episode_level(conn: impl FeedbackQueries) {
     let feedback_id = Uuid::now_v7();
     // Use a known episode ID from the test database
     let target_id = Uuid::parse_str("0192e14c-09b8-7d3e-8618-46aed8c213dc").unwrap();
@@ -1093,8 +1079,7 @@ async fn test_insert_comment_feedback_episode_level() {
     };
 
     // Insert should succeed
-    clickhouse
-        .insert_comment_feedback(&insert)
+    conn.insert_comment_feedback(&insert)
         .await
         .expect("Comment feedback insert should succeed");
 
@@ -1102,7 +1087,7 @@ async fn test_insert_comment_feedback_episode_level() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Read back the feedback
-    let feedback = clickhouse
+    let feedback = conn
         .query_feedback_by_target_id(target_id, None, None, Some(1000))
         .await
         .expect("Query should succeed");
@@ -1114,11 +1099,9 @@ async fn test_insert_comment_feedback_episode_level() {
     });
     assert!(found, "Should find the inserted comment feedback");
 }
+make_db_test!(test_insert_comment_feedback_episode_level);
 
-#[tokio::test]
-async fn test_insert_demonstration_feedback() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_demonstration_feedback(conn: impl FeedbackQueries) {
     let feedback_id = Uuid::now_v7();
     // Use a known inference ID from the test database
     let inference_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
@@ -1133,8 +1116,7 @@ async fn test_insert_demonstration_feedback() {
     };
 
     // Insert should succeed
-    clickhouse
-        .insert_demonstration_feedback(&insert)
+    conn.insert_demonstration_feedback(&insert)
         .await
         .expect("Demonstration feedback insert should succeed");
 
@@ -1142,7 +1124,7 @@ async fn test_insert_demonstration_feedback() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Read back the feedback using demonstration-specific query
-    let feedback = clickhouse
+    let feedback = conn
         .query_demonstration_feedback_by_inference_id(inference_id, None, None, Some(1000))
         .await
         .expect("Query should succeed");
@@ -1153,11 +1135,9 @@ async fn test_insert_demonstration_feedback() {
         .any(|d| d.id == feedback_id && d.value == demo_value);
     assert!(found, "Should find the inserted demonstration feedback");
 }
+make_db_test!(test_insert_demonstration_feedback);
 
-#[tokio::test]
-async fn test_insert_static_eval_feedback() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_static_eval_feedback(conn: impl FeedbackQueries + EvaluationQueries) {
     let feedback_id = Uuid::now_v7();
     let datapoint_id = Uuid::now_v7();
     let evaluator_inference_id = Uuid::now_v7();
@@ -1174,8 +1154,7 @@ async fn test_insert_static_eval_feedback() {
     };
 
     // Insert should succeed
-    clickhouse
-        .insert_static_eval_feedback(&insert)
+    conn.insert_static_eval_feedback(&insert)
         .await
         .expect("Static eval feedback insert should succeed");
 
@@ -1183,7 +1162,7 @@ async fn test_insert_static_eval_feedback() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Read back the feedback using evaluation queries
-    let feedback = clickhouse
+    let feedback = conn
         .get_inference_evaluation_human_feedback(&metric_name, &datapoint_id, &output)
         .await
         .expect("Query should succeed");
@@ -1203,11 +1182,12 @@ async fn test_insert_static_eval_feedback() {
         "Evaluator inference ID should match"
     );
 }
+// TODO(#5691): Implement after we support EvaluationQueries in Postgres.
+make_clickhouse_only_test!(test_insert_static_eval_feedback);
 
-#[tokio::test]
-async fn test_insert_static_eval_feedback_without_evaluator_inference_id() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_static_eval_feedback_without_evaluator_inference_id(
+    conn: impl FeedbackQueries + EvaluationQueries,
+) {
     let feedback_id = Uuid::now_v7();
     let datapoint_id = Uuid::now_v7();
     let metric_name = format!("e2e_test_quality_no_evaluator_{feedback_id}");
@@ -1223,8 +1203,7 @@ async fn test_insert_static_eval_feedback_without_evaluator_inference_id() {
     };
 
     // Insert should succeed
-    clickhouse
-        .insert_static_eval_feedback(&insert)
+    conn.insert_static_eval_feedback(&insert)
         .await
         .expect("Static eval feedback insert without evaluator_inference_id should succeed");
 
@@ -1232,7 +1211,7 @@ async fn test_insert_static_eval_feedback_without_evaluator_inference_id() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Read back the feedback using evaluation queries
-    let feedback = clickhouse
+    let feedback = conn
         .get_inference_evaluation_human_feedback(&metric_name, &datapoint_id, &output)
         .await
         .expect("Query should succeed");
@@ -1254,11 +1233,100 @@ async fn test_insert_static_eval_feedback_without_evaluator_inference_id() {
         "Evaluator inference ID should be nil UUID when not provided"
     );
 }
+// TODO(#5691): Implement after we support EvaluationQueries in Postgres.
+make_clickhouse_only_test!(test_insert_static_eval_feedback_without_evaluator_inference_id);
 
-#[tokio::test]
-async fn test_insert_feedback_with_multiple_tags() {
-    let clickhouse = get_clickhouse().await;
+/// Tests that `get_variant_performances` returns only the latest feedback per inference
+/// when there are multiple feedbacks for the same inference (deduplication via DISTINCT ON).
+///
+/// This verifies the SQL semantics of:
+/// `SELECT DISTINCT ON (target_id) ... ORDER BY target_id, created_at DESC`
+/// which should keep only the latest feedback per target_id.
+async fn test_get_variant_performances_distinct_on_semantics(conn: impl FeedbackQueries) {
+    // Use the inference ID from fixture data for write_haiku function
+    let target_id = Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2").unwrap();
+    let unique_metric_name = format!("e2e_distinct_on_test_{}", Uuid::now_v7());
 
+    // Insert first feedback with value 1.0
+    let first_feedback_id = Uuid::now_v7();
+    let first_insert = FloatMetricFeedbackInsert {
+        id: first_feedback_id,
+        target_id,
+        metric_name: unique_metric_name.clone(),
+        value: 1.0,
+        tags: HashMap::new(),
+        snapshot_hash: SnapshotHash::new_test(),
+    };
+    conn.insert_float_feedback(&first_insert)
+        .await
+        .expect("First feedback insert should succeed");
+
+    // Sleep to ensure different `created_at` timestamps
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Insert second feedback with value 5.0 (this should be the one kept)
+    let second_feedback_id = Uuid::now_v7();
+    let second_insert = FloatMetricFeedbackInsert {
+        id: second_feedback_id,
+        target_id,
+        metric_name: unique_metric_name.clone(),
+        value: 5.0,
+        tags: HashMap::new(),
+        snapshot_hash: SnapshotHash::new_test(),
+    };
+    conn.insert_float_feedback(&second_insert)
+        .await
+        .expect("Second feedback insert should succeed");
+
+    // Wait for database to process (especially for ClickHouse)
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Query variant performances
+    let metric_config = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+        description: None,
+    };
+
+    let params = GetVariantPerformanceParams {
+        function_name: "write_haiku",
+        function_type: FunctionConfigType::Chat,
+        metric_name: &unique_metric_name,
+        metric_config: &metric_config,
+        time_window: TimeWindow::Cumulative,
+        variant_name: Some("initial_prompt_gpt4o_mini"),
+    };
+
+    let results = conn.get_variant_performances(params).await.unwrap();
+
+    println!("DISTINCT ON test results: {results:?}");
+
+    // Should have exactly one result (one inference with deduplicated feedback)
+    assert_eq!(
+        results.len(),
+        1,
+        "Should have exactly one result for the variant"
+    );
+
+    let result = &results[0];
+    assert_eq!(
+        result.variant_name, "initial_prompt_gpt4o_mini",
+        "Result should be for the expected variant"
+    );
+    assert_eq!(
+        result.count, 1,
+        "Count should be 1 since DISTINCT ON keeps only one feedback per target_id"
+    );
+    assert!(
+        (result.avg_metric - 5.0).abs() < 1e-6,
+        "avg_metric should be 5.0 (the later feedback value), got {}",
+        result.avg_metric
+    );
+}
+make_db_test!(test_get_variant_performances_distinct_on_semantics);
+
+async fn test_insert_feedback_with_multiple_tags(conn: impl FeedbackQueries) {
     let feedback_id = Uuid::now_v7();
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
     let metric_name = format!("e2e_test_with_tags_{feedback_id}");
@@ -1279,8 +1347,7 @@ async fn test_insert_feedback_with_multiple_tags() {
     };
 
     // Insert should succeed
-    clickhouse
-        .insert_boolean_feedback(&insert)
+    conn.insert_boolean_feedback(&insert)
         .await
         .expect("Feedback insert with multiple tags should succeed");
 
@@ -1288,7 +1355,7 @@ async fn test_insert_feedback_with_multiple_tags() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Read back the feedback
-    let feedback = clickhouse
+    let feedback = conn
         .query_feedback_by_target_id(target_id, None, None, Some(1000))
         .await
         .expect("Query should succeed");
@@ -1326,3 +1393,4 @@ async fn test_insert_feedback_with_multiple_tags() {
         );
     }
 }
+make_db_test!(test_insert_feedback_with_multiple_tags);
