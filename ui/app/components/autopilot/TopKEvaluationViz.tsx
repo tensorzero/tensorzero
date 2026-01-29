@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { ChartContainer, ChartTooltip } from "~/components/ui/chart";
 import type { TopKEvaluationVisualization } from "~/types/tensorzero";
-import { CHART_COLORS } from "~/utils/chart";
+import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
 
 type TopKEvaluationVizProps = {
   data: TopKEvaluationVisualization;
@@ -112,7 +112,7 @@ function PerformanceTooltip({
   const data = payload[0].payload;
 
   return (
-    <div className="border-border bg-bg-secondary rounded-md border p-2 text-xs shadow-lg">
+    <div className="border-border/50 bg-background rounded-md border p-2 text-xs shadow-lg">
       <div className="mb-1 font-medium">{data.name}</div>
       <div className="text-fg-secondary space-y-0.5">
         <div>
@@ -141,7 +141,7 @@ function CountTooltip({
   const data = payload[0].payload;
 
   return (
-    <div className="border-border bg-bg-secondary rounded-md border p-2 text-xs shadow-lg">
+    <div className="border-border/50 bg-background rounded-md border p-2 text-xs shadow-lg">
       <div className="mb-1 font-medium">{data.name}</div>
       <div className="text-fg-secondary">
         Samples:{" "}
@@ -226,7 +226,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
         Mean Performance by Variant
       </div>
       <ChartContainer config={{}} className="h-[200px] w-full">
-        <BarChart data={chartData} margin={chartMargin}>
+        <BarChart accessibilityLayer data={chartData} margin={chartMargin}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="name" tick={false} axisLine={true} tickLine={false} />
           <YAxis
@@ -257,7 +257,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
         Number of Evaluations by Variant
       </div>
       <ChartContainer config={{}} className="h-[260px] w-full">
-        <BarChart data={chartData} margin={chartMargin}>
+        <BarChart accessibilityLayer data={chartData} margin={chartMargin}>
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="name"
@@ -276,6 +276,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
             tickLine={false}
             tickMargin={10}
             axisLine={true}
+            tickFormatter={(value) => formatChartNumber(Number(value))}
           />
           <ChartTooltip content={<CountTooltip />} />
           <Bar
