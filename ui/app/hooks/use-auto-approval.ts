@@ -104,6 +104,7 @@ export function useAutoApproval({
     return () => {
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
+      clearState();
     };
   }, [enabled, sessionId, clearState]);
 
