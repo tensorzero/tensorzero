@@ -165,6 +165,7 @@ function EventStreamContent({
   onStatusChange,
   onPendingToolCallsChange,
   onErrorChange,
+  onHasReachedStartChange,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -176,6 +177,7 @@ function EventStreamContent({
   onStatusChange: (status: AutopilotStatus) => void;
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
+  onHasReachedStartChange: (hasReachedStart: boolean) => void;
 }) {
   const {
     events: initialEvents,
@@ -242,6 +244,11 @@ function EventStreamContent({
     prependItems: prependEvents,
     scrollContainerRef,
   });
+
+  // Notify parent when hasReachedStart changes (for top fade visibility)
+  useEffect(() => {
+    onHasReachedStartChange(hasReachedStart);
+  }, [hasReachedStart, onHasReachedStartChange]);
 
   /*
    * SCROLL BEHAVIOR SPEC:
@@ -404,6 +411,13 @@ export default function AutopilotSessionEventsPage({
   const [isEventsLoading, setIsEventsLoading] = useState(!isNewSession);
   const [hasLoadError, setHasLoadError] = useState(false);
 
+  // Track whether we've reached the start of the conversation (for top fade)
+  const [hasReachedStart, setHasReachedStart] = useState(false);
+
+  const handleHasReachedStartChange = useCallback((reached: boolean) => {
+    setHasReachedStart(reached);
+  }, []);
+
   // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
   // Covers both directions: new item jumping to top, or top item removed by external approval.
   // Does NOT trigger when queue was empty and first item arrives (no accidental click risk).
@@ -417,6 +431,7 @@ export default function AutopilotSessionEventsPage({
     setOptimisticMessages([]);
     setIsEventsLoading(!isNewSession);
     setHasLoadError(false);
+    setHasReachedStart(false);
     setAutopilotStatus({ status: "idle" });
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
@@ -592,13 +607,17 @@ export default function AutopilotSessionEventsPage({
   }, [footerHeight]);
 
   // Update fade overlay visibility based on scroll position
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget;
-    setShowTopFade(target.scrollTop > 20);
-    const distanceFromBottom =
-      target.scrollHeight - target.scrollTop - target.clientHeight;
-    setShowBottomFade(distanceFromBottom > 20);
-  }, []);
+  // Top fade stays visible until we've reached the start of the conversation
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const target = e.currentTarget;
+      setShowTopFade(target.scrollTop > 20 || !hasReachedStart);
+      const distanceFromBottom =
+        target.scrollHeight - target.scrollTop - target.clientHeight;
+      setShowBottomFade(distanceFromBottom > 20);
+    },
+    [hasReachedStart],
+  );
 
   const handleNavigateToSession = useCallback(
     (newSessionId: string) => {
@@ -710,6 +729,7 @@ export default function AutopilotSessionEventsPage({
                   onStatusChange={handleStatusChange}
                   onPendingToolCallsChange={handlePendingToolCallsChange}
                   onErrorChange={handleErrorChange}
+                  onHasReachedStartChange={handleHasReachedStartChange}
                 />
               )}
             </Await>

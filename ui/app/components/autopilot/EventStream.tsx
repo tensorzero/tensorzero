@@ -605,8 +605,9 @@ export default function EventStream({
       {/* Session start indicator */}
       {showSessionStart && <SessionStartDivider />}
 
-      {/* Loading skeletons at the top */}
-      {isLoadingOlder && <EventSkeletons count={3} />}
+      {/* Always show 3 skeletons when more content exists above */}
+      {/* This prevents layout jump when loading starts */}
+      {!showSessionStart && !loadError && <EventSkeletons count={3} />}
 
       {events.map((event) => (
         <EventErrorBoundary key={event.id} eventId={event.id}>
