@@ -227,31 +227,14 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
       </div>
       <ChartContainer config={{}} className="h-[200px] w-full">
         <BarChart data={chartData} margin={chartMargin}>
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="var(--color-border)"
-            strokeOpacity={0.8}
-          />
-          <XAxis
-            dataKey="name"
-            tick={false}
-            axisLine={{
-              stroke: "var(--color-border)",
-              strokeDasharray: "3 3",
-              strokeOpacity: 0.8,
-            }}
-            tickLine={false}
-          />
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="name" tick={false} axisLine={true} tickLine={false} />
           <YAxis
             domain={[0, 1]}
             tickFormatter={formatNumber}
-            tick={{ fontSize: 10, fill: "var(--color-fg-tertiary)" }}
-            axisLine={{
-              stroke: "var(--color-border)",
-              strokeDasharray: "3 3",
-              strokeOpacity: 0.8,
-            }}
-            tickLine={{ stroke: "var(--color-border)", strokeOpacity: 0.8 }}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
             width={50}
           />
           <ChartTooltip content={<PerformanceTooltip />} />
@@ -275,12 +258,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
       </div>
       <ChartContainer config={{}} className="h-[260px] w-full">
         <BarChart data={chartData} margin={chartMargin}>
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="var(--color-border)"
-            strokeOpacity={0.8}
-            vertical={false}
-          />
+          <CartesianGrid vertical={false} />
           <XAxis
             dataKey="name"
             tick={{
@@ -288,12 +266,8 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
               fill: "var(--color-fg-tertiary)",
               fontFamily: "var(--font-mono)",
             }}
-            axisLine={{
-              stroke: "var(--color-border)",
-              strokeDasharray: "3 3",
-              strokeOpacity: 0.8,
-            }}
-            tickLine={{ stroke: "var(--color-border)", strokeOpacity: 0.8 }}
+            axisLine={true}
+            tickLine={false}
             angle={-45}
             textAnchor="end"
             height={70}
@@ -302,13 +276,9 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           <YAxis
             domain={[0, maxCount]}
             ticks={countTicks}
-            tick={{ fontSize: 10, fill: "var(--color-fg-tertiary)" }}
-            axisLine={{
-              stroke: "var(--color-border)",
-              strokeDasharray: "3 3",
-              strokeOpacity: 0.8,
-            }}
-            tickLine={{ stroke: "var(--color-border)", strokeOpacity: 0.8 }}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
             width={50}
           />
           <ChartTooltip content={<CountTooltip />} />
