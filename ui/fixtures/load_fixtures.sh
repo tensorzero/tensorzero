@@ -21,10 +21,10 @@ else
   CLICKHOUSE_SECURE_FLAG=""
 fi
 
-# Truncate all tables before loading fixtures (dynamically query all tables, excluding views and internal .inner.* tables)
+# Truncate all tables before loading fixtures (dynamically query all tables, excluding views, internal .inner.* tables, and migration tracking)
 echo "Truncating all tables before loading fixtures..."
 tables=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
-    --query "SELECT name FROM system.tables WHERE database = '$DATABASE_NAME' AND engine NOT LIKE '%View%' AND name NOT LIKE '.inner%'")
+    --query "SELECT name FROM system.tables WHERE database = '$DATABASE_NAME' AND engine NOT LIKE '%View%' AND name NOT LIKE '.inner%' AND name != 'TensorZeroMigration'")
 
 # Build a single query with all TRUNCATEs for efficiency
 truncate_query=""
