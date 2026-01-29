@@ -17,12 +17,18 @@ import {
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { AlertCircle, Loader2 } from "lucide-react";
+import debounce from "lodash-es/debounce";
+import { AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
+import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
+import {
+  StatusBanner,
+  StatusBannerVariant,
+} from "~/components/ui/StatusBanner";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
 import { logger } from "~/utils/logger";
@@ -31,6 +37,8 @@ import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
+import { useLocalStorage } from "~/hooks/use-local-storage";
+import { useAutoApproval } from "~/hooks/use-auto-approval";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -131,15 +139,6 @@ function EventStreamSkeleton() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
       <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
-    </div>
-  );
-}
-
-// Warning banner for transient errors
-function ErrorBanner({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
-      {children}
     </div>
   );
 }
@@ -409,6 +408,12 @@ export default function AutopilotSessionEventsPage({
     Map<string, "approving" | "rejecting">
   >(new Map());
 
+  // YOLO mode: auto-approve all tool calls without review
+  const [yoloMode, setYoloMode] = useLocalStorage<boolean>(
+    "tensorzero-yolo-mode",
+    false,
+  );
+
   // State for SSE connection error
   const [sseError, setSseError] = useState<{
     error: string | null;
@@ -453,7 +458,8 @@ export default function AutopilotSessionEventsPage({
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
-  }, [sessionId, isNewSession]);
+    resetAutoApproval();
+  }, [sessionId, isNewSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const currentTopId = oldestPendingToolCall?.id ?? null;
@@ -471,7 +477,39 @@ export default function AutopilotSessionEventsPage({
     return undefined;
   }, [oldestPendingToolCall?.id]);
 
-  // Handle tool call authorization
+  // Silent authorize for auto-approval (throws on error, no UI feedback)
+  const silentAuthorize = useCallback(
+    async (eventId: string) => {
+      const response = await fetch(
+        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/authorize`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tool_call_event_id: eventId,
+            status: { type: "approved" },
+          }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error("Authorization failed");
+      }
+    },
+    [sessionId],
+  );
+
+  // Auto-approval hook for YOLO mode
+  const { failedIds: failedAutoApprovals, reset: resetAutoApproval } =
+    useAutoApproval({
+      enabled: yoloMode && !isNewSession,
+      pendingToolCallIds: useMemo(
+        () => pendingToolCalls.map((tc) => tc.id),
+        [pendingToolCalls],
+      ),
+      onAuthorize: silentAuthorize,
+    });
+
+  // Handle tool call authorization (manual)
   const handleAuthorize = useCallback(
     async (eventId: string, approved: boolean) => {
       userActionRef.current = true;
@@ -701,7 +739,7 @@ export default function AutopilotSessionEventsPage({
         <div className="container mx-auto px-8">
           {/* Header background - matches message width with slight outset */}
           <div ref={headerRef} className="bg-bg-secondary -mx-2 px-2 pt-4 pb-5">
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto flex items-center justify-between">
               <Breadcrumbs
                 segments={
                   isNewSession
@@ -715,9 +753,18 @@ export default function AutopilotSessionEventsPage({
                       ]
                 }
               />
+              <YoloModeToggle
+                checked={yoloMode}
+                onCheckedChange={setYoloMode}
+              />
             </div>
             {sseError.error && sseError.isRetrying && (
-              <ErrorBanner>Failed to fetch events. Retrying...</ErrorBanner>
+              <StatusBanner
+                variant={StatusBannerVariant.Warning}
+                className="mt-3"
+              >
+                Failed to fetch events. Retrying...
+              </StatusBanner>
             )}
           </div>
           <FadeGradient
@@ -775,6 +822,16 @@ export default function AutopilotSessionEventsPage({
           {/* Footer background - matches message width with slight outset */}
           <div ref={footerRef} className="bg-bg-secondary -mx-2 px-2">
             <div className="pointer-events-auto flex flex-col gap-4 pt-4 pb-8">
+              {yoloMode && failedAutoApprovals.size > 0 && (
+                <StatusBanner
+                  variant={StatusBannerVariant.Warning}
+                  icon={AlertTriangle}
+                >
+                  Auto-approval failed for {failedAutoApprovals.size} tool
+                  {failedAutoApprovals.size === 1 ? " call" : " calls"}.
+                  Retrying in background...
+                </StatusBanner>
+              )}
               {oldestPendingToolCall && (
                 <PendingToolCallCard
                   key={oldestPendingToolCall.id}
