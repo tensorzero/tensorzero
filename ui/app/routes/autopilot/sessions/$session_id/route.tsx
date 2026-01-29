@@ -17,7 +17,6 @@ import {
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import debounce from "lodash-es/debounce";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
@@ -27,9 +26,11 @@ import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard"
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
 import { logger } from "~/utils/logger";
+import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
+import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -180,6 +181,7 @@ function EventStreamContent({
   onStatusChange,
   onPendingToolCallsChange,
   onErrorChange,
+  onHasReachedStartChange,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -191,6 +193,7 @@ function EventStreamContent({
   onStatusChange: (status: AutopilotStatus) => void;
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
+  onHasReachedStartChange: (hasReachedStart: boolean) => void;
 }) {
   const {
     events: initialEvents,
@@ -229,36 +232,53 @@ function EventStreamContent({
     onErrorChange(error, isRetrying);
   }, [error, isRetrying, onErrorChange]);
 
-  // State for pagination
-  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [hasReachedStart, setHasReachedStart] = useState(!initialHasMore);
-
   // Derive pending tool call IDs for highlighting in the event stream
   const pendingToolCallIds = useMemo(
     () => new Set(pendingToolCalls.map((e) => e.id)),
     [pendingToolCalls],
   );
 
+  // Fetch older events for infinite scroll pagination
+  const fetchOlderEvents = useCallback(
+    async (oldestEvent: GatewayEvent) => {
+      return fetchOlderAutopilotEvents(sessionId, oldestEvent.id);
+    },
+    [sessionId],
+  );
+
+  // Infinite scroll pagination (loading older events when scrolling up)
+  const {
+    isLoadingOlder,
+    hasReachedStart,
+    loadError: paginationError,
+    topSentinelRef,
+    retry: retryPagination,
+  } = useInfiniteScrollUp({
+    items: events,
+    initialHasMore: initialHasMore,
+    fetchOlder: fetchOlderEvents,
+    prependItems: prependEvents,
+    scrollContainerRef,
+  });
+
+  // Notify parent when hasReachedStart changes (for top fade visibility)
+  useEffect(() => {
+    onHasReachedStartChange(hasReachedStart);
+  }, [hasReachedStart, onHasReachedStartChange]);
+
   /*
    * SCROLL BEHAVIOR SPEC:
    * 1. Submit message → Scroll to bottom (after optimistic message appears)
    * 2. New SSE event → Scroll to bottom ONLY if within BOTTOM_THRESHOLD of bottom
    * 3. Page load → Scroll to bottom (once)
-   * 4. Scroll up (infinite scroll) → Preserve scroll position (no layout shift)
+   * 4. Scroll up (infinite scroll) → Preserve scroll position (handled by useInfiniteScrollUp)
    * 5. BOTTOM_THRESHOLD (100px) → Buffer to handle tool card appearance
    */
   const BOTTOM_THRESHOLD = 100;
 
-  // Refs for scroll management
-  const topSentinelRef = useRef<HTMLDivElement>(null);
+  // Refs for scroll-to-bottom management
   const isAtBottomRef = useRef(true);
   const hasInitiallyScrolledRef = useRef(false);
-
-  // For preserving scroll position when loading older events
-  const pendingScrollPreservation = useRef<{
-    scrollHeight: number;
-    scrollTop: number;
-  } | null>(null);
 
   const checkIfAtBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -280,29 +300,16 @@ function EventStreamContent({
     isAtBottomRef.current = checkIfAtBottom();
   }, [checkIfAtBottom]);
 
-  // Handle scroll when events change
+  // Scroll to bottom when new events arrive (SSE), but not when loading older events
   useEffect(() => {
-    // Still loading older events - wait for them to arrive before adjusting scroll
+    // Skip during pagination - useInfiniteScrollUp handles scroll preservation
     if (isLoadingOlder) return;
 
-    // Older events loaded - preserve scroll position
-    if (pendingScrollPreservation.current) {
-      const container = scrollContainerRef.current;
-      if (container) {
-        const { scrollHeight: prevHeight, scrollTop: prevScrollTop } =
-          pendingScrollPreservation.current;
-        const heightDiff = container.scrollHeight - prevHeight;
-        container.scrollTop = prevScrollTop + heightDiff;
-      }
-      pendingScrollPreservation.current = null;
-      return;
-    }
-
-    // New events - only scroll if user was at bottom
+    // Scroll to bottom only if user was already at bottom
     if (isAtBottomRef.current) {
       scrollToBottom();
     }
-  }, [events, isLoadingOlder, scrollToBottom, scrollContainerRef]);
+  }, [events, isLoadingOlder, scrollToBottom]);
 
   // Listen to scroll events from the parent-provided scroll container
   useEffect(() => {
@@ -321,111 +328,6 @@ function EventStreamContent({
       hasInitiallyScrolledRef.current = true;
     }
   }, [scrollToBottom, scrollContainerRef, handleScroll]);
-
-  // Load older events
-  const loadOlderEvents = useCallback(async () => {
-    if (isLoadingOlder || hasReachedStart || events.length === 0) return;
-
-    const container = scrollContainerRef.current;
-    if (container) {
-      pendingScrollPreservation.current = {
-        scrollHeight: container.scrollHeight,
-        scrollTop: container.scrollTop,
-      };
-    }
-
-    setIsLoadingOlder(true);
-
-    try {
-      const oldestEvent = events[0];
-      const response = await fetch(
-        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events?limit=${EVENTS_PER_PAGE + 1}&before=${oldestEvent.id}`,
-      );
-
-      if (!response.ok) {
-        logger.debug(
-          `API returned ${response.status} when fetching older events, treating as session start`,
-        );
-        setHasReachedStart(true);
-        return;
-      }
-
-      const responseData = (await response.json()) as {
-        events: GatewayEvent[];
-      };
-
-      logger.debug(
-        `Loaded ${responseData.events.length} older events (requested ${EVENTS_PER_PAGE + 1})`,
-      );
-
-      if (responseData.events.length <= EVENTS_PER_PAGE) {
-        logger.debug("Reached session start");
-        setHasReachedStart(true);
-      }
-
-      if (responseData.events.length === 0) {
-        return;
-      }
-
-      const olderEvents = responseData.events
-        .sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        )
-        .slice(responseData.events.length > EVENTS_PER_PAGE ? 1 : 0);
-
-      prependEvents(olderEvents);
-    } catch (err) {
-      logger.error("Failed to load older events:", err);
-      setHasReachedStart(true);
-    } finally {
-      setIsLoadingOlder(false);
-    }
-  }, [
-    isLoadingOlder,
-    hasReachedStart,
-    events,
-    sessionId,
-    prependEvents,
-    scrollContainerRef,
-  ]);
-
-  const loadOlderEventsDebounced = useMemo(
-    () => debounce(loadOlderEvents, 100),
-    [loadOlderEvents],
-  );
-
-  useEffect(() => {
-    const sentinel = topSentinelRef.current;
-    const container = scrollContainerRef.current;
-
-    if (!sentinel || !container) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry.isIntersecting && !isLoadingOlder && !hasReachedStart) {
-          loadOlderEventsDebounced();
-        }
-      },
-      {
-        root: container,
-        rootMargin: "300px 0px 0px 0px",
-        threshold: 0.1,
-      },
-    );
-
-    observer.observe(sentinel);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [
-    isLoadingOlder,
-    hasReachedStart,
-    loadOlderEventsDebounced,
-    scrollContainerRef,
-  ]);
 
   // SSE delivers event → remove optimistic message when real event arrives
   useEffect(() => {
@@ -453,7 +355,9 @@ function EventStreamContent({
     <EventStream
       events={events}
       isLoadingOlder={isLoadingOlder}
-      hasReachedStart={isNewSession ? false : hasReachedStart}
+      hasReachedStart={isNewSession ? true : hasReachedStart}
+      loadError={isNewSession ? null : paginationError}
+      onRetryLoad={retryPagination}
       topSentinelRef={topSentinelRef}
       pendingToolCallIds={pendingToolCallIds}
       optimisticMessages={visibleOptimisticMessages}
@@ -523,6 +427,13 @@ export default function AutopilotSessionEventsPage({
   const [isEventsLoading, setIsEventsLoading] = useState(!isNewSession);
   const [hasLoadError, setHasLoadError] = useState(false);
 
+  // Track whether we've reached the start of the conversation (for top fade)
+  const [hasReachedStart, setHasReachedStart] = useState(false);
+
+  const handleHasReachedStartChange = useCallback((reached: boolean) => {
+    setHasReachedStart(reached);
+  }, []);
+
   // Cooldown animation: triggers when the queue top changes due to SSE (not user action).
   // Covers both directions: new item jumping to top, or top item removed by external approval.
   // Does NOT trigger when queue was empty and first item arrives (no accidental click risk).
@@ -536,6 +447,7 @@ export default function AutopilotSessionEventsPage({
     setOptimisticMessages([]);
     setIsEventsLoading(!isNewSession);
     setHasLoadError(false);
+    setHasReachedStart(false);
     setAutopilotStatus({ status: "idle" });
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
@@ -711,13 +623,28 @@ export default function AutopilotSessionEventsPage({
   }, [footerHeight]);
 
   // Update fade overlay visibility based on scroll position
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget;
-    setShowTopFade(target.scrollTop > 20);
-    const distanceFromBottom =
-      target.scrollHeight - target.scrollTop - target.clientHeight;
-    setShowBottomFade(distanceFromBottom > 20);
-  }, []);
+  // Top fade stays visible until we've reached the start of the conversation
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const target = e.currentTarget;
+      setShowTopFade(target.scrollTop > 20 || !hasReachedStart);
+      const distanceFromBottom =
+        target.scrollHeight - target.scrollTop - target.clientHeight;
+      setShowBottomFade(distanceFromBottom > 20);
+    },
+    [hasReachedStart],
+  );
+
+  // Update top fade when hasReachedStart changes (not just on scroll)
+  // Without this, fade lingers if user is near top when reaching start
+  useEffect(() => {
+    if (hasReachedStart) {
+      const container = scrollContainerRef.current;
+      if (container && container.scrollTop <= 20) {
+        setShowTopFade(false);
+      }
+    }
+  }, [hasReachedStart]);
 
   const handleNavigateToSession = useCallback(
     (newSessionId: string) => {
@@ -829,6 +756,7 @@ export default function AutopilotSessionEventsPage({
                   onStatusChange={handleStatusChange}
                   onPendingToolCallsChange={handlePendingToolCallsChange}
                   onErrorChange={handleErrorChange}
+                  onHasReachedStartChange={handleHasReachedStartChange}
                 />
               )}
             </Await>
