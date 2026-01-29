@@ -111,6 +111,11 @@ export function useAutoApproval({
     }
   }, [enabled, reset]);
 
+  // Full cleanup on unmount
+  useEffect(() => {
+    return reset;
+  }, [reset]);
+
   // Exponential backoff: 1s, 2s, 4s, then 60s forever
   const getRetryDelay = (retryCount: number): number => {
     if (retryCount < 3) {
