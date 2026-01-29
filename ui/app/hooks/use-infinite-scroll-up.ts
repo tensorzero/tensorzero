@@ -190,6 +190,7 @@ export function useInfiniteScrollUp<T>({
 
           // Schedule retry
           retryTimeoutRef.current = setTimeout(() => {
+            retryTimeoutRef.current = null; // Clear before calling so finally knows we're not waiting
             isLoadingOlderRef.current = false;
             loadOlderItems(true);
           }, delay);
@@ -204,8 +205,8 @@ export function useInfiniteScrollUp<T>({
         // Clear scroll preservation since we failed
         pendingScrollPreservation.current = null;
       } finally {
-        // Only clear loading state if we're not waiting for a retry
-        if (retryCountRef.current === 0 || retryCountRef.current > maxRetries) {
+        // Only clear loading state if we're not waiting for a scheduled retry
+        if (retryTimeoutRef.current === null) {
           isLoadingOlderRef.current = false;
           setIsLoadingOlder(false);
         }

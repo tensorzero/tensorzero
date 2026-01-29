@@ -585,23 +585,25 @@ export default function EventStream({
   optimisticMessages = [],
   status,
 }: EventStreamProps) {
+  // Determine what to show at the top: sentinel, error, or session start
+  const showSessionStart =
+    (hasReachedStart || optimisticMessages.length > 0) &&
+    !isLoadingOlder &&
+    !loadError;
+
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* Sentinel for loading more - always present unless we've reached start or have optimistic messages */}
-      {/* Keep sentinel in DOM even during error so retry can work */}
-      {!hasReachedStart &&
-        optimisticMessages.length === 0 &&
-        !isLoadingOlder && (
-          <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
-        )}
+      {/* Sentinel for loading more - always present unless showing session start */}
+      {/* Must stay in DOM during loading/error so IntersectionObserver keeps working */}
+      {!showSessionStart && (
+        <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
+      )}
 
-      {/* Error state - show retry notice */}
+      {/* Error state - show retry notice (after sentinel so it appears below) */}
       {loadError && <LoadErrorNotice onRetry={onRetryLoad} />}
 
       {/* Session start indicator */}
-      {(hasReachedStart || optimisticMessages.length > 0) &&
-        !isLoadingOlder &&
-        !loadError && <SessionStartDivider />}
+      {showSessionStart && <SessionStartDivider />}
 
       {/* Loading skeletons at the top */}
       {isLoadingOlder && <EventSkeletons count={3} />}
