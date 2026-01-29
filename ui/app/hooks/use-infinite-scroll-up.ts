@@ -133,8 +133,8 @@ function canStartLoad(status: LoadStatus, itemCount: number): boolean {
   if (itemCount === 0) return false;
   if (status === "loading") return false;
   if (status === "reached_start") return false;
-  // "idle", "error", and "waiting_retry" can start a load
-  // (waiting_retry transitions to loading when the retry timer fires)
+  if (status === "error") return false; // Must use retry() to recover from error
+  // "idle" and "waiting_retry" can start a load
   return true;
 }
 
@@ -159,24 +159,28 @@ function getRetryDelay(retryCount: number, baseDelayMs: number): number {
  * ## State Machine
  *
  * ```
- * idle ──[START_LOADING]──► loading
- *                              │
- *              ┌───────────────┴───────────────┐
- *              ▼                               ▼
- *   [FETCH_SUCCESS]                     [on error]
- *         │                                   │
- *    ┌────┴────┐                    ┌─────────┴─────────┐
- *    ▼         ▼                    ▼                   ▼
- *  idle   reached_start      waiting_retry            error
- *                             (auto-retry)        (max retries)
- *                                   │                   │
- *                            [timer fires]       [RESET_FOR_RETRY]
- *                                   │                   │
- *                                   └─► [START_LOADING] ◄┘
- *                                              │
- *                                              ▼
- *                                           loading
+ *        ┌──────────────────────────────────────────────────────────┐
+ *        │                                                          │
+ *        ▼                                                          │
+ *      idle ──[START_LOADING]──► loading                            │
+ *        ▲                          │                               │
+ *        │           ┌──────────────┴──────────────┐                │
+ *        │           ▼                             ▼                │
+ *        │    [FETCH_SUCCESS]                [on error]             │
+ *        │          │                              │                │
+ *        │     ┌────┴────┐               ┌─────────┴─────────┐      │
+ *        │     ▼         ▼               ▼                   ▼      │
+ *        │   idle   reached_start   waiting_retry          error    │
+ *        │                          (auto-retry)       (max retries)│
+ *        │                               │                   │      │
+ *        │                        [timer fires        [RESET_FOR_RETRY]
+ *        │                         or user scroll]          (via retry())
+ *        │                               │                          │
+ *        │                               ▼                          │
+ *        └────────────────────────── loading ◄──────────────────────┘
  * ```
+ *
+ * Note: `error` state requires manual retry() call - scroll won't trigger load.
  */
 export function useInfiniteScrollUp<T>({
   items,
@@ -263,6 +267,13 @@ export function useInfiniteScrollUp<T>({
     }
 
     transition({ type: "START_LOADING" });
+
+    // Cancel any pending auto-retry (user scroll preempts backoff timer)
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
     captureScrollPosition();
 
     try {
