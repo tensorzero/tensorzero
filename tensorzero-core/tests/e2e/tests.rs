@@ -36,6 +36,7 @@ mod otel;
 mod otel_config_headers;
 mod otel_export;
 mod prometheus;
+mod provider_tools;
 mod providers;
 mod proxy;
 mod rate_limiting;
