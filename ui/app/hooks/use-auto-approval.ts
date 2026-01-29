@@ -117,18 +117,15 @@ export function useAutoApproval({
   // Manage AbortController lifecycle: create when enabled, abort on disable/session change/unmount
   useEffect(() => {
     if (!enabled) {
-      // When disabled, abort any in-flight and clear state
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
       clearState();
       return;
     }
 
-    // Create fresh controller for this enabled session
     abortControllerRef.current = new AbortController();
 
     return () => {
-      // Abort when session changes or unmount (while enabled)
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
     };
