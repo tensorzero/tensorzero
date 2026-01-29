@@ -8,7 +8,6 @@ interface UseAutoApprovalOptions {
 
 interface UseAutoApprovalResult {
   failedIds: Set<string>;
-  reset: () => void;
 }
 
 async function approveAllToolCalls(
@@ -79,13 +78,6 @@ export function useAutoApproval({
     setFailedIds(new Set());
   }, []);
 
-  // Full reset: abort in-flight requests AND clear state
-  const reset = useCallback(() => {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = new AbortController();
-    clearState();
-  }, [clearState]);
-
   // Cleanup when pending tool calls change (tool calls resolved)
   useEffect(() => {
     const pendingSet = new Set(pendingToolCallIds);
@@ -150,7 +142,7 @@ export function useAutoApproval({
     const currentPendingIds = pendingToolCallIdsRef.current;
     if (currentPendingIds.length === 0) return;
 
-    // Get the highest ID (most recent) to approve all up to it
+    // Get the most recent pending ID - API will approve all pending calls up to this ID
     const lastId = currentPendingIds[currentPendingIds.length - 1];
 
     inFlightRef.current = true;
@@ -198,5 +190,5 @@ export function useAutoApproval({
     attemptBatchApproval();
   }, [enabled, pendingToolCallIds, attemptBatchApproval]);
 
-  return { failedIds, reset };
+  return { failedIds };
 }
