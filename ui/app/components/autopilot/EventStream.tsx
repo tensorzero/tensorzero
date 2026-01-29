@@ -144,6 +144,8 @@ function getVisualizationTitle(visualization: VisualizationType): string {
   switch (visualization.type) {
     case "top_k_evaluation":
       return "Top-K Evaluation Results";
+    case "unknown":
+      return "Visualization";
   }
 }
 
@@ -158,6 +160,16 @@ function VisualizationRenderer({
   switch (visualization.type) {
     case "top_k_evaluation":
       return <TopKEvaluationViz data={visualization} />;
+    case "unknown":
+      return (
+        <div className="text-fg-muted flex items-center gap-2 text-sm">
+          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          <span>
+            Unknown visualization type. Your TensorZero deployment may be
+            outdated.
+          </span>
+        </div>
+      );
   }
 }
 
