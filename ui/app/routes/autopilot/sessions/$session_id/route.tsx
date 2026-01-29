@@ -619,6 +619,17 @@ export default function AutopilotSessionEventsPage({
     [hasReachedStart],
   );
 
+  // Update top fade when hasReachedStart changes (not just on scroll)
+  // Without this, fade lingers if user is near top when reaching start
+  useEffect(() => {
+    if (hasReachedStart) {
+      const container = scrollContainerRef.current;
+      if (container && container.scrollTop <= 20) {
+        setShowTopFade(false);
+      }
+    }
+  }, [hasReachedStart]);
+
   const handleNavigateToSession = useCallback(
     (newSessionId: string) => {
       navigate(`/autopilot/sessions/${newSessionId}`);
