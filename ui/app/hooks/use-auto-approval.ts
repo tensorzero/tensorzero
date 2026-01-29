@@ -39,7 +39,7 @@ async function authorizeToolCall(
  * Retry schedule: 1s, 2s, 4s, then 60s forever after showing error.
  * After 3 retries, the tool call ID is added to `failedIds`.
  *
- * Requests are cancelled on unmount or session change via AbortController.
+ * Requests are cancelled when disabled, session changes, or on unmount.
  */
 export function useAutoApproval({
   enabled,
@@ -64,11 +64,8 @@ export function useAutoApproval({
 
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
 
-  const reset = useCallback(() => {
-    // Abort any in-flight requests
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-
+  // Clear timers and tracking state (does not touch AbortController)
+  const clearState = useCallback(() => {
     for (const timer of retryTimersRef.current.values()) {
       clearTimeout(timer);
     }
@@ -77,6 +74,13 @@ export function useAutoApproval({
     inFlightRef.current.clear();
     setFailedIds(new Set());
   }, []);
+
+  // Full reset: abort in-flight requests AND clear state
+  const reset = useCallback(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+    clearState();
+  }, [clearState]);
 
   // Cleanup when pending tool calls change (tool call resolved externally)
   useEffect(() => {
@@ -110,28 +114,25 @@ export function useAutoApproval({
     });
   }, [pendingToolCallIds]);
 
-  // Reset when disabled
+  // Manage AbortController lifecycle: create when enabled, abort on disable/session change/unmount
   useEffect(() => {
     if (!enabled) {
-      reset();
+      // When disabled, abort any in-flight and clear state
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      clearState();
+      return;
     }
-  }, [enabled, reset]);
 
-  // Reset on session change - abort requests for old session
-  useEffect(() => {
-    // Create fresh controller for this session
+    // Create fresh controller for this enabled session
     abortControllerRef.current = new AbortController();
 
     return () => {
-      // Abort requests when session changes
+      // Abort when session changes or unmount (while enabled)
       abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
     };
-  }, [sessionId]);
-
-  // Full cleanup on unmount
-  useEffect(() => {
-    return reset;
-  }, [reset]);
+  }, [enabled, sessionId, clearState]);
 
   // Exponential backoff: 1s, 2s, 4s, then 60s forever
   const getRetryDelay = (retryCount: number): number => {
@@ -155,7 +156,7 @@ export function useAutoApproval({
         (error: Error) => {
           inFlightRef.current.delete(eventId);
 
-          // Don't retry if request was aborted (unmount/session change)
+          // Don't retry if request was aborted (disabled/session change/unmount)
           if (error.name === "AbortError") return;
 
           if (!enabledRef.current) return;

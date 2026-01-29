@@ -456,8 +456,8 @@ function AutopilotSessionEventsPageContent({
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
-    resetAutoApproval();
-  }, [sessionId, isNewSession]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Note: useAutoApproval handles its own cleanup on session change via internal effect
+  }, [sessionId, isNewSession]);
 
   useEffect(() => {
     const currentTopId = oldestPendingToolCall?.id ?? null;
@@ -475,15 +475,14 @@ function AutopilotSessionEventsPageContent({
     return undefined;
   }, [oldestPendingToolCall?.id]);
 
-  const { failedIds: failedAutoApprovals, reset: resetAutoApproval } =
-    useAutoApproval({
-      enabled: yoloMode && !isNewSession,
-      sessionId,
-      pendingToolCallIds: useMemo(
-        () => pendingToolCalls.map((tc) => tc.id),
-        [pendingToolCalls],
-      ),
-    });
+  const { failedIds: failedAutoApprovals } = useAutoApproval({
+    enabled: yoloMode && !isNewSession,
+    sessionId,
+    pendingToolCallIds: useMemo(
+      () => pendingToolCalls.map((tc) => tc.id),
+      [pendingToolCalls],
+    ),
+  });
 
   // Handle tool call authorization (manual)
   const handleAuthorize = useCallback(
