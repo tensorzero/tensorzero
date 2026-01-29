@@ -202,6 +202,15 @@ wheels = [
 ]
 
 [[package]]
+name = "dacite"
+version = "1.9.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/55/a0/7ca79796e799a3e782045d29bf052b5cde7439a2bbb17f15ff44f7aacc63/dacite-1.9.2.tar.gz", hash = "sha256:6ccc3b299727c7aa17582f0021f6ae14d5de47c7227932c47fec4cdfefd26f09", size = 22420, upload-time = "2025-02-05T09:27:29.757Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/35/386550fd60316d1e37eccdda609b074113298f23cef5bddb2049823fe666/dacite-1.9.2-py3-none-any.whl", hash = "sha256:053f7c3f5128ca2e9aceb66892b1a3c8936d02c686e707bee96e19deef4bc4a0", size = 16600, upload-time = "2025-02-05T09:27:24.345Z" },
+]
+
+[[package]]
 name = "debugpy"
 version = "1.8.15"
 source = { registry = "https://pypi.org/simple" }
@@ -947,7 +956,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.32.4"
+version = "2.32.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -955,9 +964,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e1/0a/929373653770d8a0d7ea76c37de6e41f11eb07559b103b1c02cafb3f7cf8/requests-2.32.4.tar.gz", hash = "sha256:27d0316682c8a29834d3264820024b62a36942083d52caf2f14c0591336d3422", size = 135258, upload-time = "2025-06-09T16:43:07.34Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/e4/56027c4a6b4ae70ca9de302488c5ca95ad4a39e190093d6c1a8ace08341b/requests-2.32.4-py3-none-any.whl", hash = "sha256:27babd3cda2a6d50b30443204ee89830707d396671944c998b5975b031ac2b2c", size = 64847, upload-time = "2025-06-09T16:43:05.728Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
 ]
 
 [[package]]
@@ -1000,22 +1009,22 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-version = "2025.7.5"
+version = "2026.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "dacite" },
     { name = "httpx" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5d/63/188bb1f520123008be982f815b7c35234d924d90c1284016ecc6c95886d9/tensorzero-2025.7.5.tar.gz", hash = "sha256:cb366f3c355524e3e0a2a3a2a80e96454d2e5816e2789fb8b93de03874318383", size = 1218364, upload-time = "2025-07-30T16:24:04.804Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/dd/5629b41b7da4bd277741039a7dbc50f5b83994a443b2cb549cea734b47c7/tensorzero-2026.1.5.tar.gz", hash = "sha256:beb805c33fb4217d899e2b824bf24435b93be737ba2967bc488215ba4000f5e4", size = 1663426, upload-time = "2026-01-24T17:52:28.935Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/2f/7d57e631f3c14c585dbefb779d11e441c2f22cd03748c75375b0ad08d1ea/tensorzero-2025.7.5-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:40b589770c86cea5942d144300f381d851351defa9efd0986a0d87b8735f7a07", size = 16389069, upload-time = "2025-07-30T16:23:57.282Z" },
-    { url = "https://files.pythonhosted.org/packages/c4/73/3673c9f30e81f3107db3a6a600c8846c9b2edd57b9dcb15ea4c03182dd23/tensorzero-2025.7.5-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:a24fed842f2485be39bcbf1c8280a2538e6bfdbd3ab615e2583ae9c86743dd9d", size = 15522191, upload-time = "2025-07-30T16:23:54.692Z" },
-    { url = "https://files.pythonhosted.org/packages/94/0d/0d604dbe1089f482767fb8fc227b381d922df72108e6ace87f1884cb4db4/tensorzero-2025.7.5-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b32b47e1a5f1f6c769eb067698a8ad804f6189f1588e0f4e45445ee9dc329164", size = 16034337, upload-time = "2025-07-30T16:23:47.152Z" },
-    { url = "https://files.pythonhosted.org/packages/fa/81/a6ad537839c874c9b03ce5473b4bcc4348f58fa7d6e63baba9f425d98c1c/tensorzero-2025.7.5-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9338617764a65d0be9482246d84ddc9a76d9c6524abd1e4d10db48f3a2abb180", size = 17233682, upload-time = "2025-07-30T16:23:50.139Z" },
-    { url = "https://files.pythonhosted.org/packages/e9/b4/4c43957672ad7bf4d49050c67ddf0ed3b31dfe2ccd990a1d9bc04241e61c/tensorzero-2025.7.5-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:db6fbc8b522f43da219ab9f71c2177295fc6820e9168a98b94facb75317987ab", size = 16112384, upload-time = "2025-07-30T16:23:59.98Z" },
-    { url = "https://files.pythonhosted.org/packages/7b/a7/936433b56a6506c1b6ee0476c41e39539fb14dca54aefacb30179bc0b086/tensorzero-2025.7.5-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:93d4e17147f9449df8cf6aad0f18c936f1170c0cb59b07760dd09abb47a29b40", size = 17445354, upload-time = "2025-07-30T16:24:02.43Z" },
-    { url = "https://files.pythonhosted.org/packages/f4/fd/88f4368b71ae8c4bd1e3ed99c1660467760ca6cfbd31d9167f3a010f9d02/tensorzero-2025.7.5-cp39-abi3-win_amd64.whl", hash = "sha256:a80d9739c61c8d839f8d4f9f61d6333ca13b2bd7ea1bb021ea989dd15a8eb39e", size = 17174978, upload-time = "2025-07-30T16:24:08.122Z" },
+    { url = "https://files.pythonhosted.org/packages/53/92/a0724aaff4b90d4994961308515c215c9869cbcdb7b8b94aa85c98b98a9b/tensorzero-2026.1.5-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:160c0f32c3119addfd5f64eb93efc51a920a3cd77398982b7d177676c7a0c9f7", size = 35630038, upload-time = "2026-01-24T17:52:20.683Z" },
+    { url = "https://files.pythonhosted.org/packages/51/78/b5edd0f1b382276d60f5a369d496b144939039511b4c80da238853ceea1d/tensorzero-2026.1.5-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2b0b6571ad51e3116100ae8d40fee8f6aa128ba851fefc2981c184bd0422bf0c", size = 37283165, upload-time = "2026-01-24T17:52:13.684Z" },
+    { url = "https://files.pythonhosted.org/packages/44/c0/82ee0421c45fabcba5124350a92f47c6ff7c6bd4365b25b63262bf88bb4f/tensorzero-2026.1.5-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f58322ea0f7c0460e18ba59bc8540fbfb9d4c13ef1a0f867a5f0bbf32478ccd2", size = 37769093, upload-time = "2026-01-24T17:52:17.609Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/a4/51ecf57e0115c8863aa20adf3cfe9dc8d91657a09cd3e4313e1f2a669b6e/tensorzero-2026.1.5-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:a069ad5a20f7011682ccabb2dcd31e470635a57983d332016160b6652ffc9ff9", size = 37504618, upload-time = "2026-01-24T17:52:23.705Z" },
+    { url = "https://files.pythonhosted.org/packages/89/d7/0d740907e3e6252539c025ab3262cb061c8e4d8dd76239fe0e064be0b985/tensorzero-2026.1.5-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:09f655155ffd4618f3202c45e70a21584e14578f09372da8c76d7f3e1ab27925", size = 38217504, upload-time = "2026-01-24T17:52:26.706Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/6c/f88d03195ad628e59ae62026d36563225f4ae304478ed3fc4c5cebbc59dc/tensorzero-2026.1.5-cp310-abi3-win_amd64.whl", hash = "sha256:56835dddb2b50379a8c4056552ed152a4d9e0b25eee7744697f1cb1443a203e8", size = 35166852, upload-time = "2026-01-24T17:52:30.864Z" },
 ]
 
 [[package]]
