@@ -4,6 +4,6 @@ import type { TopKEvaluationVisualization } from "./TopKEvaluationVisualization"
 /**
  * Types of visualizations that can be displayed.
  */
-export type VisualizationType = {
-  type: "top_k_evaluation";
-} & TopKEvaluationVisualization;
+export type VisualizationType =
+  | ({ type: "top_k_evaluation" } & TopKEvaluationVisualization)
+  | { type: "unknown" };
