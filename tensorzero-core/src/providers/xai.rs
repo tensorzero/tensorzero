@@ -366,8 +366,10 @@ async fn prepare_xai_messages<'a>(
     // Add system message if present
     if let Some(system_content) = system {
         // Check if we need to prepend JSON mode instruction
+        // Only add if neither system content nor messages contain "json"
         let system_content = if messages_config.json_mode
             == Some(&ModelInferenceRequestJsonMode::On)
+            && !system_content.to_lowercase().contains("json")
             && !messages_contain_json_hint(messages)
         {
             Cow::Owned(format!("Respond using JSON.\n\n{system_content}"))
@@ -1359,6 +1361,86 @@ mod tests {
         assert!(
             !serialized.contains("reasoning_content"),
             "serialized message should not contain reasoning_content when None"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_xai_messages_json_hint_in_system_not_duplicated() {
+        // Test that JSON instruction is NOT prepended when system already contains "json"
+        let system = Some("Output as JSON format");
+        let messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["What's the weather?".to_string().into()],
+        }];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: Some(&ModelInferenceRequestJsonMode::On),
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = prepare_xai_messages(system, &messages, messages_config)
+            .await
+            .expect("failed to prepare messages");
+
+        // Find the system message
+        let system_msg = result
+            .iter()
+            .find_map(|msg| {
+                if let XAIRequestMessage::System(sys) = msg {
+                    Some(sys.content.as_ref())
+                } else {
+                    None
+                }
+            })
+            .expect("system message should be present");
+
+        // Should NOT have the "Respond using JSON." prefix since system already mentions JSON
+        assert!(
+            !system_msg.starts_with("Respond using JSON."),
+            "JSON instruction should not be prepended when system already contains 'json'. Got: {system_msg}"
+        );
+        assert_eq!(
+            system_msg, "Output as JSON format",
+            "system content should be unchanged"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_xai_messages_json_hint_added_when_missing() {
+        // Test that JSON instruction IS prepended when neither system nor messages contain "json"
+        let system = Some("You are a helpful assistant.");
+        let messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["What's the weather?".to_string().into()],
+        }];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: Some(&ModelInferenceRequestJsonMode::On),
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = prepare_xai_messages(system, &messages, messages_config)
+            .await
+            .expect("failed to prepare messages");
+
+        // Find the system message
+        let system_msg = result
+            .iter()
+            .find_map(|msg| {
+                if let XAIRequestMessage::System(sys) = msg {
+                    Some(sys.content.as_ref())
+                } else {
+                    None
+                }
+            })
+            .expect("system message should be present");
+
+        // Should have the "Respond using JSON." prefix since no JSON hint exists
+        assert!(
+            system_msg.starts_with("Respond using JSON."),
+            "JSON instruction should be prepended when no JSON hint exists. Got: {system_msg}"
         );
     }
 }
