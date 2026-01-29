@@ -25,6 +25,7 @@ import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard"
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
 import { logger } from "~/utils/logger";
+import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
@@ -222,34 +223,7 @@ function EventStreamContent({
   // Fetch older events for infinite scroll pagination
   const fetchOlderEvents = useCallback(
     async (oldestEvent: GatewayEvent) => {
-      const response = await fetch(
-        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events?limit=${EVENTS_PER_PAGE + 1}&before=${oldestEvent.id}`,
-      );
-
-      if (!response.ok) {
-        logger.debug(
-          `API returned ${response.status} when fetching older events, treating as session start`,
-        );
-        return { items: [], hasMore: false };
-      }
-
-      const responseData = (await response.json()) as {
-        events: GatewayEvent[];
-      };
-
-      logger.debug(
-        `Loaded ${responseData.events.length} older events (requested ${EVENTS_PER_PAGE + 1})`,
-      );
-
-      const hasMore = responseData.events.length > EVENTS_PER_PAGE;
-      const olderEvents = responseData.events
-        .sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        )
-        .slice(hasMore ? 1 : 0);
-
-      return { items: olderEvents, hasMore };
+      return fetchOlderAutopilotEvents(sessionId, oldestEvent.id);
     },
     [sessionId],
   );
