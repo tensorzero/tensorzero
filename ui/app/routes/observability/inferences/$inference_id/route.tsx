@@ -47,6 +47,8 @@ import {
   ModelInferencesTableSkeleton,
 } from "./InferenceSkeletons";
 import {
+  BasicInfoError,
+  ActionsError,
   FeedbackSectionError,
   ModelInferencesSectionError,
   InputSectionError,
@@ -256,10 +258,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           key={location.key}
           fallback={<BasicInfoLayoutSkeleton rows={5} />}
         >
-          <Await
-            resolve={modelInferences}
-            errorElement={<BasicInfoLayoutSkeleton rows={5} />}
-          >
+          <Await resolve={modelInferences} errorElement={<BasicInfoError />}>
             {(resolvedModelInferences) => (
               <BasicInfoContent
                 inference={inference}
@@ -274,7 +273,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           key={`actions-${location.key}`}
           fallback={<ActionsSkeleton />}
         >
-          <Await resolve={actionBarData} errorElement={<ActionsSkeleton />}>
+          <Await resolve={actionBarData} errorElement={<ActionsError />}>
             {(resolvedActionBarData) => (
               <InferenceActionBar
                 inference={inference}

@@ -1,7 +1,4 @@
-import {
-  isJsonOutput,
-  type ParsedModelInferenceRow,
-} from "~/utils/clickhouse/inference";
+import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import type {
   FeedbackRow,
   FeedbackBounds,
@@ -28,7 +25,7 @@ import { useToast } from "~/hooks/use-toast";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
-  type VariantResponseInfo,
+  prepareDemonstrationFromVariantOutput,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithSelect } from "~/components/inference/TryWithSelect";
@@ -457,18 +454,4 @@ export function InferenceDetailContent({
       )}
     </>
   );
-}
-
-function prepareDemonstrationFromVariantOutput(
-  variantOutput: VariantResponseInfo,
-) {
-  const output = variantOutput.output;
-  if (output === undefined) {
-    return undefined;
-  }
-  if (isJsonOutput(output)) {
-    return output.parsed;
-  } else {
-    return output;
-  }
 }

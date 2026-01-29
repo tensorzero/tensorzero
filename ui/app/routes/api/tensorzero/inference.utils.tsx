@@ -429,6 +429,25 @@ export type VariantResponseInfo =
       usage?: InferenceUsage;
     };
 
+/**
+ * Prepares demonstration feedback value from variant output.
+ * Returns the parsed output for JSON inferences, or the raw output for chat inferences.
+ */
+export function prepareDemonstrationFromVariantOutput(
+  variantOutput: VariantResponseInfo,
+) {
+  const output = variantOutput.output;
+  if (output === undefined) {
+    return undefined;
+  }
+  // Check if output has 'parsed' property (JSON output)
+  if ("parsed" in output) {
+    return output.parsed;
+  } else {
+    return output;
+  }
+}
+
 function convertTemplate(
   template: PathWithContents | null,
 ): ResolvedTomlPathData | null {

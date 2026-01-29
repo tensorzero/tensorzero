@@ -5,7 +5,6 @@ import { useToast } from "~/hooks/use-toast";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
-import { isJsonOutput } from "~/utils/clickhouse/inference";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithSelect } from "~/components/inference/TryWithSelect";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
@@ -17,7 +16,7 @@ import { VariantResponseModal } from "~/components/inference/VariantResponseModa
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
-  type VariantResponseInfo,
+  prepareDemonstrationFromVariantOutput,
 } from "~/routes/api/tensorzero/inference.utils";
 import { logger } from "~/utils/logger";
 import type {
@@ -28,20 +27,6 @@ import type {
 type ActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
-
-function prepareDemonstrationFromVariantOutput(
-  variantOutput: VariantResponseInfo,
-) {
-  const output = variantOutput.output;
-  if (output === undefined) {
-    return undefined;
-  }
-  if (isJsonOutput(output)) {
-    return output.parsed;
-  } else {
-    return output;
-  }
-}
 
 interface InferenceActionBarProps {
   inference: StoredInference;
