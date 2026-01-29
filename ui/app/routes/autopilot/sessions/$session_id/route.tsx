@@ -217,6 +217,11 @@ function EventStreamContent({
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [hasReachedStart, setHasReachedStart] = useState(!initialHasMore);
 
+  // Refs for pagination state - used to avoid stale closures and race conditions
+  // These are updated synchronously alongside state to prevent duplicate fetches
+  const isLoadingOlderRef = useRef(false);
+  const hasReachedStartRef = useRef(!initialHasMore);
+
   // Derive pending tool call IDs for highlighting in the event stream
   const pendingToolCallIds = useMemo(
     () => new Set(pendingToolCalls.map((e) => e.id)),
@@ -308,7 +313,18 @@ function EventStreamContent({
 
   // Load older events
   const loadOlderEvents = useCallback(async () => {
-    if (isLoadingOlder || hasReachedStart || events.length === 0) return;
+    // Use refs for synchronous guard - prevents race conditions when called
+    // multiple times before React re-renders
+    if (
+      isLoadingOlderRef.current ||
+      hasReachedStartRef.current ||
+      events.length === 0
+    ) {
+      return;
+    }
+
+    // Set ref synchronously BEFORE any async work to prevent duplicate calls
+    isLoadingOlderRef.current = true;
 
     const container = scrollContainerRef.current;
     if (container) {
@@ -330,6 +346,7 @@ function EventStreamContent({
         logger.debug(
           `API returned ${response.status} when fetching older events, treating as session start`,
         );
+        hasReachedStartRef.current = true;
         setHasReachedStart(true);
         return;
       }
@@ -344,6 +361,7 @@ function EventStreamContent({
 
       if (responseData.events.length <= EVENTS_PER_PAGE) {
         logger.debug("Reached session start");
+        hasReachedStartRef.current = true;
         setHasReachedStart(true);
       }
 
@@ -361,24 +379,45 @@ function EventStreamContent({
       prependEvents(olderEvents);
     } catch (err) {
       logger.error("Failed to load older events:", err);
+      hasReachedStartRef.current = true;
       setHasReachedStart(true);
     } finally {
+      isLoadingOlderRef.current = false;
       setIsLoadingOlder(false);
     }
-  }, [
-    isLoadingOlder,
-    hasReachedStart,
-    events,
-    sessionId,
-    prependEvents,
-    scrollContainerRef,
-  ]);
+  }, [events, sessionId, prependEvents, scrollContainerRef]);
 
+  // Keep a ref to the latest loadOlderEvents so debounced function always calls current version
+  const loadOlderEventsRef = useRef(loadOlderEvents);
+  useEffect(() => {
+    loadOlderEventsRef.current = loadOlderEvents;
+  }, [loadOlderEvents]);
+
+  // Create a stable debounced function that:
+  // 1. Always calls the latest loadOlderEvents via ref (avoids stale closures)
+  // 2. Never recreates (empty deps), so pending calls aren't lost
+  // 3. Is cancelled on unmount
   const loadOlderEventsDebounced = useMemo(
-    () => debounce(loadOlderEvents, 100),
-    [loadOlderEvents],
+    () =>
+      debounce(() => {
+        // Check refs inside callback - observer doesn't need to reconnect when these change
+        if (isLoadingOlderRef.current || hasReachedStartRef.current) {
+          return;
+        }
+        loadOlderEventsRef.current();
+      }, 100),
+    [], // Empty deps - stable function that uses refs
   );
 
+  // Cancel pending debounced calls on unmount
+  useEffect(() => {
+    return () => {
+      loadOlderEventsDebounced.cancel();
+    };
+  }, [loadOlderEventsDebounced]);
+
+  // IntersectionObserver for infinite scroll
+  // Uses refs for state checks to avoid reconnecting observer on every state change
   useEffect(() => {
     const sentinel = topSentinelRef.current;
     const container = scrollContainerRef.current;
@@ -388,7 +427,8 @@ function EventStreamContent({
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        if (entry.isIntersecting && !isLoadingOlder && !hasReachedStart) {
+        // Check refs instead of closure state - avoids observer reconnection churn
+        if (entry.isIntersecting) {
           loadOlderEventsDebounced();
         }
       },
@@ -404,12 +444,7 @@ function EventStreamContent({
     return () => {
       observer.disconnect();
     };
-  }, [
-    isLoadingOlder,
-    hasReachedStart,
-    loadOlderEventsDebounced,
-    scrollContainerRef,
-  ]);
+  }, [loadOlderEventsDebounced, scrollContainerRef]);
 
   // SSE delivers event → remove optimistic message when real event arrives
   useEffect(() => {
