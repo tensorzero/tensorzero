@@ -86,6 +86,7 @@ async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
     let llm_params = WriteConfigToolParams {
         config: serde_json::json!({}),
         extra_templates,
+        edit: None,
     };
 
     let mut mock_client = MockTensorZeroClient::new();

@@ -23,6 +23,20 @@ pub struct WriteConfigToolParams {
     /// Templates that should be stored with the config.
     #[serde(default)]
     pub extra_templates: HashMap<String, String>,
+    /// Only set if the config write is an upsert to a single TOML entry (so that we can add nice edit handling)
+    pub edit: Option<EditPayload>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EditPayload {
+    Upsert(UpsertPayload),
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertPayload {
+    pub path: Vec<String>, // The keys that make up the full TOML path to where the edit is being made
+    pub value: Value,      // The value being upserted at that path
 }
 
 /// Tool for writing config snapshots.
