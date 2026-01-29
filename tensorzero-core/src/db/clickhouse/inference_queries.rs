@@ -1,32 +1,38 @@
 use async_trait::async_trait;
 use itertools::Itertools;
+use std::collections::HashMap;
+use std::time::Duration;
 use uuid::Uuid;
 
-use crate::config::MetricConfigLevel;
+use crate::config::{
+    Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
+};
+use crate::db::TimeWindow;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
     ClickhouseType, JoinRegistry, OrderByTerm, OrderDirection, QueryParameter,
     generate_order_by_sql,
 };
+use crate::db::clickhouse::select_queries::parse_count;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::inferences::{
-    ClickHouseStoredInferenceWithDispreferredOutputs, CountInferencesParams,
-    DEFAULT_INFERENCE_QUERY_LIMIT, FunctionInfo, InferenceMetadata, InferenceOutputSource,
+    ClickHouseStoredInferenceWithDispreferredOutputs, CountByVariant,
+    CountInferencesForFunctionParams, CountInferencesParams,
+    CountInferencesWithDemonstrationFeedbacksParams, CountInferencesWithFeedbackParams,
+    DEFAULT_INFERENCE_QUERY_LIMIT, FunctionInferenceCount, FunctionInfo,
+    GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceOutputSource,
     InferenceQueries, ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
+    VariantThroughput,
 };
 use crate::db::query_helpers::json_double_escape_string_without_quotes;
+use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
 use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
+use crate::stored_inference::StoredInferenceDatabase;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::deserialize_optional_tool_info;
-use crate::{
-    config::Config,
-    error::{Error, ErrorDetails},
-    stored_inference::StoredInferenceDatabase,
-};
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashMap;
 
 /// Represents the structured parts of a single-table query
 /// This allows the caller to insert JOINs between the SELECT/FROM and WHERE clauses
@@ -343,6 +349,145 @@ impl InferenceQueries for ClickHouseConnectionInfo {
             return Ok(());
         }
         self.write_batched(rows, TableName::JsonInference).await
+    }
+
+    // ===== Inference count methods (merged from InferenceCountQueries trait) =====
+
+    async fn count_inferences_for_function(
+        &self,
+        params: CountInferencesForFunctionParams<'_>,
+    ) -> Result<u64, Error> {
+        let (query, query_params) = build_count_inferences_query(&params);
+        let response = self.run_query_synchronous(query, &query_params).await?;
+        parse_count(&response.response)
+    }
+
+    async fn count_inferences_by_variant(
+        &self,
+        params: CountInferencesForFunctionParams<'_>,
+    ) -> Result<Vec<CountByVariant>, Error> {
+        let (query, query_params) = build_count_inferences_by_variant_query(&params);
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        let result: Vec<CountByVariant> = response
+            .response
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                let datapoint: Result<CountByVariant, Error> =
+                    serde_json::from_str(line).map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseDeserialization {
+                            message: format!("Failed to deserialize CountByVariant info: {e}"),
+                        })
+                    });
+                datapoint
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(result)
+    }
+
+    async fn count_inferences_with_feedback(
+        &self,
+        params: CountInferencesWithFeedbackParams<'_>,
+    ) -> Result<u64, Error> {
+        let (query, params_owned) = build_count_metric_feedbacks_query(
+            params.function_name,
+            params.function_type,
+            params.metric_name,
+            params.metric_config,
+            params.metric_threshold,
+        );
+        let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+        parse_count(&response.response)
+    }
+
+    async fn count_inferences_with_demonstration_feedback(
+        &self,
+        params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
+    ) -> Result<u64, Error> {
+        let (query, params_owned) = build_count_demonstration_feedbacks_query(params);
+        let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+        parse_count(&response.response)
+    }
+
+    async fn count_inferences_for_episode(&self, episode_id: Uuid) -> Result<u64, Error> {
+        let mut query_params_owned = HashMap::new();
+        query_params_owned.insert("episode_id".to_string(), episode_id.to_string());
+
+        let query = "SELECT COUNT() AS count
+             FROM InferenceByEpisodeId FINAL
+             WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))
+             FORMAT JSONEachRow"
+            .to_string();
+
+        let query_params: HashMap<&str, &str> = query_params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+        parse_count(&response.response)
+    }
+
+    async fn get_function_throughput_by_variant(
+        &self,
+        params: GetFunctionThroughputByVariantParams<'_>,
+    ) -> Result<Vec<VariantThroughput>, Error> {
+        let (query, params_owned) = build_function_throughput_by_variant_query(&params);
+        let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        let response = self.run_query_synchronous(query, &query_params).await?;
+
+        let result: Vec<VariantThroughput> = response
+            .response
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                serde_json::from_str(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize VariantThroughput: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(result)
+    }
+
+    async fn list_functions_with_inference_count(
+        &self,
+    ) -> Result<Vec<FunctionInferenceCount>, Error> {
+        let query = build_list_functions_with_inference_count_query();
+        let response = self.run_query_synchronous_no_params(query).await?;
+
+        let result: Vec<FunctionInferenceCount> = response
+            .response
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                serde_json::from_str(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize FunctionInferenceCount: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(result)
     }
 }
 
@@ -1055,6 +1200,251 @@ fn generate_single_table_query_for_type(
         select_from_sql_fragment,
         where_sql_fragment,
     })
+}
+
+// ===== Inference count helper functions (merged from inference_count module) =====
+
+/// Builds the SQL query for counting inferences.
+fn build_count_inferences_query<'a>(
+    params: &'a CountInferencesForFunctionParams<'a>,
+) -> (String, HashMap<&'a str, &'a str>) {
+    let mut query_params = HashMap::new();
+    query_params.insert("function_name", params.function_name);
+
+    let variant_clause = match params.variant_name {
+        Some(variant_name) => {
+            query_params.insert("variant_name", variant_name);
+            "AND variant_name = {variant_name:String}"
+        }
+        None => "",
+    };
+
+    let table_name = params.function_type.table_name();
+
+    let query = format!(
+        "SELECT COUNT() AS count
+         FROM {table_name}
+         WHERE function_name = {{function_name:String}}
+           {variant_clause}
+         FORMAT JSONEachRow"
+    );
+
+    (query, query_params)
+}
+
+/// Builds the SQL query for counting inferences grouped by variant.
+fn build_count_inferences_by_variant_query<'a>(
+    params: &'a CountInferencesForFunctionParams<'a>,
+) -> (String, HashMap<&'a str, &'a str>) {
+    let mut query_params = HashMap::new();
+    query_params.insert("function_name", params.function_name);
+
+    let variant_clause = match params.variant_name {
+        Some(variant_name) => {
+            query_params.insert("variant_name", variant_name);
+            "AND variant_name = {variant_name:String}"
+        }
+        None => "",
+    };
+
+    let table_name = params.function_type.table_name();
+
+    let query = format!(
+        "SELECT
+            variant_name,
+            COUNT() AS inference_count,
+            formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS last_used_at
+        FROM {table_name}
+        WHERE function_name = {{function_name:String}}
+            {variant_clause}
+        GROUP BY variant_name
+        ORDER BY inference_count DESC
+        FORMAT JSONEachRow"
+    );
+
+    (query, query_params)
+}
+
+/// Build query for counting feedbacks for a boolean/float metric.
+/// If `metric_threshold` is Some, filters to only count feedbacks meeting the threshold criteria based on metric type and optimize direction.
+fn build_count_metric_feedbacks_query(
+    function_name: &str,
+    function_type: FunctionConfigType,
+    metric_name: &str,
+    metric_config: &MetricConfig,
+    metric_threshold: Option<f64>,
+) -> (String, HashMap<String, String>) {
+    let inference_table = function_type.table_name();
+    let feedback_table = metric_config.r#type.to_clickhouse_table_name();
+    let join_key = metric_config.level.inference_column_name();
+
+    let mut query_params = HashMap::new();
+
+    let value_condition = match metric_threshold {
+        None => String::new(),
+        Some(threshold) => match metric_config.r#type {
+            MetricConfigType::Boolean => match metric_config.optimize {
+                MetricConfigOptimize::Max => "AND value = 1",
+                MetricConfigOptimize::Min => "AND value = 0",
+            }
+            .to_string(),
+            MetricConfigType::Float => {
+                query_params.insert("threshold".to_string(), threshold.to_string());
+
+                let operator = match metric_config.optimize {
+                    MetricConfigOptimize::Max => ">",
+                    MetricConfigOptimize::Min => "<",
+                };
+                format!("AND value {operator} {{threshold:Float64}}")
+            }
+        },
+    };
+
+    let query = format!(
+        r"SELECT toUInt32(COUNT(*)) as count
+        FROM {inference_table} i
+        JOIN (
+            SELECT target_id, value,
+                ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+            FROM {feedback_table}
+            WHERE metric_name = {{metric_name:String}}
+            {value_condition}
+        ) f ON i.{join_key} = f.target_id AND f.rn = 1
+        WHERE i.function_name = {{function_name:String}}
+        FORMAT JSONEachRow"
+    );
+
+    query_params.insert("function_name".to_string(), function_name.to_string());
+    query_params.insert("metric_name".to_string(), metric_name.to_string());
+
+    (query, query_params)
+}
+
+/// Build query for counting demonstration feedbacks
+fn build_count_demonstration_feedbacks_query(
+    params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
+) -> (String, HashMap<String, String>) {
+    let inference_table = params.function_type.table_name();
+
+    let query = format!(
+        r"SELECT toUInt32(COUNT(*)) as count
+        FROM {inference_table} i
+        JOIN (
+            SELECT inference_id,
+                ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn
+            FROM DemonstrationFeedback
+        ) f ON i.id = f.inference_id AND f.rn = 1
+        WHERE i.function_name = {{function_name:String}}
+        FORMAT JSONEachRow"
+    );
+
+    let mut query_params = HashMap::new();
+    query_params.insert(
+        "function_name".to_string(),
+        params.function_name.to_string(),
+    );
+
+    (query, query_params)
+}
+
+/// Converts a time window to a Duration.
+fn time_window_to_duration(time_window: &TimeWindow) -> Duration {
+    match time_window {
+        TimeWindow::Minute => Duration::from_secs(60),
+        TimeWindow::Hour => Duration::from_secs(60 * 60),
+        TimeWindow::Day => Duration::from_secs(24 * 60 * 60),
+        TimeWindow::Week => Duration::from_secs(7 * 24 * 60 * 60),
+        TimeWindow::Month => Duration::from_secs(30 * 24 * 60 * 60),
+        TimeWindow::Cumulative => Duration::from_secs(365 * 24 * 60 * 60), // 1 year for cumulative
+    }
+}
+
+/// Build query for getting function throughput by variant
+fn build_function_throughput_by_variant_query(
+    params: &GetFunctionThroughputByVariantParams<'_>,
+) -> (String, HashMap<String, String>) {
+    let mut query_params = HashMap::new();
+    query_params.insert(
+        "function_name".to_string(),
+        params.function_name.to_string(),
+    );
+
+    let query = match params.time_window {
+        TimeWindow::Cumulative => {
+            // For cumulative, return all-time data grouped by variant with fixed epoch start
+            r"SELECT
+                '1970-01-01T00:00:00.000Z' AS period_start,
+                i.variant_name AS variant_name,
+                toUInt32(count()) AS count
+            FROM InferenceById i
+            WHERE i.function_name = {function_name:String}
+            GROUP BY variant_name
+            ORDER BY variant_name DESC
+            FORMAT JSONEachRow"
+                .to_string()
+        }
+        TimeWindow::Minute
+        | TimeWindow::Hour
+        | TimeWindow::Day
+        | TimeWindow::Week
+        | TimeWindow::Month => {
+            // Calculate time delta using idiomatic Duration math in Rust.
+            // We use ClickHouse's UUIDv7ToDateTime for timestamp comparison,
+            // avoiding manual bit manipulation of UUIDv7 format.
+            let time_window_duration = time_window_to_duration(&params.time_window);
+            let time_delta = time_window_duration * (params.max_periods + 1);
+            let time_delta_secs = time_delta.as_secs();
+            query_params.insert("time_delta_secs".to_string(), time_delta_secs.to_string());
+
+            let time_window_str = match params.time_window {
+                TimeWindow::Minute => "minute",
+                TimeWindow::Hour => "hour",
+                TimeWindow::Day => "day",
+                TimeWindow::Week => "week",
+                TimeWindow::Month => "month",
+                TimeWindow::Cumulative => "year", // Won't be reached but makes match exhaustive
+            };
+            query_params.insert("time_window".to_string(), time_window_str.to_string());
+
+            // Use UUIDv7ToDateTime for timestamp-based filtering.
+            // This preserves the original semantics of filtering relative to the max timestamp.
+            r"SELECT
+                formatDateTime(dateTrunc({time_window:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
+                i.variant_name AS variant_name,
+                toUInt32(count()) AS count
+            FROM InferenceById i
+            WHERE i.function_name = {function_name:String}
+            AND UUIDv7ToDateTime(uint_to_uuid(i.id_uint)) >= (
+                SELECT max(UUIDv7ToDateTime(uint_to_uuid(id_uint))) - INTERVAL {time_delta_secs:UInt64} SECOND
+                FROM InferenceById
+                WHERE function_name = {function_name:String}
+            )
+            GROUP BY period_start, variant_name
+            ORDER BY period_start DESC, variant_name DESC
+            FORMAT JSONEachRow".to_string()
+        }
+    };
+
+    (query, query_params)
+}
+
+/// Builds the SQL query for listing functions with inference counts.
+fn build_list_functions_with_inference_count_query() -> String {
+    r"SELECT
+        function_name,
+        formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS last_inference_timestamp,
+        toUInt32(count()) AS inference_count
+    FROM (
+        SELECT function_name, timestamp
+        FROM ChatInference
+        UNION ALL
+        SELECT function_name, timestamp
+        FROM JsonInference
+    )
+    GROUP BY function_name
+    ORDER BY last_inference_timestamp DESC
+    FORMAT JSONEachRow"
+        .to_string()
 }
 
 #[cfg(test)]

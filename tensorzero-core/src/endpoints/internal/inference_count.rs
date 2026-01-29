@@ -8,10 +8,11 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::TimeWindow;
-use crate::db::inference_count::{
-    CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
-    CountInferencesWithFeedbackParams, FunctionInferenceCount,
-    GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
+use crate::db::inferences::{
+    CountByVariant, CountInferencesForFunctionParams,
+    CountInferencesWithDemonstrationFeedbacksParams, CountInferencesWithFeedbackParams,
+    FunctionInferenceCount, GetFunctionThroughputByVariantParams, InferenceQueries,
+    VariantThroughput,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::feature_flags::ENABLE_POSTGRES_READ;
@@ -137,7 +138,7 @@ pub async fn get_inference_count_handler(
     Path(function_name): Path<String>,
     Query(params): Query<InferenceCountQueryParams>,
 ) -> Result<Json<InferenceCountResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
         &app_state.postgres_connection_info
     } else {
         &app_state.clickhouse_connection_info
@@ -162,7 +163,7 @@ pub async fn get_inference_with_feedback_count_handler(
     Path((function_name, metric_name)): Path<(String, String)>,
     Query(params): Query<InferenceWithFeedbackCountQueryParams>,
 ) -> Result<Json<InferenceWithFeedbackCountResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
         &app_state.postgres_connection_info
     } else {
         &app_state.clickhouse_connection_info
@@ -182,7 +183,7 @@ pub async fn get_inference_with_feedback_count_handler(
 /// Core business logic for getting inference count
 async fn get_inference_count(
     config: &Config,
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
     function_name: &str,
     params: InferenceCountQueryParams,
 ) -> Result<InferenceCountResponse, Error> {
@@ -202,7 +203,7 @@ async fn get_inference_count(
     }
 
     // Standard count (optionally filtered by variant_name)
-    let count_params = CountInferencesParams {
+    let count_params = CountInferencesForFunctionParams {
         function_name,
         function_type: function.config_type(),
         variant_name: params.variant_name.as_deref(),
@@ -232,7 +233,7 @@ async fn get_inference_count(
 /// Core business logic for getting feedback count
 async fn get_inference_with_feedback_count(
     config: &Config,
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
     function_name: String,
     metric_name: String,
     params: InferenceWithFeedbackCountQueryParams,
@@ -301,7 +302,7 @@ pub async fn get_function_throughput_by_variant_handler(
     Path(function_name): Path<String>,
     Query(params): Query<FunctionThroughputByVariantQueryParams>,
 ) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
         &state.postgres_connection_info
     } else {
         &state.clickhouse_connection_info
@@ -317,7 +318,7 @@ pub async fn get_function_throughput_by_variant_handler(
 /// Validates the function exists and returns throughput data grouped by variant and time period.
 pub async fn get_function_throughput_by_variant(
     config: &Config,
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
     function_name: &str,
     params: FunctionThroughputByVariantQueryParams,
 ) -> Result<GetFunctionThroughputByVariantResponse, Error> {
@@ -341,7 +342,7 @@ pub async fn get_function_throughput_by_variant(
 pub async fn list_functions_with_inference_count_handler(
     State(state): State<AppStateData>,
 ) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
         &state.postgres_connection_info
     } else {
         &state.clickhouse_connection_info
@@ -353,7 +354,7 @@ pub async fn list_functions_with_inference_count_handler(
 
 /// Core business logic for listing all functions with their inference counts
 async fn list_functions_with_inference_count(
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
 ) -> Result<ListFunctionsWithInferenceCountResponse, Error> {
     let functions = database.list_functions_with_inference_count().await?;
 
@@ -528,7 +529,7 @@ mod tests {
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
+            .inference_queries
             .expect_count_inferences_for_function()
             .withf(|params| {
                 assert_eq!(params.function_name, "test_function");
@@ -558,7 +559,7 @@ mod tests {
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
+            .inference_queries
             .expect_list_functions_with_inference_count()
             .times(1)
             .returning(|| {
@@ -593,7 +594,7 @@ mod tests {
     async fn test_list_functions_with_inference_count_empty() {
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
+            .inference_queries
             .expect_list_functions_with_inference_count()
             .times(1)
             .returning(|| Box::pin(async move { Ok(vec![]) }));
@@ -613,7 +614,7 @@ mod tests {
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
+            .inference_queries
             .expect_count_inferences_for_function()
             .withf(|params| {
                 assert_eq!(params.function_name, DEFAULT_FUNCTION_NAME);

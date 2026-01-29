@@ -1,5 +1,5 @@
 use crate::{
-    db::inference_count::InferenceCountQueries,
+    db::inferences::InferenceQueries,
     error::Error,
     feature_flags::ENABLE_POSTGRES_READ,
     utils::gateway::{AppState, AppStateData},
@@ -42,7 +42,7 @@ pub async fn get_episode_inference_count_handler(
 
 /// Core business logic for getting episode inference counts
 pub async fn get_episode_inference_count(
-    clickhouse: &impl InferenceCountQueries,
+    clickhouse: &impl InferenceQueries,
     episode_id: Uuid,
 ) -> Result<GetEpisodeInferenceCountResponse, Error> {
     let inference_count = clickhouse.count_inferences_for_episode(episode_id).await?;
@@ -53,11 +53,11 @@ pub async fn get_episode_inference_count(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::inference_count::MockInferenceCountQueries;
+    use crate::db::inferences::MockInferenceQueries;
 
     #[tokio::test]
     async fn test_get_episode_inference_count_calls_clickhouse() {
-        let mut mock_clickhouse = MockInferenceCountQueries::new();
+        let mut mock_clickhouse = MockInferenceQueries::new();
 
         let episode_id = Uuid::now_v7();
         let expected_count = 42;
