@@ -286,10 +286,7 @@ async fn get_streaming_input_tokens(
         }
 
         let chunk_json: Value = serde_json::from_str(&data).unwrap_or_else(|e| {
-            panic!(
-                "Failed to parse chunk as JSON for provider {variant_name}: {e}. Data: {}",
-                data
-            )
+            panic!("Failed to parse chunk as JSON for provider {variant_name}: {e}. Data: {data}")
         });
 
         all_chunks.push(chunk_json.clone());
