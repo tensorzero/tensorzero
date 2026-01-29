@@ -537,6 +537,13 @@ async fn tensorzero_to_xai_assistant_message<'a>(
             ContentBlock::Thought(thought) => {
                 // Thought blocks from other providers are already filtered at the model layer.
                 // Extract reasoning text for multi-turn reasoning support.
+
+                // INVARIANT: We should've filtered thought content blocks from other providers.
+                debug_assert!(matches!(
+                    thought.provider_type.as_deref(),
+                    None | Some(PROVIDER_TYPE)
+                ));
+
                 if let Some(text) = &thought.text {
                     // Concatenate multiple thought blocks if present
                     match &mut reasoning_content {
