@@ -23,6 +23,7 @@ import type {
   EventPayloadMessageContent,
   GatewayEvent,
   GatewayEventPayload,
+  TopKEvaluationVisualization,
   VisualizationType,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
@@ -169,7 +170,10 @@ function VisualizationRenderer({
     "type" in visualization &&
     visualization.type === "top_k_evaluation"
   ) {
-    return <TopKEvaluationViz data={visualization} />;
+    // Type assertion needed because TypeScript can't narrow through the untagged union
+    return (
+      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
+    );
   }
 
   // Unknown or malformed visualization - show raw JSON with a warning

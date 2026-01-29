@@ -27,8 +27,10 @@ type ChartDataPoint = {
   color: string;
 };
 
+const NUM_DECIMAL_PLACES = 3;
+
 function formatNumber(value: number): string {
-  return value.toFixed(3);
+  return value.toFixed(NUM_DECIMAL_PLACES);
 }
 
 // Custom shape that renders a dot with error bars
