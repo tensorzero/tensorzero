@@ -33,7 +33,10 @@ for table in $tables; do
 done
 
 if [ -n "$truncate_query" ]; then
-    echo "Truncating tables: $tables"
+    echo "Truncating tables:"
+    for table in $tables; do
+        echo "  - $table"
+    done
     clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
         --database "$DATABASE_NAME" --multiquery --query "$truncate_query"
 fi
