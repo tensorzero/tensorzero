@@ -409,7 +409,7 @@ function AutopilotSessionEventsPageContent({
 
   // State for tool call authorization loading
   const [authLoadingStates, setAuthLoadingStates] = useState<
-    Map<string, "approving" | "rejecting">
+    Map<string, "approving" | "rejecting" | "approving_all">
   >(new Map());
 
   // State for SSE connection error
@@ -531,6 +531,51 @@ function AutopilotSessionEventsPageContent({
     },
     [sessionId, toast],
   );
+
+  // Handle approve all tool calls (manual batch approval)
+  const handleApproveAll = useCallback(async () => {
+    if (pendingToolCalls.length === 0) return;
+
+    userActionRef.current = true;
+
+    // Use the oldest pending tool call's ID for loading state display
+    const displayEventId = pendingToolCalls[0].id;
+    // Use the newest pending tool call's ID for the API
+    const lastEventId = pendingToolCalls[pendingToolCalls.length - 1].id;
+
+    setAuthLoadingStates((prev) =>
+      new Map(prev).set(displayEventId, "approving_all"),
+    );
+
+    try {
+      const response = await fetch(
+        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/approve_all`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            last_tool_call_event_id: lastEventId,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Batch approval failed");
+      }
+    } catch (err) {
+      logger.error("Failed to approve all tool calls:", err);
+      toast.error({
+        title: "Batch approval failed",
+        description: "Failed to approve all tool calls. Please try again.",
+      });
+    } finally {
+      setAuthLoadingStates((prev) => {
+        const next = new Map(prev);
+        next.delete(displayEventId);
+        return next;
+      });
+    }
+  }, [sessionId, pendingToolCalls, toast]);
 
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
@@ -818,6 +863,7 @@ function AutopilotSessionEventsPageContent({
                   onAuthorize={(approved) =>
                     handleAuthorize(oldestPendingToolCall.id, approved)
                   }
+                  onApproveAll={handleApproveAll}
                   additionalCount={pendingToolCalls.length - 1}
                   isInCooldown={isInCooldown}
                 />
