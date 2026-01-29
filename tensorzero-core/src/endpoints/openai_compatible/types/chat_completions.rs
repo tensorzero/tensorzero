@@ -34,7 +34,7 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::usage::{RawResponseEntry, RawUsageEntry};
 use crate::inference::types::{
     Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage, InputMessageContent,
-    RawText, Role, System, Template, Text, current_timestamp,
+    RawText, Role, System, Template, Text, Thought, current_timestamp,
 };
 use crate::tool::{DynamicToolParams, ProviderTool, ToolResult};
 use crate::variant::JsonMode;
@@ -57,6 +57,8 @@ pub struct OpenAICompatibleUserMessage {
 pub struct OpenAICompatibleAssistantMessage {
     pub content: Option<Value>,
     pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
+    #[serde(default)]
+    pub tensorzero_reasoning_content: Option<Vec<OpenAICompatibleInputThought>>,
 }
 
 #[derive(Clone, Debug, PartialEq, TensorZeroDeserialize)]
@@ -170,8 +172,11 @@ pub struct OpenAICompatibleParams {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleResponseMessage {
     pub content: Option<String>,
+    #[serde(skip_serializing_if = "is_none_or_empty")]
     pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
     pub role: String,
+    #[serde(skip_serializing_if = "is_none_or_empty")]
+    pub tensorzero_reasoning_content: Option<Vec<OpenAICompatibleThought>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -222,6 +227,28 @@ pub struct OpenAICompatibleResponse {
     pub tensorzero_original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
+}
+
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
+fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
+    v.as_ref().is_none_or(Vec::is_empty)
+}
+
+/// OpenAI-compatible Thought for responses (with index for position in content array)
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OpenAICompatibleThought {
+    pub index: usize,
+    #[serde(flatten)]
+    pub thought: Thought,
+}
+
+/// OpenAI-compatible Thought for input (with optional index)
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct OpenAICompatibleInputThought {
+    pub index: Option<usize>,
+    #[serde(flatten)]
+    pub thought: Thought,
 }
 
 // ============================================================================
@@ -552,6 +579,31 @@ pub fn openai_messages_to_input(
                         message_content.push(InputMessageContent::ToolCall(tool_call.into()));
                     }
                 }
+                // Process reasoning content with index-based insertion
+                if let Some(thoughts) = msg.tensorzero_reasoning_content {
+                    // Collect indexed thoughts (with explicit index) and unindexed thoughts separately
+                    let mut indexed: Vec<(usize, Thought)> = Vec::new();
+                    let mut unindexed: Vec<Thought> = Vec::new();
+                    for input_thought in thoughts {
+                        match input_thought.index {
+                            Some(idx) => indexed.push((idx, input_thought.thought)),
+                            None => unindexed.push(input_thought.thought),
+                        }
+                    }
+
+                    // First, insert thoughts with explicit indices at their specified positions
+                    // Sort by index to handle insertions correctly
+                    indexed.sort_by_key(|(idx, _)| *idx);
+                    for (idx, thought) in indexed {
+                        let idx = idx.min(message_content.len());
+                        message_content.insert(idx, InputMessageContent::Thought(thought));
+                    }
+
+                    // Then, prepend all thoughts without an index at position 0 (reverse to maintain order)
+                    for thought in unindexed.into_iter().rev() {
+                        message_content.insert(0, InputMessageContent::Thought(thought));
+                    }
+                }
                 messages.push(InputMessage {
                     role: Role::Assistant,
                     content: message_content,
@@ -689,7 +741,7 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
     ) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
-                let (content, tool_calls) = process_chat_content(response.content);
+                let (content, tool_calls, thoughts) = process_chat_content(response.content);
                 let tensorzero_original_response = if include_original_response {
                     response.original_response
                 } else {
@@ -708,8 +760,17 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
                         finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
                         message: OpenAICompatibleResponseMessage {
                             content,
-                            tool_calls: Some(tool_calls),
+                            tool_calls: if tool_calls.is_empty() {
+                                None
+                            } else {
+                                Some(tool_calls)
+                            },
                             role: "assistant".to_string(),
+                            tensorzero_reasoning_content: if thoughts.is_empty() {
+                                None
+                            } else {
+                                Some(thoughts)
+                            },
                         },
                     }],
                     created: current_timestamp() as u32,
@@ -745,6 +806,7 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
                             content: response.output.raw,
                             tool_calls: None,
                             role: "assistant".to_string(),
+                            tensorzero_reasoning_content: None,
                         },
                     }],
                     created: current_timestamp() as u32,
@@ -763,14 +825,20 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
     }
 }
 
-/// Takes a vector of ContentBlockOutput and returns a tuple of (Option<String>, Vec<OpenAICompatibleToolCall>).
-/// This is useful since the OpenAI format separates text and tool calls in the response fields.
+/// Takes a vector of ContentBlockOutput and returns a tuple of
+/// (Option<String>, Vec<OpenAICompatibleToolCall>, Vec<OpenAICompatibleThought>).
+/// This is useful since the OpenAI format separates text, tool calls, and reasoning in the response fields.
 pub fn process_chat_content(
     content: Vec<ContentBlockChatOutput>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
+) -> (
+    Option<String>,
+    Vec<OpenAICompatibleToolCall>,
+    Vec<OpenAICompatibleThought>,
+) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
-    for block in content {
+    let mut thoughts = Vec::new();
+    for (index, block) in content.into_iter().enumerate() {
         match block {
             ContentBlockChatOutput::Text(text) => match content_str {
                 Some(ref mut content) => content.push_str(&text.text),
@@ -779,12 +847,8 @@ pub fn process_chat_content(
             ContentBlockChatOutput::ToolCall(tool_call) => {
                 tool_calls.push(tool_call.into());
             }
-            ContentBlockChatOutput::Thought(_thought) => {
-                // OpenAI compatible endpoint does not support thought blocks
-                // Users of this endpoint will need to check observability to see them
-                tracing::warn!(
-                    "Ignoring 'thought' content block when constructing OpenAI-compatible response"
-                );
+            ContentBlockChatOutput::Thought(thought) => {
+                thoughts.push(OpenAICompatibleThought { index, thought });
             }
             ContentBlockChatOutput::Unknown(_) => {
                 tracing::warn!(
@@ -793,7 +857,7 @@ pub fn process_chat_content(
             }
         }
     }
-    (content_str, tool_calls)
+    (content_str, tool_calls, thoughts)
 }
 
 #[cfg(test)]
@@ -862,6 +926,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
+                tensorzero_reasoning_content: None,
             }),
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: None,
@@ -873,6 +938,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
+                tensorzero_reasoning_content: None,
             }),
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: None,
@@ -884,6 +950,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
+                tensorzero_reasoning_content: None,
             }),
             OpenAICompatibleMessage::Tool(OpenAICompatibleToolMessage {
                 content: Some(Value::String("Tool result 1".to_string())),
@@ -1067,6 +1134,7 @@ mod tests {
                     "city": "Tokyo",
                 }])),
                 tool_calls: None,
+                tensorzero_reasoning_content: None,
             },
         )];
         let input: Input = openai_messages_to_input(messages).unwrap();
@@ -1100,6 +1168,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
+                tensorzero_reasoning_content: None,
             },
         )];
         let input: Input = openai_messages_to_input(messages).unwrap();
@@ -1133,6 +1202,7 @@ mod tests {
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Assistant message".to_string())),
                 tool_calls: None,
+                tensorzero_reasoning_content: None,
             }),
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("System message".to_string()),
@@ -1495,16 +1565,19 @@ mod tests {
                 text: ", world!".to_string(),
             }),
         ];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, thoughts) = process_chat_content(content);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "1");
         assert_eq!(tool_calls[0].function.name, "test_tool");
         assert_eq!(tool_calls[0].function.arguments, "{}");
+        assert!(thoughts.is_empty());
+
         let content: Vec<ContentBlockChatOutput> = vec![];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, thoughts) = process_chat_content(content);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
+        assert!(thoughts.is_empty());
 
         let content = vec![
             ContentBlockChatOutput::Text(Text {
@@ -1527,7 +1600,7 @@ mod tests {
                 text: " fourth part".to_string(),
             }),
         ];
-        let (content_str, tool_calls) = process_chat_content(content);
+        let (content_str, tool_calls, thoughts) = process_chat_content(content);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())
@@ -1536,6 +1609,7 @@ mod tests {
         assert_eq!(tool_calls[0].id, "123");
         assert_eq!(tool_calls[0].function.name, "middle_tool");
         assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
+        assert!(thoughts.is_empty());
     }
 
     #[test]
@@ -1615,5 +1689,235 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly
             }
         );
+    }
+
+    #[test]
+    fn test_process_chat_content_with_thoughts() {
+        let content = vec![
+            ContentBlockChatOutput::Thought(Thought {
+                text: Some("Let me think about this...".to_string()),
+                signature: Some("sig123".to_string()),
+                summary: None,
+                provider_type: Some("anthropic".to_string()),
+                extra_data: None,
+            }),
+            ContentBlockChatOutput::Text(Text {
+                text: "Hello".to_string(),
+            }),
+            ContentBlockChatOutput::Thought(Thought {
+                text: Some("Another thought".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+        ];
+        let (content_str, tool_calls, thoughts) = process_chat_content(content);
+        assert_eq!(
+            content_str,
+            Some("Hello".to_string()),
+            "Text content should be extracted"
+        );
+        assert!(tool_calls.is_empty(), "No tool calls expected");
+        assert_eq!(thoughts.len(), 2, "Should have two thoughts");
+
+        // First thought at index 0
+        assert_eq!(thoughts[0].index, 0, "First thought should have index 0");
+        assert_eq!(
+            thoughts[0].thought.text,
+            Some("Let me think about this...".to_string())
+        );
+        assert_eq!(thoughts[0].thought.signature, Some("sig123".to_string()));
+        assert_eq!(
+            thoughts[0].thought.provider_type,
+            Some("anthropic".to_string())
+        );
+
+        // Second thought at index 2
+        assert_eq!(thoughts[1].index, 2, "Second thought should have index 2");
+        assert_eq!(
+            thoughts[1].thought.text,
+            Some("Another thought".to_string())
+        );
+        assert_eq!(thoughts[1].thought.signature, None);
+    }
+
+    #[test]
+    fn test_input_reasoning_content_ordering() {
+        // Test with indexed and unindexed thoughts
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: Some(Value::String("Response text".to_string())),
+                tool_calls: None,
+                tensorzero_reasoning_content: Some(vec![
+                    // Unindexed thought - should be prepended
+                    OpenAICompatibleInputThought {
+                        index: None,
+                        thought: Thought {
+                            text: Some("Unindexed thought 1".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                    // Indexed thought at position 2
+                    OpenAICompatibleInputThought {
+                        index: Some(2),
+                        thought: Thought {
+                            text: Some("Indexed thought at 2".to_string()),
+                            signature: Some("sig456".to_string()),
+                            summary: None,
+                            provider_type: Some("anthropic".to_string()),
+                            extra_data: None,
+                        },
+                    },
+                    // Another unindexed thought - should be prepended
+                    OpenAICompatibleInputThought {
+                        index: None,
+                        thought: Thought {
+                            text: Some("Unindexed thought 2".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                    // Indexed thought at position 0
+                    OpenAICompatibleInputThought {
+                        index: Some(0),
+                        thought: Thought {
+                            text: Some("Indexed thought at 0".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                ]),
+            },
+        )];
+        let input: Input = openai_messages_to_input(messages).unwrap();
+        assert_eq!(input.messages.len(), 1, "Should have one message");
+        let content = &input.messages[0].content;
+
+        // Expected order based on the algorithm:
+        // 1. Start with text content: ["Response text"]
+        // 2. Apply indexed thoughts (sorted by index):
+        //    - Insert at 0: ["Indexed thought at 0", "Response text"]
+        //    - Insert at 2 (capped to len=2): ["Indexed thought at 0", "Response text", "Indexed thought at 2"]
+        // 3. Prepend unindexed thoughts (reversed to maintain order):
+        //    - Prepend "Unindexed thought 2": ["Unindexed thought 2", "Indexed thought at 0", "Response text", "Indexed thought at 2"]
+        //    - Prepend "Unindexed thought 1": ["Unindexed thought 1", "Unindexed thought 2", "Indexed thought at 0", "Response text", "Indexed thought at 2"]
+        assert_eq!(content.len(), 5, "Should have 5 content blocks");
+
+        // Verify content order
+        match &content[0] {
+            InputMessageContent::Thought(t) => {
+                assert_eq!(
+                    t.text,
+                    Some("Unindexed thought 1".to_string()),
+                    "First should be unindexed thought 1"
+                );
+            }
+            _ => panic!("Expected Thought at position 0"),
+        }
+        match &content[1] {
+            InputMessageContent::Thought(t) => {
+                assert_eq!(
+                    t.text,
+                    Some("Unindexed thought 2".to_string()),
+                    "Second should be unindexed thought 2"
+                );
+            }
+            _ => panic!("Expected Thought at position 1"),
+        }
+        match &content[2] {
+            InputMessageContent::Thought(t) => {
+                assert_eq!(
+                    t.text,
+                    Some("Indexed thought at 0".to_string()),
+                    "Third should be indexed thought at 0"
+                );
+            }
+            _ => panic!("Expected Thought at position 2"),
+        }
+        match &content[3] {
+            InputMessageContent::Text(t) => {
+                assert_eq!(t.text, "Response text", "Fourth should be the text content");
+            }
+            _ => panic!("Expected Text at position 3"),
+        }
+        match &content[4] {
+            InputMessageContent::Thought(t) => {
+                assert_eq!(
+                    t.text,
+                    Some("Indexed thought at 2".to_string()),
+                    "Fifth should be indexed thought at 2"
+                );
+                assert_eq!(
+                    t.signature,
+                    Some("sig456".to_string()),
+                    "Should preserve signature"
+                );
+                assert_eq!(
+                    t.provider_type,
+                    Some("anthropic".to_string()),
+                    "Should preserve provider_type"
+                );
+            }
+            _ => panic!("Expected Thought at position 4"),
+        }
+    }
+
+    #[test]
+    fn test_openai_compatible_input_thought_deserialization() {
+        // Test that serde(flatten) works correctly for input thoughts
+        let json_with_index = json!({
+            "index": 5,
+            "text": "My thought",
+            "signature": "sig789",
+            "provider_type": "anthropic"
+        });
+        let thought: OpenAICompatibleInputThought =
+            serde_json::from_value(json_with_index).unwrap();
+        assert_eq!(thought.index, Some(5));
+        assert_eq!(thought.thought.text, Some("My thought".to_string()));
+        assert_eq!(thought.thought.signature, Some("sig789".to_string()));
+        assert_eq!(thought.thought.provider_type, Some("anthropic".to_string()));
+
+        // Test without index
+        let json_without_index = json!({
+            "text": "Another thought"
+        });
+        let thought: OpenAICompatibleInputThought =
+            serde_json::from_value(json_without_index).unwrap();
+        assert_eq!(thought.index, None);
+        assert_eq!(thought.thought.text, Some("Another thought".to_string()));
+        assert_eq!(thought.thought.signature, None);
+    }
+
+    #[test]
+    fn test_openai_compatible_thought_serialization() {
+        // Test that serde(flatten) works correctly for output thoughts
+        let thought = OpenAICompatibleThought {
+            index: 3,
+            thought: Thought {
+                text: Some("Thinking...".to_string()),
+                signature: Some("sig_abc".to_string()),
+                summary: None,
+                provider_type: Some("anthropic".to_string()),
+                extra_data: None,
+            },
+        };
+        let json = serde_json::to_value(&thought).unwrap();
+
+        // With flatten, all fields should be at the top level
+        assert_eq!(json["index"], 3);
+        assert_eq!(json["text"], "Thinking...");
+        assert_eq!(json["signature"], "sig_abc");
+        assert_eq!(json["provider_type"], "anthropic");
+        // summary should not be present since it's None and has skip_serializing_if
+        assert!(json.get("summary").is_none() || json["summary"].is_null());
     }
 }

@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::streams::ThoughtChunk;
 use crate::inference::types::usage::{RawResponseEntry, RawUsageEntry};
 use crate::inference::types::{ContentBlockChunk, FinishReason, current_timestamp};
 
@@ -60,6 +61,14 @@ fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
     v.as_ref().is_none_or(Vec::is_empty)
 }
 
+/// OpenAI-compatible ThoughtChunk for streaming responses (with index for position in content array)
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OpenAICompatibleThoughtChunk {
+    pub index: usize,
+    #[serde(flatten)]
+    pub chunk: ThoughtChunk,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,12 +77,15 @@ pub struct OpenAICompatibleDelta {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "is_none_or_empty")]
     pub tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
+    #[serde(skip_serializing_if = "is_none_or_empty")]
+    pub tensorzero_reasoning_content: Option<Vec<OpenAICompatibleThoughtChunk>>,
 }
 
 #[expect(clippy::too_many_arguments)]
 pub fn convert_inference_response_chunk_to_openai_compatible(
     chunk: InferenceResponseChunk,
     tool_id_to_index: &mut HashMap<String, usize>,
+    thought_id_to_index: &mut HashMap<String, usize>,
     response_model_prefix: &str,
     is_first_chunk: bool,
     include_usage: bool,
@@ -90,7 +102,8 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
 
     let response_chunk = match chunk {
         InferenceResponseChunk::Chat(c) => {
-            let (content, tool_calls) = process_chat_content_chunk(c.content, tool_id_to_index);
+            let (content, tool_calls, thoughts) =
+                process_chat_content_chunk(c.content, tool_id_to_index, thought_id_to_index);
             let usage = if include_usage {
                 c.usage.map(OpenAICompatibleUsage::from)
             } else {
@@ -123,7 +136,16 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                     delta: OpenAICompatibleDelta {
                         role: role.clone(),
                         content,
-                        tool_calls: Some(tool_calls),
+                        tool_calls: if tool_calls.is_empty() {
+                            None
+                        } else {
+                            Some(tool_calls)
+                        },
+                        tensorzero_reasoning_content: if thoughts.is_empty() {
+                            None
+                        } else {
+                            Some(thoughts)
+                        },
                     },
                 }],
                 created: current_timestamp() as u32,
@@ -172,6 +194,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                         role,
                         content: Some(c.raw),
                         tool_calls: None,
+                        tensorzero_reasoning_content: None,
                     },
                 }],
                 created: current_timestamp() as u32,
@@ -194,9 +217,15 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
 pub fn process_chat_content_chunk(
     content: Vec<ContentBlockChunk>,
     tool_id_to_index: &mut HashMap<String, usize>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCallChunk>) {
+    thought_id_to_index: &mut HashMap<String, usize>,
+) -> (
+    Option<String>,
+    Vec<OpenAICompatibleToolCallChunk>,
+    Vec<OpenAICompatibleThoughtChunk>,
+) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
+    let mut thoughts = Vec::new();
     for block in content {
         match block {
             ContentBlockChunk::Text(text) => match content_str {
@@ -217,12 +246,13 @@ pub fn process_chat_content_chunk(
                     },
                 });
             }
-            ContentBlockChunk::Thought(_thought) => {
-                // OpenAI compatible endpoint does not support thought blocks
-                // Users of this endpoint will need to check observability to see them
-                tracing::warn!(
-                    "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
-                );
+            ContentBlockChunk::Thought(thought) => {
+                let len = thought_id_to_index.len();
+                let index = *thought_id_to_index.entry(thought.id.clone()).or_insert(len);
+                thoughts.push(OpenAICompatibleThoughtChunk {
+                    index,
+                    chunk: thought,
+                });
             }
             ContentBlockChunk::Unknown(_) => {
                 // OpenAI compatible endpoint does not support unknown blocks
@@ -233,7 +263,7 @@ pub fn process_chat_content_chunk(
             }
         }
     }
-    (content_str, tool_calls)
+    (content_str, tool_calls, thoughts)
 }
 
 /// Prepares an Event for SSE on the way out of the gateway.
@@ -249,6 +279,7 @@ pub fn prepare_serialized_openai_compatible_events(
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let mut is_first_chunk = true;
 
         while let Some(chunk) = stream.next().await {
@@ -261,6 +292,7 @@ pub fn prepare_serialized_openai_compatible_events(
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(
                 chunk,
                 &mut tool_id_to_index,
+                &mut thought_id_to_index,
                 &response_model_prefix,
                 is_first_chunk,
                 include_usage,
@@ -313,9 +345,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -369,9 +403,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -416,9 +452,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -473,9 +511,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -513,9 +553,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -564,9 +606,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             false, // include_usage = false
@@ -606,9 +650,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             false, // include_usage
@@ -653,9 +699,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             false, // include_usage
@@ -692,9 +740,11 @@ mod tests {
         });
 
         let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
             &mut tool_id_to_index,
+            &mut thought_id_to_index,
             "test_prefix::",
             true,
             false, // include_usage
@@ -734,18 +784,23 @@ mod tests {
             }),
         ];
         let mut tool_id_to_index = HashMap::new();
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let mut thought_id_to_index = HashMap::new();
+        let (content_str, tool_calls, thoughts) =
+            process_chat_content_chunk(content, &mut tool_id_to_index, &mut thought_id_to_index);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, Some("1".to_string()));
         assert_eq!(tool_calls[0].index, 0);
         assert_eq!(tool_calls[0].function.name, "test_tool".to_string());
         assert_eq!(tool_calls[0].function.arguments, "{}");
+        assert!(thoughts.is_empty());
 
         let content: Vec<ContentBlockChunk> = vec![];
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let (content_str, tool_calls, thoughts) =
+            process_chat_content_chunk(content, &mut tool_id_to_index, &mut thought_id_to_index);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
+        assert!(thoughts.is_empty());
 
         let content = vec![
             ContentBlockChunk::Text(TextChunk {
@@ -776,7 +831,9 @@ mod tests {
             }),
         ];
         let mut tool_id_to_index = HashMap::new();
-        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
+        let mut thought_id_to_index = HashMap::new();
+        let (content_str, tool_calls, thoughts) =
+            process_chat_content_chunk(content, &mut tool_id_to_index, &mut thought_id_to_index);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())
@@ -790,5 +847,124 @@ mod tests {
         assert_eq!(tool_calls[1].index, 1);
         assert_eq!(tool_calls[1].function.name, "last_tool".to_string());
         assert_eq!(tool_calls[1].function.arguments, "{\"key\": \"value\"}");
+        assert!(thoughts.is_empty());
+    }
+
+    #[test]
+    fn test_process_chat_content_chunk_with_thoughts() {
+        let content = vec![
+            ContentBlockChunk::Thought(ThoughtChunk {
+                id: "thought_1".to_string(),
+                text: Some("Let me think...".to_string()),
+                signature: Some("sig123".to_string()),
+                summary_id: None,
+                summary_text: None,
+                provider_type: Some("anthropic".to_string()),
+                extra_data: None,
+            }),
+            ContentBlockChunk::Text(TextChunk {
+                id: "text_1".to_string(),
+                text: "Response text".to_string(),
+            }),
+            ContentBlockChunk::Thought(ThoughtChunk {
+                id: "thought_1".to_string(), // Same ID, new chunk
+                text: Some(" more thinking".to_string()),
+                signature: None,
+                summary_id: None,
+                summary_text: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            ContentBlockChunk::Thought(ThoughtChunk {
+                id: "thought_2".to_string(), // New thought
+                text: Some("Different thought".to_string()),
+                signature: None,
+                summary_id: None,
+                summary_text: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+        ];
+
+        let mut tool_id_to_index = HashMap::new();
+        let mut thought_id_to_index = HashMap::new();
+        let (content_str, tool_calls, thoughts) =
+            process_chat_content_chunk(content, &mut tool_id_to_index, &mut thought_id_to_index);
+
+        assert_eq!(
+            content_str,
+            Some("Response text".to_string()),
+            "Text content should be extracted"
+        );
+        assert!(tool_calls.is_empty(), "No tool calls expected");
+        assert_eq!(thoughts.len(), 3, "Should have three thought chunks");
+
+        // First thought chunk
+        assert_eq!(
+            thoughts[0].index, 0,
+            "First thought should have index 0 (assigned based on thought_1)"
+        );
+        assert_eq!(thoughts[0].chunk.id, "thought_1");
+        assert_eq!(thoughts[0].chunk.text, Some("Let me think...".to_string()));
+        assert_eq!(thoughts[0].chunk.signature, Some("sig123".to_string()));
+        assert_eq!(
+            thoughts[0].chunk.provider_type,
+            Some("anthropic".to_string())
+        );
+
+        // Second thought chunk (same thought ID, should have same index)
+        assert_eq!(
+            thoughts[1].index, 0,
+            "Second chunk of thought_1 should still have index 0"
+        );
+        assert_eq!(thoughts[1].chunk.id, "thought_1");
+        assert_eq!(thoughts[1].chunk.text, Some(" more thinking".to_string()));
+
+        // Third thought chunk (new thought ID, should have new index)
+        assert_eq!(thoughts[2].index, 1, "New thought_2 should have index 1");
+        assert_eq!(thoughts[2].chunk.id, "thought_2");
+        assert_eq!(
+            thoughts[2].chunk.text,
+            Some("Different thought".to_string())
+        );
+
+        // Verify the hashmap tracked the thought IDs correctly
+        assert_eq!(
+            thought_id_to_index.get("thought_1"),
+            Some(&0),
+            "thought_1 should be mapped to index 0"
+        );
+        assert_eq!(
+            thought_id_to_index.get("thought_2"),
+            Some(&1),
+            "thought_2 should be mapped to index 1"
+        );
+    }
+
+    #[test]
+    fn test_openai_compatible_thought_chunk_serialization() {
+        // Test that serde(flatten) works correctly for streaming thought chunks
+        let chunk = OpenAICompatibleThoughtChunk {
+            index: 2,
+            chunk: ThoughtChunk {
+                id: "chunk_id".to_string(),
+                text: Some("Thinking...".to_string()),
+                signature: Some("sig_chunk".to_string()),
+                summary_id: Some("summary_1".to_string()),
+                summary_text: Some("Summary text".to_string()),
+                provider_type: Some("anthropic".to_string()),
+                extra_data: None,
+            },
+        };
+        let json = serde_json::to_value(&chunk).unwrap();
+
+        // With flatten, all fields should be at the top level
+        assert_eq!(json["index"], 2);
+        assert_eq!(json["id"], "chunk_id");
+        assert_eq!(json["text"], "Thinking...");
+        assert_eq!(json["signature"], "sig_chunk");
+        assert_eq!(json["summary_id"], "summary_1");
+        assert_eq!(json["summary_text"], "Summary text");
+        assert_eq!(json["provider_type"], "anthropic");
     }
 }
