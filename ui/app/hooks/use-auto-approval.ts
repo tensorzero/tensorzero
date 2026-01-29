@@ -10,7 +10,8 @@ const RETRY_SHOW_ERROR_THRESHOLD = 3;
 interface UseAutoApprovalOptions {
   enabled: boolean;
   sessionId: string;
-  pendingToolCallIds: string[];
+  pendingToolCalls: { id: string }[];
+  pendingToolCallIds: Set<string>;
 }
 
 interface UseAutoApprovalResult {
@@ -31,10 +32,12 @@ interface UseAutoApprovalResult {
 export function useAutoApproval({
   enabled,
   sessionId,
+  pendingToolCalls,
   pendingToolCallIds,
 }: UseAutoApprovalOptions): UseAutoApprovalResult {
   // Refs to access current values in async callbacks (avoid stale closures)
   const enabledRef = useLatest(enabled);
+  const pendingToolCallsRef = useLatest(pendingToolCalls);
   const pendingToolCallIdsRef = useLatest(pendingToolCallIds);
 
   const retryCountRef = useRef(0);
@@ -59,13 +62,11 @@ export function useAutoApproval({
 
   // Cleanup when pending tool calls change (tool calls resolved)
   useEffect(() => {
-    const pendingSet = new Set(pendingToolCallIds);
-
     // If the ID we were trying to approve is no longer pending, it succeeded
     // Clear the retry state
     if (
       lastAttemptedIdRef.current &&
-      !pendingSet.has(lastAttemptedIdRef.current)
+      !pendingToolCallIds.has(lastAttemptedIdRef.current)
     ) {
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
@@ -80,7 +81,7 @@ export function useAutoApproval({
       const next = new Set(prev);
       let changed = false;
       for (const eventId of prev) {
-        if (!pendingSet.has(eventId)) {
+        if (!pendingToolCallIds.has(eventId)) {
           next.delete(eventId);
           changed = true;
         }
@@ -118,11 +119,11 @@ export function useAutoApproval({
     const controller = abortControllerRef.current;
     if (!controller) return;
 
-    const currentPendingIds = pendingToolCallIdsRef.current;
-    if (currentPendingIds.length === 0) return;
+    const currentPending = pendingToolCallsRef.current;
+    if (currentPending.length === 0) return;
 
     // Get the most recent pending ID - API will approve all pending calls up to this ID
-    const lastId = currentPendingIds[currentPendingIds.length - 1];
+    const lastId = currentPending[currentPending.length - 1].id;
 
     inFlightRef.current = true;
     lastAttemptedIdRef.current = lastId;
@@ -151,23 +152,23 @@ export function useAutoApproval({
           retryTimerRef.current = null;
 
           if (!enabledRef.current) return;
-          if (pendingToolCallIdsRef.current.length === 0) return;
+          if (pendingToolCallsRef.current.length === 0) return;
 
           attemptBatchApproval();
         }, delay);
       },
     );
-  }, [sessionId, enabledRef, pendingToolCallIdsRef]);
+  }, [sessionId, enabledRef, pendingToolCallsRef, pendingToolCallIdsRef]);
 
   // Trigger batch approval when pending IDs change
   useEffect(() => {
-    if (!enabled || pendingToolCallIds.length === 0) return;
+    if (!enabled || pendingToolCalls.length === 0) return;
 
     // Don't start a new attempt if one is in-flight or scheduled
     if (inFlightRef.current || retryTimerRef.current) return;
 
     attemptBatchApproval();
-  }, [enabled, pendingToolCallIds, attemptBatchApproval]);
+  }, [enabled, pendingToolCalls, attemptBatchApproval]);
 
   return { failedIds };
 }

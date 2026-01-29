@@ -185,6 +185,7 @@ function EventStreamContent({
   onPendingToolCallsChange,
   onErrorChange,
   onHasReachedStartChange,
+  pendingToolCallIds,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -197,6 +198,7 @@ function EventStreamContent({
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
   onHasReachedStartChange: (hasReachedStart: boolean) => void;
+  pendingToolCallIds: Set<string>;
 }) {
   const {
     events: initialEvents,
@@ -234,12 +236,6 @@ function EventStreamContent({
   useEffect(() => {
     onErrorChange(error, isRetrying);
   }, [error, isRetrying, onErrorChange]);
-
-  // Derive pending tool call IDs for highlighting in the event stream
-  const pendingToolCallIds = useMemo(
-    () => new Set(pendingToolCalls.map((e) => e.id)),
-    [pendingToolCalls],
-  );
 
   // Fetch older events for infinite scroll pagination
   const fetchOlderEvents = useCallback(
@@ -398,6 +394,12 @@ function AutopilotSessionEventsPageContent({
   // Pending tool calls state - lifted from EventStreamContent for footer rendering
   const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>([]);
 
+  // Derive pending tool call IDs Set once - used by EventStream and useAutoApproval
+  const pendingToolCallIds = useMemo(
+    () => new Set(pendingToolCalls.map((tc) => tc.id)),
+    [pendingToolCalls],
+  );
+
   const handlePendingToolCallsChange = useCallback(
     (toolCalls: GatewayEvent[]) => {
       setPendingToolCalls(toolCalls);
@@ -479,10 +481,8 @@ function AutopilotSessionEventsPageContent({
   const { failedIds: failedAutoApprovals } = useAutoApproval({
     enabled: yoloMode && !isNewSession,
     sessionId,
-    pendingToolCallIds: useMemo(
-      () => pendingToolCalls.map((tc) => tc.id),
-      [pendingToolCalls],
-    ),
+    pendingToolCalls,
+    pendingToolCallIds,
   });
 
   // Handle tool call authorization (manual)
@@ -812,6 +812,7 @@ function AutopilotSessionEventsPageContent({
                   onPendingToolCallsChange={handlePendingToolCallsChange}
                   onErrorChange={handleErrorChange}
                   onHasReachedStartChange={handleHasReachedStartChange}
+                  pendingToolCallIds={pendingToolCallIds}
                 />
               )}
             </Await>
