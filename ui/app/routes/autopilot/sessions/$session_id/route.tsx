@@ -255,14 +255,19 @@ function EventStreamContent({
   );
 
   // Infinite scroll pagination (loading older events when scrolling up)
-  const { isLoadingOlder, hasReachedStart, topSentinelRef } =
-    useInfiniteScrollUp({
-      items: events,
-      initialHasMore: initialHasMore,
-      fetchOlder: fetchOlderEvents,
-      prependItems: prependEvents,
-      scrollContainerRef,
-    });
+  const {
+    isLoadingOlder,
+    hasReachedStart,
+    loadError: paginationError,
+    topSentinelRef,
+    retry: retryPagination,
+  } = useInfiniteScrollUp({
+    items: events,
+    initialHasMore: initialHasMore,
+    fetchOlder: fetchOlderEvents,
+    prependItems: prependEvents,
+    scrollContainerRef,
+  });
 
   /*
    * SCROLL BEHAVIOR SPEC:
@@ -354,6 +359,8 @@ function EventStreamContent({
       events={events}
       isLoadingOlder={isLoadingOlder}
       hasReachedStart={isNewSession ? false : hasReachedStart}
+      loadError={isNewSession ? null : paginationError}
+      onRetryLoad={retryPagination}
       topSentinelRef={topSentinelRef}
       pendingToolCallIds={pendingToolCallIds}
       optimisticMessages={visibleOptimisticMessages}
