@@ -2,10 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
 import { useLatest } from "./use-latest";
 
-// Retry configuration
+// =============================================================================
+// Configuration
+// =============================================================================
+
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRY_MAX_DELAY_MS = 60000;
 const RETRY_SHOW_ERROR_THRESHOLD = 3;
+
+// =============================================================================
+// Types
+// =============================================================================
 
 interface UseAutoApprovalOptions {
   enabled: boolean;
@@ -18,15 +25,65 @@ interface UseAutoApprovalResult {
   failedIds: Set<string>;
 }
 
+// =============================================================================
+// Pure Helpers (no hooks/refs)
+// =============================================================================
+
 /**
- * Hook to handle auto-approval of tool calls using batch approval with retry.
+ * Calculate retry delay with exponential backoff.
+ * Schedule: 1s, 2s, 4s, then 60s forever after threshold.
+ */
+function calculateRetryDelay(retryCount: number): number {
+  if (retryCount < RETRY_SHOW_ERROR_THRESHOLD) {
+    return RETRY_BASE_DELAY_MS * Math.pow(2, retryCount);
+  }
+  return RETRY_MAX_DELAY_MS;
+}
+
+/**
+ * Remove resolved IDs from the failed set.
+ * Returns new Set if changed, same reference if unchanged (for React state).
+ */
+function pruneResolvedFromFailedIds(
+  failedIds: Set<string>,
+  pendingToolCallIds: Set<string>,
+): Set<string> {
+  const pruned = new Set(failedIds);
+  let changed = false;
+  for (const eventId of failedIds) {
+    if (!pendingToolCallIds.has(eventId)) {
+      pruned.delete(eventId);
+      changed = true;
+    }
+  }
+  return changed ? pruned : failedIds;
+}
+
+// =============================================================================
+// Hook
+// =============================================================================
+
+/**
+ * Auto-approve tool calls using batch approval with retry.
  *
- * Uses approve_all endpoint to batch-approve all pending tool calls up to
- * the most recent pending ID.
+ * Flow:
+ * ┌───────┐  pending arrives   ┌───────────┐  success   ┌───────┐
+ * │ Idle  │ ─────────────────► │ Attempting│ ──────────►│ Idle  │
+ * └───────┘                    └─────┬─────┘            └───────┘
+ *                                    │ failure
+ *                                    ▼
+ *                             ┌─────────────┐  retry
+ *                             │ Retrying    │ ──────┐
+ *                             └──────┬──────┘       │
+ *                                    │ 3 failures   │
+ *                                    ▼              │
+ *                             ┌──────────┐          │
+ *                             │ Failed   │ ◄────────┘
+ *                             │(show err)│
+ *                             └──────────┘
  *
- * Retry schedule: 1s, 2s, 4s, then 60s forever after showing error.
- * After RETRY_SHOW_ERROR_THRESHOLD failures, all pending IDs are added to `failedIds`.
- *
+ * Retry schedule: 1s → 2s → 4s → 60s (forever)
+ * After 3 failures, all pending IDs are marked as failed (shown in UI).
  * Requests are cancelled when disabled, session changes, or on unmount.
  */
 export function useAutoApproval({
@@ -35,11 +92,16 @@ export function useAutoApproval({
   pendingToolCalls,
   pendingToolCallIds,
 }: UseAutoApprovalOptions): UseAutoApprovalResult {
-  // Refs to access current values in async callbacks (avoid stale closures)
+  // ---------------------------------------------------------------------------
+  // Refs for async callback access (avoid stale closures)
+  // ---------------------------------------------------------------------------
   const enabledRef = useLatest(enabled);
   const pendingToolCallsRef = useLatest(pendingToolCalls);
   const pendingToolCallIdsRef = useLatest(pendingToolCallIds);
 
+  // ---------------------------------------------------------------------------
+  // Internal state
+  // ---------------------------------------------------------------------------
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const inFlightRef = useRef(false);
@@ -48,73 +110,42 @@ export function useAutoApproval({
 
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
 
-  // Clear timers and tracking state (does not touch AbortController)
-  const clearState = useCallback(() => {
+  // ---------------------------------------------------------------------------
+  // State management helpers
+  // ---------------------------------------------------------------------------
+
+  /** Clear retry timer if one is scheduled. */
+  const clearRetryTimer = useCallback(() => {
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
     }
+  }, []);
+
+  /** Reset all tracking state (timers, counters, flags). Does not touch AbortController. */
+  const resetTrackingState = useCallback(() => {
+    clearRetryTimer();
     retryCountRef.current = 0;
     inFlightRef.current = false;
     lastAttemptedIdRef.current = null;
     setFailedIds(new Set());
-  }, []);
+  }, [clearRetryTimer]);
 
-  // Cleanup when pending tool calls change (tool calls resolved)
-  useEffect(() => {
-    // If the ID we were trying to approve is no longer pending, it succeeded
-    // Clear the retry state
+  /** Clear retry state when the tool call we were attempting has been resolved. */
+  const clearRetryStateIfAttemptResolved = useCallback(() => {
     if (
       lastAttemptedIdRef.current &&
       !pendingToolCallIds.has(lastAttemptedIdRef.current)
     ) {
-      if (retryTimerRef.current) {
-        clearTimeout(retryTimerRef.current);
-        retryTimerRef.current = null;
-      }
+      clearRetryTimer();
       retryCountRef.current = 0;
       lastAttemptedIdRef.current = null;
     }
+  }, [pendingToolCallIds, clearRetryTimer]);
 
-    // Update failedIds - remove any that are no longer pending
-    setFailedIds((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const eventId of prev) {
-        if (!pendingToolCallIds.has(eventId)) {
-          next.delete(eventId);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [pendingToolCallIds]);
-
-  // Manage AbortController lifecycle
-  useEffect(() => {
-    if (!enabled) {
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = null;
-      clearState();
-      return;
-    }
-
-    abortControllerRef.current = new AbortController();
-
-    return () => {
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = null;
-      clearState();
-    };
-  }, [enabled, sessionId, clearState]);
-
-  // Exponential backoff: 1s, 2s, 4s, then 60s forever
-  const getRetryDelay = (retryCount: number): number => {
-    if (retryCount < RETRY_SHOW_ERROR_THRESHOLD) {
-      return RETRY_BASE_DELAY_MS * Math.pow(2, retryCount);
-    }
-    return RETRY_MAX_DELAY_MS;
-  };
+  // ---------------------------------------------------------------------------
+  // Approval logic
+  // ---------------------------------------------------------------------------
 
   const attemptBatchApproval = useCallback(() => {
     const controller = abortControllerRef.current;
@@ -123,45 +154,82 @@ export function useAutoApproval({
     const currentPending = pendingToolCallsRef.current;
     if (currentPending.length === 0) return;
 
-    // Get the most recent pending ID - API will approve all pending calls up to this ID
+    // Approve all pending calls up to the most recent ID
     const lastId = currentPending[currentPending.length - 1].id;
 
     inFlightRef.current = true;
     lastAttemptedIdRef.current = lastId;
 
-    approveAllToolCalls(sessionId, lastId, controller.signal).then(
-      () => {
-        inFlightRef.current = false;
-        retryCountRef.current = 0;
-      },
-      (error: Error) => {
-        inFlightRef.current = false;
+    const handleSuccess = () => {
+      inFlightRef.current = false;
+      retryCountRef.current = 0;
+    };
 
-        if (error.name === "AbortError") return;
+    const handleFailure = (error: Error) => {
+      inFlightRef.current = false;
+
+      // Ignore aborted requests or if disabled while in-flight
+      if (error.name === "AbortError") return;
+      if (!enabledRef.current) return;
+
+      const newRetryCount = retryCountRef.current + 1;
+      retryCountRef.current = newRetryCount;
+
+      // After threshold failures, mark all current pending IDs as failed
+      if (newRetryCount === RETRY_SHOW_ERROR_THRESHOLD) {
+        setFailedIds(new Set(pendingToolCallIdsRef.current));
+      }
+
+      // Schedule retry with exponential backoff
+      const delay = calculateRetryDelay(newRetryCount);
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null;
+
+        // Guard: could have been disabled or resolved during delay
         if (!enabledRef.current) return;
+        if (pendingToolCallsRef.current.length === 0) return;
 
-        const newRetryCount = retryCountRef.current + 1;
-        retryCountRef.current = newRetryCount;
+        attemptBatchApproval();
+      }, delay);
+    };
 
-        // After threshold failures, mark all current pending IDs as failed
-        if (newRetryCount === RETRY_SHOW_ERROR_THRESHOLD) {
-          setFailedIds(new Set(pendingToolCallIdsRef.current));
-        }
-
-        const delay = getRetryDelay(newRetryCount);
-        retryTimerRef.current = setTimeout(() => {
-          retryTimerRef.current = null;
-
-          if (!enabledRef.current) return;
-          if (pendingToolCallsRef.current.length === 0) return;
-
-          attemptBatchApproval();
-        }, delay);
-      },
+    approveAllToolCalls(sessionId, lastId, controller.signal).then(
+      handleSuccess,
+      handleFailure,
     );
   }, [sessionId, enabledRef, pendingToolCallsRef, pendingToolCallIdsRef]);
 
-  // Trigger batch approval when pending IDs change
+  // ---------------------------------------------------------------------------
+  // Effects
+  // ---------------------------------------------------------------------------
+
+  // Effect: Clean up when tool calls are resolved (success detected via SSE)
+  useEffect(() => {
+    clearRetryStateIfAttemptResolved();
+    setFailedIds((prev) =>
+      pruneResolvedFromFailedIds(prev, pendingToolCallIds),
+    );
+  }, [pendingToolCallIds, clearRetryStateIfAttemptResolved]);
+
+  // Effect: Manage AbortController lifecycle (enabled/session changes)
+  useEffect(() => {
+    if (!enabled) {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      resetTrackingState();
+      return;
+    }
+
+    abortControllerRef.current = new AbortController();
+
+    return () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      resetTrackingState();
+    };
+  }, [enabled, sessionId, resetTrackingState]);
+
+  // Effect: Trigger approval when new pending tool calls arrive
   useEffect(() => {
     if (!enabled || pendingToolCalls.length === 0) return;
 
