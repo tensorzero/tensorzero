@@ -6,9 +6,11 @@ import type { VisualizationType } from "./VisualizationType";
  */
 export type EventPayloadVisualization = {
   /**
-   * The tool call event ID that generated this visualization.
+   * The ID of the tool execution that generated this visualization.
+   * For client-side tools, this is the ToolCall event ID.
+   * For server-side tools, this is the task ID.
    */
-  tool_call_event_id: string;
+  tool_execution_id: string;
   /**
    * The visualization data.
    */

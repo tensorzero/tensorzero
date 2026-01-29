@@ -11,6 +11,7 @@ use crate::error::{Error, ErrorDetails};
 use super::HealthCheckable;
 
 pub mod experimentation;
+pub mod feedback;
 pub mod inference_count;
 pub mod rate_limiting;
 

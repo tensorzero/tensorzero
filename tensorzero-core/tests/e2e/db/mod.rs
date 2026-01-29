@@ -5,6 +5,38 @@
 use sqlx::postgres::PgPoolOptions;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 
+/// Generates test functions for both ClickHouse and Postgres backends.
+macro_rules! make_db_test {
+    ($test_name:ident) => {
+        paste::paste! {
+            #[tokio::test]
+            async fn [<$test_name _clickhouse>]() {
+                let conn = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
+                $test_name(conn).await;
+            }
+
+            #[tokio::test]
+            async fn [<$test_name _postgres>]() {
+                let conn = crate::db::get_test_postgres().await;
+                $test_name(conn).await;
+            }
+        }
+    };
+}
+
+/// Generates test functions for ClickHouse only.
+macro_rules! make_clickhouse_only_test {
+    ($test_name:ident) => {
+        paste::paste! {
+            #[tokio::test]
+            async fn [<$test_name _clickhouse>]() {
+                let conn = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
+                $test_name(conn).await;
+            }
+        }
+    };
+}
+
 mod bandit_queries;
 mod batch_inference_queries;
 mod dataset_queries;

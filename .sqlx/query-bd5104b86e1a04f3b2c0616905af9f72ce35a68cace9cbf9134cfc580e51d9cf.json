@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            tensorzero.min_uuid(id) as first_id,\n            tensorzero.max_uuid(id) as last_id\n        FROM tensorzero.demonstration_feedback\n        WHERE inference_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "first_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "last_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "bd5104b86e1a04f3b2c0616905af9f72ce35a68cace9cbf9134cfc580e51d9cf"
+}

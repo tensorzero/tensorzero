@@ -94,18 +94,10 @@ const CUSTOM_EDITOR_THEME = EditorView.theme({
   },
 });
 
-// Pre-computed theme variants (only 2 needed: mono vs sans font)
+// Editor theme with monospace font
 const THEME_MONO = githubLightInit({
   settings: {
     fontFamily: "var(--font-mono)",
-    fontSize: "var(--text-xs)",
-    gutterBorder: "transparent",
-    background: "transparent",
-  },
-});
-const THEME_SANS = githubLightInit({
-  settings: {
-    fontFamily: "var(--font-sans)",
     fontSize: "var(--text-xs)",
     gutterBorder: "transparent",
     background: "transparent",
@@ -321,8 +313,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const buttonClassName =
     "flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs";
 
-  // Use pre-computed theme (only 2 variants exist)
-  const theme = language === "text" ? THEME_SANS : THEME_MONO;
+  const theme = THEME_MONO;
 
   // Use cached basicSetup (shared across all CodeEditor instances)
   const basicSetup = getBasicSetup(showLineNumbers, readOnly);

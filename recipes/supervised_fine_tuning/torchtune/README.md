@@ -11,25 +11,13 @@ You will need to set a few environment variables in the shell your notebook will
 
 ## Setup
 
+We recommend using [`uv`](https://github.com/astral-sh/uv).
+
+```bash
+uv sync
+```
+
 ### Optional: Dev Container
 
 We have provided a Dev Container config in `.devcontainer` to help users of VS Code who want to run the notebook on a remote server.
 To use our container, follow the [VS Code Instructions](https://code.visualstudio.com/docs/devcontainers/containers#_open-a-folder-on-a-remote-ssh-host-in-a-container), then proceed with the "Using `uv`" instructions below.
-
-### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
-
-```bash
-uv venv  # Create a new virtual environment
-source .venv/bin/activate # Activate environment
-uv sync # Install the dependencies
-uv pip install --pre torchtune --extra-index-url https://download.pytorch.org/whl/nightly/cu126
-```
-
-### Using `pip`
-
-We recommend using Python 3.10+ and a virtual environment.
-
-```bash
-pip install -r requirements.txt
-pip install --pre torchtune --extra-index-url https://download.pytorch.org/whl/nightly/cu126
-```

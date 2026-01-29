@@ -234,9 +234,9 @@ jobs:
         shell: bash
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Generate Python schemas
         run: pnpm generate-python-schemas
@@ -272,9 +272,9 @@ jobs:
           cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
       - name: Install Python 3.10
         run: uv python install 3.10
       - name: Set PYO3_PYTHON
@@ -348,19 +348,9 @@ jobs:
         run: rustc --version
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
-
-      - name: uv-lock
-        run: |
-          git ls-files "**/pyproject.toml" | xargs -P4 -I{} bash -c 'cd "$(dirname "{}")" && uv lock --project="pyproject.toml"'
-
-      - name: uv-export
-        run: |
-          git ls-files "**/pyproject.toml" | xargs -P4 -I{} bash -c 'cd "$(dirname "{}")" && uv export --project="pyproject.toml" --output-file=requirements.txt --quiet'
-      - name: verify uv generated files
-        run: git diff --exit-code
+          version: "0.9.27"
 
       - name: Install Python for python async client tests
         run: uv python install 3.9
@@ -372,9 +362,7 @@ jobs:
 
       - name: "Python: Pyo3 Client: Build and install dependencies"
         working-directory: clients/python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
+        run: uv sync
 
       - name: "Python: PyO3 Client: pyright"
         working-directory: clients/python
@@ -587,9 +575,9 @@ jobs:
         shell: bash
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
@@ -756,7 +744,7 @@ jobs:
       # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
       # Use extreme disk cleanup script that frees up ~26GB of space (11-phase cleanup)
       - name: "Free up disk space"
-        run: ./ci/free-disk-space.sh
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
@@ -773,9 +761,9 @@ jobs:
             ./ui/fixtures/large-fixtures/
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Download container images
         run: |
@@ -1014,7 +1002,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Install Rust toolchain
         run: |
@@ -1046,9 +1034,9 @@ jobs:
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Download ClickHouse fixtures
         run: |
@@ -1155,10 +1143,10 @@ jobs:
           tool: cargo-nextest
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
-          # Without this, the post-install hook tries to prune and save the cache, but ./ci/free-disk-space.sh already nukes /opt/hostedtoolcache/*, so it fails.
+          version: "0.9.27"
+          # Without this, the post-install hook tries to prune and save the cache, but jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be already nukes /opt/hostedtoolcache/*, so it fails.
           enable-cache: "false"
 
       - name: Download ClickHouse fixtures
@@ -1167,7 +1155,7 @@ jobs:
           uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
