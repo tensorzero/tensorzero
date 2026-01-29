@@ -300,7 +300,8 @@ export function useInfiniteScrollUp<T>({
 
         retryTimeoutRef.current = setTimeout(() => {
           retryTimeoutRef.current = null;
-          // loadOlderItems will transition from "waiting_retry" to "loading" via START_LOADING
+          // Recursive call is safe: even if items changed (new events prepended),
+          // the cursor (items[0]) from when we started is still valid for pagination
           loadOlderItems();
         }, delay);
       } else {
