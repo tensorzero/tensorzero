@@ -981,7 +981,7 @@ impl EmbeddingProvider for OpenAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
-                    api_type: ApiType::ChatCompletions,
+                    api_type: ApiType::Embeddings,
                 })
             })?;
 
@@ -995,7 +995,7 @@ impl EmbeddingProvider for OpenAIProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
-                        api_type: ApiType::ChatCompletions,
+                        api_type: ApiType::Embeddings,
                     })
                 })?;
             let latency = Latency::NonStreaming {

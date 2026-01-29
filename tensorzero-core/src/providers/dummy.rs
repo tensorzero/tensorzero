@@ -911,7 +911,7 @@ impl EmbeddingProvider for DummyProvider {
                 raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
+                api_type: ApiType::Embeddings,
             }
             .into());
         }
@@ -933,7 +933,7 @@ impl EmbeddingProvider for DummyProvider {
                 raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
-                api_type: ApiType::ChatCompletions,
+                api_type: ApiType::Embeddings,
             }
             .into());
         }

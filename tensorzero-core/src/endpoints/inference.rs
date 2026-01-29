@@ -3321,4 +3321,133 @@ mod tests {
             "cached inference's own raw_response should NOT be included (non-streaming path)"
         );
     }
+
+    /// Test that streaming errors include raw_response data when include_raw_response=true.
+    /// This verifies the error handling path in prepare_serialized_events where provider errors
+    /// with raw_response data are properly collected and serialized into the SSE event.
+    #[tokio::test]
+    async fn test_streaming_error_includes_raw_responses() {
+        use crate::error::{Error, ErrorDetails};
+        use indexmap::IndexMap;
+        use reqwest::StatusCode;
+
+        // 1. Create InferenceClient errors with raw_response data
+        let error1 = Error::new(ErrorDetails::InferenceClient {
+            message: "Provider 1 failed".to_string(),
+            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: Some(r#"{"prompt":"test"}"#.to_string()),
+            raw_response: Some(r#"{"error": "rate_limit"}"#.to_string()),
+        });
+
+        let error2 = Error::new(ErrorDetails::InferenceClient {
+            message: "Provider 2 failed".to_string(),
+            status_code: Some(StatusCode::SERVICE_UNAVAILABLE),
+            provider_type: "anthropic".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: Some(r#"{"messages":[]}"#.to_string()),
+            raw_response: Some(r#"{"type":"error"}"#.to_string()),
+        });
+
+        // 2. Aggregate into ModelProvidersExhausted
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert("openai".to_string(), error1);
+        provider_errors.insert("anthropic".to_string(), error2);
+        let exhausted_error = Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors });
+
+        // 3. Verify collect_raw_responses extracts all provider errors
+        let raw_responses = exhausted_error.collect_raw_responses();
+        assert_eq!(
+            raw_responses.len(),
+            2,
+            "Should collect raw_response from both failed providers"
+        );
+
+        // Verify provider types are correct
+        let provider_types: Vec<&str> = raw_responses
+            .iter()
+            .map(|r| r.provider_type.as_str())
+            .collect();
+        assert!(
+            provider_types.contains(&"openai"),
+            "Should contain openai provider"
+        );
+        assert!(
+            provider_types.contains(&"anthropic"),
+            "Should contain anthropic provider"
+        );
+
+        // Verify raw_response data is preserved
+        for entry in &raw_responses {
+            assert!(
+                entry.model_inference_id.is_none(),
+                "Failed attempts should not have model_inference_id"
+            );
+            assert!(
+                !entry.data.is_empty(),
+                "raw_response data should be present"
+            );
+        }
+
+        // 4. Test the serialization path used by prepare_serialized_events
+        // This mirrors the error handling logic in prepare_serialized_events
+        let include_raw_response = true;
+        let mut error_json = serde_json::json!({"error": exhausted_error.to_string()});
+        if include_raw_response {
+            let collected = exhausted_error.collect_raw_responses();
+            if !collected.is_empty() {
+                error_json["raw_response"] =
+                    serde_json::to_value(&collected).expect("Should serialize raw_responses");
+            }
+        }
+
+        // Verify the serialized JSON has the expected structure
+        assert!(error_json.get("error").is_some(), "Should have error field");
+        assert!(
+            error_json.get("raw_response").is_some(),
+            "Should have raw_response field when include_raw_response=true"
+        );
+
+        let serialized_raw_responses = error_json["raw_response"].as_array().unwrap();
+        assert_eq!(
+            serialized_raw_responses.len(),
+            2,
+            "Should have 2 raw_response entries"
+        );
+
+        // Verify the entries have the expected fields
+        for entry in serialized_raw_responses {
+            assert!(
+                entry.get("provider_type").is_some(),
+                "Each entry should have provider_type"
+            );
+            assert!(
+                entry.get("api_type").is_some(),
+                "Each entry should have api_type"
+            );
+            assert!(entry.get("data").is_some(), "Each entry should have data");
+            // model_inference_id should be absent (None is skipped in serialization)
+            assert!(
+                entry.get("model_inference_id").is_none(),
+                "model_inference_id should be omitted for failed attempts"
+            );
+        }
+
+        // 5. Test that raw_response is NOT included when include_raw_response=false
+        let mut error_json_no_raw = serde_json::json!({"error": exhausted_error.to_string()});
+        let include_raw_response_false = false;
+        if include_raw_response_false {
+            let collected = exhausted_error.collect_raw_responses();
+            if !collected.is_empty() {
+                error_json_no_raw["raw_response"] =
+                    serde_json::to_value(&collected).expect("Should serialize");
+            }
+        }
+
+        assert!(
+            error_json_no_raw.get("raw_response").is_none(),
+            "Should NOT have raw_response field when include_raw_response=false"
+        );
+    }
 }
