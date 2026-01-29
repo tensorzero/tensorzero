@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{FeedbackBounds, FeedbackBoundsByType, FeedbackQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -44,17 +45,20 @@ pub async fn get_feedback_bounds_by_target_id_handler(
     State(app_state): AppState,
     Path(target_id): Path<Uuid>,
 ) -> Result<Json<GetFeedbackBoundsResponse>, Error> {
-    let response =
-        get_feedback_bounds_by_target_id(&app_state.clickhouse_connection_info, target_id).await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = get_feedback_bounds_by_target_id(&database, target_id).await?;
     Ok(Json(response))
 }
 
 /// Core business logic for getting feedback bounds by target ID
 pub async fn get_feedback_bounds_by_target_id(
-    clickhouse: &impl FeedbackQueries,
+    database: &(dyn FeedbackQueries + Sync),
     target_id: Uuid,
 ) -> Result<GetFeedbackBoundsResponse, Error> {
-    let bounds = clickhouse
+    let bounds = database
         .query_feedback_bounds_by_target_id(target_id)
         .await?;
 
@@ -69,12 +73,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_feedback_bounds_by_target_id_calls_clickhouse() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
         let target_id = Uuid::now_v7();
         let first_id = Uuid::now_v7();
         let last_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_query_feedback_bounds_by_target_id()
             .withf(move |id| *id == target_id)
             .times(1)
@@ -94,7 +98,7 @@ mod tests {
                 })
             });
 
-        let response = get_feedback_bounds_by_target_id(&mock_clickhouse, target_id)
+        let response = get_feedback_bounds_by_target_id(&mock_db, target_id)
             .await
             .expect("Expected feedback bounds to be returned");
 
@@ -117,10 +121,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_feedback_bounds_by_target_id_handles_empty_bounds() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
         let target_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_query_feedback_bounds_by_target_id()
             .withf(move |id| *id == target_id)
             .times(1)
@@ -140,7 +144,7 @@ mod tests {
                 })
             });
 
-        let response = get_feedback_bounds_by_target_id(&mock_clickhouse, target_id)
+        let response = get_feedback_bounds_by_target_id(&mock_db, target_id)
             .await
             .expect("Expected empty bounds response");
 

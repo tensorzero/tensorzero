@@ -18,7 +18,7 @@ See [API Reference: Datasets & Datapoints](https://www.tensorzero.com/docs/gatew
 #### Python (TensorZero Client)
 
 ```bash
-python main.py
+uv run main.py
 ```
 
 #### curl (HTTP)

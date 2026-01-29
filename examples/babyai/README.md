@@ -26,7 +26,7 @@ Our setup implements the function `act` with multiple variants (e.g. baseline, r
 1. Install `cmake` (e.g. `brew install cmake` or `sudo apt-get install cmake`)
 2. Install Docker
 3. Install Python 3.10+
-4. Install the Python dependencies with `pip install -r requirements.txt`
+4. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 5. Generate an API key for OpenAI (`OPENAI_API_KEY`)
 
 ### Setup

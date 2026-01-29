@@ -35,6 +35,12 @@ TENSORZERO_CLICKHOUSE_URL="${TENSORZERO_CLICKHOUSE_URL%/}/${DATABASE_NAME}"
 export TENSORZERO_CLICKHOUSE_URL
 echo "Updated ClickHouse URL with database: $TENSORZERO_CLICKHOUSE_URL"
 
+# Fire off a background request to wake up the ClickHouse Cloud instance
+# (idle instances take ~4-5 min to wake up, so start this early while we install dependencies)
+echo "Starting background ClickHouse wake-up..."
+curl --retry 20 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
+    "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SELECT 1' > /dev/null 2>&1 &
+
 # Set up cleanup function to run on exit
 cleanup_database() {
     if [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
@@ -79,13 +85,13 @@ sudo apt-get update
 sudo apt-get install -y clickhouse-client
 
 curl \
-    --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 30 \
+    --retry 20 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
     "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
+curl --proto '=https' --tlsv1.2 -sSf --retry 3 --retry-delay 5 --retry-all-errors https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
-curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://astral.sh/uv/0.9.27/install.sh | sh
 source $HOME/.local/bin/env
-curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
+curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
 uv run ./ui/fixtures/download-large-fixtures.py
 uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
@@ -114,6 +120,11 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
     done
     export GATEWAY_PID=$!
 
+# Start test compilation in background while we load fixtures
+echo "Starting background test compilation..."
+SQLX_OFFLINE=1 cargo test-clickhouse --no-run &
+TEST_BUILD_PID=$!
+
 export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
 export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
 export SQLX_OFFLINE=1
@@ -132,6 +143,10 @@ for attempt in $(seq 1 $max_retries); do
 done
 cd ../..
 sleep 2
+
+# Wait for background test compilation to finish
+echo "Waiting for test compilation to complete..."
+wait $TEST_BUILD_PID
 
 cargo test-clickhouse --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
 cat e2e_logs.txt

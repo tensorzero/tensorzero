@@ -122,7 +122,7 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -166,7 +166,7 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -215,7 +215,7 @@ async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -251,7 +251,7 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -298,7 +298,7 @@ async fn test_get_inferences_tool_basic(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -349,7 +349,7 @@ async fn test_get_inferences_tool_with_function_name(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -396,7 +396,7 @@ async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 
@@ -436,7 +436,7 @@ async fn test_get_inferences_tool_error(pool: PgPool) {
     let side_info = AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
-        config_snapshot_hash: "test_hash".to_string(),
+        config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
     };
 

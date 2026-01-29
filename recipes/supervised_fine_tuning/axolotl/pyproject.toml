@@ -5,6 +5,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "awscli",
+    "axolotl[flash-attn,deepspeed]",
     "clickhouse-connect",
     "ipykernel",
     "ipywidgets",
@@ -20,3 +21,12 @@ dependencies = [
     "torch==2.6.0",
     "wheel",
 ]
+
+[tool.uv]
+required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.extra-build-dependencies]
+flash-attn = [{ requirement = "torch", match-runtime = true }]
+
+[tool.uv.extra-build-variables]
+flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
