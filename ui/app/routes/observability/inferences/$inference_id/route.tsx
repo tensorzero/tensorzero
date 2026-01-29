@@ -451,18 +451,34 @@ function InferenceActionBar({
   const [resolvedModelInferences, setResolvedModelInferences] =
     useState<ModelInferencesData | null>(null);
 
-  // Resolve input promise
+  // Resolve input promise with cleanup to avoid state update on unmounted component
   useEffect(() => {
+    let cancelled = false;
     inputPromise
-      .then((input) => setResolvedInput(input))
-      .catch(() => setResolvedInput(null));
+      .then((input) => {
+        if (!cancelled) setResolvedInput(input);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedInput(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [inputPromise]);
 
-  // Resolve modelInferences promise
+  // Resolve modelInferences promise with cleanup to avoid state update on unmounted component
   useEffect(() => {
+    let cancelled = false;
     modelInferencesPromise
-      .then((mi) => setResolvedModelInferences(mi))
-      .catch(() => setResolvedModelInferences(null));
+      .then((mi) => {
+        if (!cancelled) setResolvedModelInferences(mi);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedModelInferences(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [modelInferencesPromise]);
 
   const inferenceUsage = resolvedModelInferences
@@ -681,7 +697,7 @@ function InferenceActionBar({
         </HumanFeedbackModal>
       </ActionBar>
 
-      {selectedVariant && inferenceUsage && (
+      {selectedVariant && (
         <VariantResponseModal
           isOpen={openModal === "variant-response"}
           isLoading={variantInferenceIsLoading}
@@ -694,7 +710,7 @@ function InferenceActionBar({
             setLastRequestArgs(null);
           }}
           item={inference}
-          inferenceUsage={inferenceUsage}
+          inferenceUsage={inferenceUsage ?? undefined}
           selectedVariant={selectedVariant}
           source={variantSource}
           onRefresh={lastRequestArgs ? handleRefresh : null}
@@ -731,9 +747,20 @@ function InferenceActionBar({
   );
 }
 
-function FeedbackSectionContent({ data }: { data: FeedbackData }) {
+function FeedbackSectionContent({
+  data,
+  onCountUpdate,
+}: {
+  data: FeedbackData;
+  onCountUpdate: (count: number) => void;
+}) {
   const { feedback, feedback_bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
+
+  // Update count when data loads
+  useEffect(() => {
+    onCountUpdate(feedback.length);
+  }, [feedback.length, onCountUpdate]);
 
   const topFeedback = feedback[0] as { id: string } | undefined;
   const bottomFeedback = feedback[feedback.length - 1] as
@@ -800,6 +827,11 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Track feedback count for SectionHeader (updated when feedbackData resolves)
+  const [feedbackCount, setFeedbackCount] = useState<number | undefined>(
+    undefined,
+  );
+
   // Show toast when feedback is successfully added (outside Suspense to avoid repeating)
   useEffect(() => {
     if (newFeedbackId) {
@@ -808,6 +840,11 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     }
     return;
   }, [newFeedbackId, toast]);
+
+  // Reset feedback count when location changes (navigating to new page)
+  useEffect(() => {
+    setFeedbackCount(undefined);
+  }, [location.key]);
 
   // Handle feedback added callback - extract newFeedbackId from the API redirect URL
   const handleFeedbackAdded = useCallback(
@@ -904,6 +941,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader
             heading="Feedback"
+            count={feedbackCount}
             badge={{
               name: "inference",
               tooltip:
@@ -924,7 +962,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
               errorElement={<FeedbackSectionError />}
             >
               {(resolvedFeedbackData) => (
-                <FeedbackSectionContent data={resolvedFeedbackData} />
+                <FeedbackSectionContent
+                  data={resolvedFeedbackData}
+                  onCountUpdate={setFeedbackCount}
+                />
               )}
             </Await>
           </Suspense>
