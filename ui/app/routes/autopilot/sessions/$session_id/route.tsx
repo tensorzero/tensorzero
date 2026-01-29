@@ -16,7 +16,6 @@ import {
   useNavigate,
   type RouteHandle,
 } from "react-router";
-import debounce from "lodash-es/debounce";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
@@ -29,6 +28,7 @@ import { logger } from "~/utils/logger";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
+import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -213,41 +213,70 @@ function EventStreamContent({
     onErrorChange(error, isRetrying);
   }, [error, isRetrying, onErrorChange]);
 
-  // State for pagination
-  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [hasReachedStart, setHasReachedStart] = useState(!initialHasMore);
-
-  // Refs for pagination state - used to avoid stale closures and race conditions
-  // These are updated synchronously alongside state to prevent duplicate fetches
-  const isLoadingOlderRef = useRef(false);
-  const hasReachedStartRef = useRef(!initialHasMore);
-
   // Derive pending tool call IDs for highlighting in the event stream
   const pendingToolCallIds = useMemo(
     () => new Set(pendingToolCalls.map((e) => e.id)),
     [pendingToolCalls],
   );
 
+  // Fetch older events for infinite scroll pagination
+  const fetchOlderEvents = useCallback(
+    async (oldestEvent: GatewayEvent) => {
+      const response = await fetch(
+        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events?limit=${EVENTS_PER_PAGE + 1}&before=${oldestEvent.id}`,
+      );
+
+      if (!response.ok) {
+        logger.debug(
+          `API returned ${response.status} when fetching older events, treating as session start`,
+        );
+        return { items: [], hasMore: false };
+      }
+
+      const responseData = (await response.json()) as {
+        events: GatewayEvent[];
+      };
+
+      logger.debug(
+        `Loaded ${responseData.events.length} older events (requested ${EVENTS_PER_PAGE + 1})`,
+      );
+
+      const hasMore = responseData.events.length > EVENTS_PER_PAGE;
+      const olderEvents = responseData.events
+        .sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        )
+        .slice(hasMore ? 1 : 0);
+
+      return { items: olderEvents, hasMore };
+    },
+    [sessionId],
+  );
+
+  // Infinite scroll pagination (loading older events when scrolling up)
+  const { isLoadingOlder, hasReachedStart, topSentinelRef } =
+    useInfiniteScrollUp({
+      items: events,
+      initialHasMore: initialHasMore,
+      fetchOlder: fetchOlderEvents,
+      prependItems: prependEvents,
+      scrollContainerRef,
+    });
+
   /*
    * SCROLL BEHAVIOR SPEC:
    * 1. Submit message → Scroll to bottom (after optimistic message appears)
    * 2. New SSE event → Scroll to bottom ONLY if within BOTTOM_THRESHOLD of bottom
    * 3. Page load → Scroll to bottom (once)
-   * 4. Scroll up (infinite scroll) → Preserve scroll position (no layout shift)
+   * 4. Scroll up (infinite scroll) → Preserve scroll position (handled by useInfiniteScrollUp)
    * 5. BOTTOM_THRESHOLD (100px) → Buffer to handle tool card appearance
    */
   const BOTTOM_THRESHOLD = 100;
 
-  // Refs for scroll management
-  const topSentinelRef = useRef<HTMLDivElement>(null);
+  // Refs for scroll-to-bottom management
   const isAtBottomRef = useRef(true);
   const hasInitiallyScrolledRef = useRef(false);
-
-  // For preserving scroll position when loading older events
-  const pendingScrollPreservation = useRef<{
-    scrollHeight: number;
-    scrollTop: number;
-  } | null>(null);
 
   const checkIfAtBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -269,29 +298,16 @@ function EventStreamContent({
     isAtBottomRef.current = checkIfAtBottom();
   }, [checkIfAtBottom]);
 
-  // Handle scroll when events change
+  // Scroll to bottom when new events arrive (SSE), but not when loading older events
   useEffect(() => {
-    // Still loading older events - wait for them to arrive before adjusting scroll
+    // Skip during pagination - useInfiniteScrollUp handles scroll preservation
     if (isLoadingOlder) return;
 
-    // Older events loaded - preserve scroll position
-    if (pendingScrollPreservation.current) {
-      const container = scrollContainerRef.current;
-      if (container) {
-        const { scrollHeight: prevHeight, scrollTop: prevScrollTop } =
-          pendingScrollPreservation.current;
-        const heightDiff = container.scrollHeight - prevHeight;
-        container.scrollTop = prevScrollTop + heightDiff;
-      }
-      pendingScrollPreservation.current = null;
-      return;
-    }
-
-    // New events - only scroll if user was at bottom
+    // Scroll to bottom only if user was already at bottom
     if (isAtBottomRef.current) {
       scrollToBottom();
     }
-  }, [events, isLoadingOlder, scrollToBottom, scrollContainerRef]);
+  }, [events, isLoadingOlder, scrollToBottom]);
 
   // Listen to scroll events from the parent-provided scroll container
   useEffect(() => {
@@ -310,141 +326,6 @@ function EventStreamContent({
       hasInitiallyScrolledRef.current = true;
     }
   }, [scrollToBottom, scrollContainerRef, handleScroll]);
-
-  // Load older events
-  const loadOlderEvents = useCallback(async () => {
-    // Use refs for synchronous guard - prevents race conditions when called
-    // multiple times before React re-renders
-    if (
-      isLoadingOlderRef.current ||
-      hasReachedStartRef.current ||
-      events.length === 0
-    ) {
-      return;
-    }
-
-    // Set ref synchronously BEFORE any async work to prevent duplicate calls
-    isLoadingOlderRef.current = true;
-
-    const container = scrollContainerRef.current;
-    if (container) {
-      pendingScrollPreservation.current = {
-        scrollHeight: container.scrollHeight,
-        scrollTop: container.scrollTop,
-      };
-    }
-
-    setIsLoadingOlder(true);
-
-    try {
-      const oldestEvent = events[0];
-      const response = await fetch(
-        `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events?limit=${EVENTS_PER_PAGE + 1}&before=${oldestEvent.id}`,
-      );
-
-      if (!response.ok) {
-        logger.debug(
-          `API returned ${response.status} when fetching older events, treating as session start`,
-        );
-        hasReachedStartRef.current = true;
-        setHasReachedStart(true);
-        return;
-      }
-
-      const responseData = (await response.json()) as {
-        events: GatewayEvent[];
-      };
-
-      logger.debug(
-        `Loaded ${responseData.events.length} older events (requested ${EVENTS_PER_PAGE + 1})`,
-      );
-
-      if (responseData.events.length <= EVENTS_PER_PAGE) {
-        logger.debug("Reached session start");
-        hasReachedStartRef.current = true;
-        setHasReachedStart(true);
-      }
-
-      if (responseData.events.length === 0) {
-        return;
-      }
-
-      const olderEvents = responseData.events
-        .sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        )
-        .slice(responseData.events.length > EVENTS_PER_PAGE ? 1 : 0);
-
-      prependEvents(olderEvents);
-    } catch (err) {
-      logger.error("Failed to load older events:", err);
-      hasReachedStartRef.current = true;
-      setHasReachedStart(true);
-    } finally {
-      isLoadingOlderRef.current = false;
-      setIsLoadingOlder(false);
-    }
-  }, [events, sessionId, prependEvents, scrollContainerRef]);
-
-  // Keep a ref to the latest loadOlderEvents so debounced function always calls current version
-  const loadOlderEventsRef = useRef(loadOlderEvents);
-  useEffect(() => {
-    loadOlderEventsRef.current = loadOlderEvents;
-  }, [loadOlderEvents]);
-
-  // Create a stable debounced function that:
-  // 1. Always calls the latest loadOlderEvents via ref (avoids stale closures)
-  // 2. Never recreates (empty deps), so pending calls aren't lost
-  // 3. Is cancelled on unmount
-  const loadOlderEventsDebounced = useMemo(
-    () =>
-      debounce(() => {
-        // Check refs inside callback - observer doesn't need to reconnect when these change
-        if (isLoadingOlderRef.current || hasReachedStartRef.current) {
-          return;
-        }
-        loadOlderEventsRef.current();
-      }, 100),
-    [], // Empty deps - stable function that uses refs
-  );
-
-  // Cancel pending debounced calls on unmount
-  useEffect(() => {
-    return () => {
-      loadOlderEventsDebounced.cancel();
-    };
-  }, [loadOlderEventsDebounced]);
-
-  // IntersectionObserver for infinite scroll
-  // Uses refs for state checks to avoid reconnecting observer on every state change
-  useEffect(() => {
-    const sentinel = topSentinelRef.current;
-    const container = scrollContainerRef.current;
-
-    if (!sentinel || !container) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        // Check refs instead of closure state - avoids observer reconnection churn
-        if (entry.isIntersecting) {
-          loadOlderEventsDebounced();
-        }
-      },
-      {
-        root: container,
-        rootMargin: "300px 0px 0px 0px",
-        threshold: 0.1,
-      },
-    );
-
-    observer.observe(sentinel);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [loadOlderEventsDebounced, scrollContainerRef]);
 
   // SSE delivers event → remove optimistic message when real event arrives
   useEffect(() => {
