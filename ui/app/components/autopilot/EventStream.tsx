@@ -556,7 +556,6 @@ function StatusIndicator({ status }: { status: AutopilotStatus }) {
 function LoadErrorNotice({ onRetry }: { onRetry?: () => void }) {
   return (
     <div className="flex items-center justify-center gap-2 py-2 text-sm text-amber-600">
-      <AlertCircle className="h-4 w-4" />
       <span>Failed to load older messages</span>
       {onRetry && (
         <Button
