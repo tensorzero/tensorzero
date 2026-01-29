@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import debounce from "lodash-es/debounce";
 import { logger } from "~/utils/logger";
+import { useLatest } from "./use-latest";
 
-type ScrollPreservation = {
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ScrollSnapshot = {
   scrollHeight: number;
   scrollTop: number;
 };
@@ -41,59 +46,136 @@ export type UseInfiniteScrollUpResult = {
   retry: () => void;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// State Machine
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Load states:
+ * - idle: Ready to load, no error
+ * - loading: Fetch in progress
+ * - waiting_retry: Failed, auto-retry scheduled
+ * - error: Failed after max retries, waiting for manual retry
+ * - reached_start: No more items to load
+ */
+type LoadStatus =
+  | "idle"
+  | "loading"
+  | "waiting_retry"
+  | "error"
+  | "reached_start";
+
+type LoadState = {
+  status: LoadStatus;
+  retryCount: number;
+  errorMessage: string | null;
+};
+
+type LoadAction =
+  | { type: "START_LOADING" }
+  | { type: "FETCH_SUCCESS"; hasMore: boolean }
+  | { type: "SCHEDULE_RETRY" }
+  | { type: "MAX_RETRIES_EXCEEDED"; errorMessage: string }
+  | { type: "RESET_FOR_RETRY" };
+
+function loadReducer(state: LoadState, action: LoadAction): LoadState {
+  switch (action.type) {
+    case "START_LOADING":
+      return {
+        status: "loading",
+        retryCount: state.retryCount,
+        errorMessage: null,
+      };
+
+    case "FETCH_SUCCESS":
+      return {
+        status: action.hasMore ? "idle" : "reached_start",
+        retryCount: 0,
+        errorMessage: null,
+      };
+
+    case "SCHEDULE_RETRY":
+      return {
+        status: "waiting_retry",
+        retryCount: state.retryCount + 1,
+        errorMessage: null,
+      };
+
+    case "MAX_RETRIES_EXCEEDED":
+      return {
+        status: "error",
+        retryCount: state.retryCount + 1,
+        errorMessage: action.errorMessage,
+      };
+
+    case "RESET_FOR_RETRY":
+      // Reset to idle so loadOlderItems can start fresh
+      return { status: "idle", retryCount: 0, errorMessage: null };
+
+    default:
+      return state;
+  }
+}
+
+function createInitialState(hasMore: boolean): LoadState {
+  return {
+    status: hasMore ? "idle" : "reached_start",
+    retryCount: 0,
+    errorMessage: null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pure Helper Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+function canStartLoad(status: LoadStatus, itemCount: number): boolean {
+  if (itemCount === 0) return false;
+  if (status === "loading") return false;
+  if (status === "reached_start") return false;
+  // "idle", "error", and "waiting_retry" can start a load
+  // (waiting_retry transitions to loading when the retry timer fires)
+  return true;
+}
+
+function getRetryDelay(retryCount: number, baseDelayMs: number): number {
+  return baseDelayMs * Math.pow(2, retryCount - 1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Hook for infinite scroll pagination that loads older items when scrolling up.
  *
- * ## Algorithm Overview
+ * ## How It Works
  *
- * **Trigger Flow:**
- * 1. IntersectionObserver watches a sentinel element at the top of the scroll container
- * 2. When sentinel becomes visible (user scrolled near top), observer fires
- * 3. Debounced handler checks guards (not loading, not at start, no error) and calls loadOlderItems()
+ * 1. **Trigger**: IntersectionObserver fires when sentinel near top becomes visible
+ * 2. **Guard**: Check state synchronously via ref to prevent concurrent loads
+ * 3. **Load**: Fetch older items, with auto-retry on transient errors
+ * 4. **Restore**: Adjust scroll position so user stays at same visual spot
  *
- * **Load Flow:**
- * 1. Set loading guard synchronously (prevents concurrent loads)
- * 2. Capture current scroll position for later restoration
- * 3. Fetch older items via provided fetchOlder callback
- * 4. On success: prepend items, update hasReachedStart if no more
- * 5. On error: auto-retry with exponential backoff (up to maxRetries), then show error
+ * ## State Machine
  *
- * **Scroll Preservation:**
- * 1. Before fetch: save scrollHeight and scrollTop
- * 2. After items prepended: calculate height difference, adjust scrollTop to maintain position
- *
- * **State Management:**
- * - Refs (isLoadingOlderRef, hasReachedStartRef, hasErrorRef) for synchronous guards
- * - State (isLoadingOlder, hasReachedStart, loadError) for UI rendering
- * - Refs are checked/set synchronously to prevent race conditions between rapid calls
- *
- * @example
- * ```tsx
- * const { isLoadingOlder, hasReachedStart, loadError, topSentinelRef, retry } = useInfiniteScrollUp({
- *   items: events,
- *   initialHasMore: true,
- *   fetchOlder: async (oldest) => {
- *     const response = await fetch(`/api/events?before=${oldest.id}`);
- *     const data = await response.json();
- *     return { items: data.events, hasMore: data.hasMore };
- *   },
- *   prependItems: (newEvents) => setEvents(prev => [...newEvents, ...prev]),
- *   scrollContainerRef,
- * });
- *
- * return (
- *   <div ref={scrollContainerRef}>
- *     {loadError ? (
- *       <ErrorNotice message={loadError} onRetry={retry} />
- *     ) : hasReachedStart ? (
- *       <SessionStart />
- *     ) : (
- *       <div ref={topSentinelRef} />
- *     )}
- *     {isLoadingOlder && <Spinner />}
- *     {events.map(e => <Event key={e.id} event={e} />)}
- *   </div>
- * );
+ * ```
+ * idle ──[START_LOADING]──► loading
+ *                              │
+ *              ┌───────────────┴───────────────┐
+ *              ▼                               ▼
+ *   [FETCH_SUCCESS]                     [on error]
+ *         │                                   │
+ *    ┌────┴────┐                    ┌─────────┴─────────┐
+ *    ▼         ▼                    ▼                   ▼
+ *  idle   reached_start      waiting_retry            error
+ *                             (auto-retry)        (max retries)
+ *                                   │                   │
+ *                            [timer fires]       [RESET_FOR_RETRY]
+ *                                   │                   │
+ *                                   └─► [START_LOADING] ◄┘
+ *                                              │
+ *                                              ▼
+ *                                           loading
  * ```
  */
 export function useInfiniteScrollUp<T>({
@@ -107,28 +189,61 @@ export function useInfiniteScrollUp<T>({
   maxRetries = 2,
   retryBaseDelayMs = 1000,
 }: UseInfiniteScrollUpOptions<T>): UseInfiniteScrollUpResult {
-  // State for UI rendering
-  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-  const [hasReachedStart, setHasReachedStart] = useState(!initialHasMore);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // ─────────────────────────────────────────────────────────────────────────
+  // State Machine
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Refs for synchronous guards - prevent race conditions when called
-  // multiple times before React re-renders
-  const isLoadingOlderRef = useRef(false);
-  const hasReachedStartRef = useRef(!initialHasMore);
-  const hasErrorRef = useRef(false);
+  const [state, dispatch] = useReducer(loadReducer, initialHasMore, (hasMore) =>
+    createInitialState(hasMore),
+  );
 
-  // Retry tracking
-  const retryCountRef = useRef(0);
+  // Ref mirrors state for synchronous access in guards (before React re-renders)
+  const stateRef = useRef(state);
+
+  // Transition helper: updates ref synchronously, then dispatches to React
+  const transition = useCallback((action: LoadAction) => {
+    stateRef.current = loadReducer(stateRef.current, action);
+    dispatch(action);
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Refs
+  // ─────────────────────────────────────────────────────────────────────────
+
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sentinel element ref
+  const scrollSnapshotRef = useRef<ScrollSnapshot | null>(null);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // For preserving scroll position when loading older items
-  const pendingScrollPreservation = useRef<ScrollPreservation | null>(null);
+  // ─────────────────────────────────────────────────────────────────────────
+  // Scroll Preservation
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Clear any pending retry timeout on unmount
+  const captureScrollPosition = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      scrollSnapshotRef.current = {
+        scrollHeight: container.scrollHeight,
+        scrollTop: container.scrollTop,
+      };
+    }
+  }, [scrollContainerRef]);
+
+  const restoreScrollPosition = useCallback(() => {
+    const snapshot = scrollSnapshotRef.current;
+    const container = scrollContainerRef.current;
+
+    if (snapshot && container) {
+      const heightDiff = container.scrollHeight - snapshot.scrollHeight;
+      container.scrollTop = snapshot.scrollTop + heightDiff;
+    }
+
+    scrollSnapshotRef.current = null;
+  }, [scrollContainerRef]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Cleanup
+  // ─────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     return () => {
       if (retryTimeoutRef.current) {
@@ -137,213 +252,144 @@ export function useInfiniteScrollUp<T>({
     };
   }, []);
 
-  // Load older items
-  const loadOlderItems = useCallback(
-    async (isRetry = false) => {
-      // Use refs for synchronous guard - prevents race conditions when called
-      // multiple times before React re-renders
-      if (
-        isLoadingOlderRef.current ||
-        hasReachedStartRef.current ||
-        items.length === 0
-      ) {
-        return;
+  // ─────────────────────────────────────────────────────────────────────────
+  // Core Load Function
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const loadOlderItems = useCallback(async () => {
+    // Synchronous guard using ref (prevents race conditions before React re-renders)
+    if (!canStartLoad(stateRef.current.status, items.length)) {
+      return;
+    }
+
+    transition({ type: "START_LOADING" });
+    captureScrollPosition();
+
+    try {
+      const result = await fetchOlder(items[0]);
+
+      transition({ type: "FETCH_SUCCESS", hasMore: result.hasMore });
+
+      if (result.items.length > 0) {
+        prependItems(result.items);
       }
+    } catch (err) {
+      logger.error("Failed to load older items:", err);
 
-      // Don't auto-trigger if there's an error (user must click retry)
-      // But allow if this is an explicit retry
-      if (hasErrorRef.current && !isRetry) {
-        return;
+      const currentRetryCount = stateRef.current.retryCount;
+      const canRetry = currentRetryCount < maxRetries;
+
+      if (canRetry) {
+        transition({ type: "SCHEDULE_RETRY" });
+
+        const delay = getRetryDelay(currentRetryCount + 1, retryBaseDelayMs);
+        logger.debug(
+          `Auto-retrying (${currentRetryCount + 1}/${maxRetries}) in ${delay}ms`,
+        );
+
+        retryTimeoutRef.current = setTimeout(() => {
+          retryTimeoutRef.current = null;
+          // loadOlderItems will transition from "waiting_retry" to "loading" via START_LOADING
+          loadOlderItems();
+        }, delay);
+      } else {
+        transition({
+          type: "MAX_RETRIES_EXCEEDED",
+          errorMessage: "Failed to load older messages",
+        });
+        scrollSnapshotRef.current = null;
       }
+    }
+  }, [
+    items,
+    fetchOlder,
+    prependItems,
+    maxRetries,
+    retryBaseDelayMs,
+    transition,
+    captureScrollPosition,
+  ]);
 
-      // Set ref synchronously BEFORE any async work to prevent duplicate calls
-      isLoadingOlderRef.current = true;
+  // ─────────────────────────────────────────────────────────────────────────
+  // Manual Retry
+  // ─────────────────────────────────────────────────────────────────────────
 
-      // Clear error state when attempting to load
-      if (hasErrorRef.current) {
-        hasErrorRef.current = false;
-        setLoadError(null);
-      }
-
-      const container = scrollContainerRef.current;
-      if (container) {
-        pendingScrollPreservation.current = {
-          scrollHeight: container.scrollHeight,
-          scrollTop: container.scrollTop,
-        };
-      }
-
-      setIsLoadingOlder(true);
-
-      try {
-        const oldestItem = items[0];
-        const result = await fetchOlder(oldestItem);
-
-        // Success - reset retry count
-        retryCountRef.current = 0;
-
-        if (!result.hasMore) {
-          hasReachedStartRef.current = true;
-          setHasReachedStart(true);
-        }
-
-        if (result.items.length > 0) {
-          prependItems(result.items);
-        }
-      } catch (err) {
-        logger.error("Failed to load older items:", err);
-
-        // Check if we should auto-retry
-        if (retryCountRef.current < maxRetries) {
-          retryCountRef.current += 1;
-          const delay =
-            retryBaseDelayMs * Math.pow(2, retryCountRef.current - 1);
-          logger.debug(
-            `Auto-retrying pagination (attempt ${retryCountRef.current}/${maxRetries}) in ${delay}ms`,
-          );
-
-          // Schedule retry
-          retryTimeoutRef.current = setTimeout(() => {
-            retryTimeoutRef.current = null; // Clear before calling so finally knows we're not waiting
-            isLoadingOlderRef.current = false;
-            loadOlderItems(true);
-          }, delay);
-
-          // Keep loading state true during retry wait
-          return;
-        }
-
-        // Max retries exceeded - show error to user
-        hasErrorRef.current = true;
-        setLoadError("Failed to load older messages");
-        // Clear scroll preservation since we failed
-        pendingScrollPreservation.current = null;
-      } finally {
-        // Only clear loading state if we're not waiting for a scheduled retry
-        if (retryTimeoutRef.current === null) {
-          isLoadingOlderRef.current = false;
-          setIsLoadingOlder(false);
-        }
-      }
-    },
-    [
-      items,
-      fetchOlder,
-      prependItems,
-      scrollContainerRef,
-      maxRetries,
-      retryBaseDelayMs,
-    ],
-  );
-
-  // Manual retry function for user-initiated recovery
   const retry = useCallback(() => {
+    // Guard against rapid clicks - if already loading, ignore
+    if (stateRef.current.status === "loading") {
+      return;
+    }
+
     // Cancel any pending auto-retry
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
       retryTimeoutRef.current = null;
-      // Reset loading ref since we're canceling the pending retry
-      isLoadingOlderRef.current = false;
     }
 
-    // Prevent concurrent loads from rapid clicks
-    if (isLoadingOlderRef.current) return;
+    // Reset state to allow a fresh load attempt
+    transition({ type: "RESET_FOR_RETRY" });
 
-    // Reset retry count for fresh attempt
-    retryCountRef.current = 0;
+    // Now loadOlderItems can proceed (status is "idle")
+    loadOlderItems();
+  }, [loadOlderItems, transition]);
 
-    // Trigger load with isRetry=true to bypass error guard
-    loadOlderItems(true);
-  }, [loadOlderItems]);
+  // ─────────────────────────────────────────────────────────────────────────
+  // IntersectionObserver Trigger
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Keep a ref to the latest loadOlderItems so debounced function always calls current version
-  const loadOlderItemsRef = useRef(loadOlderItems);
-  useEffect(() => {
-    loadOlderItemsRef.current = loadOlderItems;
-  }, [loadOlderItems]);
+  // useLatest keeps a stable ref to the latest loadOlderItems without needing
+  // to include it in dependency arrays (avoids observer reconnections)
+  const loadOlderItemsRef = useLatest(loadOlderItems);
 
-  // Create a stable debounced function that:
-  // 1. Always calls the latest loadOlderItems via ref (avoids stale closures)
-  // 2. Never recreates (empty deps), so pending calls aren't lost
-  // 3. Is cancelled on unmount
-  const loadOlderItemsDebounced = useMemo(
-    () =>
-      debounce(() => {
-        // Check refs inside callback - observer doesn't need to reconnect when these change
-        if (
-          isLoadingOlderRef.current ||
-          hasReachedStartRef.current ||
-          hasErrorRef.current
-        ) {
-          return;
-        }
-        loadOlderItemsRef.current();
-      }, debounceMs),
-    [debounceMs],
+  const debouncedLoad = useMemo(
+    () => debounce(() => loadOlderItemsRef.current(), debounceMs),
+    [debounceMs, loadOlderItemsRef],
   );
 
-  // Cancel pending debounced calls on unmount
   useEffect(() => {
-    return () => {
-      loadOlderItemsDebounced.cancel();
-    };
-  }, [loadOlderItemsDebounced]);
+    return () => debouncedLoad.cancel();
+  }, [debouncedLoad]);
 
-  // IntersectionObserver for infinite scroll
-  // Uses refs for state checks to avoid reconnecting observer on every state change
   useEffect(() => {
     const sentinel = topSentinelRef.current;
     const container = scrollContainerRef.current;
 
-    if (!sentinel || !container) {
-      return;
-    }
+    if (!sentinel || !container) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0];
-        if (entry.isIntersecting) {
-          loadOlderItemsDebounced();
+        if (entries[0].isIntersecting) {
+          debouncedLoad();
         }
       },
-      {
-        root: container,
-        rootMargin,
-        threshold: 0.1,
-      },
+      { root: container, rootMargin, threshold: 0.1 },
     );
 
     observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [debouncedLoad, scrollContainerRef, rootMargin]);
 
-    return () => {
-      observer.disconnect();
-    };
-  }, [loadOlderItemsDebounced, scrollContainerRef, rootMargin]);
+  // ─────────────────────────────────────────────────────────────────────────
+  // Scroll Position Restoration
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Preserve scroll position when older items are loaded
+  const isLoading =
+    state.status === "loading" || state.status === "waiting_retry";
+
   useEffect(() => {
-    // Still loading - wait for items to arrive before adjusting scroll
-    if (isLoadingOlder) {
-      return;
+    if (!isLoading && scrollSnapshotRef.current) {
+      restoreScrollPosition();
     }
+  }, [items, isLoading, restoreScrollPosition]);
 
-    // Older items loaded - preserve scroll position
-    if (pendingScrollPreservation.current) {
-      const container = scrollContainerRef.current;
-      if (container) {
-        const { scrollHeight: prevHeight, scrollTop: prevScrollTop } =
-          pendingScrollPreservation.current;
-        const heightDiff = container.scrollHeight - prevHeight;
-        container.scrollTop = prevScrollTop + heightDiff;
-      }
-      pendingScrollPreservation.current = null;
-    }
-  }, [items, isLoadingOlder, scrollContainerRef]);
+  // ─────────────────────────────────────────────────────────────────────────
+  // Return Derived State
+  // ─────────────────────────────────────────────────────────────────────────
 
   return {
-    isLoadingOlder,
-    hasReachedStart,
-    loadError,
+    isLoadingOlder: isLoading,
+    hasReachedStart: state.status === "reached_start",
+    loadError: state.errorMessage,
     topSentinelRef,
     retry,
   };
