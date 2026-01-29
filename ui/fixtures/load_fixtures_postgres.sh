@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Load small fixtures into Postgres inference tables.
-# Only loads chat_inferences and json_inferences (Step 1 tables).
+# Load small fixtures into Postgres tables.
+# Loads inference tables (Step 1) and feedback tables (Step 2).
 #
 # Usage:
 #   ./ui/fixtures/load_fixtures_postgres.sh
@@ -54,22 +54,34 @@ if [ "${TENSORZERO_SKIP_TRUNCATE:-}" = "1" ]; then
 else
     echo "Truncating tables..."
     psql -q "$POSTGRES_URL" <<EOF
+-- Inference tables (Step 1)
 TRUNCATE TABLE tensorzero.chat_inferences CASCADE;
 TRUNCATE TABLE tensorzero.json_inferences CASCADE;
+-- Feedback tables (Step 2)
+TRUNCATE TABLE tensorzero.boolean_metric_feedback CASCADE;
+TRUNCATE TABLE tensorzero.float_metric_feedback CASCADE;
+TRUNCATE TABLE tensorzero.comment_feedback CASCADE;
+TRUNCATE TABLE tensorzero.demonstration_feedback CASCADE;
 EOF
     echo "  Done"
 fi
 
 # Download JSONL fixtures from R2 if not present
-if [ ! -f "chat_inference_examples.jsonl" ] || [ ! -f "json_inference_examples.jsonl" ]; then
+if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/boolean_metric_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/float_metric_feedback_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/comment_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/demonstration_feedback_examples.jsonl" ]; then
     echo "Downloading small fixtures..."
-    uv run ./download-small-fixtures.py
+    if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
+        uv run ./download-small-fixtures-http.py
+    else
+        uv run ./download-small-fixtures.py
+    fi
 fi
 
 # Chat Inferences
 # Note: input, output, tool_params, inference_params are JSONB in our schema
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
-load_jsonl "chat_inference_examples.jsonl" "tensorzero.chat_inferences" "
+load_jsonl "small-fixtures/chat_inference_examples.jsonl" "tensorzero.chat_inferences" "
 INSERT INTO tensorzero.chat_inferences (
     id, function_name, variant_name, episode_id,
     input, output, tool_params, inference_params,
@@ -103,7 +115,7 @@ ON CONFLICT (id, created_at) DO NOTHING;
 # JSON Inferences
 # Note: input, output, output_schema, inference_params, auxiliary_content are JSONB in our schema
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
-load_jsonl "json_inference_examples.jsonl" "tensorzero.json_inferences" "
+load_jsonl "small-fixtures/json_inference_examples.jsonl" "tensorzero.json_inferences" "
 INSERT INTO tensorzero.json_inferences (
     id, function_name, variant_name, episode_id,
     input, output, output_schema, inference_params,
@@ -128,6 +140,95 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
 "
 
+# =====================================================================
+# Feedback Tables (Step 2)
+# =====================================================================
+
+# Boolean Metric Feedback
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
+load_jsonl "small-fixtures/boolean_metric_feedback_examples.jsonl" "tensorzero.boolean_metric_feedback" "
+INSERT INTO tensorzero.boolean_metric_feedback (
+    id, target_id, metric_name, value, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    (j->>'target_id')::uuid,
+    j->>'metric_name',
+    (j->>'value')::boolean,
+    COALESCE(j->'tags', '{}')::jsonb,
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id) DO NOTHING;
+"
+
+# Float Metric Feedback
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
+load_jsonl "small-fixtures/float_metric_feedback_examples.jsonl" "tensorzero.float_metric_feedback" "
+INSERT INTO tensorzero.float_metric_feedback (
+    id, target_id, metric_name, value, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    (j->>'target_id')::uuid,
+    j->>'metric_name',
+    (j->>'value')::double precision,
+    COALESCE(j->'tags', '{}')::jsonb,
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id) DO NOTHING;
+"
+
+# Also load jaro_winkler_similarity_feedback into float_metric_feedback
+load_jsonl "small-fixtures/jaro_winkler_similarity_feedback.jsonl" "tensorzero.float_metric_feedback" "
+INSERT INTO tensorzero.float_metric_feedback (
+    id, target_id, metric_name, value, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    (j->>'target_id')::uuid,
+    j->>'metric_name',
+    (j->>'value')::double precision,
+    COALESCE(j->'tags', '{}')::jsonb,
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id) DO NOTHING;
+"
+
+# Comment Feedback
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
+load_jsonl "small-fixtures/comment_feedback_examples.jsonl" "tensorzero.comment_feedback" "
+INSERT INTO tensorzero.comment_feedback (
+    id, target_id, target_type, value, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    (j->>'target_id')::uuid,
+    j->>'target_type',
+    j->>'value',
+    COALESCE(j->'tags', '{}')::jsonb,
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id) DO NOTHING;
+"
+
+# Demonstration Feedback
+# Note: demonstration_feedback uses inference_id instead of target_id
+# Note: value is JSONB (stores JsonInferenceOutput or Vec<ContentBlockChatOutput>)
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
+load_jsonl "small-fixtures/demonstration_feedback_examples.jsonl" "tensorzero.demonstration_feedback" "
+INSERT INTO tensorzero.demonstration_feedback (
+    id, inference_id, value, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    (j->>'inference_id')::uuid,
+    j->'value',
+    COALESCE(j->'tags', '{}')::jsonb,
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id) DO NOTHING;
+"
+
 echo ""
 echo "All fixtures loaded successfully!"
 
@@ -138,5 +239,13 @@ psql -q "$POSTGRES_URL" <<EOF
 SELECT 'chat_inferences' as table_name, count(*) as count FROM tensorzero.chat_inferences
 UNION ALL
 SELECT 'json_inferences', count(*) FROM tensorzero.json_inferences
+UNION ALL
+SELECT 'boolean_metric_feedback', count(*) FROM tensorzero.boolean_metric_feedback
+UNION ALL
+SELECT 'float_metric_feedback', count(*) FROM tensorzero.float_metric_feedback
+UNION ALL
+SELECT 'comment_feedback', count(*) FROM tensorzero.comment_feedback
+UNION ALL
+SELECT 'demonstration_feedback', count(*) FROM tensorzero.demonstration_feedback
 ORDER BY table_name;
 EOF

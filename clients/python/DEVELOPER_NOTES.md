@@ -6,17 +6,9 @@
 
 ## Local Installation
 
-To install the local version of the client (i.e. not from PyPI), run:
+We recommend using [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
-pip install -r requirements.txt
-maturin develop
-```
-
-If using `uv`, then instead run:
-
-```bash
-uv venv
 uv sync
 uv run maturin develop --uv
 uv run python

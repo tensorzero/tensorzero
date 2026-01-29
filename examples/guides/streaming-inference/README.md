@@ -47,17 +47,16 @@ curl -X POST http://localhost:3000/inference \
 <details>
 <summary><b>Python</b></summary>
 
-a. Install the dependencies:
+a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
-# We recommend using Python 3.10+ and a virtual environment
-pip install -r requirements.txt
+uv sync
 ```
 
 b. Run the example:
 
 ```bash
-python run.py
+uv run run.py
 ```
 
 </details>

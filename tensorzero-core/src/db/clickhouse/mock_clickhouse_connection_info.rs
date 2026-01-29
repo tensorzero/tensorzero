@@ -114,6 +114,16 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
             .get_json_inference_output_schema(function_name, inference_id)
             .await
     }
+
+    async fn get_inference_output(
+        &self,
+        function_info: &FunctionInfo,
+        inference_id: Uuid,
+    ) -> Result<Option<String>, Error> {
+        self.inference_queries
+            .get_inference_output(function_info, inference_id)
+            .await
+    }
 }
 
 #[async_trait]
@@ -157,6 +167,16 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
     ) -> Result<u64, Error> {
         self.dataset_queries
             .delete_datapoints(dataset_name, datapoint_ids)
+            .await
+    }
+
+    async fn clone_datapoints(
+        &self,
+        target_dataset_name: &str,
+        source_datapoint_ids: &[Uuid],
+    ) -> Result<Vec<Option<Uuid>>, Error> {
+        self.dataset_queries
+            .clone_datapoints(target_dataset_name, source_datapoint_ids)
             .await
     }
 }

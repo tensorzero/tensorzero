@@ -110,10 +110,10 @@ describe("URL helper functions", () => {
   describe("toWorkflowEvaluationRunUrl", () => {
     it("should encode run IDs", () => {
       expect(toWorkflowEvaluationRunUrl("run_1")).toBe(
-        "/workflow_evaluations/runs/run_1",
+        "/workflow-evaluations/runs/run_1",
       );
       expect(toWorkflowEvaluationRunUrl("run/test")).toBe(
-        "/workflow_evaluations/runs/run%2Ftest",
+        "/workflow-evaluations/runs/run%2Ftest",
       );
     });
   });
@@ -121,10 +121,10 @@ describe("URL helper functions", () => {
   describe("toWorkflowEvaluationProjectUrl", () => {
     it("should encode project names", () => {
       expect(toWorkflowEvaluationProjectUrl("project_1")).toBe(
-        "/workflow_evaluations/projects/project_1",
+        "/workflow-evaluations/projects/project_1",
       );
       expect(toWorkflowEvaluationProjectUrl("project/test")).toBe(
-        "/workflow_evaluations/projects/project%2Ftest",
+        "/workflow-evaluations/projects/project%2Ftest",
       );
     });
   });

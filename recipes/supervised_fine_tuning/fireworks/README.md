@@ -13,17 +13,8 @@ The `fireworks.ipynb` notebook provides a step-by-step recipe to perform supervi
 3. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database (run the [quickstart guide](https://www.tensorzero.com/docs/quickstart/) or an example in /examples if your ClickHouse database is not yet populated with data).
 4. Run the `fireworks.ipynb` Jupyter notebook.
 
-### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
+We recommend using [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
-uv venv  # Create a new virtual environment
-uv pip sync requirements.txt  # Install the dependencies
-```
-
-### Using `pip`
-
-We recommend using Python 3.10+ and a virtual environment.
-
-```bash
-pip install -r requirements.txt
+uv sync
 ```

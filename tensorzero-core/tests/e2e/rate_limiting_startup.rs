@@ -7,11 +7,14 @@
 //! - Starting with both backends available
 //! - Backend selection via config
 
+use redis::AsyncCommands;
 use tempfile::NamedTempFile;
 use tensorzero::ClientBuilder;
 use tensorzero::ClientBuilderMode;
 use tensorzero::PostgresConfig;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
+use uuid::Uuid;
 
 /// Helper to get the test Postgres URL from environment
 fn postgres_url() -> Option<PostgresConfig> {
@@ -423,5 +426,154 @@ model = "dummy"
     assert!(
         result.is_ok(),
         "Gateway should start successfully with disabled rate limiting and without backends, got: {result:?}",
+    );
+}
+
+/// Test that old rate limit keys (`ratelimit:*`) are migrated to new keys (`tensorzero_ratelimit:*`)
+/// when creating a Valkey connection.
+#[tokio::test]
+async fn test_valkey_migration_old_ratelimit_keys() {
+    let valkey_url =
+        valkey_url().expect("Valkey tests should have a TENSORZERO_VALKEY_URL env variable");
+
+    // Create a raw Redis client to set up the old key
+    let client = redis::Client::open(valkey_url.as_str()).expect("Failed to create Redis client");
+    let mut raw_conn = client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("Failed to connect to Valkey");
+
+    // Create a unique test key to avoid interference with other tests
+    let test_id = Uuid::now_v7().to_string();
+    let old_key = format!("ratelimit:{test_id}");
+    let new_key = format!("tensorzero_ratelimit:{test_id}");
+
+    // Set up the old key with some rate limit state
+    let _: () = raw_conn
+        .hset_multiple(
+            &old_key,
+            &[("balance", "42"), ("last_refilled", "1234567890")],
+        )
+        .await
+        .expect("Failed to set old key");
+
+    // Set a TTL on the old key
+    let _: () = raw_conn
+        .expire(&old_key, 3600)
+        .await
+        .expect("Failed to set TTL on old key");
+
+    // Verify the old key exists and new key doesn't
+    let old_exists: bool = raw_conn
+        .exists(&old_key)
+        .await
+        .expect("Failed to check old key existence");
+    assert!(old_exists, "Old key should exist before migration");
+
+    let new_exists_before: bool = raw_conn
+        .exists(&new_key)
+        .await
+        .expect("Failed to check new key existence");
+    assert!(
+        !new_exists_before,
+        "New key should not exist before migration"
+    );
+
+    // Create the ValkeyConnectionInfo, which triggers the migration
+    let _valkey_conn = ValkeyConnectionInfo::new(&valkey_url)
+        .await
+        .expect("Failed to create ValkeyConnectionInfo");
+
+    // Verify the new key now exists with the same data
+    let new_exists_after: bool = raw_conn
+        .exists(&new_key)
+        .await
+        .expect("Failed to check new key existence after migration");
+    assert!(new_exists_after, "New key should exist after migration");
+
+    // Verify the data was copied correctly
+    let new_data: Vec<(String, String)> = raw_conn
+        .hgetall(&new_key)
+        .await
+        .expect("Failed to get new key data");
+
+    let balance = new_data
+        .iter()
+        .find(|(k, _)| k == "balance")
+        .map(|(_, v)| v.as_str());
+    let last_refilled = new_data
+        .iter()
+        .find(|(k, _)| k == "last_refilled")
+        .map(|(_, v)| v.as_str());
+
+    assert_eq!(
+        balance,
+        Some("42"),
+        "Balance should be copied from old key to new key"
+    );
+    assert_eq!(
+        last_refilled,
+        Some("1234567890"),
+        "last_refilled should be copied from old key to new key"
+    );
+
+    // Verify TTL was copied (should be close to 3600, accounting for test execution time)
+    let new_ttl: i64 = raw_conn
+        .ttl(&new_key)
+        .await
+        .expect("Failed to get new key TTL");
+    assert!(
+        new_ttl > 3500 && new_ttl <= 3600,
+        "TTL should be copied from old key, got {new_ttl}"
+    );
+}
+
+/// Test that migration is idempotent - existing new keys are not overwritten
+#[tokio::test]
+async fn test_valkey_migration_does_not_overwrite_existing_new_keys() {
+    let valkey_url =
+        valkey_url().expect("Valkey tests should have a TENSORZERO_VALKEY_URL env variable");
+
+    let client = redis::Client::open(valkey_url.as_str()).expect("Failed to create Redis client");
+    let mut raw_conn = client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("Failed to connect to Valkey");
+
+    let test_id = Uuid::now_v7().to_string();
+    let old_key = format!("ratelimit:{test_id}");
+    let new_key = format!("tensorzero_ratelimit:{test_id}");
+
+    // Set up both old and new keys with different values
+    let _: () = raw_conn
+        .hset_multiple(&old_key, &[("balance", "100"), ("last_refilled", "111")])
+        .await
+        .expect("Failed to set old key");
+
+    let _: () = raw_conn
+        .hset_multiple(&new_key, &[("balance", "50"), ("last_refilled", "222")])
+        .await
+        .expect("Failed to set new key");
+
+    // Create the ValkeyConnectionInfo, which triggers the migration
+    let _valkey_conn = ValkeyConnectionInfo::new(&valkey_url)
+        .await
+        .expect("Failed to create ValkeyConnectionInfo");
+
+    // Verify the new key still has its original data (not overwritten)
+    let new_data: Vec<(String, String)> = raw_conn
+        .hgetall(&new_key)
+        .await
+        .expect("Failed to get new key data");
+
+    let balance = new_data
+        .iter()
+        .find(|(k, _)| k == "balance")
+        .map(|(_, v)| v.as_str());
+
+    assert_eq!(
+        balance,
+        Some("50"),
+        "New key should not be overwritten by migration"
     );
 }

@@ -1,17 +1,18 @@
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { TableItemTime } from "~/components/ui/TableItems";
-import type { Event } from "~/types/tensorzero";
+import type { GatewayEvent } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 import { getToolCallEventId, isToolEvent, ToolEventId } from "./EventStream";
 
 type PendingToolCallCardProps = {
-  event: Event;
+  event: GatewayEvent;
   isLoading: boolean;
   loadingAction?: "approving" | "rejecting";
   onAuthorize: (approved: boolean) => void;
   additionalCount: number;
   isInCooldown?: boolean;
+  className?: string;
 };
 
 export function PendingToolCallCard({
@@ -21,6 +22,7 @@ export function PendingToolCallCard({
   onAuthorize,
   additionalCount,
   isInCooldown = false,
+  className,
 }: PendingToolCallCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
@@ -60,6 +62,7 @@ export function PendingToolCallCard({
         "flex flex-col gap-2 rounded-md border border-blue-300 bg-blue-50 px-4 py-3 dark:border-blue-700 dark:bg-blue-950/30",
         isInCooldown &&
           "animate-in fade-in zoom-in-95 duration-1000 ease-in-out",
+        className,
       )}
     >
       <div className="flex items-center justify-between gap-4">

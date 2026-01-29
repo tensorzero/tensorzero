@@ -268,6 +268,58 @@ impl InferenceQueries for ClickHouseConnectionInfo {
 
         Ok(Some(output_schema))
     }
+
+    async fn get_inference_output(
+        &self,
+        function_info: &FunctionInfo,
+        inference_id: Uuid,
+    ) -> Result<Option<String>, Error> {
+        let table_name = function_info.function_type.inference_table_name();
+
+        // Build the query with parameterized values
+        let query = format!(
+            r"
+            SELECT output
+            FROM {table_name}
+            WHERE
+                id = {{inference_id:String}} AND
+                episode_id = {{episode_id:UUID}} AND
+                function_name = {{function_name:String}} AND
+                variant_name = {{variant_name:String}}
+            LIMIT 1
+            FORMAT JSONEachRow
+            SETTINGS max_threads=1
+            "
+        );
+
+        let inference_id_str = inference_id.to_string();
+        let episode_id_str = function_info.episode_id.to_string();
+        let params = HashMap::from([
+            ("inference_id", inference_id_str.as_str()),
+            ("episode_id", episode_id_str.as_str()),
+            ("function_name", function_info.function_name.as_str()),
+            ("variant_name", function_info.variant_name.as_str()),
+        ]);
+
+        let response = self.inner.run_query_synchronous(query, &params).await?;
+
+        if response.response.is_empty() {
+            return Ok(None);
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct OutputResult {
+            output: String,
+        }
+
+        let result: OutputResult = serde_json::from_str(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: format!("Failed to parse output result: {e}"),
+            })
+        })?;
+
+        Ok(Some(result.output))
+    }
 }
 
 /// Generates the SQL query and parameters for counting inferences.
@@ -1822,6 +1874,301 @@ mod tests {
                 ),
                 "Error should mention search relevance ordering conflict with before/after pagination"
             );
+        }
+    }
+
+    mod get_inference_output_tests {
+        use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+        use crate::db::clickhouse::query_builder::test_util::assert_query_contains;
+        use crate::db::clickhouse::{
+            ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
+        };
+        use crate::db::inferences::{FunctionInfo, InferenceQueries};
+        use crate::inference::types::FunctionType;
+        use std::sync::Arc;
+        use uuid::Uuid;
+
+        #[tokio::test]
+        async fn test_get_inference_output_chat_inference_success() {
+            let inference_id = Uuid::now_v7();
+            let episode_id = Uuid::now_v7();
+            let function_info = FunctionInfo {
+                function_name: "test_chat_function".to_string(),
+                function_type: FunctionType::Chat,
+                variant_name: "test_variant".to_string(),
+                episode_id,
+            };
+
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    // Verify query targets ChatInference table
+                    assert_query_contains(query, "FROM ChatInference");
+                    // Verify parameterized WHERE clause
+                    assert_query_contains(query, "id = {inference_id:String}");
+                    assert_query_contains(query, "episode_id = {episode_id:UUID}");
+                    assert_query_contains(query, "function_name = {function_name:String}");
+                    assert_query_contains(query, "variant_name = {variant_name:String}");
+                    // Verify parameters are set
+                    assert_eq!(
+                        params.get("function_name"),
+                        Some(&"test_chat_function"),
+                        "function_name parameter should be set"
+                    );
+                    assert_eq!(
+                        params.get("variant_name"),
+                        Some(&"test_variant"),
+                        "variant_name parameter should be set"
+                    );
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"output":"[{\"type\":\"text\",\"text\":\"Hello!\"}]"}"#
+                            .to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .get_inference_output(&function_info, inference_id)
+                .await
+                .expect("Should succeed");
+
+            assert!(
+                result.is_some(),
+                "Should return Some for existing inference"
+            );
+            assert_eq!(
+                result.unwrap(),
+                r#"[{"type":"text","text":"Hello!"}]"#,
+                "Should return the output string"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_output_json_inference_success() {
+            let inference_id = Uuid::now_v7();
+            let episode_id = Uuid::now_v7();
+            let function_info = FunctionInfo {
+                function_name: "test_json_function".to_string(),
+                function_type: FunctionType::Json,
+                variant_name: "json_variant".to_string(),
+                episode_id,
+            };
+
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    // Verify query targets JsonInference table
+                    assert_query_contains(query, "FROM JsonInference");
+                    // Verify parameters
+                    assert_eq!(
+                        params.get("function_name"),
+                        Some(&"test_json_function"),
+                        "function_name parameter should be set"
+                    );
+                    assert_eq!(
+                        params.get("variant_name"),
+                        Some(&"json_variant"),
+                        "variant_name parameter should be set"
+                    );
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"output":"{\"raw\":\"{\\\"score\\\":0.95}\",\"parsed\":{\"score\":0.95}}"}"#
+                            .to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .get_inference_output(&function_info, inference_id)
+                .await
+                .expect("Should succeed");
+
+            assert!(
+                result.is_some(),
+                "Should return Some for existing JSON inference"
+            );
+            assert!(
+                result.unwrap().contains("score"),
+                "Should return the JSON output"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_output_not_found() {
+            let inference_id = Uuid::now_v7();
+            let episode_id = Uuid::now_v7();
+            let function_info = FunctionInfo {
+                function_name: "nonexistent_function".to_string(),
+                function_type: FunctionType::Chat,
+                variant_name: "nonexistent_variant".to_string(),
+                episode_id,
+            };
+
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous().returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(), // Empty response indicates not found
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .get_inference_output(&function_info, inference_id)
+                .await
+                .expect("Should succeed even when not found");
+
+            assert!(
+                result.is_none(),
+                "Should return None for non-existent inference"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_output_uses_all_parameters_for_security() {
+            let inference_id = Uuid::now_v7();
+            let episode_id = Uuid::now_v7();
+            let function_info = FunctionInfo {
+                function_name: "secure_function".to_string(),
+                function_type: FunctionType::Chat,
+                variant_name: "secure_variant".to_string(),
+                episode_id,
+            };
+
+            let mut mock = MockClickHouseClient::new();
+            mock.expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    // Verify ALL parameters are used in WHERE clause for security
+                    // This prevents unauthorized access by requiring all identifiers to match
+                    assert_query_contains(query, "id = {inference_id:String}");
+                    assert_query_contains(query, "episode_id = {episode_id:UUID}");
+                    assert_query_contains(query, "function_name = {function_name:String}");
+                    assert_query_contains(query, "variant_name = {variant_name:String}");
+
+                    // Verify all parameters are bound (not interpolated)
+                    assert!(
+                        params.contains_key("inference_id"),
+                        "inference_id should be a bound parameter"
+                    );
+                    assert!(
+                        params.contains_key("episode_id"),
+                        "episode_id should be a bound parameter"
+                    );
+                    assert!(
+                        params.contains_key("function_name"),
+                        "function_name should be a bound parameter"
+                    );
+                    assert!(
+                        params.contains_key("variant_name"),
+                        "variant_name should be a bound parameter"
+                    );
+
+                    // Verify no string interpolation in the query (SQL injection prevention)
+                    assert!(
+                        !query.contains("secure_function"),
+                        "function_name should NOT be interpolated into query"
+                    );
+                    assert!(
+                        !query.contains("secure_variant"),
+                        "variant_name should NOT be interpolated into query"
+                    );
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"output":"test output"}"#.to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
+            let result = conn
+                .get_inference_output(&function_info, inference_id)
+                .await;
+
+            assert!(result.is_ok(), "Query should execute successfully");
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_output_table_selection_by_function_type() {
+            // Test Chat function type uses ChatInference table
+            let chat_function_info = FunctionInfo {
+                function_name: "chat_func".to_string(),
+                function_type: FunctionType::Chat,
+                variant_name: "v1".to_string(),
+                episode_id: Uuid::now_v7(),
+            };
+
+            let mut chat_mock = MockClickHouseClient::new();
+            chat_mock
+                .expect_run_query_synchronous()
+                .withf(|query, _| {
+                    assert_query_contains(query, "FROM ChatInference");
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(chat_mock));
+            let _ = conn
+                .get_inference_output(&chat_function_info, Uuid::now_v7())
+                .await;
+
+            // Test Json function type uses JsonInference table
+            let json_function_info = FunctionInfo {
+                function_name: "json_func".to_string(),
+                function_type: FunctionType::Json,
+                variant_name: "v1".to_string(),
+                episode_id: Uuid::now_v7(),
+            };
+
+            let mut json_mock = MockClickHouseClient::new();
+            json_mock
+                .expect_run_query_synchronous()
+                .withf(|query, _| {
+                    assert_query_contains(query, "FROM JsonInference");
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(json_mock));
+            let _ = conn
+                .get_inference_output(&json_function_info, Uuid::now_v7())
+                .await;
         }
     }
 

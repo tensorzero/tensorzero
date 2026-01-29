@@ -15,9 +15,31 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          sparse-checkout: .github/workflows/general.yml
+          sparse-checkout-cone-mode: false
+
       - name: Check running workflows on merge queue branches
         run: |
           echo "Checking for running workflows on merge queue branches..."
+
+          # Dynamically extract the 'needs' list from 'check-all-general-jobs-passed' job in general.yml
+          # This ensures we only cancel on failures of jobs that actually block merging
+          REQUIRED_JOBS=$(yq -r '.jobs["check-all-general-jobs-passed"].needs[]' .github/workflows/general.yml)
+
+          if [ -z "$REQUIRED_JOBS" ]; then
+            echo "ERROR: Could not extract required jobs from general.yml"
+            exit 1
+          fi
+
+          echo "Required jobs (from check-all-general-jobs-passed needs):"
+          echo "$REQUIRED_JOBS"
+          echo ""
+
+          # Build jq filter for required jobs as a JSON array
+          JQ_FILTER=$(echo "$REQUIRED_JOBS" | jq -R -s 'split("\n") | map(select(length > 0))')
 
           # Get all in-progress workflow runs for general.yml
           workflow_runs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
@@ -51,11 +73,20 @@ jobs:
             jobs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
               "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/jobs")
 
-            # Check if any job has failed
-            failed_jobs=$(echo "$jobs" | jq -r '.jobs[] | select(.conclusion == "failure") | "\(.name) (status: \(.status), conclusion: \(.conclusion))"')
+            # Check if any required job has failed
+            # Job names may include matrix suffixes (e.g., "lint-rust (1)"), so we check if the job name starts with any required job name
+            failed_jobs=$(echo "$jobs" | jq -r --argjson required "$JQ_FILTER" '
+              .jobs[] |
+              select(.conclusion == "failure") |
+              select(
+                .name as $job_name |
+                any($required[]; . as $req | $job_name | startswith($req))
+              ) |
+              "\(.name) (status: \(.status), conclusion: \(.conclusion))"
+            ')
 
             if [ -n "$failed_jobs" ]; then
-              echo "Found failed jobs in workflow run $run_id:"
+              echo "Found failed required jobs in workflow run $run_id:"
               echo "$failed_jobs"
               echo ""
               echo "Cancelling workflow run $run_id on branch $branch..."
@@ -75,7 +106,7 @@ jobs:
               fi
               echo ""
             else
-              echo "No failed jobs found in workflow run $run_id"
+              echo "No failed required jobs found in workflow run $run_id"
             fi
           done <<< "$merge_queue_runs"
 

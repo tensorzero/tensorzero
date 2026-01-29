@@ -10,10 +10,11 @@ use mockall::mock;
 use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
-    InferenceResponse, ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference,
-    StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
+    CreateDatapointsResponse, DatasetMetadata, DeleteDatapointsResponse, FeedbackParams,
+    FeedbackResponse, GetConfigResponse, GetDatapointsResponse, GetInferencesRequest,
+    GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
+    ListDatasetsResponse, ListInferencesRequest, Role, StoredChatInference, StoredInference,
+    UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
     WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
@@ -56,7 +57,7 @@ mock! {
             &self,
             session_id: Uuid,
             params: durable_tools::ListEventsParams,
-        ) -> Result<durable_tools::ListEventsResponse, TensorZeroClientError>;
+        ) -> Result<durable_tools::GatewayListEventsResponse, TensorZeroClientError>;
 
         async fn list_autopilot_sessions(
             &self,
@@ -90,6 +91,11 @@ mock! {
             dataset_name: String,
             params: CreateDatapointsFromInferenceRequestParams,
         ) -> Result<CreateDatapointsResponse, TensorZeroClientError>;
+
+        async fn list_datasets(
+            &self,
+            request: ListDatasetsRequest,
+        ) -> Result<ListDatasetsResponse, TensorZeroClientError>;
 
         async fn list_datapoints(
             &self,
@@ -296,5 +302,23 @@ pub fn create_mock_feedback_by_variant(
         mean,
         variance: if count > 1 { Some(0.1) } else { None },
         count,
+    }
+}
+
+/// Create a mock ListDatasetsResponse with the given datasets.
+pub fn create_mock_list_datasets_response(datasets: Vec<DatasetMetadata>) -> ListDatasetsResponse {
+    ListDatasetsResponse { datasets }
+}
+
+/// Create a mock DatasetMetadata for testing.
+pub fn create_mock_dataset_metadata(
+    dataset_name: &str,
+    datapoint_count: u32,
+    last_updated: &str,
+) -> DatasetMetadata {
+    DatasetMetadata {
+        dataset_name: dataset_name.to_string(),
+        datapoint_count,
+        last_updated: last_updated.to_string(),
     }
 }

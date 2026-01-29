@@ -1,7 +1,7 @@
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{MetricConfig, MetricConfigLevel};
 use crate::error::Error;
-use crate::function::FunctionConfigType;
+use crate::function::{FunctionConfig, FunctionConfigType};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -62,7 +62,7 @@ pub struct DemonstrationFeedbackInsert {
 }
 
 /// Row to insert into static_evaluation_human_feedback
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct StaticEvaluationHumanFeedbackInsert {
     pub feedback_id: Uuid,
     pub metric_name: String,
@@ -153,7 +153,7 @@ pub trait FeedbackQueries {
     async fn query_metrics_with_feedback(
         &self,
         function_name: &str,
-        inference_table: &str,
+        function_config: &FunctionConfig,
         variant_name: Option<&str>,
     ) -> Result<Vec<MetricWithFeedback>, Error>;
 
@@ -293,7 +293,7 @@ pub struct CommentFeedbackRow {
     pub timestamp: DateTime<Utc>,
 }
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum CommentTargetType {

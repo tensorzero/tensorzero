@@ -18,6 +18,7 @@ services:
       - "3030:3030"
 
   fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
       context: ../../..
@@ -29,6 +30,7 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - TENSORZERO_SKIP_LARGE_FIXTURES
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
@@ -38,9 +40,14 @@ services:
       gateway-clickhouse-migrations:
         condition: service_healthy
     # Keep this running to make `check-docker-compose.sh` detect that all containers are healthy
-    command: [ "bash", "-c", "cd /fixtures && ./load_fixtures.sh ${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests} && sleep infinity" ]
+    command:
+      [
+        "bash",
+        "-c",
+        "cd /fixtures && ./load_fixtures.sh ${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests} && sleep infinity",
+      ]
     healthcheck:
-      test: [ "CMD", "test", "-f", "/load_complete.marker" ]
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 72 # Retry for up to 6 minutes
@@ -57,6 +64,7 @@ services:
       - ~/.aws:/root/.aws
     environment:
       - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
     depends_on:
@@ -64,9 +72,14 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-    command: [ "bash", "-c", "cd /fixtures && ./load_fixtures_postgres.sh && touch /load_complete_postgres.marker && sleep infinity" ]
+    command:
+      [
+        "bash",
+        "-c",
+        "cd /fixtures && ./load_fixtures_postgres.sh && touch /load_complete_postgres.marker && sleep infinity",
+      ]
     healthcheck:
-      test: [ "CMD", "test", "-f", "/load_complete_postgres.marker" ]
+      test: ["CMD", "test", "-f", "/load_complete_postgres.marker"]
       interval: 5s
       timeout: 1s
       retries: 72 # Retry for up to 6 minutes

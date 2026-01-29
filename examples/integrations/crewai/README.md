@@ -16,7 +16,7 @@ For this example, we simply call the model `openai::gpt-4o-mini` with the defaul
 
 1. Open the `example/` directory: `cd example/`
 2. Install Python 3.10+ and the `crewai` CLI utility.
-3. Install the Python dependencies with `pip install -r requirements.txt`.
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 4. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 
 ### Setup

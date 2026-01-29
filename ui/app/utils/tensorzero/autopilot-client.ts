@@ -4,12 +4,12 @@ import type {
   ApproveAllToolCallsResponse,
   CreateEventGatewayRequest,
   CreateEventResponse,
+  GatewayListEventsResponse,
+  GatewayStreamUpdate,
   ListEventsParams,
-  ListEventsResponse,
   ListSessionsParams,
   ListSessionsResponse,
   StreamEventsParams,
-  StreamUpdate,
 } from "~/types/tensorzero";
 
 /**
@@ -37,12 +37,24 @@ export class AutopilotClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Interrupts an autopilot session.
+   */
+  async interruptAutopilotSession(sessionId: string): Promise<void> {
+    const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/actions/interrupt`;
+    const response = await this.fetch(endpoint, { method: "POST" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+  }
+
+  /**
    * Lists events for an autopilot session with optional pagination.
    */
   async listAutopilotEvents(
     sessionId: string,
     params?: ListEventsParams,
-  ): Promise<ListEventsResponse> {
+  ): Promise<GatewayListEventsResponse> {
     const searchParams = new URLSearchParams();
     if (params?.limit) searchParams.set("limit", params.limit.toString());
     if (params?.before) searchParams.set("before", params.before);
@@ -54,7 +66,7 @@ export class AutopilotClient extends BaseTensorZeroClient {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as ListEventsResponse;
+    return (await response.json()) as GatewayListEventsResponse;
   }
 
   /**
@@ -99,12 +111,12 @@ export class AutopilotClient extends BaseTensorZeroClient {
 
   /**
    * Streams events for an autopilot session using Server-Sent Events.
-   * Returns an async generator that yields Event objects.
+   * Returns an async generator that yields GatewayStreamUpdate objects.
    */
   async *streamAutopilotEvents(
     sessionId: string,
     params?: StreamEventsParams,
-  ): AsyncGenerator<StreamUpdate, void, unknown> {
+  ): AsyncGenerator<GatewayStreamUpdate, void, unknown> {
     const searchParams = new URLSearchParams();
     if (params?.last_event_id)
       searchParams.set("last_event_id", params.last_event_id);
@@ -145,7 +157,7 @@ export class AutopilotClient extends BaseTensorZeroClient {
           if (line.startsWith("data: ")) {
             const data = line.slice(6);
             if (data) {
-              const event = JSON.parse(data) as StreamUpdate;
+              const event = JSON.parse(data) as GatewayStreamUpdate;
               yield event;
             }
           }

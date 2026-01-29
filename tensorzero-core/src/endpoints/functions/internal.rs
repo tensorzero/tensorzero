@@ -64,11 +64,10 @@ pub async fn get_function_metrics(
 ) -> Result<MetricsWithFeedbackResponse, Error> {
     // Get function config to determine the inference table
     let function_config = get_function(&config.functions, function_name)?;
-    let inference_table = function_config.table_name();
 
     // Query metrics with feedback
     let metrics = clickhouse
-        .query_metrics_with_feedback(function_name, inference_table, variant_name)
+        .query_metrics_with_feedback(function_name, &function_config, variant_name)
         .await?;
 
     // Enrich metric_type from config for metrics that don't have it set

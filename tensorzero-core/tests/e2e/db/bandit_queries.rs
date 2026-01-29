@@ -1,7 +1,9 @@
 #![expect(clippy::print_stdout)]
-use tensorzero_core::db::{
-    TimeWindow, clickhouse::test_helpers::get_clickhouse, feedback::FeedbackQueries,
-};
+//! Shared test logic for bandit-related FeedbackQueries methods (ClickHouse and Postgres).
+//!
+//! Each test function accepts a connection implementing `FeedbackQueries`.
+
+use tensorzero_core::db::{TimeWindow, feedback::FeedbackQueries};
 
 fn assert_float_eq(actual: f32, expected: f32, epsilon: Option<f32>) {
     let epsilon = epsilon.unwrap_or(1e-4);
@@ -11,10 +13,10 @@ fn assert_float_eq(actual: f32, expected: f32, epsilon: Option<f32>) {
     );
 }
 
-#[tokio::test]
-async fn test_clickhouse_metrics_by_variant_singleton() {
-    let clickhouse = get_clickhouse().await;
-    let metrics_by_variant = clickhouse
+// ===== get_feedback_by_variant tests =====
+
+async fn test_metrics_by_variant_singleton(conn: impl FeedbackQueries) {
+    let metrics_by_variant = conn
         .get_feedback_by_variant("haiku_score_episode", "write_haiku", None)
         .await
         .unwrap();
@@ -25,11 +27,12 @@ async fn test_clickhouse_metrics_by_variant_singleton() {
     assert_float_eq(metric.variance.unwrap(), 0.10703, None);
     assert_eq!(metric.count, 75);
 }
+// Postgres small fixtures don't have haiku_score_episode feedback linked to write_haiku inferences.
+// TODO(#5691): Add Postgres test after adding large fixtures.
+make_clickhouse_only_test!(test_metrics_by_variant_singleton);
 
-#[tokio::test]
-async fn test_clickhouse_metrics_by_variant_filter_all() {
-    let clickhouse = get_clickhouse().await;
-    let metrics_by_variant = clickhouse
+async fn test_metrics_by_variant_filter_all(conn: impl FeedbackQueries) {
+    let metrics_by_variant = conn
         .get_feedback_by_variant(
             "haiku_score_episode",
             "write_haiku",
@@ -40,11 +43,12 @@ async fn test_clickhouse_metrics_by_variant_filter_all() {
         .unwrap();
     assert!(metrics_by_variant.is_empty());
 }
+// Postgres small fixtures don't have haiku_score_episode feedback linked to write_haiku inferences.
+// TODO(#5691): Add Postgres test after adding large fixtures.
+make_clickhouse_only_test!(test_metrics_by_variant_filter_all);
 
-#[tokio::test]
-async fn test_clickhouse_metrics_by_variant_many_results() {
-    let clickhouse = get_clickhouse().await;
-    let metrics_by_variant = clickhouse
+async fn test_metrics_by_variant_many_results(conn: impl FeedbackQueries) {
+    let metrics_by_variant = conn
         .get_feedback_by_variant("exact_match", "extract_entities", None)
         .await
         .unwrap();
@@ -52,7 +56,7 @@ async fn test_clickhouse_metrics_by_variant_many_results() {
     assert_eq!(metrics_by_variant.len(), 3);
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by(|a, b| b.count.cmp(&a.count));
+    metrics_by_variant.sort_by_key(|b| std::cmp::Reverse(b.count));
     let metric = metrics_by_variant.first().unwrap();
     assert_eq!(metric.variant_name, "dicl");
     assert_eq!(metric.count, 39);
@@ -71,17 +75,16 @@ async fn test_clickhouse_metrics_by_variant_many_results() {
     assert_float_eq(metric.mean, 0.2, None);
     assert_float_eq(metric.variance.unwrap(), 0.16666667, None);
 }
+make_db_test!(test_metrics_by_variant_many_results);
 
-#[tokio::test]
-async fn test_clickhouse_metrics_by_variant_episode_boolean() {
-    let clickhouse = get_clickhouse().await;
-    let metrics_by_variant = clickhouse
+async fn test_metrics_by_variant_episode_boolean(conn: impl FeedbackQueries) {
+    let metrics_by_variant = conn
         .get_feedback_by_variant("solved", "ask_question", None)
         .await
         .unwrap();
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by(|a, b| b.count.cmp(&a.count));
+    metrics_by_variant.sort_by_key(|b| std::cmp::Reverse(b.count));
     println!("metrics_by_variant: {metrics_by_variant:?}");
     assert_eq!(metrics_by_variant.len(), 3);
     let metric = metrics_by_variant.first().unwrap();
@@ -102,17 +105,18 @@ async fn test_clickhouse_metrics_by_variant_episode_boolean() {
     assert_float_eq(metric.mean, 1.0, None);
     assert_float_eq(metric.variance.unwrap(), 0.0, None);
 }
+// Postgres small fixtures don't have solved feedback linked to ask_question inferences.
+// TODO(#5691): Add Postgres test after adding large fixtures.
+make_clickhouse_only_test!(test_metrics_by_variant_episode_boolean);
 
-#[tokio::test]
-async fn test_clickhouse_metrics_by_variant_episode_float() {
-    let clickhouse = get_clickhouse().await;
-    let metrics_by_variant = clickhouse
+async fn test_metrics_by_variant_episode_float(conn: impl FeedbackQueries) {
+    let metrics_by_variant = conn
         .get_feedback_by_variant("elapsed_ms", "ask_question", None)
         .await
         .unwrap();
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by(|a, b| b.count.cmp(&a.count));
+    metrics_by_variant.sort_by_key(|b| std::cmp::Reverse(b.count));
     println!("metrics_by_variant: {metrics_by_variant:?}");
     assert_eq!(metrics_by_variant.len(), 3);
     let metric = metrics_by_variant.first().unwrap();
@@ -133,17 +137,20 @@ async fn test_clickhouse_metrics_by_variant_episode_float() {
     assert_float_eq(metric.mean, 65755.3, None);
     assert_float_eq(metric.variance.unwrap(), 22337140.0, None);
 }
+// Postgres small fixtures don't have elapsed_ms feedback linked to ask_question inferences.
+// TODO(#5691): Add Postgres test after adding large fixtures.
+make_clickhouse_only_test!(test_metrics_by_variant_episode_float);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_minute_level() {
-    let clickhouse = get_clickhouse().await;
+// ===== get_cumulative_feedback_timeseries tests =====
+
+async fn test_get_cumulative_feedback_timeseries_minute_level(conn: impl FeedbackQueries) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
 
     // Test minute-level aggregation
     // Fixture data is from April 2025, so we need to look back far enough
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -225,16 +232,15 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_minute_level() {
         Some(1e-6),
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_minute_level);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_hourly() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_hourly(conn: impl FeedbackQueries) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
 
     // Test hourly aggregation
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -315,16 +321,15 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_hourly() {
         Some(1e-6),
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_hourly);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_daily() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_daily(conn: impl FeedbackQueries) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
 
     // Test daily aggregation
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -404,16 +409,15 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_daily() {
         Some(1e-6),
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_daily);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_weekly() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_weekly(conn: impl FeedbackQueries) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
 
     // Test weekly aggregation
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -490,16 +494,15 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_weekly() {
         Some(1e-6),
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_weekly);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_monthly() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_monthly(conn: impl FeedbackQueries) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
 
     // Test monthly aggregation
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -576,16 +579,17 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_monthly() {
         Some(1e-6),
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_monthly);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_cumulative_returns_error() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_cumulative_returns_error(
+    conn: impl FeedbackQueries,
+) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
 
     // Test that Cumulative time window returns an error
-    let result = clickhouse
+    let result = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -606,16 +610,15 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_cumulative_returns_e
         "Error message should indicate Cumulative is not supported, got: {error_message}"
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_cumulative_returns_error);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_with_variant_filter() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_with_variant_filter(conn: impl FeedbackQueries) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
 
     // Test with specific variant (filter to only one)
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name.clone(),
             metric_name.clone(),
@@ -666,7 +669,7 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_with_variant_filter(
     assert_float_eq(final_point.variance.unwrap(), 0.094_610_54, Some(1e-6));
 
     // Test with empty variant list - should return empty result
-    let empty_result = clickhouse
+    let empty_result = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -681,10 +684,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_with_variant_filter(
         "Empty variant list should return empty result"
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_with_variant_filter);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_includes_baseline_values() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_includes_baseline_values(
+    conn: impl FeedbackQueries,
+) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
@@ -694,7 +698,7 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_includes_baseline_va
     // With daily granularity and max_periods=2, we should only see:
     // - 2025-04-15 (most recent - 1)
     // - 2025-04-16 (most recent)
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -763,10 +767,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_includes_baseline_va
         );
     }
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_includes_baseline_values);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_includes_silent_variants() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_includes_silent_variants(
+    conn: impl FeedbackQueries,
+) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
@@ -775,7 +780,7 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_includes_silent_vari
     // On this day, only gpt4o_mini_initial_prompt has new data
     // But llama_8b_initial_prompt and gpt4o_initial_prompt should still appear
     // with their baseline values from 2025-04-14
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -847,17 +852,16 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_includes_silent_vari
         "llama_8b_initial_prompt should have baseline count of 38"
     );
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_includes_silent_variants);
 
-#[tokio::test]
-async fn test_clickhouse_get_cumulative_feedback_timeseries_baseline_continuity() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_cumulative_feedback_timeseries_baseline_continuity(conn: impl FeedbackQueries) {
     let function_name = "extract_entities".to_string();
     let metric_name =
         "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
 
     // Get a narrow window (hourly with max_periods=3)
     // This should show proper cumulative progression
-    let feedback_timeseries = clickhouse
+    let feedback_timeseries = conn
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -893,7 +897,7 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_baseline_continuity(
             .collect();
 
         // Sort by period
-        variant_points.sort_by(|a, b| a.period_end.cmp(&b.period_end));
+        variant_points.sort_by_key(|a| a.period_end);
 
         if variant_points.len() > 1 {
             // Verify counts are non-decreasing (cumulative)
@@ -917,3 +921,4 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_baseline_continuity(
         }
     }
 }
+make_db_test!(test_get_cumulative_feedback_timeseries_baseline_continuity);
