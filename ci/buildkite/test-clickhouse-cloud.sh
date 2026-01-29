@@ -87,11 +87,11 @@ sudo apt-get install -y clickhouse-client
 curl \
     --retry 3 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 90 \
     "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
+curl --proto '=https' --tlsv1.2 -sSf --retry 3 --retry-delay 5 --retry-all-errors https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
-curl -LsSf https://astral.sh/uv/0.9.27/install.sh | sh
+curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://astral.sh/uv/0.9.27/install.sh | sh
 source $HOME/.local/bin/env
-curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
+curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
 uv run ./ui/fixtures/download-large-fixtures.py
 uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
