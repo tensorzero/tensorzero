@@ -25,11 +25,18 @@ fi
 echo "Truncating all tables before loading fixtures..."
 tables=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
     --query "SELECT name FROM system.tables WHERE database = '$DATABASE_NAME' AND engine NOT LIKE '%View%' AND name NOT LIKE '.inner%'")
+
+# Build a single query with all TRUNCATEs for efficiency
+truncate_query=""
 for table in $tables; do
-    echo "Truncating table: $table"
-    clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
-        --database "$DATABASE_NAME" --query "TRUNCATE TABLE \`$table\`"
+    truncate_query+="TRUNCATE TABLE \`$table\`; "
 done
+
+if [ -n "$truncate_query" ]; then
+    echo "Truncating tables: $tables"
+    clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
+        --database "$DATABASE_NAME" --multiquery --query "$truncate_query"
+fi
 
 # Download JSONL fixtures from R2
 if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
