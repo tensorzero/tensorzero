@@ -535,6 +535,10 @@ pub struct TopKEvaluationVisualization {
 pub enum VisualizationType {
     /// Top-k evaluation results showing variant performance comparisons.
     TopKEvaluation(TopKEvaluationVisualization),
+    /// Unknown visualization type for forward compatibility.
+    /// Old clients can gracefully handle new visualization types they don't recognize.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Visualization payload for an event.
