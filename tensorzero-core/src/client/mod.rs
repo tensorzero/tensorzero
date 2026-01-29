@@ -25,7 +25,7 @@ use crate::{
     utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey},
 };
 use reqwest::header::HeaderMap;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
 use tokio::time::error::Elapsed;
@@ -229,7 +229,7 @@ impl HTTPGateway {
             let inner_err = Error::new(ErrorDetails::StreamError {
                 source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
             });
-            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = *e {
+            if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = *e {
                 return Err(TensorZeroError::Http {
                     status_code: code.as_u16(),
                     text: resp.text().await.ok(),
@@ -248,9 +248,6 @@ impl HTTPGateway {
             while let Some(ev) = event_source.next().await {
                 match ev {
                     Err(e) => {
-                        if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
-                            break;
-                        }
                         yield Err(Error::new(ErrorDetails::StreamError {
                             source: Box::new(Error::new(ErrorDetails::Serialization {
                                 message: format!("Error in streaming response: {}", DisplayOrDebug {

@@ -5,7 +5,7 @@ mod common;
 use common::start_gateway_on_random_port;
 use futures::StreamExt;
 use http::StatusCode;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use std::time::Duration;
 use tokio::time::error::Elapsed;
 

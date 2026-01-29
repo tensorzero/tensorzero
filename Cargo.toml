@@ -60,6 +60,7 @@ futures = "0.3.30"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
 sse-stream = "0.2.1"
+reqwest-sse-stream = { path = "internal/reqwest-sse-stream" }
 minijinja = { version = "2.15.1", features = [
     "loader",
     "debug",

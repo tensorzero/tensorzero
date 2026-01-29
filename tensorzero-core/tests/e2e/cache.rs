@@ -3,8 +3,8 @@
 use futures::StreamExt;
 use rand::Rng;
 use reqwest::Client;
-use reqwest_eventsource::Event;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_sse_stream::Event;
+use reqwest_sse_stream::RequestBuilderExt;
 use serde_json::Value;
 use serde_json::json;
 use std::time::Duration;

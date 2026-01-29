@@ -766,7 +766,7 @@ async fn test_openai_compatible_route_with_json_schema() {
 #[tokio::test]
 async fn test_openai_compatible_streaming_tool_call() {
     use futures::StreamExt;
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::{Event, RequestBuilderExt};
 
     let client = Client::new();
     let episode_id = Uuid::now_v7();
@@ -934,7 +934,7 @@ async fn test_openai_compatible_deny_unknown_fields() {
 #[tokio::test]
 async fn test_openai_compatible_streaming() {
     use futures::StreamExt;
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::{Event, RequestBuilderExt};
 
     let client = Client::new();
     let episode_id = Uuid::now_v7();

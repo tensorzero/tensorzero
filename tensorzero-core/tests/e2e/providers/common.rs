@@ -27,7 +27,7 @@ use object_store::path::Path;
 
 use rand::Rng;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use std::future::IntoFuture;
 use tensorzero::{
@@ -3736,7 +3736,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         .unwrap();
 
     while let Some(event) = event_source.next().await {
-        if let Ok(reqwest_eventsource::Event::Open) = event {
+        if let Ok(reqwest_sse_stream::Event::Open) = event {
             continue;
         }
         let err = event.unwrap_err();

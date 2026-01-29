@@ -7,7 +7,7 @@ use tensorzero::{
 use tensorzero_core::inference::types::{Arguments, System, Text};
 
 use crate::common::get_gateway_endpoint;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 
 #[tokio::test]
 async fn test_client_stream_with_error_http_gateway() {
@@ -111,13 +111,10 @@ async fn test_stream_with_error() {
                 }
             },
             Some(Err(e)) => {
-                if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                    break;
-                }
                 panic!("Unexpected error: {e:?}");
             }
             None => {
-                panic!("Stream ended unexpectedly");
+                break;
             }
         }
     }

@@ -4,7 +4,7 @@ use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest::multipart::{Form, Part};
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use responses::stream_openai_responses;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;

@@ -7,7 +7,7 @@
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Map, Value, json};
 use tensorzero::test_helpers::{
     make_embedded_gateway_e2e_with_unique_db, start_http_gateway_with_unique_db,

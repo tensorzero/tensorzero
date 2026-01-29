@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
@@ -848,7 +848,6 @@ async fn test_run_evaluation_streaming_success() {
 
                 events.push(event);
             }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
             Err(e) => panic!("SSE stream error: {e:?}"),
         }
     }
@@ -959,7 +958,6 @@ async fn test_run_evaluation_streaming_nonexistent_dataset() {
                     _ => {}
                 }
             }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
             Err(_) => {
                 found_error_or_empty = true;
                 break;
@@ -1045,7 +1043,6 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
                     _ => {}
                 }
             }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
             Err(e) => panic!("SSE stream error: {e:?}"),
         }
     }

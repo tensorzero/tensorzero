@@ -15,7 +15,7 @@ use axum::{
 use futures_util::StreamExt;
 use provider_proxy::{Args, CacheMode, run_server};
 use rand::Rng;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_sse_stream::RequestBuilderExt;
 use serde_json::Value;
 use tokio::{sync::oneshot, task::JoinHandle};
 
@@ -439,7 +439,6 @@ async fn test_dropped_stream_body() {
         // Read the entire stream, so that we're sure that provider-proxy will write the file to disk
         while let Some(event) = good_stream.next().await {
             match event {
-                Err(reqwest_eventsource::Error::StreamEnded) => break,
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => continue,
             }
@@ -480,10 +479,10 @@ async fn test_dropped_stream_body() {
         .unwrap();
 
     let first_event = first_stream.next().await.unwrap().unwrap();
-    assert_eq!(first_event, reqwest_eventsource::Event::Open);
+    assert_eq!(first_event, reqwest_sse_stream::Event::Open);
 
     let second_event = first_stream.next().await.unwrap().unwrap();
-    let reqwest_eventsource::Event::Message(second_event) = second_event else {
+    let reqwest_sse_stream::Event::Message(second_event) = second_event else {
         panic!("Unexpected event: {second_event:?}");
     };
     assert_eq!(second_event.data, "Hello");
@@ -547,7 +546,7 @@ async fn test_stream_body() {
 
     while let Some(event) = second_stream.next().await {
         let event = event.unwrap();
-        if let reqwest_eventsource::Event::Message(event) = event
+        if let reqwest_sse_stream::Event::Message(event) = event
             && event.data == "[DONE]"
         {
             break;

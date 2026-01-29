@@ -2,7 +2,7 @@
 use std::time::{Duration, Instant};
 
 use reqwest::Client;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use tensorzero::test_helpers::get_metrics;
 use tokio::task::JoinSet;
 use tokio_stream::StreamExt;

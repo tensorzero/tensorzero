@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use futures::StreamExt;
 use indexmap::IndexMap;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero::{
     ClientInferenceParams, File, InferenceOutput, InferenceResponse, Input, InputMessage,

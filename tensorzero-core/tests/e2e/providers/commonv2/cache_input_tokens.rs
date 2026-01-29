@@ -16,7 +16,7 @@ use crate::providers::common::E2ETestProvider;
 use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use uuid::Uuid;

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use futures::StreamExt;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
