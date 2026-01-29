@@ -9,9 +9,9 @@ use durable_tools_spawn::{SpawnClient, SpawnOptions};
 use futures::stream::{Stream, StreamExt};
 use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
-use reqwest_eventsource::{Event as SseEvent, EventSource};
 use secrecy::{ExposeSecret, SecretString};
 use sqlx::PgPool;
+use sse_stream::{Sse, SseStream};
 use url::Url;
 use uuid::Uuid;
 
@@ -674,13 +674,13 @@ impl AutopilotClient {
 
         let request = self.sse_http_client.get(url).headers(self.auth_headers());
 
-        let mut event_source =
-            EventSource::new(request).map_err(|e| AutopilotError::Sse(e.to_string()))?;
+        let event_source =
+            SseStream::from_byte_stream(request.send().await?.error_for_status()?.bytes_stream());
 
         // Wait for connection to be established or fail.
         // The first event should be Open on success, or an error on failure.
         match event_source.next().await {
-            Some(Ok(SseEvent::Open)) => {
+            Some(Ok(Sse::Open)) => {
                 // Connection established successfully
             }
             Some(Err(e)) => {

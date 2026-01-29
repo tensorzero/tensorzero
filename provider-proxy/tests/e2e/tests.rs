@@ -15,7 +15,6 @@ use axum::{
 use futures_util::StreamExt;
 use provider_proxy::{Args, CacheMode, run_server};
 use rand::Rng;
-use reqwest_eventsource::RequestBuilderExt;
 use serde_json::Value;
 use tokio::{sync::oneshot, task::JoinHandle};
 
@@ -432,14 +431,14 @@ async fn test_dropped_stream_body() {
             .build()
             .unwrap();
 
-        let mut good_stream = good_client
-            .post(format!("http://{target_server_addr}/slow"))
-            .eventsource()
-            .unwrap();
+        let mut good_stream = reqwest_sse_stream::into_sse_stream(
+            good_client.post(format!("http://{target_server_addr}/slow")),
+        )
+        .await
+        .unwrap();
         // Read the entire stream, so that we're sure that provider-proxy will write the file to disk
         while let Some(event) = good_stream.next().await {
             match event {
-                Err(reqwest_eventsource::Error::StreamEnded) => break,
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => continue,
             }
@@ -474,23 +473,18 @@ async fn test_dropped_stream_body() {
         .build()
         .unwrap();
 
-    let mut first_stream = client
-        .post(format!("http://{target_server_addr}/slow"))
-        .eventsource()
-        .unwrap();
+    let mut first_stream = reqwest_sse_stream::into_sse_stream(
+        client.post(format!("http://{target_server_addr}/slow")),
+    )
+    .await
+    .unwrap();
 
     let first_event = first_stream.next().await.unwrap().unwrap();
-    assert_eq!(first_event, reqwest_eventsource::Event::Open);
-
-    let second_event = first_stream.next().await.unwrap().unwrap();
-    let reqwest_eventsource::Event::Message(second_event) = second_event else {
-        panic!("Unexpected event: {second_event:?}");
-    };
-    assert_eq!(second_event.data, "Hello");
+    assert_eq!(first_event.data, Some("Hello".to_string()));
     // We should get a timeout
     let err = first_stream.next().await.unwrap().unwrap_err();
     assert!(
-        matches!(&err, reqwest_eventsource::Error::Transport(e) if e.is_timeout()),
+        matches!(&err, sse_stream::Error::Body(e) if format!("{e:?}").contains("TimedOut")),
         "Unexpected error: {err:?}"
     );
 
@@ -540,16 +534,15 @@ async fn test_stream_body() {
         .build()
         .unwrap();
 
-    let mut second_stream = client
-        .post(format!("http://{target_server_addr}/slow"))
-        .eventsource()
-        .unwrap();
+    let mut second_stream = reqwest_sse_stream::into_sse_stream(
+        client.post(format!("http://{target_server_addr}/slow")),
+    )
+    .await
+    .unwrap();
 
     while let Some(event) = second_stream.next().await {
         let event = event.unwrap();
-        if let reqwest_eventsource::Event::Message(event) = event
-            && event.data == "[DONE]"
-        {
+        if event.data.as_deref() == Some("done") {
             break;
         }
     }

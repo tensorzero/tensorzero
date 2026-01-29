@@ -13,17 +13,14 @@ use std::{
 use tracing::Span;
 use tracing_futures::Instrument;
 
-use eventsource_stream::Eventsource;
 use futures::{Stream, StreamExt};
 use http::{HeaderMap, HeaderName, HeaderValue};
 use pin_project::pin_project;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest::{Body, Response, StatusCode};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
-use reqwest_eventsource::{
-    CannotCloneRequestError, Error as ReqwestEventSourceError, Event, RequestBuilderExt,
-};
 use serde::{Serialize, de::DeserializeOwned};
+use sse_stream::SseStream;
 
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -543,11 +540,17 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         self
     }
 
-    pub fn eventsource(mut self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
+    pub async fn eventsource(mut self) -> Result<TensorZeroEventSource, reqwest::Error> {
         self = self.with_otlp_headers();
-        let event_source = self.builder.eventsource()?;
+        let response = self
+            .builder
+            .send()
+            .instrument(tensorzero_h2_workaround_span())
+            .await?
+            .error_for_status()?;
+
         Ok(TensorZeroEventSource {
-            stream: Box::pin(event_source.map(|r| r.map_err(Box::new))),
+            stream: SseStream::new(response.body()).pin(),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
             tensorzero_external_span: tracing::debug_span!(

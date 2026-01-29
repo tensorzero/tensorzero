@@ -31,6 +31,8 @@ tokio.workspace = true
 tokio-rustls = "0.26.1"
 tracing = "0.1.43"
 tracing-subscriber.workspace = true
+reqwest-sse-stream = { path = "../internal/reqwest-sse-stream" }
+sse-stream = { workspace = true }
 tempfile = "3.21.0"
 
 
@@ -41,5 +43,4 @@ workspace = true
 axum.workspace = true
 rand = "0.9.1"
 async-stream.workspace = true
-reqwest-eventsource.workspace = true
 futures-util = "0.3.31"
