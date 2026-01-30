@@ -23,6 +23,7 @@ pub mod inference_count;
 pub mod inferences;
 pub mod model_inferences;
 pub mod postgres;
+pub mod query_helpers;
 pub mod rate_limiting;
 pub mod stored_datapoint;
 pub mod test_helpers;
