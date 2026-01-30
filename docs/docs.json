@@ -131,6 +131,7 @@
               "deployment/clickhouse",
               "deployment/postgres",
               "deployment/valkey-redis",
+              "deployment/tensorzero-autopilot",
               "deployment/optimize-latency-and-throughput"
             ]
           },
