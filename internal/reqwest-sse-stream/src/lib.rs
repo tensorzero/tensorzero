@@ -48,21 +48,21 @@ pub enum Event {
 
 /// Mimics the api of `reqwest_eventsource::RequestBuilderExt`
 pub trait RequestBuilderExt {
-    fn eventsource(self) -> impl Stream<Item = Result<Event, ReqwestSseStreamError>>;
+    async fn eventsource(
+        self,
+    ) -> Result<impl Stream<Item = Result<Event, ReqwestSseStreamError>>, ReqwestSseStreamError>;
 
     /// Sends the request and returns the event stream along with response headers.
     /// Returns the headers even on error for cases where they are needed for error handling.
     #[expect(clippy::type_complexity)]
-    fn eventsource_with_headers(
+    async fn eventsource_with_headers(
         self,
-    ) -> impl std::future::Future<
-        Output = Result<
-            (
-                impl Stream<Item = Result<Event, ReqwestSseStreamError>>,
-                http::HeaderMap,
-            ),
-            (ReqwestSseStreamError, Option<http::HeaderMap>),
-        >,
+    ) -> Result<
+        (
+            impl Stream<Item = Result<Event, ReqwestSseStreamError>>,
+            http::HeaderMap,
+        ),
+        (ReqwestSseStreamError, Option<http::HeaderMap>),
     >;
 }
 
@@ -117,44 +117,14 @@ async fn start_stream_with_headers(
     ))
 }
 
-fn sse_stream_to_event_stream(
-    sse_stream: SseStream<impl Body<Error = reqwest::Error>>,
-) -> impl Stream<Item = Result<Event, ReqwestSseStreamError>> {
-    futures::stream::once(async { Ok(Event::Open) }).chain(sse_stream.filter_map(|event| async {
-        match event {
-            Ok(sse) => {
-                // Only yield Message events when data is present
-                MessageEvent::from_sse(sse).map(|message| Ok(Event::Message(message)))
-            }
-            Err(e) => Some(Err(ReqwestSseStreamError::SseError(e))),
-        }
-    }))
-}
-
-/// Sends the request and returns a stream of raw SSE events.
-/// This is useful when you want to handle SSE events directly without
-/// the `Event::Open`/`Event::Message` wrapper.
-pub async fn into_sse_stream(
-    builder: reqwest::RequestBuilder,
-) -> Result<impl Stream<Item = Result<Sse, ReqwestSseStreamError>>, ReqwestSseStreamError> {
-    let (sse_stream, _headers) = start_stream_with_headers(builder)
-        .await
-        .map_err(|(e, _headers)| e)?;
-    Ok(sse_stream.map(|r| r.map_err(ReqwestSseStreamError::SseError)))
-}
-
 impl RequestBuilderExt for reqwest::RequestBuilder {
-    fn eventsource(self) -> impl Stream<Item = Result<Event, ReqwestSseStreamError>> {
-        async_stream::stream! {
-            match self.eventsource_with_headers().await {
-                Ok((event_stream, _headers)) => {
-                    let mut event_stream = std::pin::pin!(event_stream);
-                    while let Some(event) = event_stream.next().await {
-                        yield event;
-                    }
-                }
-                Err((e, _headers)) => yield Err(e),
-            }
+    async fn eventsource(
+        self,
+    ) -> Result<impl Stream<Item = Result<Event, ReqwestSseStreamError>>, ReqwestSseStreamError>
+    {
+        match self.eventsource_with_headers().await {
+            Ok((event_stream, _headers)) => Ok(event_stream),
+            Err((e, _headers)) => Err(e),
         }
     }
 
@@ -167,7 +137,23 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
         ),
         (ReqwestSseStreamError, Option<http::HeaderMap>),
     > {
-        let (sse_stream, headers) = start_stream_with_headers(self).await?;
-        Ok((sse_stream_to_event_stream(sse_stream), headers))
+        let (mut sse_stream, headers) = start_stream_with_headers(self).await?;
+        Ok((
+            async_stream::stream! {
+                while let Some(event) = sse_stream.next().await {
+                    match event {
+                        Ok(sse) => {
+                            if let Some(message_event) = MessageEvent::from_sse(sse) {
+                                yield Ok(Event::Message(message_event));
+                            }
+                        }
+                        Err(e) => {
+                            yield Err(ReqwestSseStreamError::SseError(e));
+                        }
+                    }
+                }
+            },
+            headers,
+        ))
     }
 }

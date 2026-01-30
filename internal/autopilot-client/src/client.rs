@@ -9,6 +9,7 @@ use durable_tools_spawn::{SpawnClient, SpawnOptions};
 use futures::stream::{Stream, StreamExt};
 use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+use reqwest_sse_stream::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use sqlx::PgPool;
 use url::Url;
@@ -672,11 +673,11 @@ impl AutopilotClient {
         }
 
         // Wait for connection to be established or fail.
-        let event_source = reqwest_sse_stream::into_sse_stream(
-            self.sse_http_client.get(url).headers(self.auth_headers()),
-        )
-        .await
-        .map_err(Self::convert_sse_error)?;
+        let event_source = self
+            .sse_http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .eventsource();
 
         // Connection is good, return the stream
         let cache = self.tool_call_cache.clone();
