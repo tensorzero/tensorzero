@@ -1,20 +1,20 @@
 import { useCallback, useMemo, useRef } from "react";
 import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
-import { authorizeToolCall } from "~/utils/autopilot/authorize";
+import { submitToolCallAuthorization } from "~/utils/autopilot/authorize";
 import { approvedStatus, rejectedStatus } from "~/utils/autopilot/types";
 
-interface UseManualApprovalResult {
-  /** Approve or reject a single tool call. Throws on error. */
-  approve: (eventId: string, approved: boolean) => Promise<void>;
+interface UseManualAuthorizationResult {
+  /** Approve a single tool call. Throws on error. */
+  approve: (eventId: string) => Promise<void>;
+
+  /** Reject a single tool call. Throws on error. */
+  reject: (eventId: string) => Promise<void>;
 
   /** Approve all pending tool calls. Throws on error. */
-  approveAll: (lastEventId: string) => Promise<void>;
+  approveAll: (eventIds: string[], lastEventId: string) => Promise<void>;
 
   /** Check if an eventId has been processed (in-flight or completed). */
   isProcessed: (eventId: string) => boolean;
-
-  /** Check if batch approval has been processed. */
-  isBatchProcessed: () => boolean;
 
   /** Reset all tracking (call on session change). */
   reset: () => void;
@@ -33,22 +33,36 @@ interface UseManualApprovalResult {
  * - Keep ref set on success (blocks until SSE removes tool call from UI)
  * - Clear ref only on error (allows retry)
  */
-export function useManualApproval(sessionId: string): UseManualApprovalResult {
+export function useManualAuthorization(
+  sessionId: string,
+): UseManualAuthorizationResult {
   const processedRef = useRef<Set<string>>(new Set());
-  const batchProcessedRef = useRef<boolean>(false);
 
   const approve = useCallback(
-    async (eventId: string, approved: boolean): Promise<void> => {
+    async (eventId: string): Promise<void> => {
       if (processedRef.current.has(eventId)) return;
       processedRef.current.add(eventId);
 
       try {
-        await authorizeToolCall(
+        await submitToolCallAuthorization(sessionId, eventId, approvedStatus());
+      } catch (err) {
+        processedRef.current.delete(eventId);
+        throw err;
+      }
+    },
+    [sessionId],
+  );
+
+  const reject = useCallback(
+    async (eventId: string): Promise<void> => {
+      if (processedRef.current.has(eventId)) return;
+      processedRef.current.add(eventId);
+
+      try {
+        await submitToolCallAuthorization(
           sessionId,
           eventId,
-          approved
-            ? approvedStatus()
-            : rejectedStatus("The user rejected the tool call."),
+          rejectedStatus("The user rejected the tool call."),
         );
       } catch (err) {
         processedRef.current.delete(eventId);
@@ -59,14 +73,23 @@ export function useManualApproval(sessionId: string): UseManualApprovalResult {
   );
 
   const approveAll = useCallback(
-    async (lastEventId: string): Promise<void> => {
-      if (batchProcessedRef.current) return;
-      batchProcessedRef.current = true;
+    async (eventIds: string[], lastEventId: string): Promise<void> => {
+      // Mark all event IDs as processed to prevent individual approve/reject
+      // from firing duplicate requests while batch is in flight
+      const newIds = eventIds.filter((id) => !processedRef.current.has(id));
+      if (newIds.length === 0) return;
+
+      for (const id of newIds) {
+        processedRef.current.add(id);
+      }
 
       try {
         await approveAllToolCalls(sessionId, lastEventId);
       } catch (err) {
-        batchProcessedRef.current = false;
+        // Clear all on error to allow retry
+        for (const id of newIds) {
+          processedRef.current.delete(id);
+        }
         throw err;
       }
     },
@@ -77,17 +100,12 @@ export function useManualApproval(sessionId: string): UseManualApprovalResult {
     return processedRef.current.has(eventId);
   }, []);
 
-  const isBatchProcessed = useCallback((): boolean => {
-    return batchProcessedRef.current;
-  }, []);
-
   const reset = useCallback(() => {
     processedRef.current.clear();
-    batchProcessedRef.current = false;
   }, []);
 
   return useMemo(
-    () => ({ approve, approveAll, isProcessed, isBatchProcessed, reset }),
-    [approve, approveAll, isProcessed, isBatchProcessed, reset],
+    () => ({ approve, reject, approveAll, isProcessed, reset }),
+    [approve, reject, approveAll, isProcessed, reset],
   );
 }

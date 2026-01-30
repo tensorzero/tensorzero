@@ -1,10 +1,10 @@
 import type { AuthorizationStatus } from "./types";
 
 /**
- * Authorize (approve or reject) a single tool call.
+ * Submit an authorization decision (approve or reject) for a tool call.
  * @throws Error if the request fails
  */
-export async function authorizeToolCall(
+export async function submitToolCallAuthorization(
   sessionId: string,
   toolCallEventId: string,
   status: AuthorizationStatus,
