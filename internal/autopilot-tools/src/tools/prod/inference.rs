@@ -1,6 +1,6 @@
 //! Inference tool for calling TensorZero inference endpoint.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
@@ -141,6 +141,10 @@ impl ToolMetadata for InferenceTool {
             }
             .into()
         })
+    }
+
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(5 * 60)
     }
 }
 
