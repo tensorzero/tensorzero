@@ -20,7 +20,7 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 // TODO: make these write human feedback and make sure this is writing correctly.
 
 #[tokio::test]
-async fn e2e_test_comment_human_feedback() {
+async fn test_comment_human_feedback() {
     let client = Client::new();
     // Run inference (standard, no dryrun) to get an episode_id.
     let inference_payload = serde_json::json!({
@@ -175,7 +175,7 @@ async fn e2e_test_comment_human_feedback() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback() {
+async fn test_demonstration_feedback() {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let tag_value = Uuid::now_v7().to_string();
@@ -328,7 +328,7 @@ async fn e2e_test_demonstration_feedback() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_json() {
+async fn test_demonstration_feedback_json() {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -463,7 +463,7 @@ async fn e2e_test_demonstration_feedback_json() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_dynamic_json() {
+async fn test_demonstration_feedback_dynamic_json() {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -633,7 +633,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_tool() {
+async fn test_demonstration_feedback_tool() {
     // Running without valid inference_id. Should fail.
     let client = Client::new();
     let inference_id = Uuid::now_v7();
@@ -829,7 +829,7 @@ async fn e2e_test_demonstration_feedback_tool() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_dynamic_tool() {
+async fn test_demonstration_feedback_dynamic_tool() {
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an inference_id
@@ -1023,7 +1023,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
 }
 
 #[tokio::test]
-async fn e2e_test_float_feedback() {
+async fn test_float_feedback() {
     let client = Client::new();
     let tag_value = Uuid::now_v7().to_string();
     // Running without valid episode_id. Should fail.
@@ -1247,7 +1247,7 @@ async fn e2e_test_float_feedback() {
 }
 
 #[tokio::test]
-async fn e2e_test_boolean_feedback() {
+async fn test_boolean_feedback() {
     let client = Client::new();
     let inference_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();

@@ -117,7 +117,7 @@ fn assert_openai_embeddings_usage_details(entry: &Value) {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_chat_completions_non_streaming() {
+async fn test_raw_usage_chat_completions_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -205,7 +205,7 @@ async fn e2e_test_raw_usage_chat_completions_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_chat_completions_streaming() {
+async fn test_raw_usage_chat_completions_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -286,7 +286,7 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_responses_api_non_streaming() {
+async fn test_raw_usage_responses_api_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -352,7 +352,7 @@ async fn e2e_test_raw_usage_responses_api_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_responses_api_streaming() {
+async fn test_raw_usage_responses_api_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -432,7 +432,7 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_not_requested_non_streaming() {
+async fn test_raw_usage_not_requested_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -472,7 +472,7 @@ async fn e2e_test_raw_usage_not_requested_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_not_requested_streaming() {
+async fn test_raw_usage_not_requested_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -523,7 +523,7 @@ async fn e2e_test_raw_usage_not_requested_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_best_of_n_non_streaming() {
+async fn test_raw_usage_best_of_n_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -594,7 +594,7 @@ async fn e2e_test_raw_usage_best_of_n_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_best_of_n_streaming() {
+async fn test_raw_usage_best_of_n_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -671,7 +671,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_mixture_of_n_non_streaming() {
+async fn test_raw_usage_mixture_of_n_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -747,7 +747,7 @@ async fn e2e_test_raw_usage_mixture_of_n_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_mixture_of_n_streaming() {
+async fn test_raw_usage_mixture_of_n_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -830,7 +830,7 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_dicl_non_streaming() {
+async fn test_raw_usage_dicl_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -916,7 +916,7 @@ async fn e2e_test_raw_usage_dicl_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_dicl_streaming() {
+async fn test_raw_usage_dicl_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -998,7 +998,7 @@ async fn e2e_test_raw_usage_dicl_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_streaming_requires_include_usage() {
+async fn test_raw_usage_streaming_requires_include_usage() {
     let episode_id = Uuid::now_v7();
 
     // OpenAI-compatible API: include_raw_usage without include_usage should error
@@ -1038,7 +1038,7 @@ async fn e2e_test_raw_usage_streaming_requires_include_usage() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_json_function_non_streaming() {
+async fn test_raw_usage_json_function_non_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1099,7 +1099,7 @@ async fn e2e_test_raw_usage_json_function_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_json_function_streaming() {
+async fn test_raw_usage_json_function_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

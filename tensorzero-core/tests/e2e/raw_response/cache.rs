@@ -10,7 +10,7 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{Map, Value, json};
 use tensorzero::test_helpers::{
-    make_embedded_gateway_e2e_with_unique_db, start_http_gateway_with_unique_db,
+    make_embedded_gateway_e2e_with_unique_db, make_http_gateway_with_unique_db,
 };
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, Input, InputMessage,
@@ -473,7 +473,7 @@ async fn make_openai_request_to_gateway(
 async fn test_raw_response_cache_openai_compatible_non_streaming() {
     // Start HTTP gateway with unique database
     let (base_url, _shutdown_handle) =
-        start_http_gateway_with_unique_db("raw_response_openai_cache_non_streaming").await;
+        make_http_gateway_with_unique_db("raw_response_openai_cache_non_streaming").await;
 
     let input = "raw_response_openai_non_streaming: What is 5+5?";
 
@@ -504,7 +504,7 @@ async fn test_raw_response_cache_openai_compatible_non_streaming() {
 async fn test_raw_response_cache_openai_compatible_streaming() {
     // Start HTTP gateway with unique database
     let (base_url, _shutdown_handle) =
-        start_http_gateway_with_unique_db("raw_response_openai_cache_streaming").await;
+        make_http_gateway_with_unique_db("raw_response_openai_cache_streaming").await;
 
     let input = "raw_response_openai_streaming: What is 6+6?";
 

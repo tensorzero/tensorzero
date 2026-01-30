@@ -7,7 +7,7 @@ use tensorzero_core::db::clickhouse::test_helpers::select_chat_inference_clickho
 use uuid::Uuid;
 
 #[tokio::test]
-async fn e2e_test_dynamic_chat_variant() {
+async fn test_dynamic_chat_variant() {
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -67,7 +67,7 @@ async fn e2e_test_dynamic_chat_variant() {
 }
 
 #[tokio::test]
-async fn e2e_test_dynamic_mixture_of_n() {
+async fn test_dynamic_mixture_of_n() {
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -130,7 +130,7 @@ async fn e2e_test_dynamic_mixture_of_n() {
 }
 
 #[tokio::test]
-async fn e2e_test_dynamic_best_of_n() {
+async fn test_dynamic_best_of_n() {
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
