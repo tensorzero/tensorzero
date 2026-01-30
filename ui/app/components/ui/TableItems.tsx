@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
+import { DotSeparator } from "./DotSeparator";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { formatDateOnly, formatTimeOnly } from "~/utils/date";
 import { useFunctionConfig } from "~/context/config";
@@ -46,15 +47,6 @@ function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
         {id}
       </TooltipContent>
     </Tooltip>
-  );
-}
-
-function DotSeparator() {
-  return (
-    <span
-      className="bg-fg-muted inline-block h-0.5 w-0.5 rounded-full"
-      aria-hidden="true"
-    />
   );
 }
 

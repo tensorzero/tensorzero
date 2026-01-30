@@ -477,7 +477,7 @@ function EventItem({
           {eventIsToolEvent && (
             <>
               <ToolEventId id={getToolCallEventId(event)} />
-              <span aria-hidden="true">&middot;</span>
+              <DotSeparator />
             </>
           )}
           <TableItemTime timestamp={event.created_at} />
