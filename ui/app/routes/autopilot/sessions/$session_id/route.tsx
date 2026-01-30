@@ -540,12 +540,14 @@ function AutopilotSessionEventsPageContent({
   const handleApproveAll = useCallback(async () => {
     if (pendingToolCalls.length === 0) return;
 
-    userActionRef.current = true;
-
     const eventIds = pendingToolCalls.map((e) => e.id);
     const displayEventId = eventIds[0];
     const lastEventId = eventIds[eventIds.length - 1];
 
+    // Early bailout if already processed (prevents double-click clearing loading state)
+    if (manualAuthorization.isProcessed(displayEventId)) return;
+
+    userActionRef.current = true;
     setAuthLoadingStates((prev) =>
       new Map(prev).set(displayEventId, "approving_all"),
     );
