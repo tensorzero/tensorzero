@@ -148,6 +148,13 @@ export function SessionsTableRows({
           <TableCell className="w-0 text-right whitespace-nowrap">
             <TableItemTime timestamp={session.created_at} />
           </TableCell>
+          <TableCell className="w-0 text-right whitespace-nowrap">
+            {session.last_event_at ? (
+              <TableItemTime timestamp={session.last_event_at} />
+            ) : (
+              <span className="text-fg-muted">&mdash;</span>
+            )}
+          </TableCell>
         </TableRow>
       ))}
     </>
