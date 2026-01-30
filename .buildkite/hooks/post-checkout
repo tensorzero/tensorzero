@@ -9,3 +9,30 @@
 # be good enough to let us run many concurrent jobs most of the time.
 export CLICKHOUSE_CLOUD_COUNT=4
 export CLICKHOUSE_ID=$(($BUILDKITE_BUILD_NUMBER%$CLICKHOUSE_CLOUD_COUNT))
+
+# Get merge queue position and set priority for merge queue builds
+# Merge queue branches have the format: gh-readonly-queue/<base>/pr-<number>-<sha>
+# Position 1 is the first in the queue (highest priority), so we negate it for Buildkite priority
+if [[ "$BUILDKITE_BRANCH" =~ ^gh-readonly-queue/.*/pr-([0-9]+)- ]]; then
+    PR_NUMBER="${BASH_REMATCH[1]}"
+
+    # Query GitHub GraphQL API for the merge queue position
+    POSITION=$(gh api graphql -f query='
+        query($owner: String!, $name: String!, $number: Int!) {
+            repository(owner: $owner, name: $name) {
+                pullRequest(number: $number) {
+                    mergeQueueEntry {
+                        position
+                    }
+                }
+            }
+        }
+    ' -f owner="tensorzero" -f name="tensorzero" -F number="$PR_NUMBER" \
+        --jq '.data.repository.pullRequest.mergeQueueEntry.position' 2>/dev/null)
+
+    if [[ -n "$POSITION" && "$POSITION" != "null" ]]; then
+        export MERGE_QUEUE_POSITION="$POSITION"
+        # Negate position so earlier queue entries get higher priority
+        export MERGE_QUEUE_PRIORITY=$((-POSITION))
+    fi
+fi

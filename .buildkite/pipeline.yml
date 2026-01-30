@@ -11,6 +11,12 @@ steps:
     concurrency: 1
     concurrency_group: "clickhouse-cloud-normal-${CLICKHOUSE_ID}"
     command: CLICKHOUSE_PREFIX="dev-tensorzero-e2e-tests-instance-" ./ci/buildkite/test-clickhouse-cloud.sh
+    # Priority for merge queue builds - earlier queue positions get higher priority
+    # MERGE_QUEUE_PRIORITY is set in post-checkout hook as the negative of queue position
+    # See https://buildkite.com/docs/pipelines/configure/workflows/controlling-concurrency#concurrency-and-parallelism-concurrency-and-prioritization
+    priority: ${MERGE_QUEUE_PRIORITY:-0}
+    concurrency_method: eager
+
   # Temporarily disabled - see https://github.com/tensorzero/tensorzero/issues/5887
   # - label: "Clickhouse Cloud tests - fast release channel"
   #   plugins:
