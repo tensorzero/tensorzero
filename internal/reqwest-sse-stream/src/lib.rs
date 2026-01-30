@@ -127,23 +127,30 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
         self,
     ) -> Result<(EventStream, http::HeaderMap), (ReqwestSseStreamError, Option<http::HeaderMap>)>
     {
-        let (mut sse_stream, headers) = start_stream_with_headers(self).await?;
-        Ok((
-            Box::pin(async_stream::stream! {
-                while let Some(event) = sse_stream.next().await {
-                    match event {
-                        Ok(sse) => {
-                            if let Some(message_event) = MessageEvent::from_sse(sse) {
-                                yield Ok(Event::Message(message_event));
+        match start_stream_with_headers(self).await {
+            Ok((mut sse_stream, headers)) => Ok((
+                Box::pin(async_stream::stream! {
+                    while let Some(event) = sse_stream.next().await {
+                        match event {
+                            Ok(sse) => {
+                                if let Some(message_event) = MessageEvent::from_sse(sse) {
+                                    yield Ok(Event::Message(message_event));
+                                }
+                            }
+                            Err(e) => {
+                                yield Err(ReqwestSseStreamError::SseError(e));
                             }
                         }
-                        Err(e) => {
-                            yield Err(ReqwestSseStreamError::SseError(e));
-                        }
                     }
-                }
-            }),
-            headers,
-        ))
+                }),
+                headers,
+            )),
+            // For backwards compatibility with our existing stream consumers, turn connection errors into a stream
+            // with a single error event.
+            Err((e, headers)) => Ok((
+                Box::pin(futures::stream::once(async { Err(e) })),
+                headers.unwrap_or_default(),
+            )),
+        }
     }
 }

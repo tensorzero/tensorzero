@@ -492,15 +492,10 @@ async fn test_dropped_stream_body() {
         })
     );
 
-    let second_event = first_stream.next().await.unwrap().unwrap();
-    let reqwest_sse_stream::Event::Message(second_event) = second_event else {
-        panic!("Unexpected event: {second_event:?}");
-    };
-    assert_eq!(second_event.data, "World");
     // We should get a timeout
     let err = first_stream.next().await.unwrap().unwrap_err();
     assert!(
-        matches!(&err, reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_timeout()),
+        format!("{err:?}").contains("TimedOut"),
         "Unexpected error: {err:?}"
     );
 

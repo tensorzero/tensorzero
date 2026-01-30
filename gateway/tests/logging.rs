@@ -86,7 +86,7 @@ async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
     println!("Started stream");
 
     // Cancel the request early, and verify that the gateway logs a warning.
-    let _elapsed = tokio::time::timeout(Duration::from_millis(500), async move {
+    let _elapsed = tokio::time::timeout(Duration::from_millis(200), async move {
         let mut stream = std::pin::pin!(stream);
         while let Some(event) = stream.next().await {
             let event = event.unwrap();
