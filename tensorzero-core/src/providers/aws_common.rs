@@ -17,6 +17,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
+    inference::types::ApiType,
     model::{CredentialLocation, CredentialLocationOrHardcoded},
 };
 
@@ -481,9 +482,11 @@ pub async fn config_with_region(
             Error::new(ErrorDetails::InferenceClient {
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                 message: "Failed to determine AWS region.".to_string(),
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -557,9 +560,11 @@ impl AWSProviderConfig {
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,
                     raw_response: None,
+                    relay_raw_responses: None,
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: "No region configured".to_string(),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             }),
         }
@@ -687,9 +692,11 @@ pub async fn get_credentials(
         Error::new(ErrorDetails::InferenceClient {
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
             message: "No credentials provider configured".to_string(),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -697,9 +704,11 @@ pub async fn get_credentials(
         Error::new(ErrorDetails::InferenceClient {
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
             message: format!("Failed to get AWS credentials: {e}"),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })
 }
@@ -731,9 +740,11 @@ pub fn sign_request(
             Error::new(ErrorDetails::InferenceClient {
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                 message: format!("Failed to build signing params: {e}"),
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -744,9 +755,11 @@ pub fn sign_request(
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,
                     raw_response: None,
+                    relay_raw_responses: None,
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: format!("Invalid header value: {e}"),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })
         })
@@ -762,9 +775,11 @@ pub fn sign_request(
         Error::new(ErrorDetails::InferenceClient {
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
             message: format!("Failed to create signable request: {e}"),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -773,9 +788,11 @@ pub fn sign_request(
             Error::new(ErrorDetails::InferenceClient {
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                 message: format!("Failed to sign request: {e}"),
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?
         .into_parts();
@@ -791,18 +808,22 @@ pub fn sign_request(
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,
                     raw_response: None,
+                    relay_raw_responses: None,
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: format!("Invalid header name from signing: {e}"),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
         let header_value = reqwest::header::HeaderValue::from_str(value).map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
                 status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                 message: format!("Invalid header value from signing: {e}"),
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
         // Only insert if the header isn't already present (preserve user-provided headers)
@@ -873,6 +894,7 @@ pub async fn send_aws_request(
                 raw_request: Some(raw_request.to_string()),
                 raw_response: None,
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -884,6 +906,7 @@ pub async fn send_aws_request(
             raw_request: Some(raw_request.to_string()),
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -893,6 +916,7 @@ pub async fn send_aws_request(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(raw_response),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
         }));
     }
 

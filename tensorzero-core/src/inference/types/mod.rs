@@ -1313,6 +1313,9 @@ pub struct ModelInferenceResponse {
     /// Raw response entries passed through from gateway relay.
     /// When present, these should be used instead of generating new entries.
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw response entries from failed provider attempts before this successful one.
+    /// Used when `include_raw_response` is true and some providers failed before success.
+    pub failed_raw_responses: Vec<RawResponseEntry>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1342,6 +1345,9 @@ pub struct ModelInferenceResponseWithMetadata {
     /// Raw response entries passed through from relay.
     /// When present, these should be used instead of generating new entries.
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw response entries from failed provider attempts before this successful one.
+    /// Used when `include_raw_response` is true and some providers failed before success.
+    pub failed_raw_responses: Vec<RawResponseEntry>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1639,6 +1645,7 @@ impl ModelInferenceResponse {
             cached,
             raw_usage: provider_inference_response.raw_usage,
             relay_raw_response: provider_inference_response.relay_raw_response,
+            failed_raw_responses: Vec::new(),
         }
     }
 
@@ -1667,6 +1674,7 @@ impl ModelInferenceResponse {
             // TensorZero cache hits are excluded from raw_usage and raw_response lists
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }
     }
 }
@@ -1690,6 +1698,7 @@ impl ModelInferenceResponseWithMetadata {
             cached: model_inference_response.cached,
             raw_usage: model_inference_response.raw_usage,
             relay_raw_response: model_inference_response.relay_raw_response,
+            failed_raw_responses: model_inference_response.failed_raw_responses,
         }
     }
 }
@@ -2085,6 +2094,7 @@ impl ProviderInferenceResponseChunk {
             content,
             usage,
             raw_usage: None,
+            relay_raw_response: None,
             raw_response,
             provider_latency: latency,
             finish_reason,
@@ -2104,6 +2114,28 @@ impl ProviderInferenceResponseChunk {
             content,
             usage,
             raw_usage,
+            relay_raw_response: None,
+            raw_response,
+            provider_latency: latency,
+            finish_reason,
+        }
+    }
+
+    /// Creates a new chunk with relay_raw_response passthrough (streaming relay)
+    pub fn new_with_relay_raw_response(
+        content: Vec<ContentBlockChunk>,
+        usage: Option<Usage>,
+        raw_response: String,
+        latency: Duration,
+        finish_reason: Option<FinishReason>,
+        raw_usage: Option<Vec<RawUsageEntry>>,
+        relay_raw_response: Option<Vec<RawResponseEntry>>,
+    ) -> Self {
+        Self {
+            content,
+            usage,
+            raw_usage,
+            relay_raw_response,
             raw_response,
             provider_latency: latency,
             finish_reason,
@@ -2332,6 +2364,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2382,6 +2415,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2435,6 +2469,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2484,6 +2519,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2553,6 +2589,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2640,6 +2677,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2736,6 +2774,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2788,6 +2827,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2864,6 +2904,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2922,6 +2963,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -3120,6 +3162,7 @@ mod tests {
                 cached,
                 raw_usage: None,
                 relay_raw_response: None,
+                failed_raw_responses: Vec::new(),
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly
@@ -3358,6 +3401,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
 
         let response_middle = ModelInferenceResponseWithMetadata {
@@ -3377,6 +3421,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
 
         let response_newest = ModelInferenceResponseWithMetadata {
@@ -3396,6 +3441,7 @@ mod tests {
             finish_reason: Some(FinishReason::Length),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_responses: Vec::new(),
         };
 
         // Test: passing results in order newest-first should still return newest's finish_reason

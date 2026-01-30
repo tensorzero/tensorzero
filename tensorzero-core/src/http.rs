@@ -30,6 +30,7 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    inference::types::ApiType,
     model_table::CowNoClone,
 };
 
@@ -624,8 +625,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 status_code: None,
                 message: format!("Error building request: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
         let url = request.url().clone();
@@ -645,8 +648,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: raw_body.clone(),
                     raw_response: None,
+                    relay_raw_responses: None,
                 })
             })?;
 
@@ -665,8 +670,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: raw_body.clone(),
                     raw_response: None,
+                    relay_raw_responses: None,
                 })
             })?;
 
@@ -675,8 +682,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 status_code: Some(status_code),
                 message: format!("Non-successful status code for url `{url}`",),
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: raw_body.clone(),
                 raw_response: Some(raw_response.clone()),
+                relay_raw_responses: None,
             }));
         }
 
@@ -686,9 +695,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     "Error parsing JSON response: {}",
                     DisplayOrDebugGateway::new(e)
                 ),
+                provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: raw_body.clone(),
                 raw_response: Some(raw_response.clone()),
-                provider_type: provider_type.to_string(),
             })
         })?;
         Ok(res)

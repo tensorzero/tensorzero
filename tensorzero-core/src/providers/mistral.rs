@@ -211,6 +211,7 @@ impl InferenceProvider for MistralProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -223,6 +224,7 @@ impl InferenceProvider for MistralProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -247,6 +249,7 @@ impl InferenceProvider for MistralProvider {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some(raw_request),
                         raw_response: None,
                     })
@@ -341,13 +344,16 @@ fn handle_mistral_error(
             message: response_body.to_string(),
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         }
         .into()),
         _ => Err(ErrorDetails::InferenceServer {
             message: response_body.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }
@@ -382,6 +388,7 @@ pub fn stream_mistral(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }.into());
@@ -747,6 +754,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
             }));
@@ -761,6 +769,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
@@ -856,6 +865,7 @@ fn mistral_to_tensorzero_chunk(
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: Some(raw_message.clone()),
         }
@@ -1535,13 +1545,16 @@ mod tests {
             message,
             status_code,
             provider_type: provider,
+            api_type,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Unauthorized access");
             assert_eq!(*status_code, Some(StatusCode::UNAUTHORIZED));
             assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*api_type, ApiType::ChatCompletions);
             assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, None);
         }
@@ -1555,13 +1568,16 @@ mod tests {
             message,
             status_code,
             provider_type: provider,
+            api_type,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Forbidden access");
             assert_eq!(*status_code, Some(StatusCode::FORBIDDEN));
             assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*api_type, ApiType::ChatCompletions);
             assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, None);
         }
@@ -1575,13 +1591,16 @@ mod tests {
             message,
             status_code,
             provider_type: provider,
+            api_type,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Rate limit exceeded");
             assert_eq!(*status_code, Some(StatusCode::TOO_MANY_REQUESTS));
             assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*api_type, ApiType::ChatCompletions);
             assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, None);
         }
@@ -1594,12 +1613,14 @@ mod tests {
         if let ErrorDetails::InferenceServer {
             message,
             provider_type: provider,
+            api_type,
             raw_request,
             raw_response,
         } = details
         {
             assert_eq!(*message, "Server error");
             assert_eq!(*provider, PROVIDER_TYPE.to_string());
+            assert_eq!(*api_type, ApiType::ChatCompletions);
             assert_eq!(*raw_request, None);
             assert_eq!(*raw_response, None);
         }

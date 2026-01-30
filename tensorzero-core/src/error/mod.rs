@@ -20,6 +20,8 @@ use crate::config::snapshot::SnapshotHash;
 use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
+pub use crate::inference::types::usage::ApiType;
+use crate::inference::types::usage::RawResponseEntry;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
@@ -167,6 +169,88 @@ impl Error {
 
     pub fn is_retryable(&self) -> bool {
         self.0.is_retryable()
+    }
+
+    /// Recursively collects raw response entries from provider errors.
+    ///
+    /// This extracts `raw_response` data from provider errors (`InferenceClient`,
+    /// `InferenceServer`, `FatalStreamError`) and their aggregates (`AllVariantsFailed`,
+    /// `ModelProvidersExhausted`).
+    ///
+    /// Returns an empty Vec if no raw responses are found (e.g., for non-provider errors).
+    pub fn collect_raw_responses(&self) -> Vec<RawResponseEntry> {
+        let mut entries = Vec::new();
+        self.collect_raw_responses_recursive(&mut entries);
+        entries
+    }
+
+    fn collect_raw_responses_recursive(&self, entries: &mut Vec<RawResponseEntry>) {
+        match self.get_details() {
+            ErrorDetails::AllVariantsFailed { errors } => {
+                for error in errors.values() {
+                    error.collect_raw_responses_recursive(entries);
+                }
+            }
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => {
+                for error in provider_errors.values() {
+                    error.collect_raw_responses_recursive(entries);
+                }
+            }
+            ErrorDetails::InferenceClient {
+                raw_response,
+                provider_type,
+                api_type,
+                relay_raw_responses,
+                ..
+            } => {
+                // Include relay passthrough entries first
+                if let Some(relay_entries) = relay_raw_responses {
+                    entries.extend(relay_entries.iter().cloned());
+                }
+                // Then include the direct raw_response if present
+                if let Some(data) = raw_response {
+                    entries.push(RawResponseEntry {
+                        model_inference_id: None,
+                        provider_type: provider_type.clone(),
+                        api_type: *api_type,
+                        data: data.clone(),
+                    });
+                }
+            }
+            ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            } => {
+                entries.push(RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: provider_type.clone(),
+                    api_type: *api_type,
+                    data: data.clone(),
+                });
+            }
+            ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            } => {
+                entries.push(RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: provider_type.clone(),
+                    api_type: *api_type,
+                    data: data.clone(),
+                });
+            }
+            ErrorDetails::Relay {
+                relay_raw_responses: Some(relay_entries),
+                ..
+            } => {
+                entries.extend(relay_entries.iter().cloned());
+            }
+            _ => {}
+        }
     }
 
     /// Builds the JSON response body for this error.
@@ -343,10 +427,14 @@ pub enum ErrorDetails {
         #[serde(serialize_with = "serialize_status")]
         status_code: Option<StatusCode>,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_response: Option<String>,
+        /// Raw response entries from downstream relay errors (for passthrough)
+        #[serde(skip)]
+        relay_raw_responses: Option<Vec<RawResponseEntry>>,
     },
     InferenceNotFound {
         inference_id: Uuid,
@@ -354,6 +442,7 @@ pub enum ErrorDetails {
     FatalStreamError {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -362,6 +451,7 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -568,6 +658,9 @@ pub enum ErrorDetails {
     },
     Relay {
         message: String,
+        /// Raw response entries from downstream relay errors (for passthrough)
+        #[serde(skip)]
+        relay_raw_responses: Option<Vec<RawResponseEntry>>,
     },
     RateLimitMissingMaxTokens,
     Serialization {
@@ -1069,7 +1162,7 @@ impl std::fmt::Display for ErrorDetails {
                     "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration."
                 )
             }
-            ErrorDetails::Relay { message } => {
+            ErrorDetails::Relay { message, .. } => {
                 write!(f, "Error forwarding request in relay mode: {message}")
             }
             ErrorDetails::UnsupportedContentBlockType {
@@ -1241,6 +1334,7 @@ impl std::fmt::Display for ErrorDetails {
                 raw_request,
                 raw_response,
                 status_code,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1274,6 +1368,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1298,6 +1393,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1716,6 +1812,39 @@ impl IntoResponse for Error {
     }
 }
 
+/// An error paired with raw response data for error responses.
+///
+/// This is used to provide `raw_response` in error responses when requested via
+/// the `include_raw_response` parameter. It wraps an error and includes raw response
+/// entries collected from provider errors.
+pub struct ErrorWithRawResponse {
+    pub error: Error,
+    pub raw_responses: Vec<RawResponseEntry>,
+}
+
+impl IntoResponse for ErrorWithRawResponse {
+    fn into_response(self) -> Response {
+        let message = self.error.to_string();
+        let mut body = json!({
+            "error": message,
+        });
+        if !self.raw_responses.is_empty() {
+            body["raw_response"] =
+                serde_json::to_value(&self.raw_responses).unwrap_or_else(|e| json!(e.to_string()));
+        }
+        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
+            body["error_json"] = serde_json::to_value(self.error.get_details())
+                .unwrap_or_else(|e| json!(e.to_string()));
+        }
+        let status_code = self.error.status_code();
+        let mut response = (status_code, Json(body)).into_response();
+        // Attach the error to the response, so that we can set a nice message in our
+        // `apply_otel_http_trace_layer` middleware
+        response.extensions_mut().insert(self.error);
+        response
+    }
+}
+
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self::new(ErrorDetails::Serialization {
@@ -1824,5 +1953,52 @@ impl From<tensorzero_types::TypeError> for Error {
                 Self::new(ErrorDetails::Base64 { message })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_collect_raw_responses_from_inference_errors() {
+        // Test that InferenceClient errors collect raw responses with correct api_type
+        let error = Error::new(ErrorDetails::InferenceClient {
+            message: "test error".to_string(),
+            status_code: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::Responses,
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+            relay_raw_responses: None,
+        });
+
+        let entries = error.collect_raw_responses();
+
+        assert_eq!(entries.len(), 1, "should collect one entry");
+        assert_eq!(
+            entries[0].api_type,
+            ApiType::Responses,
+            "should preserve Responses api_type"
+        );
+        assert_eq!(entries[0].provider_type, "openai");
+
+        // Test ChatCompletions api_type
+        let error = Error::new(ErrorDetails::InferenceServer {
+            message: "test error".to_string(),
+            provider_type: "anthropic".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
+        });
+
+        let entries = error.collect_raw_responses();
+
+        assert_eq!(entries.len(), 1, "should collect one entry");
+        assert_eq!(
+            entries[0].api_type,
+            ApiType::ChatCompletions,
+            "should preserve ChatCompletions api_type"
+        );
     }
 }

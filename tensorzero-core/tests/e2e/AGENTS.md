@@ -1,1 +1,2 @@
 - Tests involving gateway relay should go in `gateway/tests/relay` instead of `tensorzero-core`. [kw: gateway_relay, relay_gateway, GatewayRelay, RelayGateway]
+- If you're adding a new E2E test, avoid relying on a shared external gateway. Instead, prefer launching an isolated gateway with inline configuration for that test. You can find many examples that use `make_http_gateway*` and `make_embedded_gateway*` (from `clients/rust/src/test_helpers.rs`).

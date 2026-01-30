@@ -32,6 +32,7 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::usage::RawResponseEntry;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -206,6 +207,10 @@ pub struct ModelUsedInfo {
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts before this successful one.
+    pub failed_raw_responses: Vec<RawResponseEntry>,
+    /// Passed-through raw response entries from downstream (for relay mode).
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 pub trait Variant {
@@ -767,14 +772,28 @@ async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
     let clients = args.clients.clone();
-    let model_inference_response = args
+
+    // Use retry_collecting_failures to capture failed attempt errors
+    let retry_result = args
         .retry_config
-        .retry(|| async {
+        .retry_collecting_failures(|| async {
             args.model_config
                 .infer(&args.request, &clients, &args.model_name)
                 .await
         })
-        .await?;
+        .await;
+
+    let mut model_inference_response = retry_result.result?;
+
+    // Collect raw_responses from failed retry attempts
+    if clients.include_raw_response {
+        for error in &retry_result.failed_attempts {
+            let retry_failed_raw_responses = error.collect_raw_responses();
+            model_inference_response
+                .failed_raw_responses
+                .extend(retry_failed_raw_responses);
+        }
+    }
 
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
@@ -807,6 +826,15 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+    // Use retry_collecting_failures to capture failed attempt errors
+    let retry_result = retry_config
+        .retry_collecting_failures(|| async {
+            model_config
+                .infer_stream(&request, &clients, &model_name)
+                .await
+        })
+        .await;
+
     let StreamResponseAndMessages {
         response:
             StreamResponse {
@@ -815,15 +843,19 @@ async fn infer_model_request_stream<'request>(
                 model_provider_name,
                 cached,
                 model_inference_id,
+                mut failed_raw_responses,
             },
         messages: input_messages,
-    } = retry_config
-        .retry(|| async {
-            model_config
-                .infer_stream(&request, &clients, &model_name)
-                .await
-        })
-        .await?;
+    } = retry_result.result?;
+
+    // Collect raw_responses from failed retry attempts
+    if clients.include_raw_response {
+        for error in &retry_result.failed_attempts {
+            let retry_failed_raw_responses = error.collect_raw_responses();
+            failed_raw_responses.extend(retry_failed_raw_responses);
+        }
+    }
+
     let system = request.system.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
@@ -836,6 +868,8 @@ async fn infer_model_request_stream<'request>(
         input_messages,
         cached,
         model_inference_id,
+        failed_raw_responses,
+        relay_raw_response: None,
     };
     let config_type = function.config_type();
     let stream =

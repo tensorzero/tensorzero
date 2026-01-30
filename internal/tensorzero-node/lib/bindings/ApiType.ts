@@ -4,4 +4,4 @@
  * The type of API used for a model inference.
  * Used in raw usage reporting to help consumers interpret provider-specific usage data.
  */
-export type ApiType = "chat_completions" | "responses" | "embeddings";
+export type ApiType = "chat_completions" | "responses" | "embeddings" | "other";

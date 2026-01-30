@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 fn assert_raw_response_entry(entry: &RawResponseEntry) {
     assert!(
-        !entry.model_inference_id.is_nil(),
+        entry.model_inference_id.is_some_and(|id| !id.is_nil()),
         "raw_response entry should have valid model_inference_id"
     );
     assert!(

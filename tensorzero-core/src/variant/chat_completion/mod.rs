@@ -879,6 +879,7 @@ pub fn validate_all_schemas_have_templates(
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::ApiType;
     use crate::rate_limiting::ScopeInfo;
     use indexmap::IndexMap;
     use std::collections::HashMap;
@@ -1630,7 +1631,9 @@ mod tests {
                         status_code: None,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
+                        relay_raw_responses: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 )])
             }

@@ -742,3 +742,55 @@ type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 assistant_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+# Test function for best-of-n with a failing candidate to test raw_response capture
+[functions.best_of_n_with_failing_candidate]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.best_of_n_with_failing_candidate.variants.working_candidate]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n_with_failing_candidate.variants.failing_candidate]
+type = "chat_completion"
+weight = 0
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n_with_failing_candidate.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["working_candidate", "failing_candidate"]
+
+[functions.best_of_n_with_failing_candidate.variants.best_of_n.evaluator]
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Test function for mixture-of-n with a failing candidate to test raw_response capture
+[functions.mixture_of_n_with_failing_candidate]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_with_failing_candidate.variants.working_candidate]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_with_failing_candidate.variants.failing_candidate]
+type = "chat_completion"
+weight = 0
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_with_failing_candidate.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["working_candidate", "failing_candidate"]
+
+[functions.mixture_of_n_with_failing_candidate.variants.mixture_of_n.fuser]
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"

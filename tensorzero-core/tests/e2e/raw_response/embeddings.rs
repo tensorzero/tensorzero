@@ -2,11 +2,12 @@
 //!
 //! Tests that raw provider-specific response data is correctly returned when requested
 //! for embedding models.
+//!
+//! These tests use HTTP requests to `/openai/v1/embeddings` endpoint.
 
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-
-use crate::common::get_gateway_endpoint;
+use tensorzero::test_helpers::make_http_gateway_with_unique_db;
 
 /// Helper to assert raw_response entry structure is valid for embeddings
 fn assert_raw_response_entry(entry: &Value) {
@@ -45,27 +46,24 @@ fn assert_raw_response_entry(entry: &Value) {
 // Basic Embeddings Raw Response Tests
 // =============================================================================
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_requested() {
-    let payload = json!({
-        "input": "Hello, world!",
-        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
-        "tensorzero::include_raw_response": true
-    });
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_requested").await;
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true
+        }))
         .send()
         .await
         .unwrap();
 
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "Response should be successful"
-    );
-
+    assert_eq!(response.status(), StatusCode::OK);
     let response_json: Value = response.json().await.unwrap();
 
     // Verify standard embedding response fields
@@ -114,23 +112,24 @@ async fn test_embeddings_raw_response_requested() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_not_requested() {
-    let payload = json!({
-        "input": "Hello, world!",
-        "model": "tensorzero::embedding_model_name::text-embedding-3-small"
-        // tensorzero::include_raw_response is NOT set (defaults to false)
-    });
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_not_requested").await;
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small"
+            // tensorzero::include_raw_response not set (defaults to false)
+        }))
         .send()
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-
     let response_json: Value = response.json().await.unwrap();
 
     // tensorzero::raw_response should NOT be present when not requested
@@ -144,23 +143,24 @@ async fn test_embeddings_raw_response_not_requested() {
     assert!(!response_json["data"].as_array().unwrap().is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_explicitly_false() {
-    let payload = json!({
-        "input": "Hello, world!",
-        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
-        "tensorzero::include_raw_response": false
-    });
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_explicitly_false").await;
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": false
+        }))
         .send()
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-
     let response_json: Value = response.json().await.unwrap();
 
     // tensorzero::raw_response should NOT be present when explicitly false
@@ -174,32 +174,30 @@ async fn test_embeddings_raw_response_explicitly_false() {
 // Bulk Embeddings Tests
 // =============================================================================
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_batch() {
-    let inputs = vec![
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_batch").await;
+
+    let inputs = [
         "Hello, world!",
         "How are you today?",
         "This is a test of batch embeddings.",
     ];
-    let payload = json!({
-        "input": inputs,
-        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
-        "tensorzero::include_raw_response": true
-    });
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": inputs,
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true
+        }))
         .send()
         .await
         .unwrap();
 
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "Response should be successful"
-    );
-
+    assert_eq!(response.status(), StatusCode::OK);
     let response_json: Value = response.json().await.unwrap();
 
     // Verify standard embedding response fields
@@ -232,27 +230,30 @@ async fn test_embeddings_raw_response_batch() {
 // Cache Interaction Tests
 // =============================================================================
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_with_cache() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_with_cache").await;
+
     let input_text = format!(
         "This is a cache test for embeddings raw_response - {}",
         rand::random::<u32>()
     );
 
-    // First request: populate cache with raw_response enabled
-    let payload = json!({
-        "input": input_text,
-        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
-        "tensorzero::include_raw_response": true,
-        "tensorzero::cache_options": {
-            "enabled": "on",
-            "max_age_s": 60
-        }
-    });
+    let client = Client::new();
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
+    // First request: populate cache with raw_response enabled
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": input_text,
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true,
+            "tensorzero::cache_options": {
+                "enabled": "on",
+                "max_age_s": 60
+            }
+        }))
         .send()
         .await
         .unwrap();
@@ -281,9 +282,17 @@ async fn test_embeddings_raw_response_with_cache() {
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     // Second request: should hit cache
-    let response_cached = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
+    let response_cached = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": input_text,
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true,
+            "tensorzero::cache_options": {
+                "enabled": "on",
+                "max_age_s": 60
+            }
+        }))
         .send()
         .await
         .unwrap();
@@ -315,17 +324,19 @@ async fn test_embeddings_raw_response_with_cache() {
 // Entry Structure Validation Tests
 // =============================================================================
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_entry_structure() {
-    let payload = json!({
-        "input": "Test entry structure",
-        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
-        "tensorzero::include_raw_response": true
-    });
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_entry_structure").await;
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Test entry structure",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true
+        }))
         .send()
         .await
         .unwrap();
@@ -372,18 +383,20 @@ async fn test_embeddings_raw_response_entry_structure() {
 // Dimensions Parameter Tests
 // =============================================================================
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_with_dimensions() {
-    let payload = json!({
-        "input": "Test with specific dimensions",
-        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
-        "dimensions": 512,
-        "tensorzero::include_raw_response": true
-    });
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_with_dimensions").await;
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Test with specific dimensions",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "dimensions": 512,
+            "tensorzero::include_raw_response": true
+        }))
         .send()
         .await
         .unwrap();
@@ -406,4 +419,67 @@ async fn test_embeddings_raw_response_with_dimensions() {
     let raw_response_array = raw_response.as_array().unwrap();
     assert!(!raw_response_array.is_empty());
     assert_raw_response_entry(&raw_response_array[0]);
+}
+
+// =============================================================================
+// Error Tests
+// =============================================================================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_embeddings_raw_response_error() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_error").await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::error_with_raw_response",
+            "tensorzero::include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Should be an error status
+    assert!(
+        !response.status().is_success(),
+        "Response should be an error, got status: {}",
+        response.status()
+    );
+
+    // Parse the response body
+    let body: Value = response.json().await.unwrap();
+
+    // Should have raw_response in error response
+    let raw_response = body
+        .get("raw_response")
+        .expect("Error should include raw_response when include_raw_response=true");
+    assert!(raw_response.is_array(), "raw_response should be an array");
+
+    let entries = raw_response.as_array().unwrap();
+    assert!(
+        !entries.is_empty(),
+        "Should have at least one raw_response entry"
+    );
+
+    // Verify entry contains error data
+    let entry = &entries[0];
+    assert_eq!(
+        entry.get("provider_type").and_then(|v| v.as_str()),
+        Some("dummy"),
+        "Provider type should be 'dummy'"
+    );
+    assert_eq!(
+        entry.get("api_type").and_then(|v| v.as_str()),
+        Some("embeddings"),
+        "API type should be 'embeddings'"
+    );
+
+    let data = entry.get("data").and_then(|d| d.as_str()).unwrap();
+    assert!(
+        data.contains("embedding_test_error"),
+        "raw_response data should contain error info"
+    );
 }

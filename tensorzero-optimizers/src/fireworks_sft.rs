@@ -32,7 +32,7 @@ use tensorzero_core::{
     },
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
-    error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{ApiType, DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
     inference::types::ContentBlock,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
@@ -190,8 +190,10 @@ impl Optimizer for FireworksSFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
 
@@ -203,8 +205,10 @@ impl Optimizer for FireworksSFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
         let job: FireworksFineTuningJobResponse =
@@ -217,6 +221,7 @@ impl Optimizer for FireworksSFTConfig {
                     raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Other,
                 })
             })?;
 
@@ -228,6 +233,7 @@ impl Optimizer for FireworksSFTConfig {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
             })
         })?;
 
@@ -273,6 +279,7 @@ impl JobHandle for FireworksSFTJobHandle {
                     raw_request: None,
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Other,
                 })
             })?;
             // TODO - start using this as the TensorZero model name
@@ -283,6 +290,7 @@ impl JobHandle for FireworksSFTJobHandle {
                     raw_request: None,
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Other,
                 })
             })?;
             let completed_output = OptimizationJobInfo::Completed {
@@ -581,20 +589,24 @@ async fn poll_dataset_read(
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
     let raw_response = res.text().await.map_err(|e| {
         Error::new(ErrorDetails::InferenceClient {
             status_code: e.status(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
             message: format!(
                 "Error checking dataset status: {}",
                 DisplayOrDebugGateway::new(e)
             ),
+            relay_raw_responses: None,
         })
     })?;
     let response: FireworksDatasetResponse = serde_json::from_str(&raw_response).map_err(|e| {
@@ -606,6 +618,7 @@ async fn poll_dataset_read(
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
         })
     })?;
     Ok(response.state == "READY")
@@ -644,8 +657,10 @@ async fn create_and_upload_dataset<'a>(
                 status_code: e.status(),
                 message: format!("Error creating dataset: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
     let status = res.status();
@@ -654,8 +669,10 @@ async fn create_and_upload_dataset<'a>(
             status_code: e.status(),
             message: format!("Error creating dataset: {}", DisplayOrDebugGateway::new(e)),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     if !status.is_success() {
@@ -663,8 +680,10 @@ async fn create_and_upload_dataset<'a>(
             status_code: Some(status),
             message: "Error creating dataset".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: Some(raw_response),
+            relay_raw_responses: None,
         }));
     }
 
@@ -707,8 +726,10 @@ async fn create_and_upload_dataset<'a>(
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     if !res.status().is_success() {
@@ -719,8 +740,10 @@ async fn create_and_upload_dataset<'a>(
                 res.status()
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: res.text().await.ok(),
+            relay_raw_responses: None,
         }));
     }
     while !poll_dataset_read(client, api_key, api_base, account_id, &dataset_id).await? {
@@ -749,8 +772,10 @@ async fn get_model(
                 status_code: e.status(),
                 message: format!("Error getting model: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
     if res.status() == StatusCode::NOT_FOUND {
@@ -761,8 +786,10 @@ async fn get_model(
             status_code: e.status(),
             message: format!("Error getting model: {}", DisplayOrDebugGateway::new(e)),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     let model: FireworksModelResponse = serde_json::from_str(&raw_response).map_err(|e| {
@@ -774,6 +801,7 @@ async fn get_model(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
         })
     })?;
     Ok(Some(model))
@@ -820,8 +848,10 @@ async fn deploy_or_poll_model(
                 status_code: e.status(),
                 message: format!("Error deploying model: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
+                relay_raw_responses: None,
             })
         })?;
 
@@ -830,8 +860,10 @@ async fn deploy_or_poll_model(
             status_code: e.status(),
             message: format!("Error deploying model: {}", DisplayOrDebugGateway::new(e)),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     let response: FireworksDeployedModelResponse =
@@ -844,6 +876,7 @@ async fn deploy_or_poll_model(
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
             })
         })?;
     Ok(response.state)
@@ -870,8 +903,10 @@ async fn poll_job(
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     let raw_response = res.text().await.map_err(|e| {
@@ -882,8 +917,10 @@ async fn poll_job(
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
+            relay_raw_responses: None,
         })
     })?;
     let job: FireworksFineTuningJobResponse = serde_json::from_str(&raw_response).map_err(|e| {
@@ -895,6 +932,7 @@ async fn poll_job(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
         })
     })?;
     Ok(job)
