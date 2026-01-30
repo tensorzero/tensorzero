@@ -1,16 +1,7 @@
-/**
- * Client-side API utility for authorizing a single tool call.
- */
-
 import type { AuthorizationStatus } from "./types";
 
 /**
  * Authorize (approve or reject) a single tool call.
- *
- * @param sessionId - The autopilot session ID
- * @param toolCallEventId - The tool call event ID to authorize
- * @param status - The authorization status (approved or rejected with reason)
- * @param signal - Optional AbortSignal for request cancellation
  * @throws Error if the request fails
  */
 export async function authorizeToolCall(

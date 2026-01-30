@@ -34,11 +34,7 @@ interface UseManualApprovalResult {
  * - Clear ref only on error (allows retry)
  */
 export function useManualApproval(sessionId: string): UseManualApprovalResult {
-  // Track processed eventIds - blocks duplicate requests.
-  // Stays set on success (until session change) to prevent post-completion clicks.
   const processedRef = useRef<Set<string>>(new Set());
-
-  // Track batch approval state.
   const batchProcessedRef = useRef<boolean>(false);
 
   const approve = useCallback(
