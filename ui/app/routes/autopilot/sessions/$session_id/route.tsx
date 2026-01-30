@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { v7 as uuid } from "uuid";
 import {
   Await,
   data,
@@ -659,7 +660,7 @@ export default function AutopilotSessionEventsPage({
       setOptimisticMessages((prev) => [
         ...prev,
         {
-          tempId: crypto.randomUUID(),
+          tempId: uuid(),
           eventId: response.event_id,
           text,
           status: "sending",
