@@ -34,7 +34,7 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::usage::{RawResponseEntry, RawUsageEntry};
 use crate::inference::types::{
     Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage, InputMessageContent,
-    RawText, Role, System, Template, Text, Thought, current_timestamp,
+    RawText, Role, System, Template, Text, Thought, Unknown, current_timestamp,
 };
 use crate::tool::{DynamicToolParams, ProviderTool, ToolResult};
 use crate::variant::JsonMode;
@@ -58,7 +58,7 @@ pub struct OpenAICompatibleAssistantMessage {
     pub content: Option<Value>,
     pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
     #[serde(default)]
-    pub tensorzero_reasoning_content: Option<Vec<OpenAICompatibleInputThought>>,
+    pub tensorzero_extra_content_experimental: Option<Vec<InputExtraContentBlock>>,
 }
 
 #[derive(Clone, Debug, PartialEq, TensorZeroDeserialize)]
@@ -176,7 +176,7 @@ pub struct OpenAICompatibleResponseMessage {
     pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
     pub role: String,
     #[serde(skip_serializing_if = "is_none_or_empty")]
-    pub tensorzero_reasoning_content: Option<Vec<OpenAICompatibleThought>>,
+    pub tensorzero_extra_content_experimental: Option<Vec<ExtraContentBlock>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -235,20 +235,36 @@ fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
     v.as_ref().is_none_or(Vec::is_empty)
 }
 
-/// OpenAI-compatible Thought for responses (with index for position in content array)
+/// Extra content block for OpenAI-compatible responses (Thought or Unknown)
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OpenAICompatibleThought {
-    pub index: usize,
-    #[serde(flatten)]
-    pub thought: Thought,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ExtraContentBlock {
+    Thought {
+        insert_index: usize,
+        #[serde(flatten)]
+        thought: Thought,
+    },
+    Unknown {
+        insert_index: usize,
+        #[serde(flatten)]
+        unknown: Unknown,
+    },
 }
 
-/// OpenAI-compatible Thought for input (with optional index)
+/// Extra content block for OpenAI-compatible input (with optional insert_index)
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct OpenAICompatibleInputThought {
-    pub index: Option<usize>,
-    #[serde(flatten)]
-    pub thought: Thought,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InputExtraContentBlock {
+    Thought {
+        insert_index: Option<usize>,
+        #[serde(flatten)]
+        thought: Thought,
+    },
+    Unknown {
+        insert_index: Option<usize>,
+        #[serde(flatten)]
+        unknown: Unknown,
+    },
 }
 
 // ============================================================================
@@ -579,29 +595,48 @@ pub fn openai_messages_to_input(
                         message_content.push(InputMessageContent::ToolCall(tool_call.into()));
                     }
                 }
-                // Process reasoning content with index-based insertion
-                if let Some(thoughts) = msg.tensorzero_reasoning_content {
-                    // Collect indexed thoughts (with explicit index) and unindexed thoughts separately
-                    let mut indexed: Vec<(usize, Thought)> = Vec::new();
-                    let mut unindexed: Vec<Thought> = Vec::new();
-                    for input_thought in thoughts {
-                        match input_thought.index {
-                            Some(idx) => indexed.push((idx, input_thought.thought)),
-                            None => unindexed.push(input_thought.thought),
+                // Process extra content with index-based insertion
+                if let Some(extra_content) = msg.tensorzero_extra_content_experimental {
+                    // First pass: items with insert_index (in input order)
+                    for block in &extra_content {
+                        match block {
+                            InputExtraContentBlock::Thought {
+                                insert_index: Some(idx),
+                                thought,
+                            } => {
+                                let idx = (*idx).min(message_content.len());
+                                message_content
+                                    .insert(idx, InputMessageContent::Thought(thought.clone()));
+                            }
+                            InputExtraContentBlock::Unknown {
+                                insert_index: Some(idx),
+                                unknown,
+                            } => {
+                                let idx = (*idx).min(message_content.len());
+                                message_content
+                                    .insert(idx, InputMessageContent::Unknown(unknown.clone()));
+                            }
+                            _ => {} // Handle in second pass
                         }
                     }
 
-                    // First, insert thoughts with explicit indices at their specified positions
-                    // Sort by index to handle insertions correctly
-                    indexed.sort_by_key(|(idx, _)| *idx);
-                    for (idx, thought) in indexed {
-                        let idx = idx.min(message_content.len());
-                        message_content.insert(idx, InputMessageContent::Thought(thought));
-                    }
-
-                    // Then, prepend all thoughts without an index at position 0 (reverse to maintain order)
-                    for thought in unindexed.into_iter().rev() {
-                        message_content.insert(0, InputMessageContent::Thought(thought));
+                    // Second pass: items without insert_index (append to end)
+                    for block in extra_content {
+                        match block {
+                            InputExtraContentBlock::Thought {
+                                insert_index: None,
+                                thought,
+                            } => {
+                                message_content.push(InputMessageContent::Thought(thought));
+                            }
+                            InputExtraContentBlock::Unknown {
+                                insert_index: None,
+                                unknown,
+                            } => {
+                                message_content.push(InputMessageContent::Unknown(unknown));
+                            }
+                            _ => {} // Already handled
+                        }
                     }
                 }
                 messages.push(InputMessage {
@@ -741,7 +776,7 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
     ) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
-                let (content, tool_calls, thoughts) = process_chat_content(response.content);
+                let (content, tool_calls, extra_content) = process_chat_content(response.content);
                 let tensorzero_original_response = if include_original_response {
                     response.original_response
                 } else {
@@ -766,10 +801,10 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
                                 Some(tool_calls)
                             },
                             role: "assistant".to_string(),
-                            tensorzero_reasoning_content: if thoughts.is_empty() {
+                            tensorzero_extra_content_experimental: if extra_content.is_empty() {
                                 None
                             } else {
-                                Some(thoughts)
+                                Some(extra_content)
                             },
                         },
                     }],
@@ -806,7 +841,7 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
                             content: response.output.raw,
                             tool_calls: None,
                             role: "assistant".to_string(),
-                            tensorzero_reasoning_content: None,
+                            tensorzero_extra_content_experimental: None,
                         },
                     }],
                     created: current_timestamp() as u32,
@@ -826,19 +861,19 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
 }
 
 /// Takes a vector of ContentBlockOutput and returns a tuple of
-/// (Option<String>, Vec<OpenAICompatibleToolCall>, Vec<OpenAICompatibleThought>).
-/// This is useful since the OpenAI format separates text, tool calls, and reasoning in the response fields.
+/// (Option<String>, Vec<OpenAICompatibleToolCall>, Vec<ExtraContentBlock>).
+/// This is useful since the OpenAI format separates text, tool calls, and extra content in the response fields.
 pub fn process_chat_content(
     content: Vec<ContentBlockChatOutput>,
 ) -> (
     Option<String>,
     Vec<OpenAICompatibleToolCall>,
-    Vec<OpenAICompatibleThought>,
+    Vec<ExtraContentBlock>,
 ) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
-    let mut thoughts = Vec::new();
-    for (index, block) in content.into_iter().enumerate() {
+    let mut extra_content = Vec::new();
+    for (insert_index, block) in content.into_iter().enumerate() {
         match block {
             ContentBlockChatOutput::Text(text) => match content_str {
                 Some(ref mut content) => content.push_str(&text.text),
@@ -848,16 +883,20 @@ pub fn process_chat_content(
                 tool_calls.push(tool_call.into());
             }
             ContentBlockChatOutput::Thought(thought) => {
-                thoughts.push(OpenAICompatibleThought { index, thought });
+                extra_content.push(ExtraContentBlock::Thought {
+                    insert_index,
+                    thought,
+                });
             }
-            ContentBlockChatOutput::Unknown(_) => {
-                tracing::warn!(
-                    "Ignoring 'unknown' content block when constructing OpenAI-compatible response"
-                );
+            ContentBlockChatOutput::Unknown(unknown) => {
+                extra_content.push(ExtraContentBlock::Unknown {
+                    insert_index,
+                    unknown,
+                });
             }
         }
     }
-    (content_str, tool_calls, thoughts)
+    (content_str, tool_calls, extra_content)
 }
 
 #[cfg(test)]
@@ -926,7 +965,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_reasoning_content: None,
+                tensorzero_extra_content_experimental: None,
             }),
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: None,
@@ -938,7 +977,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_reasoning_content: None,
+                tensorzero_extra_content_experimental: None,
             }),
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: None,
@@ -950,7 +989,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_reasoning_content: None,
+                tensorzero_extra_content_experimental: None,
             }),
             OpenAICompatibleMessage::Tool(OpenAICompatibleToolMessage {
                 content: Some(Value::String("Tool result 1".to_string())),
@@ -1134,7 +1173,7 @@ mod tests {
                     "city": "Tokyo",
                 }])),
                 tool_calls: None,
-                tensorzero_reasoning_content: None,
+                tensorzero_extra_content_experimental: None,
             },
         )];
         let input: Input = openai_messages_to_input(messages).unwrap();
@@ -1168,7 +1207,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_reasoning_content: None,
+                tensorzero_extra_content_experimental: None,
             },
         )];
         let input: Input = openai_messages_to_input(messages).unwrap();
@@ -1202,7 +1241,7 @@ mod tests {
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Assistant message".to_string())),
                 tool_calls: None,
-                tensorzero_reasoning_content: None,
+                tensorzero_extra_content_experimental: None,
             }),
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("System message".to_string()),
@@ -1692,7 +1731,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_chat_content_with_thoughts() {
+    fn test_process_chat_content_with_extra_content() {
         let content = vec![
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("Let me think about this...".to_string()),
@@ -1704,6 +1743,11 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "Hello".to_string(),
             }),
+            ContentBlockChatOutput::Unknown(Unknown {
+                data: serde_json::json!({"custom": "data"}),
+                model_name: Some("test_model".to_string()),
+                provider_name: None,
+            }),
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("Another thought".to_string()),
                 signature: None,
@@ -1712,47 +1756,74 @@ mod tests {
                 extra_data: None,
             }),
         ];
-        let (content_str, tool_calls, thoughts) = process_chat_content(content);
+        let (content_str, tool_calls, extra_content) = process_chat_content(content);
         assert_eq!(
             content_str,
             Some("Hello".to_string()),
             "Text content should be extracted"
         );
         assert!(tool_calls.is_empty(), "No tool calls expected");
-        assert_eq!(thoughts.len(), 2, "Should have two thoughts");
-
-        // First thought at index 0
-        assert_eq!(thoughts[0].index, 0, "First thought should have index 0");
         assert_eq!(
-            thoughts[0].thought.text,
-            Some("Let me think about this...".to_string())
-        );
-        assert_eq!(thoughts[0].thought.signature, Some("sig123".to_string()));
-        assert_eq!(
-            thoughts[0].thought.provider_type,
-            Some("anthropic".to_string())
+            extra_content.len(),
+            3,
+            "Should have three extra content blocks"
         );
 
-        // Second thought at index 2
-        assert_eq!(thoughts[1].index, 2, "Second thought should have index 2");
-        assert_eq!(
-            thoughts[1].thought.text,
-            Some("Another thought".to_string())
-        );
-        assert_eq!(thoughts[1].thought.signature, None);
+        // First: Thought at insert_index 0
+        match &extra_content[0] {
+            ExtraContentBlock::Thought {
+                insert_index,
+                thought,
+            } => {
+                assert_eq!(*insert_index, 0, "First thought should have insert_index 0");
+                assert_eq!(thought.text, Some("Let me think about this...".to_string()));
+                assert_eq!(thought.signature, Some("sig123".to_string()));
+                assert_eq!(thought.provider_type, Some("anthropic".to_string()));
+            }
+            ExtraContentBlock::Unknown { .. } => panic!("Expected Thought at position 0"),
+        }
+
+        // Second: Unknown at insert_index 2
+        match &extra_content[1] {
+            ExtraContentBlock::Unknown {
+                insert_index,
+                unknown,
+            } => {
+                assert_eq!(*insert_index, 2, "Unknown should have insert_index 2");
+                assert_eq!(unknown.data, serde_json::json!({"custom": "data"}));
+                assert_eq!(unknown.model_name, Some("test_model".to_string()));
+            }
+            ExtraContentBlock::Thought { .. } => panic!("Expected Unknown at position 1"),
+        }
+
+        // Third: Thought at insert_index 3
+        match &extra_content[2] {
+            ExtraContentBlock::Thought {
+                insert_index,
+                thought,
+            } => {
+                assert_eq!(
+                    *insert_index, 3,
+                    "Second thought should have insert_index 3"
+                );
+                assert_eq!(thought.text, Some("Another thought".to_string()));
+                assert_eq!(thought.signature, None);
+            }
+            ExtraContentBlock::Unknown { .. } => panic!("Expected Thought at position 2"),
+        }
     }
 
     #[test]
-    fn test_input_reasoning_content_ordering() {
-        // Test with indexed and unindexed thoughts
+    fn test_input_extra_content_ordering() {
+        // Test with indexed and unindexed extra content blocks
         let messages = vec![OpenAICompatibleMessage::Assistant(
             OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Response text".to_string())),
                 tool_calls: None,
-                tensorzero_reasoning_content: Some(vec![
-                    // Unindexed thought - should be prepended
-                    OpenAICompatibleInputThought {
-                        index: None,
+                tensorzero_extra_content_experimental: Some(vec![
+                    // Unindexed thought - should be appended
+                    InputExtraContentBlock::Thought {
+                        insert_index: None,
                         thought: Thought {
                             text: Some("Unindexed thought 1".to_string()),
                             signature: None,
@@ -1762,8 +1833,8 @@ mod tests {
                         },
                     },
                     // Indexed thought at position 2
-                    OpenAICompatibleInputThought {
-                        index: Some(2),
+                    InputExtraContentBlock::Thought {
+                        insert_index: Some(2),
                         thought: Thought {
                             text: Some("Indexed thought at 2".to_string()),
                             signature: Some("sig456".to_string()),
@@ -1772,20 +1843,18 @@ mod tests {
                             extra_data: None,
                         },
                     },
-                    // Another unindexed thought - should be prepended
-                    OpenAICompatibleInputThought {
-                        index: None,
-                        thought: Thought {
-                            text: Some("Unindexed thought 2".to_string()),
-                            signature: None,
-                            summary: None,
-                            provider_type: None,
-                            extra_data: None,
+                    // Unindexed unknown - should be appended
+                    InputExtraContentBlock::Unknown {
+                        insert_index: None,
+                        unknown: Unknown {
+                            data: serde_json::json!({"test": "data"}),
+                            model_name: None,
+                            provider_name: None,
                         },
                     },
                     // Indexed thought at position 0
-                    OpenAICompatibleInputThought {
-                        index: Some(0),
+                    InputExtraContentBlock::Thought {
+                        insert_index: Some(0),
                         thought: Thought {
                             text: Some("Indexed thought at 0".to_string()),
                             signature: None,
@@ -1803,12 +1872,12 @@ mod tests {
 
         // Expected order based on the algorithm:
         // 1. Start with text content: ["Response text"]
-        // 2. Apply indexed thoughts (sorted by index):
-        //    - Insert at 0: ["Indexed thought at 0", "Response text"]
-        //    - Insert at 2 (capped to len=2): ["Indexed thought at 0", "Response text", "Indexed thought at 2"]
-        // 3. Prepend unindexed thoughts (reversed to maintain order):
-        //    - Prepend "Unindexed thought 2": ["Unindexed thought 2", "Indexed thought at 0", "Response text", "Indexed thought at 2"]
-        //    - Prepend "Unindexed thought 1": ["Unindexed thought 1", "Unindexed thought 2", "Indexed thought at 0", "Response text", "Indexed thought at 2"]
+        // 2. First pass - items with insert_index (in input order):
+        //    - "Indexed thought at 2" insert at min(2, 1)=1: ["Response text", "Indexed at 2"]
+        //    - "Indexed thought at 0" insert at min(0, 2)=0: ["Indexed at 0", "Response text", "Indexed at 2"]
+        // 3. Second pass - items without insert_index (append to end):
+        //    - Append "Unindexed thought 1": ["Indexed at 0", "Response text", "Indexed at 2", "Unindexed 1"]
+        //    - Append Unknown: ["Indexed at 0", "Response text", "Indexed at 2", "Unindexed 1", Unknown]
         assert_eq!(content.len(), 5, "Should have 5 content blocks");
 
         // Verify content order
@@ -1816,44 +1885,24 @@ mod tests {
             InputMessageContent::Thought(t) => {
                 assert_eq!(
                     t.text,
-                    Some("Unindexed thought 1".to_string()),
-                    "First should be unindexed thought 1"
+                    Some("Indexed thought at 0".to_string()),
+                    "First should be indexed thought at 0"
                 );
             }
             _ => panic!("Expected Thought at position 0"),
         }
         match &content[1] {
-            InputMessageContent::Thought(t) => {
-                assert_eq!(
-                    t.text,
-                    Some("Unindexed thought 2".to_string()),
-                    "Second should be unindexed thought 2"
-                );
+            InputMessageContent::Text(t) => {
+                assert_eq!(t.text, "Response text", "Second should be the text content");
             }
-            _ => panic!("Expected Thought at position 1"),
+            _ => panic!("Expected Text at position 1"),
         }
         match &content[2] {
             InputMessageContent::Thought(t) => {
                 assert_eq!(
                     t.text,
-                    Some("Indexed thought at 0".to_string()),
-                    "Third should be indexed thought at 0"
-                );
-            }
-            _ => panic!("Expected Thought at position 2"),
-        }
-        match &content[3] {
-            InputMessageContent::Text(t) => {
-                assert_eq!(t.text, "Response text", "Fourth should be the text content");
-            }
-            _ => panic!("Expected Text at position 3"),
-        }
-        match &content[4] {
-            InputMessageContent::Thought(t) => {
-                assert_eq!(
-                    t.text,
                     Some("Indexed thought at 2".to_string()),
-                    "Fifth should be indexed thought at 2"
+                    "Third should be indexed thought at 2"
                 );
                 assert_eq!(
                     t.signature,
@@ -1866,42 +1915,100 @@ mod tests {
                     "Should preserve provider_type"
                 );
             }
-            _ => panic!("Expected Thought at position 4"),
+            _ => panic!("Expected Thought at position 2"),
+        }
+        match &content[3] {
+            InputMessageContent::Thought(t) => {
+                assert_eq!(
+                    t.text,
+                    Some("Unindexed thought 1".to_string()),
+                    "Fourth should be unindexed thought 1 (appended)"
+                );
+            }
+            _ => panic!("Expected Thought at position 3"),
+        }
+        match &content[4] {
+            InputMessageContent::Unknown(u) => {
+                assert_eq!(
+                    u.data,
+                    serde_json::json!({"test": "data"}),
+                    "Fifth should be the unknown block (appended)"
+                );
+            }
+            _ => panic!("Expected Unknown at position 4"),
         }
     }
 
     #[test]
-    fn test_openai_compatible_input_thought_deserialization() {
-        // Test that serde(flatten) works correctly for input thoughts
-        let json_with_index = json!({
-            "index": 5,
+    fn test_input_extra_content_block_deserialization() {
+        // Test Thought variant deserialization with insert_index
+        let json_thought_with_index = json!({
+            "type": "thought",
+            "insert_index": 5,
             "text": "My thought",
             "signature": "sig789",
             "provider_type": "anthropic"
         });
-        let thought: OpenAICompatibleInputThought =
-            serde_json::from_value(json_with_index).unwrap();
-        assert_eq!(thought.index, Some(5));
-        assert_eq!(thought.thought.text, Some("My thought".to_string()));
-        assert_eq!(thought.thought.signature, Some("sig789".to_string()));
-        assert_eq!(thought.thought.provider_type, Some("anthropic".to_string()));
+        let block: InputExtraContentBlock =
+            serde_json::from_value(json_thought_with_index).unwrap();
+        match block {
+            InputExtraContentBlock::Thought {
+                insert_index,
+                thought,
+            } => {
+                assert_eq!(insert_index, Some(5));
+                assert_eq!(thought.text, Some("My thought".to_string()));
+                assert_eq!(thought.signature, Some("sig789".to_string()));
+                assert_eq!(thought.provider_type, Some("anthropic".to_string()));
+            }
+            InputExtraContentBlock::Unknown { .. } => panic!("Expected Thought variant"),
+        }
 
-        // Test without index
-        let json_without_index = json!({
+        // Test Thought variant deserialization without insert_index
+        let json_thought_without_index = json!({
+            "type": "thought",
             "text": "Another thought"
         });
-        let thought: OpenAICompatibleInputThought =
-            serde_json::from_value(json_without_index).unwrap();
-        assert_eq!(thought.index, None);
-        assert_eq!(thought.thought.text, Some("Another thought".to_string()));
-        assert_eq!(thought.thought.signature, None);
+        let block: InputExtraContentBlock =
+            serde_json::from_value(json_thought_without_index).unwrap();
+        match block {
+            InputExtraContentBlock::Thought {
+                insert_index,
+                thought,
+            } => {
+                assert_eq!(insert_index, None);
+                assert_eq!(thought.text, Some("Another thought".to_string()));
+                assert_eq!(thought.signature, None);
+            }
+            InputExtraContentBlock::Unknown { .. } => panic!("Expected Thought variant"),
+        }
+
+        // Test Unknown variant deserialization
+        let json_unknown = json!({
+            "type": "unknown",
+            "insert_index": 2,
+            "data": {"custom": "value"},
+            "model_name": "test_model"
+        });
+        let block: InputExtraContentBlock = serde_json::from_value(json_unknown).unwrap();
+        match block {
+            InputExtraContentBlock::Unknown {
+                insert_index,
+                unknown,
+            } => {
+                assert_eq!(insert_index, Some(2));
+                assert_eq!(unknown.data, json!({"custom": "value"}));
+                assert_eq!(unknown.model_name, Some("test_model".to_string()));
+            }
+            InputExtraContentBlock::Thought { .. } => panic!("Expected Unknown variant"),
+        }
     }
 
     #[test]
-    fn test_openai_compatible_thought_serialization() {
-        // Test that serde(flatten) works correctly for output thoughts
-        let thought = OpenAICompatibleThought {
-            index: 3,
+    fn test_extra_content_block_serialization() {
+        // Test Thought variant serialization
+        let thought_block = ExtraContentBlock::Thought {
+            insert_index: 3,
             thought: Thought {
                 text: Some("Thinking...".to_string()),
                 signature: Some("sig_abc".to_string()),
@@ -1910,14 +2017,29 @@ mod tests {
                 extra_data: None,
             },
         };
-        let json = serde_json::to_value(&thought).unwrap();
+        let json = serde_json::to_value(&thought_block).unwrap();
 
-        // With flatten, all fields should be at the top level
-        assert_eq!(json["index"], 3);
+        // With tagged enum + flatten, type tag and flattened fields at top level
+        assert_eq!(json["type"], "thought");
+        assert_eq!(json["insert_index"], 3);
         assert_eq!(json["text"], "Thinking...");
         assert_eq!(json["signature"], "sig_abc");
         assert_eq!(json["provider_type"], "anthropic");
-        // summary should not be present since it's None and has skip_serializing_if
-        assert!(json.get("summary").is_none() || json["summary"].is_null());
+
+        // Test Unknown variant serialization
+        let unknown_block = ExtraContentBlock::Unknown {
+            insert_index: 5,
+            unknown: Unknown {
+                data: json!({"custom": "data"}),
+                model_name: Some("test_model".to_string()),
+                provider_name: None,
+            },
+        };
+        let json = serde_json::to_value(&unknown_block).unwrap();
+
+        assert_eq!(json["type"], "unknown");
+        assert_eq!(json["insert_index"], 5);
+        assert_eq!(json["data"], json!({"custom": "data"}));
+        assert_eq!(json["model_name"], "test_model");
     }
 }
