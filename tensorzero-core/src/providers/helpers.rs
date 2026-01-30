@@ -83,7 +83,7 @@ pub async fn convert_stream_error(
             }
             .into()
         }
-        _ => {
+        reqwest_sse_stream::ReqwestSseStreamError::SseError(_) => {
             let message = match request_id {
                 Some(id) => format!("{base_message} [request_id: {id}]"),
                 None => base_message,

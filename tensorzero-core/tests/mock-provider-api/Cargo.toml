@@ -29,6 +29,6 @@ object_store = { workspace = true }
 bytes = "1.10.1"
 
 [dev-dependencies]
-eventsource-stream = "0.2.3"
+sse-stream = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 tokio-stream = { workspace = true }

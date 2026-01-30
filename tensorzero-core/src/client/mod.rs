@@ -206,15 +206,7 @@ impl HTTPGateway {
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<InferenceStream, TensorZeroError> {
-        let event_source =
-            self.customize_builder(builder)
-                .eventsource()
-                .map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::JsonRequest {
-                        message: format!("Error constructing event stream: {e:?}"),
-                    })
-                    .into(),
-                })?;
+        let event_source = self.customize_builder(builder).eventsource();
 
         let mut event_source = event_source.peekable();
         let first = event_source.peek().await;

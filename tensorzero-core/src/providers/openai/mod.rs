@@ -1237,11 +1237,11 @@ fn extract_request_id(headers: &reqwest::header::HeaderMap) -> Option<String> {
 }
 
 pub(super) fn request_id_from_event_source_error(
-    error: &reqwest_eventsource::Error,
+    error: &reqwest_sse_stream::ReqwestSseStreamError,
 ) -> Option<String> {
     match error {
-        reqwest_eventsource::Error::InvalidStatusCode(_, resp)
-        | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+        reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(_, resp)
+        | reqwest_sse_stream::ReqwestSseStreamError::InvalidContentType(_, resp) => {
             extract_request_id(resp.headers())
         }
         _ => None,

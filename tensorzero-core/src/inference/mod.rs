@@ -26,10 +26,22 @@ use uuid::Uuid;
 /// A helper type for preserving custom errors when working with `reqwest_sse_stream`
 /// This is currently used by `stream_openai` to allow using it with a provider
 /// that needs to do additional validation when streaming (e.g. Sagemaker)
+#[derive(Debug)]
 pub enum TensorZeroEventError {
     TensorZero(Error),
     EventSource(Box<reqwest_sse_stream::ReqwestSseStreamError>),
 }
+
+impl std::fmt::Display for TensorZeroEventError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TensorZeroEventError::TensorZero(e) => write!(f, "{e}"),
+            TensorZeroEventError::EventSource(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for TensorZeroEventError {}
 
 pub trait InferenceProvider {
     fn infer<'a>(

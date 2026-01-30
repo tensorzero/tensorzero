@@ -5,7 +5,7 @@ use aws_types::region::Region;
 use bytes::BytesMut;
 use futures::StreamExt;
 use serde::Serialize;
-use sse_stream::SseStream;
+use reqwest_sse_stream::SseStream;
 use std::time::Instant;
 
 use super::aws_common::{
@@ -316,7 +316,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                                         // The payload contains the raw bytes from the hosted model
                                         let payload = message.payload();
                                         if !payload.is_empty() {
-                                            yield Ok(payload.to_vec());
+                                            yield Ok(bytes::Bytes::copy_from_slice(payload));
                                         }
                                     }
                                 }

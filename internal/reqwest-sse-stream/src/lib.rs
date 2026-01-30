@@ -1,9 +1,8 @@
 use futures::{Stream, StreamExt};
 use http_body::Body;
-use sse_stream::SseStream;
 use thiserror::Error;
 
-pub use sse_stream::Sse;
+pub use sse_stream::{Sse, SseStream};
 
 #[derive(Debug, Error)]
 pub enum ReqwestSseStreamError {
@@ -20,15 +19,17 @@ pub enum ReqwestSseStreamError {
 /// An SSE message event with guaranteed data field.
 /// This mimics the API of `eventsource_stream::Event` (used by `reqwest_eventsource`),
 /// where `data` is a non-optional `String`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MessageEvent {
     pub event: String,
     pub data: String,
     pub id: String,
 }
 
-impl From<Sse> for Option<MessageEvent> {
-    fn from(sse: Sse) -> Self {
+impl MessageEvent {
+    /// Creates a MessageEvent from an Sse event if data is present.
+    /// Returns None if the Sse event has no data field.
+    fn from_sse(sse: Sse) -> Option<Self> {
         // Only convert if data is present - events without data are not meaningful messages
         sse.data.map(|data| MessageEvent {
             event: sse.event.unwrap_or_default(),
@@ -39,17 +40,19 @@ impl From<Sse> for Option<MessageEvent> {
 }
 
 /// Mimics the api of `reqwest_eventsource::Event`
+#[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Open,
     Message(MessageEvent),
 }
 
-//// Mimics the api of `reqwest_eventsource::RequestBuilderExt`
+/// Mimics the api of `reqwest_eventsource::RequestBuilderExt`
 pub trait RequestBuilderExt {
     fn eventsource(self) -> impl Stream<Item = Result<Event, ReqwestSseStreamError>>;
 
     /// Sends the request and returns the event stream along with response headers.
     /// Returns the headers even on error for cases where they are needed for error handling.
+    #[expect(clippy::type_complexity)]
     fn eventsource_with_headers(
         self,
     ) -> impl std::future::Future<
@@ -121,18 +124,31 @@ fn sse_stream_to_event_stream(
         match event {
             Ok(sse) => {
                 // Only yield Message events when data is present
-                Option::<MessageEvent>::from(sse).map(|message| Ok(Event::Message(message)))
+                MessageEvent::from_sse(sse).map(|message| Ok(Event::Message(message)))
             }
             Err(e) => Some(Err(ReqwestSseStreamError::SseError(e))),
         }
     }))
 }
 
+/// Sends the request and returns a stream of raw SSE events.
+/// This is useful when you want to handle SSE events directly without
+/// the `Event::Open`/`Event::Message` wrapper.
+pub async fn into_sse_stream(
+    builder: reqwest::RequestBuilder,
+) -> Result<impl Stream<Item = Result<Sse, ReqwestSseStreamError>>, ReqwestSseStreamError> {
+    let (sse_stream, _headers) = start_stream_with_headers(builder)
+        .await
+        .map_err(|(e, _headers)| e)?;
+    Ok(sse_stream.map(|r| r.map_err(ReqwestSseStreamError::SseError)))
+}
+
 impl RequestBuilderExt for reqwest::RequestBuilder {
     fn eventsource(self) -> impl Stream<Item = Result<Event, ReqwestSseStreamError>> {
         async_stream::stream! {
             match self.eventsource_with_headers().await {
-                Ok((mut event_stream, _headers)) => {
+                Ok((event_stream, _headers)) => {
+                    let mut event_stream = std::pin::pin!(event_stream);
                     while let Some(event) = event_stream.next().await {
                         yield event;
                     }

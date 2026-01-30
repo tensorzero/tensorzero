@@ -432,10 +432,9 @@ async fn test_dropped_stream_body() {
             .build()
             .unwrap();
 
-        let mut good_stream = good_client
+        let mut good_stream = std::pin::pin!(good_client
             .post(format!("http://{target_server_addr}/slow"))
-            .eventsource()
-            .unwrap();
+            .eventsource());
         // Read the entire stream, so that we're sure that provider-proxy will write the file to disk
         while let Some(event) = good_stream.next().await {
             match event {
@@ -473,10 +472,9 @@ async fn test_dropped_stream_body() {
         .build()
         .unwrap();
 
-    let mut first_stream = client
+    let mut first_stream = std::pin::pin!(client
         .post(format!("http://{target_server_addr}/slow"))
-        .eventsource()
-        .unwrap();
+        .eventsource());
 
     let first_event = first_stream.next().await.unwrap().unwrap();
     assert_eq!(first_event, reqwest_sse_stream::Event::Open);
@@ -489,11 +487,11 @@ async fn test_dropped_stream_body() {
     // We should get a timeout
     let err = first_stream.next().await.unwrap().unwrap_err();
     assert!(
-        matches!(&err, reqwest_eventsource::Error::Transport(e) if e.is_timeout()),
+        matches!(&err, reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_timeout()),
         "Unexpected error: {err:?}"
     );
 
-    drop(first_stream);
+    // first_stream gets dropped here (at end of scope)
     // Nothing should be on disk
     // The previous cache file should have been *deleted* at the start of the second request,
     // and no new file should have been written (because the stream was dropped before it was done)
@@ -539,10 +537,9 @@ async fn test_stream_body() {
         .build()
         .unwrap();
 
-    let mut second_stream = client
+    let mut second_stream = std::pin::pin!(client
         .post(format!("http://{target_server_addr}/slow"))
-        .eventsource()
-        .unwrap();
+        .eventsource());
 
     while let Some(event) = second_stream.next().await {
         let event = event.unwrap();
