@@ -6,10 +6,16 @@ set -euxo pipefail
 
 cd "$(dirname "$0")"/../
 
-docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
-docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
-TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030 TENSORZERO_SKIP_LARGE_FIXTURES=1 VITE_TENSORZERO_FORCE_CACHE_ON=1 docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml up --force-recreate -d
-docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml wait fixtures
+# Build compose file arguments - optionally include provider-proxy if TENSORZERO_USE_PROVIDER_PROXY is set
+COMPOSE_FILES="-f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml"
+if [ "${TENSORZERO_USE_PROVIDER_PROXY:-}" = "1" ]; then
+  COMPOSE_FILES="$COMPOSE_FILES -f ./fixtures/docker-compose.provider-proxy.yml"
+fi
+
+docker compose $COMPOSE_FILES down
+docker compose $COMPOSE_FILES rm -f
+TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030 TENSORZERO_SKIP_LARGE_FIXTURES=1 VITE_TENSORZERO_FORCE_CACHE_ON=1 docker compose $COMPOSE_FILES up --force-recreate -d
+docker compose $COMPOSE_FILES wait fixtures
 # Wipe the ModelInferenceCache table to ensure that we regenerate everything
 docker run --add-host=host.docker.internal:host-gateway clickhouse/clickhouse-server clickhouse-client --host host.docker.internal --user chuser --password chpassword --database tensorzero_ui_fixtures 'TRUNCATE TABLE ModelInferenceCache SYNC'
 # Don't use any retries, since this will pollute the model inference cache with duplicate entries.

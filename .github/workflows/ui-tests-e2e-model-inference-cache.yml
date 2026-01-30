@@ -143,11 +143,20 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: uv run ./ui/fixtures/download-small-fixtures.py
 
+      - name: Download provider-proxy cache
+        if: inputs.regen_cache == true
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=regen-fixtures-provider-proxy-cache ./ci/download-provider-proxy-cache.sh
+
       - name: Regenerate model inference cache
         working-directory: ui
         if: inputs.regen_cache == true
         env:
           TENSORZERO_CI: 1
+          TENSORZERO_USE_PROVIDER_PROXY: 1
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
@@ -191,8 +200,16 @@ jobs:
           echo "Cache file validation passed: same number of rows"
           # Take down and destroy the containers, so that our subsequent test run starts with a fresh ClickHouse
           # server, and inserts our regenerated fixtures from scratch
-          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
-          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
+          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml -f ./fixtures/docker-compose.provider-proxy.yml down
+          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml -f ./fixtures/docker-compose.provider-proxy.yml rm -f
+
+      - name: Upload provider-proxy cache
+        if: inputs.regen_cache == true
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=regen-fixtures-provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
 
       - name: Upload new model inference cache
         if: always() && inputs.regen_cache == true
