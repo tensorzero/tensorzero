@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Suspense, use } from "react";
 import type { Route } from "./+types/route";
 import { data, useLocation, useNavigate } from "react-router";
@@ -14,7 +14,7 @@ import PageButtons from "~/components/utils/PageButtons";
 import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { SessionsTableRows } from "../AutopilotSessionsTable";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
-import type { Session } from "~/types/tensorzero";
+import type { Session, SessionSortField, SortOrder } from "~/types/tensorzero";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   Table,
@@ -27,6 +27,8 @@ import {
 
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_SORT_BY: SessionSortField = "last_event_at";
+const DEFAULT_SORT_ORDER: SortOrder = "desc";
 
 export type SessionsData = {
   sessions: Session[];
@@ -39,6 +41,20 @@ function parseInteger(value: string | null, fallback: number) {
   return Number.isNaN(parsed) ? fallback : parsed;
 }
 
+function parseSortBy(value: string | null): SessionSortField {
+  if (value === "created_at" || value === "last_event_at") {
+    return value;
+  }
+  return DEFAULT_SORT_BY;
+}
+
+function parseSortOrder(value: string | null): SortOrder {
+  if (value === "asc" || value === "desc") {
+    return value;
+  }
+  return DEFAULT_SORT_ORDER;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const limitParam = parseInteger(
@@ -48,6 +64,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offsetParam = parseInteger(url.searchParams.get("offset"), 0);
   const limit = Math.max(1, limitParam);
   const offset = Math.max(0, offsetParam);
+  const sortBy = parseSortBy(url.searchParams.get("sort_by"));
+  const sortOrder = parseSortOrder(url.searchParams.get("sort_order"));
 
   if (limit > MAX_PAGE_SIZE) {
     throw data(`Limit cannot exceed ${MAX_PAGE_SIZE}`, { status: 400 });
@@ -60,6 +78,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     .listAutopilotSessions({
       limit: limit + 1,
       offset,
+      sort_by: sortBy,
+      sort_order: sortOrder,
     })
     .then((response) => {
       const hasMore = response.sessions.length > limit;
@@ -71,10 +91,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     sessionsData: sessionsDataPromise,
     offset,
     limit,
+    sortBy,
+    sortOrder,
   };
 }
 
-// Skeleton rows for loading state - matches table columns (Session ID, Created)
+// Skeleton rows for loading state - matches table columns (Session ID, Created, Last Activity)
 function SkeletonRows() {
   return (
     <>
@@ -82,6 +104,9 @@ function SkeletonRows() {
         <TableRow key={i}>
           <TableCell>
             <Skeleton className="h-5 w-24" />
+          </TableCell>
+          <TableCell className="w-0 text-right whitespace-nowrap">
+            <Skeleton className="ml-auto h-5 w-36" />
           </TableCell>
           <TableCell className="w-0 text-right whitespace-nowrap">
             <Skeleton className="ml-auto h-5 w-36" />
@@ -137,29 +162,89 @@ function PaginationContent({
   );
 }
 
+// Sortable column header component
+function SortableHeader({
+  label,
+  field,
+  currentSortBy,
+  currentSortOrder,
+  onSort,
+  className,
+}: {
+  label: string;
+  field: SessionSortField;
+  currentSortBy: SessionSortField;
+  currentSortOrder: SortOrder;
+  onSort: (field: SessionSortField) => void;
+  className?: string;
+}) {
+  const isActive = currentSortBy === field;
+
+  return (
+    <TableHead
+      className={`cursor-pointer select-none ${className ?? ""}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center justify-end gap-1">
+        {label}
+        {isActive ? (
+          currentSortOrder === "asc" ? (
+            <ChevronUp className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          )
+        ) : (
+          <div className="flex flex-col">
+            <ChevronUp className="h-2 w-2 opacity-40" />
+            <ChevronDown className="h-2 w-2 opacity-40" />
+          </div>
+        )}
+      </div>
+    </TableHead>
+  );
+}
+
 export default function AutopilotSessionsPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { status } = useTensorZeroStatusFetcher();
-  const { sessionsData, offset, limit } = loaderData;
+  const { sessionsData, offset, limit, sortBy, sortOrder } = loaderData;
   const gatewayVersion = status?.version;
   const uiVersion = __APP_VERSION__;
 
-  const updateOffset = (nextOffset: number) => {
+  const updateSearchParams = (updates: Record<string, string>) => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(nextOffset));
-    searchParams.set("limit", String(limit));
+    for (const [key, value] of Object.entries(updates)) {
+      searchParams.set(key, value);
+    }
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const handleSort = (field: SessionSortField) => {
+    // If clicking the same field, toggle order. Otherwise, sort desc by the new field.
+    const newOrder =
+      sortBy === field ? (sortOrder === "desc" ? "asc" : "desc") : "desc";
+    updateSearchParams({
+      sort_by: field,
+      sort_order: newOrder,
+      offset: "0", // Reset to first page when changing sort
+    });
+  };
+
   const handleNextPage = () => {
-    updateOffset(offset + limit);
+    updateSearchParams({
+      offset: String(offset + limit),
+      limit: String(limit),
+    });
   };
 
   const handlePreviousPage = () => {
-    updateOffset(Math.max(0, offset - limit));
+    updateSearchParams({
+      offset: String(Math.max(0, offset - limit)),
+      limit: String(limit),
+    });
   };
 
   return (
@@ -180,9 +265,22 @@ export default function AutopilotSessionsPage({
           <TableHeader>
             <TableRow>
               <TableHead>Session ID</TableHead>
-              <TableHead className="w-0 text-right whitespace-nowrap">
-                Created
-              </TableHead>
+              <SortableHeader
+                label="Created"
+                field="created_at"
+                currentSortBy={sortBy}
+                currentSortOrder={sortOrder}
+                onSort={handleSort}
+                className="w-0 text-right whitespace-nowrap"
+              />
+              <SortableHeader
+                label="Last Activity"
+                field="last_event_at"
+                currentSortBy={sortBy}
+                currentSortOrder={sortOrder}
+                onSort={handleSort}
+                className="w-0 text-right whitespace-nowrap"
+              />
             </TableRow>
           </TableHeader>
           <TableBody>
