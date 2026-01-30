@@ -22,12 +22,6 @@ export const formatDate = (date: Date) => {
  * Format date with time including seconds
  */
 export const formatDateWithSeconds = (date: Date) => {
-  const formattedDate = date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-
   const formattedTime = new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -35,7 +29,7 @@ export const formatDateWithSeconds = (date: Date) => {
     hour12: true,
   }).format(date);
 
-  return `${formattedDate} · ${formattedTime}`;
+  return `${formatDateOnly(date)} · ${formattedTime}`;
 };
 
 /**
