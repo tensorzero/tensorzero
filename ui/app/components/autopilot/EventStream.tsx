@@ -585,10 +585,12 @@ export default function EventStream({
   status,
 }: EventStreamProps) {
   // Determine what to show at the top: sentinel, error, or session start
+  // Only show session start when there's content to display (events or optimistic messages)
   const showSessionStart =
     (hasReachedStart || optimisticMessages.length > 0) &&
     !isLoadingOlder &&
-    !loadError;
+    !loadError &&
+    (events.length > 0 || optimisticMessages.length > 0);
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
@@ -604,9 +606,11 @@ export default function EventStream({
       {/* Session start indicator */}
       {showSessionStart && <SessionStartDivider />}
 
-      {/* Always show 3 skeletons when more content exists above */}
+      {/* Show skeletons when more content exists above (not yet loaded) */}
       {/* This prevents layout jump when loading starts */}
-      {!showSessionStart && !loadError && <EventSkeletons count={3} />}
+      {!showSessionStart && !hasReachedStart && !loadError && (
+        <EventSkeletons count={3} />
+      )}
 
       {events.map((event) => (
         <EventErrorBoundary key={event.id} eventId={event.id}>
