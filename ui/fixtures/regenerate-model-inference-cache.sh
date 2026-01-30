@@ -26,3 +26,4 @@ pnpm test-e2e -j 1 --grep-invert "@credentials" --max-failures 1
 # Remove the existing file if it exists (it may have restricted permissions from R2 download)
 rm -f ./fixtures/small-fixtures/model_inference_cache_e2e.jsonl
 docker run --add-host=host.docker.internal:host-gateway clickhouse/clickhouse-server clickhouse-client --host host.docker.internal --user chuser --password chpassword --database tensorzero_ui_fixtures 'SELECT * FROM ModelInferenceCache ORDER BY long_cache_key ASC FORMAT JSONEachRow' > ./fixtures/small-fixtures/model_inference_cache_e2e.jsonl
+docker compose $COMPOSE_FILES logs -t
