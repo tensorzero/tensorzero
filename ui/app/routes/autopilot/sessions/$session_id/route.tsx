@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { v7 as uuid } from "uuid";
 import {
   Await,
   data,
@@ -441,11 +442,12 @@ export default function AutopilotSessionEventsPage({
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
 
-  // Reset loading/error state when navigating to a different session
-  // Note: key={sessionId} on Suspense remounts EventStreamContent, which will call onLoaded
+  // Reset state when navigating to a different session
+  // Note: key={sessionId} on EventStreamContent ensures a fresh mount that will call onLoaded
+  // We don't set isEventsLoading here because the effect ordering with Suspense is unpredictable -
+  // EventStreamContent's onLoaded may run before this effect, causing isEventsLoading to get stuck
   useEffect(() => {
     setOptimisticMessages([]);
-    setIsEventsLoading(!isNewSession);
     setHasLoadError(false);
     setHasReachedStart(false);
     setAutopilotStatus({ status: "idle" });
@@ -659,7 +661,7 @@ export default function AutopilotSessionEventsPage({
       setOptimisticMessages((prev) => [
         ...prev,
         {
-          tempId: crypto.randomUUID(),
+          tempId: uuid(),
           eventId: response.event_id,
           text,
           status: "sending",

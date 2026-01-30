@@ -678,8 +678,33 @@ impl AutopilotClient {
             .get(url)
             .headers(self.auth_headers())
             .eventsource()
-            .await
-            .map_err(Self::convert_sse_error)?;
+            .await;
+
+        let mut event_source = match event_source {
+            Ok(event_source) => event_source,
+            Err(e) => return Err(Self::convert_sse_error(e).await),
+        };
+
+        // The first event should be Open on success, or an error on failure.
+        match event_source.next().await {
+            Some(Ok(reqwest_sse_stream::Event::Open)) => {
+                // Connection established successfully
+            }
+            Some(Err(e)) => {
+                // Convert SSE error to appropriate AutopilotError
+                return Err(Self::convert_sse_error(e).await);
+            }
+            Some(Ok(reqwest_sse_stream::Event::Message(_))) => {
+                return Err(AutopilotError::Sse(
+                    "Received message before connection was established".to_string(),
+                ));
+            }
+            None => {
+                return Err(AutopilotError::Sse(
+                    "Connection closed unexpectedly".to_string(),
+                ));
+            }
+        }
 
         // Connection is good, return the stream
         let cache = self.tool_call_cache.clone();
@@ -730,7 +755,7 @@ impl AutopilotClient {
                             None
                         }
                     }
-                    Err(e) => Some(Err(AutopilotError::Sse(e.to_string()))),
+                    Err(e) => Some(Err(Self::convert_sse_error(e).await)),
                 }
             }
         });
@@ -740,7 +765,7 @@ impl AutopilotClient {
 
     /// Converts an SSE error to the appropriate AutopilotError.
     /// HTTP errors are converted to AutopilotError::Http for consistency.
-    fn convert_sse_error(e: reqwest_sse_stream::ReqwestSseStreamError) -> AutopilotError {
+    async fn convert_sse_error(e: reqwest_sse_stream::ReqwestSseStreamError) -> AutopilotError {
         match e {
             reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_status() => {
                 AutopilotError::Http {
@@ -750,6 +775,15 @@ impl AutopilotClient {
                         .and_then(|s| s.canonical_reason())
                         .unwrap_or("Unknown error")
                         .to_string(),
+                }
+            }
+            reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(status, response) => {
+                AutopilotError::Http {
+                    status_code: status.as_u16(),
+                    message: response
+                        .text()
+                        .await
+                        .unwrap_or_else(|e| format!("<Could not read response body>: {e}")),
                 }
             }
             other => AutopilotError::Sse(other.to_string()),
