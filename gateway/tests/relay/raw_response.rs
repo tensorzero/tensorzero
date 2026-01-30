@@ -953,6 +953,529 @@ async fn test_relay_raw_response_error_streaming() {
 // doesn't produce raw_response entries in streaming the same way, so we don't
 // duplicate that test here.
 
+// =============================================================================
+// Mixture-of-N Relay Tests
+// =============================================================================
+
+/// Test relay raw_response passthrough with mixture-of-n variant (non-streaming).
+/// This tests that raw_response entries from multiple model inferences (candidates + fuser)
+/// are correctly passed through the relay with correct provider_type values.
+#[tokio::test]
+async fn test_relay_raw_response_mixture_of_n_non_streaming() {
+    // Downstream uses default shorthand models
+    let downstream_config = "";
+
+    // Define the function and mixture-of-n variant on the relay gateway.
+    // Model calls will be forwarded to the downstream via relay.
+    // Using gpt-5-nano with reasoning disabled for speed.
+    let relay_config = r#"
+[functions.mixture_of_n_test]
+type = "chat"
+
+[functions.mixture_of_n_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.mixture_of_n_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.mixture_of_n_test.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.mixture_of_n_test.variants.mixture_of_n.fuser]
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "mixture_of_n_test",
+            "variant_name": "mixture_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            "include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let raw_response = body
+        .get("raw_response")
+        .unwrap_or_else(|| panic!("Response should have raw_response when requested. Body: {body}"))
+        .as_array()
+        .expect("raw_response should be an array");
+
+    // Mixture-of-n should have at least 3 entries: 2 candidates + 1 fuser
+    assert!(
+        raw_response.len() >= 3,
+        "Mixture-of-n relay should have at least 3 raw_response entries (2 candidates + 1 fuser), got {}. Body: {body}",
+        raw_response.len()
+    );
+
+    // All entries should have provider_type = "openai" (from downstream), not "relay"
+    for entry in raw_response {
+        assert_raw_response_entry_structure(entry);
+
+        let provider_type = entry
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_response entry should have provider_type");
+        assert_eq!(
+            provider_type, "openai",
+            "All raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+        );
+    }
+}
+
+/// Test relay raw_response passthrough with mixture-of-n variant (streaming).
+/// This tests that streaming raw_response entries from multiple model inferences
+/// are correctly passed through the relay. Unlike Best-of-N, Mixture-of-N uses
+/// real streaming for the fuser, so raw_chunk should be present.
+#[tokio::test]
+async fn test_relay_raw_response_mixture_of_n_streaming() {
+    // Downstream uses default shorthand models
+    let downstream_config = "";
+
+    // Define the function and mixture-of-n variant on the relay gateway.
+    // Model calls will be forwarded to the downstream via relay.
+    // Using gpt-5-nano with reasoning disabled for speed.
+    let relay_config = r#"
+[functions.mixture_of_n_test]
+type = "chat"
+
+[functions.mixture_of_n_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.mixture_of_n_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+
+[functions.mixture_of_n_test.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.mixture_of_n_test.variants.mixture_of_n.fuser]
+model = "openai::gpt-5-nano"
+reasoning_effort = "minimal"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "mixture_of_n_test",
+            "variant_name": "mixture_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true,
+            "include_raw_response": true
+        }))
+        .eventsource()
+        .unwrap();
+
+    let mut raw_response_entries: Vec<Value> = Vec::new();
+    let mut found_raw_chunk = false;
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        // Check if this chunk has raw_response (previous inferences for mixture-of-n)
+        if let Some(raw_response) = chunk.get("raw_response")
+            && let Some(arr) = raw_response.as_array()
+        {
+            raw_response_entries.extend(arr.clone());
+        }
+
+        // Check for raw_chunk field in streaming (fuser should stream)
+        if chunk.get("raw_chunk").is_some() {
+            found_raw_chunk = true;
+        }
+    }
+
+    // Mixture-of-n streaming should have at least the 2 candidates in raw_response
+    assert!(
+        raw_response_entries.len() >= 2,
+        "Mixture-of-n relay streaming should have at least 2 raw_response entries (2 candidates), got {} (accumulated across all chunks)",
+        raw_response_entries.len()
+    );
+
+    // All entries should have provider_type = "openai" (from downstream), not "relay"
+    for entry in &raw_response_entries {
+        assert_raw_response_entry_structure(entry);
+
+        let provider_type = entry
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_response entry should have provider_type");
+        assert_eq!(
+            provider_type, "openai",
+            "All streaming raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+        );
+    }
+
+    // Unlike Best-of-N, Mixture-of-N uses real streaming for the fuser
+    // so raw_chunk SHOULD be present
+    assert!(
+        found_raw_chunk,
+        "Mixture-of-N streaming should have raw_chunk from fuser (real streaming)"
+    );
+}
+
+// =============================================================================
+// DICL (Dynamic In-Context Learning) Relay Tests
+// =============================================================================
+
+/// Test relay raw_response passthrough with DICL variant (non-streaming).
+/// This tests that raw_response entries from both embedding and chat completion
+/// model inferences are correctly passed through the relay.
+#[tokio::test]
+async fn test_relay_raw_response_dicl_non_streaming() {
+    // Downstream uses default shorthand models
+    let downstream_config = "";
+
+    // Define the function and DICL variant on the relay gateway.
+    // Model calls will be forwarded to the downstream via relay.
+    // Using gpt-5-nano with reasoning disabled for speed.
+    let relay_config = r#"
+[functions.dicl_test]
+type = "chat"
+
+[functions.dicl_test.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+weight = 1
+model = "openai::gpt-5-nano"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+reasoning_effort = "minimal"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "dicl_test",
+            "variant_name": "dicl",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            "include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let raw_response = body
+        .get("raw_response")
+        .unwrap_or_else(|| panic!("Response should have raw_response when requested. Body: {body}"))
+        .as_array()
+        .expect("raw_response should be an array");
+
+    // DICL should have at least 2 entries: 1 embedding + 1 chat completion
+    assert!(
+        raw_response.len() >= 2,
+        "DICL relay should have at least 2 raw_response entries (1 embedding + 1 chat), got {}. Body: {body}",
+        raw_response.len()
+    );
+
+    // Track which api_types we've seen
+    let mut seen_embeddings = false;
+    let mut seen_chat_completions = false;
+
+    for entry in raw_response {
+        assert_raw_response_entry_structure(entry);
+
+        let provider_type = entry
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_response entry should have provider_type");
+        assert_eq!(
+            provider_type, "openai",
+            "All raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+        );
+
+        let api_type = entry
+            .get("api_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_response entry should have api_type");
+        match api_type {
+            "embeddings" => seen_embeddings = true,
+            "chat_completions" | "responses" => seen_chat_completions = true,
+            _ => {}
+        }
+    }
+
+    assert!(
+        seen_embeddings,
+        "DICL should have at least one embeddings entry in raw_response"
+    );
+    assert!(
+        seen_chat_completions,
+        "DICL should have at least one chat_completions entry in raw_response"
+    );
+}
+
+/// Test relay raw_response passthrough with DICL variant (streaming).
+/// This tests that streaming raw_response entries from DICL are correctly passed through.
+/// The embedding call is non-streaming and appears in raw_response, while the LLM
+/// call streams and produces raw_chunk.
+#[tokio::test]
+async fn test_relay_raw_response_dicl_streaming() {
+    // Downstream uses default shorthand models
+    let downstream_config = "";
+
+    // Define the function and DICL variant on the relay gateway.
+    // Model calls will be forwarded to the downstream via relay.
+    // Using gpt-5-nano with reasoning disabled for speed.
+    let relay_config = r#"
+[functions.dicl_test]
+type = "chat"
+
+[functions.dicl_test.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+weight = 1
+model = "openai::gpt-5-nano"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+reasoning_effort = "minimal"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "dicl_test",
+            "variant_name": "dicl",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true,
+            "include_raw_response": true
+        }))
+        .eventsource()
+        .unwrap();
+
+    let mut raw_response_entries: Vec<Value> = Vec::new();
+    let mut found_raw_chunk = false;
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        // Check if this chunk has raw_response (embedding call for DICL)
+        if let Some(raw_response) = chunk.get("raw_response")
+            && let Some(arr) = raw_response.as_array()
+        {
+            raw_response_entries.extend(arr.clone());
+        }
+
+        // Check for raw_chunk field in streaming (LLM should stream)
+        if chunk.get("raw_chunk").is_some() {
+            found_raw_chunk = true;
+        }
+    }
+
+    // DICL streaming should have at least the embedding call in raw_response
+    assert!(
+        !raw_response_entries.is_empty(),
+        "DICL relay streaming should have at least 1 raw_response entry (embedding call)"
+    );
+
+    // Track which api_types we've seen in raw_response
+    let mut seen_embeddings = false;
+
+    for entry in &raw_response_entries {
+        assert_raw_response_entry_structure(entry);
+
+        let provider_type = entry
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_response entry should have provider_type");
+        assert_eq!(
+            provider_type, "openai",
+            "All streaming raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+        );
+
+        let api_type = entry
+            .get("api_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_response entry should have api_type");
+        if api_type == "embeddings" {
+            seen_embeddings = true;
+        }
+    }
+
+    assert!(
+        seen_embeddings,
+        "DICL streaming should have embeddings entry in raw_response"
+    );
+
+    // DICL uses real streaming for the LLM call, so raw_chunk SHOULD be present
+    assert!(
+        found_raw_chunk,
+        "DICL streaming should have raw_chunk from LLM (real streaming)"
+    );
+}
+
+// =============================================================================
+// Mid-Stream Error Relay Tests
+// =============================================================================
+
+/// Test that relay correctly handles mid-stream errors (errors that occur AFTER streaming starts).
+/// This is different from pre-stream errors which return a regular HTTP error response.
+/// Mid-stream errors occur after some SSE chunks have been sent, and are serialized as
+/// JSON events with an "error" field.
+#[tokio::test]
+async fn test_relay_raw_response_mid_stream_error() {
+    // Downstream uses default config
+    let downstream_config = "";
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    // Use the fatal_stream_error_with_raw_response model which errors mid-stream
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::fatal_stream_error_with_raw_response",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true,
+            "include_raw_response": true
+        }))
+        .eventsource()
+        .unwrap();
+
+    let mut chunks_before_error = 0;
+    let mut found_error = false;
+
+    while let Some(event) = stream.next().await {
+        let event = match event {
+            Ok(e) => e,
+            Err(_) => {
+                // Connection error - also counts as finding an error
+                found_error = true;
+                break;
+            }
+        };
+
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        // Check if this is an error event (mid-stream errors are sent as JSON with "error" field)
+        if chunk.get("error").is_some() {
+            found_error = true;
+            break;
+        }
+
+        // Count successful content chunks before any error
+        if chunk.get("content").is_some() || chunk.get("raw_chunk").is_some() {
+            chunks_before_error += 1;
+        }
+    }
+
+    // The fatal_stream_error_with_raw_response model produces 2 chunks before erroring
+    assert!(
+        chunks_before_error > 0,
+        "Mid-stream error should have received some chunks before the error, got {chunks_before_error}"
+    );
+    assert!(
+        found_error,
+        "Mid-stream error should have been detected after content chunks"
+    );
+}
+
 /// Test that relay passes through raw_response from downstream embedding errors
 #[tokio::test]
 async fn test_relay_raw_response_embeddings_error() {

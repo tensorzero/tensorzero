@@ -2,26 +2,12 @@
 //!
 //! Tests that raw provider-specific response data is correctly returned when requested
 //! for embedding models.
+//!
+//! These tests use HTTP requests to `/openai/v1/embeddings` endpoint.
 
-use axum::body::Body;
-use axum::extract::State;
-use axum::response::Response;
-use http_body_util::BodyExt;
-use serde_json::Value;
-use tensorzero::ClientExt;
-use tensorzero::test_helpers::make_embedded_gateway_e2e_with_unique_db;
-use tensorzero_core::embeddings::{EmbeddingEncodingFormat, EmbeddingInput};
-use tensorzero_core::endpoints::inference::InferenceCredentials;
-use tensorzero_core::endpoints::openai_compatible::OpenAIStructuredJson;
-use tensorzero_core::endpoints::openai_compatible::embeddings::embeddings_handler;
-use tensorzero_core::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
-
-/// Helper to extract JSON body from a Response<Body>
-async fn response_to_json(response: Response<Body>) -> Value {
-    let body = response.into_body();
-    let bytes = body.collect().await.unwrap().to_bytes();
-    serde_json::from_slice(&bytes).unwrap()
-}
+use reqwest::{Client, StatusCode};
+use serde_json::{Value, json};
+use tensorzero::test_helpers::make_http_gateway_with_unique_db;
 
 /// Helper to assert raw_response entry structure is valid for embeddings
 fn assert_raw_response_entry(entry: &Value) {
@@ -62,25 +48,23 @@ fn assert_raw_response_entry(entry: &Value) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_requested() {
-    let client = make_embedded_gateway_e2e_with_unique_db("emb_raw_response_requested").await;
-    let state = client.get_app_state_data().unwrap().clone();
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_requested").await;
 
-    let params = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Single("Hello, world!".to_string()),
-        model: "tensorzero::embedding_model_name::text-embedding-3-small".to_string(),
-        dimensions: None,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: None,
-        tensorzero_include_raw_response: true,
-    };
-
-    let response = embeddings_handler(State(state), None, OpenAIStructuredJson(params))
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true
+        }))
+        .send()
         .await
-        .expect("Response should be successful");
+        .unwrap();
 
-    let response_json: Value = response_to_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json: Value = response.json().await.unwrap();
 
     // Verify standard embedding response fields
     assert_eq!(
@@ -130,25 +114,23 @@ async fn test_embeddings_raw_response_requested() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_not_requested() {
-    let client = make_embedded_gateway_e2e_with_unique_db("emb_raw_response_not_requested").await;
-    let state = client.get_app_state_data().unwrap().clone();
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_not_requested").await;
 
-    let params = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Single("Hello, world!".to_string()),
-        model: "tensorzero::embedding_model_name::text-embedding-3-small".to_string(),
-        dimensions: None,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: None,
-        tensorzero_include_raw_response: false, // not requested
-    };
-
-    let response = embeddings_handler(State(state), None, OpenAIStructuredJson(params))
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small"
+            // tensorzero::include_raw_response not set (defaults to false)
+        }))
+        .send()
         .await
-        .expect("Response should be successful");
+        .unwrap();
 
-    let response_json: Value = response_to_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json: Value = response.json().await.unwrap();
 
     // tensorzero::raw_response should NOT be present when not requested
     assert!(
@@ -163,26 +145,23 @@ async fn test_embeddings_raw_response_not_requested() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_explicitly_false() {
-    let client =
-        make_embedded_gateway_e2e_with_unique_db("emb_raw_response_explicitly_false").await;
-    let state = client.get_app_state_data().unwrap().clone();
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_explicitly_false").await;
 
-    let params = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Single("Hello, world!".to_string()),
-        model: "tensorzero::embedding_model_name::text-embedding-3-small".to_string(),
-        dimensions: None,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: None,
-        tensorzero_include_raw_response: false,
-    };
-
-    let response = embeddings_handler(State(state), None, OpenAIStructuredJson(params))
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": false
+        }))
+        .send()
         .await
-        .expect("Response should be successful");
+        .unwrap();
 
-    let response_json: Value = response_to_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json: Value = response.json().await.unwrap();
 
     // tensorzero::raw_response should NOT be present when explicitly false
     assert!(
@@ -197,30 +176,29 @@ async fn test_embeddings_raw_response_explicitly_false() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_batch() {
-    let client = make_embedded_gateway_e2e_with_unique_db("emb_raw_response_batch").await;
-    let state = client.get_app_state_data().unwrap().clone();
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_batch").await;
 
     let inputs = [
         "Hello, world!",
         "How are you today?",
         "This is a test of batch embeddings.",
     ];
-    let params = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Batch(inputs.iter().map(|s| s.to_string()).collect()),
-        model: "tensorzero::embedding_model_name::text-embedding-3-small".to_string(),
-        dimensions: None,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: None,
-        tensorzero_include_raw_response: true,
-    };
 
-    let response = embeddings_handler(State(state), None, OpenAIStructuredJson(params))
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": inputs,
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true
+        }))
+        .send()
         .await
-        .expect("Response should be successful");
+        .unwrap();
 
-    let response_json: Value = response_to_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json: Value = response.json().await.unwrap();
 
     // Verify standard embedding response fields
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
@@ -254,34 +232,34 @@ async fn test_embeddings_raw_response_batch() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_with_cache() {
-    let client = make_embedded_gateway_e2e_with_unique_db("emb_raw_response_with_cache").await;
-    let state = client.get_app_state_data().unwrap().clone();
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_with_cache").await;
 
     let input_text = format!(
         "This is a cache test for embeddings raw_response - {}",
         rand::random::<u32>()
     );
 
+    let client = Client::new();
+
     // First request: populate cache with raw_response enabled
-    let params = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Single(input_text.clone()),
-        model: "tensorzero::embedding_model_name::text-embedding-3-small".to_string(),
-        dimensions: None,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: Some(tensorzero_core::cache::CacheParamsOptions {
-            enabled: tensorzero_core::cache::CacheEnabledMode::On,
-            max_age_s: Some(60),
-        }),
-        tensorzero_include_raw_response: true,
-    };
-
-    let response = embeddings_handler(State(state.clone()), None, OpenAIStructuredJson(params))
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": input_text,
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true,
+            "tensorzero::cache_options": {
+                "enabled": "on",
+                "max_age_s": 60
+            }
+        }))
+        .send()
         .await
-        .expect("Response should be successful");
+        .unwrap();
 
-    let response_json: Value = response_to_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json: Value = response.json().await.unwrap();
 
     // First request should have raw_response with data
     let raw_response = response_json
@@ -304,26 +282,23 @@ async fn test_embeddings_raw_response_with_cache() {
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     // Second request: should hit cache
-    let params_cached = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Single(input_text),
-        model: "tensorzero::embedding_model_name::text-embedding-3-small".to_string(),
-        dimensions: None,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: Some(tensorzero_core::cache::CacheParamsOptions {
-            enabled: tensorzero_core::cache::CacheEnabledMode::On,
-            max_age_s: Some(60),
-        }),
-        tensorzero_include_raw_response: true,
-    };
+    let response_cached = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": input_text,
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true,
+            "tensorzero::cache_options": {
+                "enabled": "on",
+                "max_age_s": 60
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
 
-    let response_cached =
-        embeddings_handler(State(state), None, OpenAIStructuredJson(params_cached))
-            .await
-            .expect("Cached response should be successful");
-
-    let response_cached_json: Value = response_to_json(response_cached).await;
+    assert_eq!(response_cached.status(), StatusCode::OK);
+    let response_cached_json: Value = response_cached.json().await.unwrap();
 
     // Cached response should have tensorzero::raw_response but with empty array
     let raw_response_cached = response_cached_json
@@ -351,25 +326,23 @@ async fn test_embeddings_raw_response_with_cache() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_entry_structure() {
-    let client = make_embedded_gateway_e2e_with_unique_db("emb_raw_response_entry_structure").await;
-    let state = client.get_app_state_data().unwrap().clone();
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_entry_structure").await;
 
-    let params = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Single("Test entry structure".to_string()),
-        model: "tensorzero::embedding_model_name::text-embedding-3-small".to_string(),
-        dimensions: None,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: None,
-        tensorzero_include_raw_response: true,
-    };
-
-    let response = embeddings_handler(State(state), None, OpenAIStructuredJson(params))
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Test entry structure",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "tensorzero::include_raw_response": true
+        }))
+        .send()
         .await
-        .expect("Response should be successful");
+        .unwrap();
 
-    let response_json: Value = response_to_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json: Value = response.json().await.unwrap();
 
     let raw_response = response_json
         .get("tensorzero::raw_response")
@@ -412,25 +385,24 @@ async fn test_embeddings_raw_response_entry_structure() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_with_dimensions() {
-    let client = make_embedded_gateway_e2e_with_unique_db("emb_raw_response_with_dimensions").await;
-    let state = client.get_app_state_data().unwrap().clone();
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_with_dimensions").await;
 
-    let params = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Single("Test with specific dimensions".to_string()),
-        model: "tensorzero::embedding_model_name::text-embedding-3-small".to_string(),
-        dimensions: Some(512),
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: None,
-        tensorzero_include_raw_response: true,
-    };
-
-    let response = embeddings_handler(State(state), None, OpenAIStructuredJson(params))
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Test with specific dimensions",
+            "model": "tensorzero::embedding_model_name::text-embedding-3-small",
+            "dimensions": 512,
+            "tensorzero::include_raw_response": true
+        }))
+        .send()
         .await
-        .expect("Response should be successful");
+        .unwrap();
 
-    let response_json: Value = response_to_json(response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json: Value = response.json().await.unwrap();
 
     // Verify dimensions are respected in the embedding
     assert_eq!(
@@ -455,34 +427,30 @@ async fn test_embeddings_raw_response_with_dimensions() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_embeddings_raw_response_error() {
-    let client = make_embedded_gateway_e2e_with_unique_db("emb_raw_response_error").await;
-    let state = client.get_app_state_data().unwrap().clone();
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("emb_raw_response_error").await;
 
-    let params = OpenAICompatibleEmbeddingParams {
-        input: EmbeddingInput::Single("Hello, world!".to_string()),
-        model: "tensorzero::embedding_model_name::error_with_raw_response".to_string(),
-        dimensions: None,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        tensorzero_credentials: InferenceCredentials::default(),
-        tensorzero_dryrun: None,
-        tensorzero_cache_options: None,
-        tensorzero_include_raw_response: true,
-    };
-
-    let result = embeddings_handler(State(state), None, OpenAIStructuredJson(params)).await;
-
-    // When include_raw_response is true, errors are returned as Ok(response) with error status
-    let response = result.expect("Handler should return Ok when include_raw_response is true");
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/openai/v1/embeddings"))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::error_with_raw_response",
+            "tensorzero::include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
 
     // Should be an error status
-    let status = response.status();
     assert!(
-        !status.is_success(),
-        "Response should be an error, got status: {status}"
+        !response.status().is_success(),
+        "Response should be an error, got status: {}",
+        response.status()
     );
 
     // Parse the response body
-    let body = response_to_json(response).await;
+    let body: Value = response.json().await.unwrap();
 
     // Should have raw_response in error response
     let raw_response = body
