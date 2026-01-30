@@ -536,6 +536,28 @@ pub struct ListEventsParams {
     pub before: Option<Uuid>,
 }
 
+/// Field to sort sessions by.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum SessionSortField {
+    #[default]
+    CreatedAt,
+    LastEventAt,
+}
+
+/// Sort order for listing results.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum SortOrder {
+    Asc,
+    #[default]
+    Desc,
+}
+
 /// Query parameters for listing sessions.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -549,6 +571,14 @@ pub struct ListSessionsParams {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
+    /// Field to sort by. Defaults to created_at.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_by: Option<SessionSortField>,
+    /// Sort order. Defaults to desc.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<SortOrder>,
 }
 
 /// Query parameters for streaming events.
