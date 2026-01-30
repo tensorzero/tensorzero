@@ -174,6 +174,9 @@ export default function AutopilotSessionsTable({
           <TableHead className="w-0 text-right whitespace-nowrap">
             Created
           </TableHead>
+          <TableHead className="w-0 text-right whitespace-nowrap">
+            Last Activity
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
