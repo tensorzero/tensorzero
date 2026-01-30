@@ -60,8 +60,6 @@ type EventStreamProps = {
   onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
-  authLoadingStates?: Map<string, "approving" | "rejecting">;
-  onAuthorize?: (eventId: string, approved: boolean) => Promise<void>;
   optimisticMessages?: OptimisticMessage[];
   status?: AutopilotStatus;
 };

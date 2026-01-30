@@ -9,7 +9,7 @@ type PendingToolCallCardProps = {
   event: GatewayEvent;
   isLoading: boolean;
   loadingAction?: "approving" | "rejecting" | "approving_all";
-  onAuthorize: (approved: boolean) => void;
+  onApprove: (approved: boolean) => void;
   onApproveAll?: () => void;
   additionalCount: number;
   isInCooldown?: boolean;
@@ -20,7 +20,7 @@ export function PendingToolCallCard({
   event,
   isLoading,
   loadingAction,
-  onAuthorize,
+  onApprove,
   onApproveAll,
   additionalCount,
   isInCooldown = false,
@@ -37,7 +37,7 @@ export function PendingToolCallCard({
   const { name, arguments: args } = event.payload;
 
   const handleApprove = () => {
-    onAuthorize(true);
+    onApprove(true);
   };
 
   const handleRejectClick = () => {
@@ -45,7 +45,7 @@ export function PendingToolCallCard({
   };
 
   const handleRejectConfirm = () => {
-    onAuthorize(false);
+    onApprove(false);
     setConfirmReject(false);
   };
 

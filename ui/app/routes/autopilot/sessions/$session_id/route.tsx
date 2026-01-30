@@ -492,57 +492,45 @@ function AutopilotSessionEventsPageContent({
     pendingToolCallIds,
   });
 
-  // Handle tool call authorization (manual)
-  const handleAuthorize = useCallback(
+  const handleApprove = useCallback(
     async (eventId: string, approved: boolean) => {
+      if (manualApproval.isInFlight(eventId)) return;
       userActionRef.current = true;
-
       setAuthLoadingStates((prev) =>
         new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
       );
 
-      const { deduplicated } = await manualApproval.authorize(
-        eventId,
-        approved,
-      );
+      await manualApproval.approve(eventId, approved);
 
-      // Only clear loading state if this was an actual request (not deduplicated)
-      if (!deduplicated) {
-        setAuthLoadingStates((prev) => {
-          const next = new Map(prev);
-          next.delete(eventId);
-          return next;
-        });
-      }
+      setAuthLoadingStates((prev) => {
+        const next = new Map(prev);
+        next.delete(eventId);
+        return next;
+      });
     },
     [manualApproval],
   );
 
-  // Handle approve all tool calls (manual batch approval)
   const handleApproveAll = useCallback(async () => {
     if (pendingToolCalls.length === 0) return;
+    if (manualApproval.isBatchInFlight()) return;
 
     userActionRef.current = true;
 
-    // Use the oldest pending tool call's ID for loading state display
     const displayEventId = pendingToolCalls[0].id;
-    // Use the newest pending tool call's ID for the API
     const lastEventId = pendingToolCalls[pendingToolCalls.length - 1].id;
 
     setAuthLoadingStates((prev) =>
       new Map(prev).set(displayEventId, "approving_all"),
     );
 
-    const { deduplicated } = await manualApproval.approveAll(lastEventId);
+    await manualApproval.approveAll(lastEventId);
 
-    // Only clear loading state if this was an actual request (not deduplicated)
-    if (!deduplicated) {
-      setAuthLoadingStates((prev) => {
-        const next = new Map(prev);
-        next.delete(displayEventId);
-        return next;
-      });
-    }
+    setAuthLoadingStates((prev) => {
+      const next = new Map(prev);
+      next.delete(displayEventId);
+      return next;
+    });
   }, [pendingToolCalls, manualApproval]);
 
   // Handle interrupt session
@@ -829,8 +817,8 @@ function AutopilotSessionEventsPageContent({
                   loadingAction={authLoadingStates.get(
                     oldestPendingToolCall.id,
                   )}
-                  onAuthorize={(approved) =>
-                    handleAuthorize(oldestPendingToolCall.id, approved)
+                  onApprove={(approved) =>
+                    handleApprove(oldestPendingToolCall.id, approved)
                   }
                   onApproveAll={handleApproveAll}
                   additionalCount={pendingToolCalls.length - 1}

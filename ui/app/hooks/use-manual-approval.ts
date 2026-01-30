@@ -16,36 +16,19 @@ interface UseManualApprovalOptions {
 }
 
 interface UseManualApprovalResult {
-  /**
-   * Authorize a single tool call. Returns false if request was deduplicated
-   * (already in flight for this eventId).
-   */
-  authorize: (
-    eventId: string,
-    approved: boolean,
-  ) => Promise<{ success: boolean; deduplicated: boolean }>;
+  /** Approve or reject a single tool call. */
+  approve: (eventId: string, approved: boolean) => Promise<void>;
 
-  /**
-   * Approve all pending tool calls up to lastEventId. Returns false if request
-   * was deduplicated (batch approval already in flight).
-   */
-  approveAll: (
-    lastEventId: string,
-  ) => Promise<{ success: boolean; deduplicated: boolean }>;
+  /** Approve all pending tool calls up to lastEventId. */
+  approveAll: (lastEventId: string) => Promise<void>;
 
-  /**
-   * Check if an authorization is in flight for a specific eventId.
-   */
+  /** Check if an approval is in flight for a specific eventId. */
   isInFlight: (eventId: string) => boolean;
 
-  /**
-   * Check if a batch approval is in flight.
-   */
+  /** Check if a batch approval is in flight. */
   isBatchInFlight: () => boolean;
 
-  /**
-   * Reset all in-flight tracking (call on session change).
-   */
+  /** Reset all in-flight tracking (call on session change). */
   reset: () => void;
 }
 
@@ -62,15 +45,15 @@ interface UseManualApprovalResult {
  *
  * ## Pattern
  *
- * This follows the same synchronous ref pattern as `useAutoApproval`:
  * - Check ref synchronously before starting request
  * - Update ref synchronously to block concurrent attempts
- * - Clear ref in finally block after request completes
+ * - Keep ref set on success (blocks clicks until SSE removes tool call from UI)
+ * - Clear ref only on error (allows retry)
  *
  * ## Usage
  *
  * ```tsx
- * const { authorize, approveAll, reset } = useManualApproval({
+ * const { approve, approveAll, isInFlight, reset } = useManualApproval({
  *   sessionId,
  *   showError: toast.error,
  * });
@@ -78,11 +61,12 @@ interface UseManualApprovalResult {
  * // In session change effect:
  * useEffect(() => { reset(); }, [sessionId, reset]);
  *
- * // In click handler:
+ * // In click handler (guard before setting loading state):
  * const handleApprove = async (eventId: string) => {
+ *   if (isInFlight(eventId)) return;
  *   setLoading(eventId, true);
- *   const { success, deduplicated } = await authorize(eventId, true);
- *   if (!deduplicated) setLoading(eventId, false);
+ *   await approve(eventId, true);
+ *   setLoading(eventId, false);
  * };
  * ```
  */
@@ -94,26 +78,23 @@ export function useManualApproval({
   // Refs for synchronous deduplication
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Track individual authorizations in flight (by eventId)
-  const inFlightAuthRef = useRef<Set<string>>(new Set());
+  // Track processed authorizations - blocks duplicate requests for same eventId.
+  // Stays set on success (until session change) to prevent post-completion clicks.
+  const processedRef = useRef<Set<string>>(new Set());
 
-  // Track batch approval in flight (by lastEventId to allow new batches)
-  const batchInFlightRef = useRef<string | null>(null);
+  // Track batch approval - blocks concurrent batch requests.
+  // Stays set on success (until session change) to prevent post-completion clicks.
+  const batchProcessedRef = useRef<boolean>(false);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Authorization Functions
   // ─────────────────────────────────────────────────────────────────────────
 
-  const authorize = useCallback(
-    async (
-      eventId: string,
-      approved: boolean,
-    ): Promise<{ success: boolean; deduplicated: boolean }> => {
+  const approve = useCallback(
+    async (eventId: string, approved: boolean): Promise<void> => {
       // Synchronous guard: prevent duplicate requests for same event
-      if (inFlightAuthRef.current.has(eventId)) {
-        return { success: false, deduplicated: true };
-      }
-      inFlightAuthRef.current.add(eventId);
+      if (processedRef.current.has(eventId)) return;
+      processedRef.current.add(eventId);
 
       try {
         await authorizeToolCall(
@@ -123,45 +104,39 @@ export function useManualApproval({
             ? approvedStatus()
             : rejectedStatus("The user rejected the tool call."),
         );
-        return { success: true, deduplicated: false };
+        // Success: keep eventId in ref permanently to block any further clicks
+        // (the tool call will be removed from pending list via SSE)
       } catch (err) {
-        logger.error("Failed to authorize tool call:", err);
+        logger.error("Failed to approve tool call:", err);
         showError({
-          title: "Authorization failed",
-          description:
-            "Failed to submit tool call authorization. Please try again.",
+          title: "Approval failed",
+          description: "Failed to submit tool call approval. Please try again.",
         });
-        return { success: false, deduplicated: false };
-      } finally {
-        inFlightAuthRef.current.delete(eventId);
+        // Only clear on error so user can retry
+        processedRef.current.delete(eventId);
       }
     },
     [sessionId, showError],
   );
 
   const approveAll = useCallback(
-    async (
-      lastEventId: string,
-    ): Promise<{ success: boolean; deduplicated: boolean }> => {
+    async (lastEventId: string): Promise<void> => {
       // Synchronous guard: prevent duplicate batch requests
-      // We track by lastEventId so a new batch with different ID can proceed
-      if (batchInFlightRef.current !== null) {
-        return { success: false, deduplicated: true };
-      }
-      batchInFlightRef.current = lastEventId;
+      if (batchProcessedRef.current) return;
+      batchProcessedRef.current = true;
 
       try {
         await approveAllToolCalls(sessionId, lastEventId);
-        return { success: true, deduplicated: false };
+        // Success: keep ref set to block further batch clicks
+        // (pending tool calls will be cleared via SSE)
       } catch (err) {
         logger.error("Failed to approve all tool calls:", err);
         showError({
           title: "Batch approval failed",
           description: "Failed to approve all tool calls. Please try again.",
         });
-        return { success: false, deduplicated: false };
-      } finally {
-        batchInFlightRef.current = null;
+        // Only clear on error so user can retry
+        batchProcessedRef.current = false;
       }
     },
     [sessionId, showError],
@@ -172,11 +147,11 @@ export function useManualApproval({
   // ─────────────────────────────────────────────────────────────────────────
 
   const isInFlight = useCallback((eventId: string): boolean => {
-    return inFlightAuthRef.current.has(eventId);
+    return processedRef.current.has(eventId);
   }, []);
 
   const isBatchInFlight = useCallback((): boolean => {
-    return batchInFlightRef.current !== null;
+    return batchProcessedRef.current;
   }, []);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -184,18 +159,18 @@ export function useManualApproval({
   // ─────────────────────────────────────────────────────────────────────────
 
   const reset = useCallback(() => {
-    inFlightAuthRef.current.clear();
-    batchInFlightRef.current = null;
+    processedRef.current.clear();
+    batchProcessedRef.current = false;
   }, []);
 
   return useMemo(
     () => ({
-      authorize,
+      approve,
       approveAll,
       isInFlight,
       isBatchInFlight,
       reset,
     }),
-    [authorize, approveAll, isInFlight, isBatchInFlight, reset],
+    [approve, approveAll, isInFlight, isBatchInFlight, reset],
   );
 }
