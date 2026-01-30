@@ -30,7 +30,6 @@ import {
 } from "~/components/autopilot/AutopilotStatusBanner";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
-import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
 import { logger } from "~/utils/logger";
 import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
@@ -38,6 +37,8 @@ import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
 import { useAutoApproval } from "~/hooks/use-auto-approval";
+import { useManualApproval } from "~/hooks/use-manual-approval";
+import type { AuthorizationLoadingAction } from "~/utils/autopilot/types";
 import {
   AutopilotSessionProvider,
   useAutopilotSession,
@@ -411,7 +412,7 @@ function AutopilotSessionEventsPageContent({
 
   // State for tool call authorization loading
   const [authLoadingStates, setAuthLoadingStates] = useState<
-    Map<string, "approving" | "rejecting" | "approving_all">
+    Map<string, AuthorizationLoadingAction>
   >(new Map());
 
   // State for SSE connection error
@@ -446,6 +447,12 @@ function AutopilotSessionEventsPageContent({
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
 
+  // Manual approval hook - handles deduplication of authorization requests
+  const manualApproval = useManualApproval({
+    sessionId,
+    showError: toast.error,
+  });
+
   // Reset loading/error state when navigating to a different session
   // Note: key={sessionId} on Suspense remounts EventStreamContent, which will call onLoaded
   useEffect(() => {
@@ -458,8 +465,9 @@ function AutopilotSessionEventsPageContent({
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
+    manualApproval.reset();
     // Note: useAutoApproval handles its own cleanup on session change via internal effect
-  }, [sessionId, isNewSession]);
+  }, [sessionId, isNewSession, manualApproval]);
 
   useEffect(() => {
     const currentTopId = oldestPendingToolCall?.id ?? null;
@@ -493,35 +501,13 @@ function AutopilotSessionEventsPageContent({
         new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
       );
 
-      try {
-        const response = await fetch(
-          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/authorize`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tool_call_event_id: eventId,
-              status: approved
-                ? { type: "approved" }
-                : {
-                    type: "rejected",
-                    reason: "The user rejected the tool call.",
-                  },
-            }),
-          },
-        );
+      const { deduplicated } = await manualApproval.authorize(
+        eventId,
+        approved,
+      );
 
-        if (!response.ok) {
-          throw new Error("Authorization failed");
-        }
-      } catch (err) {
-        logger.error("Failed to authorize tool call:", err);
-        toast.error({
-          title: "Authorization failed",
-          description:
-            "Failed to submit tool call authorization. Please try again.",
-        });
-      } finally {
+      // Only clear loading state if this was an actual request (not deduplicated)
+      if (!deduplicated) {
         setAuthLoadingStates((prev) => {
           const next = new Map(prev);
           next.delete(eventId);
@@ -529,7 +515,7 @@ function AutopilotSessionEventsPageContent({
         });
       }
     },
-    [sessionId, toast],
+    [manualApproval],
   );
 
   // Handle approve all tool calls (manual batch approval)
@@ -547,22 +533,17 @@ function AutopilotSessionEventsPageContent({
       new Map(prev).set(displayEventId, "approving_all"),
     );
 
-    try {
-      await approveAllToolCalls(sessionId, lastEventId);
-    } catch (err) {
-      logger.error("Failed to approve all tool calls:", err);
-      toast.error({
-        title: "Batch approval failed",
-        description: "Failed to approve all tool calls. Please try again.",
-      });
-    } finally {
+    const { deduplicated } = await manualApproval.approveAll(lastEventId);
+
+    // Only clear loading state if this was an actual request (not deduplicated)
+    if (!deduplicated) {
       setAuthLoadingStates((prev) => {
         const next = new Map(prev);
         next.delete(displayEventId);
         return next;
       });
     }
-  }, [sessionId, pendingToolCalls, toast]);
+  }, [pendingToolCalls, manualApproval]);
 
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {

@@ -30,6 +30,12 @@ export interface ToastEmitResult {
 
 export type ToastActionProps = Toast & { log?: boolean | string };
 
+/**
+ * Minimal error notification type for callbacks.
+ * Compatible with toast.error() and toast.warn().
+ */
+export type ToastErrorProps = Pick<ToastActionProps, "title" | "description">;
+
 export interface Toaster {
   info: (props: ToastActionProps) => ToastEmitResult;
   success: (props: Omit<ToastActionProps, "variant">) => ToastEmitResult;
