@@ -3740,7 +3740,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
             continue;
         }
         let err = event.unwrap_err();
-        let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = err else {
+        let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = err else {
             panic!("Unexpected error: {err:?}")
         };
         assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);

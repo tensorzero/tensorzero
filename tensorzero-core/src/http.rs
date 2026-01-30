@@ -539,10 +539,10 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         self
     }
 
-    pub fn eventsource(mut self) -> TensorZeroEventSource {
+    pub async fn eventsource(mut self) -> Result<TensorZeroEventSource, ReqwestSseStreamError> {
         self = self.with_otlp_headers();
-        let event_source = self.builder.eventsource();
-        TensorZeroEventSource {
+        let event_source = self.builder.eventsource().await?;
+        Ok(TensorZeroEventSource {
             stream: Box::pin(event_source.map(|r| r.map_err(Box::new))),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
@@ -550,7 +550,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 "eventsource",
                 { TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME } = true
             ),
-        }
+        })
     }
 
     pub async fn eventsource_with_headers(
@@ -824,6 +824,7 @@ mod tests {
         let mut event_source = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
         process_stream(&mut event_source).await;
         drop(event_source);
@@ -863,6 +864,7 @@ mod tests {
                     let mut stream = client
                         .get(format!("http://{addr}/hello-stream"))
                         .eventsource()
+                        .await
                         .unwrap();
                     process_stream(&mut stream).await;
                 });
@@ -915,6 +917,7 @@ mod tests {
         let mut stream = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
         process_stream(&mut stream).await;
         drop(stream);
@@ -962,6 +965,7 @@ mod tests {
                     let mut stream = client
                         .get(format!("http://{addr}/hello-stream"))
                         .eventsource()
+                        .await
                         .unwrap();
                     process_stream(&mut stream).await;
                 });
@@ -979,6 +983,7 @@ mod tests {
         let mut stream = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
 
         process_stream(&mut stream).await;

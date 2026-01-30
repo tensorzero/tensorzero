@@ -47,6 +47,7 @@ pub enum Event {
 }
 
 /// Mimics the api of `reqwest_eventsource::RequestBuilderExt`
+#[expect(async_fn_in_trait)]
 pub trait RequestBuilderExt {
     async fn eventsource(
         self,
@@ -54,7 +55,6 @@ pub trait RequestBuilderExt {
 
     /// Sends the request and returns the event stream along with response headers.
     /// Returns the headers even on error for cases where they are needed for error handling.
-    #[expect(clippy::type_complexity)]
     async fn eventsource_with_headers(
         self,
     ) -> Result<

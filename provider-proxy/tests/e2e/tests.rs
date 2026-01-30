@@ -432,9 +432,12 @@ async fn test_dropped_stream_body() {
             .build()
             .unwrap();
 
-        let mut good_stream = std::pin::pin!(good_client
+        let good_stream = good_client
             .post(format!("http://{target_server_addr}/slow"))
-            .eventsource());
+            .eventsource()
+            .await
+            .unwrap();
+        let mut good_stream = std::pin::pin!(good_stream);
         // Read the entire stream, so that we're sure that provider-proxy will write the file to disk
         while let Some(event) = good_stream.next().await {
             match event {
@@ -472,18 +475,28 @@ async fn test_dropped_stream_body() {
         .build()
         .unwrap();
 
-    let mut first_stream = std::pin::pin!(client
+    let first_stream = client
         .post(format!("http://{target_server_addr}/slow"))
-        .eventsource());
+        .eventsource()
+        .await
+        .unwrap();
+    let mut first_stream = std::pin::pin!(first_stream);
 
     let first_event = first_stream.next().await.unwrap().unwrap();
-    assert_eq!(first_event, reqwest_sse_stream::Event::Open);
+    assert_eq!(
+        first_event,
+        reqwest_sse_stream::Event::Message(reqwest_sse_stream::MessageEvent {
+            event: String::new(),
+            data: "Hello".to_string(),
+            id: String::new(),
+        })
+    );
 
     let second_event = first_stream.next().await.unwrap().unwrap();
     let reqwest_sse_stream::Event::Message(second_event) = second_event else {
         panic!("Unexpected event: {second_event:?}");
     };
-    assert_eq!(second_event.data, "Hello");
+    assert_eq!(second_event.data, "World");
     // We should get a timeout
     let err = first_stream.next().await.unwrap().unwrap_err();
     assert!(
@@ -537,9 +550,12 @@ async fn test_stream_body() {
         .build()
         .unwrap();
 
-    let mut second_stream = std::pin::pin!(client
+    let second_stream = client
         .post(format!("http://{target_server_addr}/slow"))
-        .eventsource());
+        .eventsource()
+        .await
+        .unwrap();
+    let mut second_stream = std::pin::pin!(second_stream);
 
     while let Some(event) = second_stream.next().await {
         let event = event.unwrap();

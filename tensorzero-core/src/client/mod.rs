@@ -206,7 +206,29 @@ impl HTTPGateway {
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<InferenceStream, TensorZeroError> {
-        let event_source = self.customize_builder(builder).eventsource();
+        let event_source = match self.customize_builder(builder).eventsource().await {
+            Ok(es) => es,
+            Err(e) => {
+                let err_str = format!("Error in streaming response: {e:?}");
+                let inner_err = Error::new(ErrorDetails::StreamError {
+                    source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
+                });
+                if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = e
+                {
+                    return Err(TensorZeroError::Http {
+                        status_code: code.as_u16(),
+                        text: resp.text().await.ok(),
+                        source: inner_err.into(),
+                    });
+                }
+                return Err(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::StreamError {
+                        source: Box::new(inner_err),
+                    })
+                    .into(),
+                });
+            }
+        };
 
         let mut event_source = event_source.peekable();
         let first = event_source.peek().await;

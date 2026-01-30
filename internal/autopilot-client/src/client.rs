@@ -677,7 +677,9 @@ impl AutopilotClient {
             .sse_http_client
             .get(url)
             .headers(self.auth_headers())
-            .eventsource();
+            .eventsource()
+            .await
+            .map_err(Self::convert_sse_error)?;
 
         // Connection is good, return the stream
         let cache = self.tool_call_cache.clone();
@@ -690,16 +692,10 @@ impl AutopilotClient {
             let spawn_client = spawn_client.clone();
             async move {
                 match result {
-                    Ok(sse) => {
-                        if sse.event.as_deref() == Some("event") {
-                            let data = sse.data.as_ref().ok_or_else(|| {
-                                AutopilotError::Sse(format!("Missing data for event: {sse:?}"))
-                            });
-                            let data = match data {
-                                Ok(data) => data,
-                                Err(e) => return Some(Err(AutopilotError::Sse(e.to_string()))),
-                            };
-                            match serde_json::from_str::<StreamUpdate>(data) {
+                    Ok(reqwest_sse_stream::Event::Open) => None,
+                    Ok(reqwest_sse_stream::Event::Message(sse)) => {
+                        if sse.event.as_str() == "event" {
+                            match serde_json::from_str::<StreamUpdate>(&sse.data) {
                                 Ok(update) => {
                                     // Cache tool calls for later lookup
                                     if let EventPayload::ToolCall(tool_call) = &update.event.payload
