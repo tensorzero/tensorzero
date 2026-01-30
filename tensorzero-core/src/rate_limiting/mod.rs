@@ -377,7 +377,7 @@ impl ActiveRateLimit {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
@@ -410,7 +410,7 @@ impl RateLimitingConfigRule {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimit {
     pub resource: RateLimitResource,
@@ -535,7 +535,7 @@ impl RateLimitInterval {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, PartialEq, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
@@ -545,9 +545,18 @@ pub enum RateLimitingConfigPriority {
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(try_from = "Vec<RateLimitingConfigScope>")]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
+
+impl TryFrom<Vec<RateLimitingConfigScope>> for RateLimitingConfigScopes {
+    type Error = &'static str;
+
+    fn try_from(scopes: Vec<RateLimitingConfigScope>) -> Result<Self, Self::Error> {
+        Self::new(scopes)
+    }
+}
 
 impl RateLimitingConfigScopes {
     /// Creates a new instance of `RateLimitingConfigScopes`.
@@ -561,12 +570,6 @@ impl RateLimitingConfigScopes {
         // stable order when generating the key
         scopes.sort();
         Ok(RateLimitingConfigScopes(scopes))
-    }
-
-    /// Consumes self and returns the inner Vec.
-    /// Used by stored config serialization.
-    pub(crate) fn into_inner(self) -> Vec<RateLimitingConfigScope> {
-        self.0
     }
 
     /// Returns the key (as a Vec) if the scope matches the given info, or None if it does not.
@@ -589,7 +592,7 @@ trait Scope {
 // and add a test each time that ensures the sort order is maintained as further changes are made.
 //
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(untagged)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -625,13 +628,6 @@ impl TagRateLimitingConfigScope {
     /// Note: This is primarily for internal use by stored config deserialization.
     pub(crate) fn new(tag_key: String, tag_value: TagValueScope) -> Self {
         Self { tag_key, tag_value }
-    }
-
-    /// Consumes self and returns the (tag_key, tag_value) tuple.
-    ///
-    /// Note: This is primarily for internal use by stored config serialization.
-    pub(crate) fn into_parts(self) -> (String, TagValueScope) {
-        (self.tag_key, self.tag_value)
     }
 
     #[cfg(test)]
@@ -684,13 +680,6 @@ impl ApiKeyPublicIdConfigScope {
         Self { api_key_public_id }
     }
 
-    /// Consumes self and returns the inner `ApiKeyPublicIdValueScope`.
-    ///
-    /// Note: This is primarily for internal use by stored config serialization.
-    pub(crate) fn into_inner(self) -> ApiKeyPublicIdValueScope {
-        self.api_key_public_id
-    }
-
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
         match self.api_key_public_id {
             ApiKeyPublicIdValueScope::Concrete(ref key) => {
@@ -738,6 +727,20 @@ impl Serialize for TagValueScope {
     }
 }
 
+impl<'de> Deserialize<'de> for TagValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "tensorzero::each" => Ok(TagValueScope::Each),
+            "tensorzero::total" => Ok(TagValueScope::Total),
+            _ => Ok(TagValueScope::Concrete(s)),
+        }
+    }
+}
+
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -754,6 +757,19 @@ impl Serialize for ApiKeyPublicIdValueScope {
         match self {
             ApiKeyPublicIdValueScope::Concrete(s) => serializer.serialize_str(s),
             ApiKeyPublicIdValueScope::Each => serializer.serialize_str("tensorzero::each"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ApiKeyPublicIdValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "tensorzero::each" => Ok(ApiKeyPublicIdValueScope::Each),
+            _ => Ok(ApiKeyPublicIdValueScope::Concrete(s)),
         }
     }
 }
