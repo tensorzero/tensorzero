@@ -1323,7 +1323,7 @@ jobs:
     permissions:
       contents: read
       actions: write
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'merge_group' || true)
     uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
       regen_cache: true
