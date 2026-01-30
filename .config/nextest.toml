@@ -12,7 +12,7 @@ slow-timeout = { period = "10s", terminate-after = 3 }
 default-filter = "not (test(no_aws_credentials) | test(export_bindings_) | test(export_schema_))"
 
 [[profile.default.overrides]]
-filter = 'test(evaluations)'
+filter = 'test(evaluations) | package(evaluations)'
 slow-timeout = { period = "20s", terminate-after = 5 }
 
 # Profiles config
