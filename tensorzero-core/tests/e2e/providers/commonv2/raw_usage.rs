@@ -162,6 +162,7 @@ pub async fn test_raw_usage_inference_with_provider_streaming(provider: E2ETestP
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap_or_else(|e| {
             panic!(
                 "Failed to create eventsource for streaming request for provider {}: {e}",

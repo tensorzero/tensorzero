@@ -529,6 +529,7 @@ pub async fn check_test_streaming_cache_with_err(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -917,6 +918,7 @@ async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
             .post(&url)
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
 
         let mut chunks_with_usage = 0;

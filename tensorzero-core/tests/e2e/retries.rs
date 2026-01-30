@@ -193,6 +193,7 @@ async fn e2e_test_streaming_flaky() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {

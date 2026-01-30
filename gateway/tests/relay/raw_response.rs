@@ -152,6 +152,7 @@ async fn test_relay_raw_response_streaming() {
             }
         }))
         .eventsource()
+        .await
         .unwrap();
 
     let mut found_raw_chunk = false;
@@ -276,6 +277,7 @@ async fn test_relay_raw_response_not_requested_streaming() {
             }
         }))
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(event) = stream.next().await {
@@ -458,6 +460,7 @@ reasoning_effort = "minimal"
             "include_raw_response": true
         }))
         .eventsource()
+        .await
         .unwrap();
 
     let mut raw_response_entries: Vec<Value> = Vec::new();

@@ -314,6 +314,7 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -850,6 +851,7 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];

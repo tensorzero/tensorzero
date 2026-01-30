@@ -146,6 +146,7 @@ async fn e2e_test_raw_response_chat_completions_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_chunk = false;
@@ -291,6 +292,7 @@ async fn e2e_test_raw_response_responses_api_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_chunk = false;
@@ -396,6 +398,7 @@ async fn e2e_test_raw_response_not_requested_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(chunk) = chunks.next().await {
@@ -522,6 +525,7 @@ async fn e2e_test_raw_response_best_of_n_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_response = false;
@@ -669,6 +673,7 @@ async fn e2e_test_raw_response_mixture_of_n_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_response = false;
@@ -837,6 +842,7 @@ async fn e2e_test_raw_response_dicl_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_response = false;
@@ -974,6 +980,7 @@ async fn e2e_test_raw_response_json_function_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_chunk = false;

@@ -259,6 +259,7 @@ async fn test_empty_chunks_success() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
@@ -728,6 +729,7 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
             .post(get_gateway_endpoint("/inference"))
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
         let mut first_inference_id = None;
         while let Some(event) = event_source.next().await {
@@ -829,6 +831,7 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
             .post(get_gateway_endpoint("/inference"))
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
         let mut first_inference_id = None;
         while let Some(event) = event_source.next().await {
@@ -955,6 +958,7 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {

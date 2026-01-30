@@ -416,6 +416,7 @@ async fn make_openai_request_to_gateway(
             .post(&url)
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
 
         // Collect raw_usage entries from all chunks, similar to native API

@@ -783,6 +783,7 @@ async fn test_run_evaluation_streaming_success() {
         .post(get_gateway_endpoint("/internal/evaluations/run"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut events: Vec<Value> = Vec::new();
@@ -926,6 +927,7 @@ async fn test_run_evaluation_streaming_nonexistent_dataset() {
         .post(get_gateway_endpoint("/internal/evaluations/run"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut found_error_or_empty = false;
@@ -1014,6 +1016,7 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
         .post(get_gateway_endpoint("/internal/evaluations/run"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut num_datapoints_reported = None;

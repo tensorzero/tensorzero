@@ -741,6 +741,7 @@ pub async fn test_dicl_inference_request_simple() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     let mut found_done_chunk = false;

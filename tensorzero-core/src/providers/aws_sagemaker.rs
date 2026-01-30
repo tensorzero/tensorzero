@@ -4,8 +4,8 @@ use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
 use aws_types::region::Region;
 use bytes::BytesMut;
 use futures::StreamExt;
-use serde::Serialize;
 use reqwest_sse_stream::SseStream;
+use serde::Serialize;
 use std::time::Instant;
 
 use super::aws_common::{

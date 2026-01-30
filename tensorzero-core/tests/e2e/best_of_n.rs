@@ -60,7 +60,7 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
         .json(&payload);
 
     let inference_id = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         while let Some(chunk) = chunks.next().await {
             println!("chunk: {chunk:?}");

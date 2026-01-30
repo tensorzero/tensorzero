@@ -83,6 +83,7 @@ async fn test_stream_with_error() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut good_chunks = 0;

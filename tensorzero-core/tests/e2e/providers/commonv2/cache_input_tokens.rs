@@ -264,7 +264,7 @@ async fn get_streaming_input_tokens(
     let mut chunks = client
         .post(get_gateway_endpoint("/inference"))
         .json(payload)
-        .eventsource()
+        .eventsource().await
         .unwrap_or_else(|e| {
             panic!(
                 "Failed to create eventsource for streaming request for provider {variant_name}: {e}",

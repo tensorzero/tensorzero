@@ -1,8 +1,14 @@
+use std::pin::Pin;
+
 use futures::{Stream, StreamExt};
 use http_body::Body;
 use thiserror::Error;
 
 pub use sse_stream::{Sse, SseStream};
+
+/// A boxed event stream that is `Unpin` and `Send`.
+pub type EventStream =
+    Pin<Box<dyn Stream<Item = Result<Event, ReqwestSseStreamError>> + Send + 'static>>;
 
 #[derive(Debug, Error)]
 pub enum ReqwestSseStreamError {
@@ -49,21 +55,13 @@ pub enum Event {
 /// Mimics the api of `reqwest_eventsource::RequestBuilderExt`
 #[expect(async_fn_in_trait)]
 pub trait RequestBuilderExt {
-    async fn eventsource(
-        self,
-    ) -> Result<impl Stream<Item = Result<Event, ReqwestSseStreamError>>, ReqwestSseStreamError>;
+    async fn eventsource(self) -> Result<EventStream, ReqwestSseStreamError>;
 
     /// Sends the request and returns the event stream along with response headers.
     /// Returns the headers even on error for cases where they are needed for error handling.
     async fn eventsource_with_headers(
         self,
-    ) -> Result<
-        (
-            impl Stream<Item = Result<Event, ReqwestSseStreamError>>,
-            http::HeaderMap,
-        ),
-        (ReqwestSseStreamError, Option<http::HeaderMap>),
-    >;
+    ) -> Result<(EventStream, http::HeaderMap), (ReqwestSseStreamError, Option<http::HeaderMap>)>;
 }
 
 async fn start_stream_with_headers(
@@ -118,10 +116,7 @@ async fn start_stream_with_headers(
 }
 
 impl RequestBuilderExt for reqwest::RequestBuilder {
-    async fn eventsource(
-        self,
-    ) -> Result<impl Stream<Item = Result<Event, ReqwestSseStreamError>>, ReqwestSseStreamError>
-    {
+    async fn eventsource(self) -> Result<EventStream, ReqwestSseStreamError> {
         match self.eventsource_with_headers().await {
             Ok((event_stream, _headers)) => Ok(event_stream),
             Err((e, _headers)) => Err(e),
@@ -130,16 +125,11 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
 
     async fn eventsource_with_headers(
         self,
-    ) -> Result<
-        (
-            impl Stream<Item = Result<Event, ReqwestSseStreamError>>,
-            http::HeaderMap,
-        ),
-        (ReqwestSseStreamError, Option<http::HeaderMap>),
-    > {
+    ) -> Result<(EventStream, http::HeaderMap), (ReqwestSseStreamError, Option<http::HeaderMap>)>
+    {
         let (mut sse_stream, headers) = start_stream_with_headers(self).await?;
         Ok((
-            async_stream::stream! {
+            Box::pin(async_stream::stream! {
                 while let Some(event) = sse_stream.next().await {
                     match event {
                         Ok(sse) => {
@@ -152,7 +142,7 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
                         }
                     }
                 }
-            },
+            }),
             headers,
         ))
     }

@@ -230,6 +230,7 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -377,6 +378,7 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -497,6 +499,7 @@ async fn e2e_test_raw_usage_not_requested_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(chunk) = chunks.next().await {
@@ -619,6 +622,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -772,6 +776,7 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -941,6 +946,7 @@ async fn e2e_test_raw_usage_dicl_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -1123,6 +1129,7 @@ async fn e2e_test_raw_usage_json_function_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;

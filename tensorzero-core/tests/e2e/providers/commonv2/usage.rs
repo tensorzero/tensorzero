@@ -143,6 +143,7 @@ pub async fn test_reasoning_output_tokens_streaming_with_provider(provider: E2ET
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap_or_else(|e| {
             panic!(
                 "Failed to create eventsource for streaming request for provider {}: {e}",

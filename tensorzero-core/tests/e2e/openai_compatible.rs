@@ -814,6 +814,7 @@ async fn test_openai_compatible_streaming_tool_call() {
         .header("Content-Type", "application/json")
         .json(&body)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -955,6 +956,7 @@ async fn test_openai_compatible_streaming() {
         .header("Content-Type", "application/json")
         .json(&body)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];

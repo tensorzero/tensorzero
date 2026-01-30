@@ -69,7 +69,8 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
                 .json(&inference_payload);
 
             if stream {
-                let mut event_source = builder.eventsource().unwrap();
+                let event_source = builder.eventsource().await.unwrap();
+                let mut event_source = std::pin::pin!(event_source);
                 while let Some(event) = event_source.next().await {
                     let event = event.unwrap();
                     if let Event::Message(event) = event

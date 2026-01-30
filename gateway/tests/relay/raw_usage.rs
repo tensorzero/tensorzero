@@ -155,6 +155,7 @@ async fn test_relay_raw_usage_streaming() {
             }
         }))
         .eventsource()
+        .await
         .unwrap();
 
     let mut found_raw_usage = false;
@@ -297,6 +298,7 @@ async fn test_relay_raw_usage_not_requested_streaming() {
             }
         }))
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(event) = stream.next().await {
@@ -488,6 +490,7 @@ reasoning_effort = "minimal"
             "include_raw_usage": true
         }))
         .eventsource()
+        .await
         .unwrap();
 
     let mut raw_usage_entries: Vec<Value> = Vec::new();

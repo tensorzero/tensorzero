@@ -171,6 +171,7 @@ async fn test_inference_ttft_ms(payload: Value, json: bool) {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut inference_id = None;
@@ -519,6 +520,7 @@ async fn slow_second_chunk_streaming(payload: Value) {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut inference_id = None;
