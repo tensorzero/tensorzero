@@ -448,10 +448,7 @@ function AutopilotSessionEventsPageContent({
   const [isInCooldown, setIsInCooldown] = useState(false);
 
   // Manual approval hook - handles deduplication of authorization requests
-  const manualApproval = useManualApproval({
-    sessionId,
-    showError: toast.error,
-  });
+  const manualApproval = useManualApproval(sessionId);
 
   // Reset loading/error state when navigating to a different session
   // Note: key={sessionId} on Suspense remounts EventStreamContent, which will call onLoaded
@@ -494,26 +491,33 @@ function AutopilotSessionEventsPageContent({
 
   const handleApprove = useCallback(
     async (eventId: string, approved: boolean) => {
-      if (manualApproval.isInFlight(eventId)) return;
+      if (manualApproval.isProcessed(eventId)) return;
       userActionRef.current = true;
       setAuthLoadingStates((prev) =>
         new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
       );
 
-      await manualApproval.approve(eventId, approved);
-
-      setAuthLoadingStates((prev) => {
-        const next = new Map(prev);
-        next.delete(eventId);
-        return next;
-      });
+      try {
+        await manualApproval.approve(eventId, approved);
+      } catch {
+        toast.error({
+          title: "Approval failed",
+          description: "Failed to submit approval. Please try again.",
+        });
+      } finally {
+        setAuthLoadingStates((prev) => {
+          const next = new Map(prev);
+          next.delete(eventId);
+          return next;
+        });
+      }
     },
-    [manualApproval],
+    [manualApproval, toast],
   );
 
   const handleApproveAll = useCallback(async () => {
     if (pendingToolCalls.length === 0) return;
-    if (manualApproval.isBatchInFlight()) return;
+    if (manualApproval.isBatchProcessed()) return;
 
     userActionRef.current = true;
 
@@ -524,14 +528,21 @@ function AutopilotSessionEventsPageContent({
       new Map(prev).set(displayEventId, "approving_all"),
     );
 
-    await manualApproval.approveAll(lastEventId);
-
-    setAuthLoadingStates((prev) => {
-      const next = new Map(prev);
-      next.delete(displayEventId);
-      return next;
-    });
-  }, [pendingToolCalls, manualApproval]);
+    try {
+      await manualApproval.approveAll(lastEventId);
+    } catch {
+      toast.error({
+        title: "Batch approval failed",
+        description: "Failed to approve all tool calls. Please try again.",
+      });
+    } finally {
+      setAuthLoadingStates((prev) => {
+        const next = new Map(prev);
+        next.delete(displayEventId);
+        return next;
+      });
+    }
+  }, [pendingToolCalls, manualApproval, toast]);
 
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
