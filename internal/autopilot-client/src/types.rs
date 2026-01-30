@@ -80,7 +80,7 @@ impl From<EventPayloadMessage> for InputMessage {
 /// A session representing an autopilot conversation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct Session {
     pub id: Uuid,
     pub organization_id: String,
@@ -88,6 +88,10 @@ pub struct Session {
     pub deployment_id: String,
     pub tensorzero_version: String,
     pub created_at: DateTime<Utc>,
+    /// Timestamp of the most recent event in this session.
+    /// `None` if the session has no events yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_event_at: Option<DateTime<Utc>>,
 }
 
 /// Internal event type - consumers should use `GatewayEvent` instead.
@@ -530,19 +534,49 @@ pub struct ListEventsParams {
     pub before: Option<Uuid>,
 }
 
+/// Field to sort sessions by.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum SessionSortField {
+    /// Sort by session creation time.
+    #[default]
+    CreatedAt,
+    /// Sort by most recent event in the session.
+    LastEventAt,
+}
+
+/// Sort order for list queries.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum SortOrder {
+    /// Ascending order (oldest first).
+    Asc,
+    /// Descending order (newest first).
+    #[default]
+    Desc,
+}
+
 /// Query parameters for listing sessions.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ListSessionsParams {
     /// Maximum number of sessions to return. Defaults to 20.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     /// Offset for pagination.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
+    /// Field to sort by. Defaults to `created_at`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_by: Option<SessionSortField>,
+    /// Sort order. Defaults to `desc` (newest first).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<SortOrder>,
 }
 
 /// Query parameters for streaming events.

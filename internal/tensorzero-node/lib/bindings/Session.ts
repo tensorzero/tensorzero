@@ -10,4 +10,9 @@ export type Session = {
   deployment_id: string;
   tensorzero_version: string;
   created_at: string;
+  /**
+   * Timestamp of the most recent event in this session.
+   * `None` if the session has no events yet.
+   */
+  last_event_at?: string;
 };
