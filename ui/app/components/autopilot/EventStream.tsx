@@ -13,7 +13,7 @@ import {
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
-import { TableItemTime } from "~/components/ui/TableItems";
+import { DotSeparator, TableItemTime } from "~/components/ui/TableItems";
 import {
   Tooltip,
   TooltipContent,
@@ -205,17 +205,30 @@ function renderEventTitle(event: GatewayEvent) {
       return "Status Update";
     case "tool_call":
       return (
-        <>
-          Tool Call &middot;{" "}
+        <span className="inline-flex items-center gap-2">
+          Tool Call
+          <DotSeparator />
           <span className="font-mono font-medium">{payload.name}</span>
-        </>
+        </span>
       );
     case "tool_call_authorization":
       switch (payload.status.type) {
         case "approved":
-          return <>Tool Call Authorization &middot; Approved</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Call Authorization
+              <DotSeparator />
+              Approved
+            </span>
+          );
         case "rejected":
-          return <>Tool Call Authorization &middot; Rejected</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Call Authorization
+              <DotSeparator />
+              Rejected
+            </span>
+          );
         default:
           // This branch should never be reached but we need it to keep ESLint happy...
           {
@@ -229,15 +242,31 @@ function renderEventTitle(event: GatewayEvent) {
       switch (payload.outcome.type) {
         case "success":
           // TODO: need tool name
-          return <>Tool Result &middot; Success</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Success
+            </span>
+          );
         case "failure":
           // TODO: need tool name
-          return <>Tool Result &middot; Failure</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Failure
+            </span>
+          );
         case "rejected":
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Rejected</span>
+              <span className="inline-flex items-center gap-2">
+                Tool Result
+                <DotSeparator />
+                Rejected
+              </span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -257,7 +286,11 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Missing Tool</span>
+              <span className="inline-flex items-center gap-2">
+                Tool Result
+                <DotSeparator />
+                Missing Tool
+              </span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -277,7 +310,11 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Unknown</span>
+              <span className="inline-flex items-center gap-2">
+                Tool Result
+                <DotSeparator />
+                Unknown
+              </span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
