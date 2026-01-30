@@ -51,7 +51,10 @@ function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
 
 function DotSeparator() {
   return (
-    <span className="bg-fg-muted h-0.5 w-0.5 rounded-full" aria-hidden="true" />
+    <span
+      className="bg-fg-muted inline-block h-0.5 w-0.5 rounded-full"
+      aria-hidden="true"
+    />
   );
 }
 
