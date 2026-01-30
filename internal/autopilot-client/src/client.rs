@@ -742,6 +742,15 @@ impl AutopilotClient {
     /// HTTP errors are converted to AutopilotError::Http for consistency.
     fn convert_sse_error(e: reqwest_sse_stream::ReqwestSseStreamError) -> AutopilotError {
         match e {
+            reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(status, _response) => {
+                AutopilotError::Http {
+                    status_code: status.as_u16(),
+                    message: status
+                        .canonical_reason()
+                        .unwrap_or("Unknown error")
+                        .to_string(),
+                }
+            }
             reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_status() => {
                 AutopilotError::Http {
                     status_code: e.status().map(|s| s.as_u16()).unwrap_or(0),
