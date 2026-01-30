@@ -1,17 +1,21 @@
-export const formatDate = (date: Date) => {
-  const formattedDate = date.toLocaleString("en-US", {
+export const formatDateOnly = (date: Date) => {
+  return date.toLocaleString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
+};
 
-  const formattedTime = new Intl.DateTimeFormat("en-US", {
+export const formatTimeOnly = (date: Date) => {
+  return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
   }).format(date);
+};
 
-  return `${formattedDate} · ${formattedTime}`;
+export const formatDate = (date: Date) => {
+  return `${formatDateOnly(date)} · ${formatTimeOnly(date)}`;
 };
 
 /**

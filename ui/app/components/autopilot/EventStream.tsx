@@ -1,7 +1,7 @@
 import {
   AlertCircle,
   AlertTriangle,
-  ChevronRight,
+  ChevronDown,
   RotateCcw,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -13,7 +13,7 @@ import {
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
-import { TableItemTime } from "~/components/ui/TableItems";
+import { DotSeparator, TableItemTime } from "~/components/ui/TableItems";
 import {
   Tooltip,
   TooltipContent,
@@ -82,6 +82,22 @@ export function ToolEventId({ id }: { id: string }) {
         Tool Call ID: <span className="font-mono text-xs">{id}</span>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+export function ToolEventMetadata({
+  toolCallEventId,
+  timestamp,
+}: {
+  toolCallEventId: string;
+  timestamp: string;
+}) {
+  return (
+    <div className="text-fg-muted flex items-center gap-1.5 text-xs">
+      <ToolEventId id={toolCallEventId} />
+      <DotSeparator />
+      <TableItemTime timestamp={timestamp} />
+    </div>
   );
 }
 
@@ -204,17 +220,30 @@ function renderEventTitle(event: GatewayEvent) {
       return "Status Update";
     case "tool_call":
       return (
-        <>
-          Tool Call &middot;{" "}
+        <span className="inline-flex items-center gap-2">
+          Tool Call
+          <DotSeparator />
           <span className="font-mono font-medium">{payload.name}</span>
-        </>
+        </span>
       );
     case "tool_call_authorization":
       switch (payload.status.type) {
         case "approved":
-          return <>Tool Call Authorization &middot; Approved</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Call Authorization
+              <DotSeparator />
+              Approved
+            </span>
+          );
         case "rejected":
-          return <>Tool Call Authorization &middot; Rejected</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Call Authorization
+              <DotSeparator />
+              Rejected
+            </span>
+          );
         default:
           // This branch should never be reached but we need it to keep ESLint happy...
           {
@@ -228,15 +257,31 @@ function renderEventTitle(event: GatewayEvent) {
       switch (payload.outcome.type) {
         case "success":
           // TODO: need tool name
-          return <>Tool Result &middot; Success</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Success
+            </span>
+          );
         case "failure":
           // TODO: need tool name
-          return <>Tool Result &middot; Failure</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Failure
+            </span>
+          );
         case "rejected":
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Rejected</span>
+              <span className="inline-flex items-center gap-2">
+                Tool Result
+                <DotSeparator />
+                Rejected
+              </span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -256,7 +301,11 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Missing Tool</span>
+              <span className="inline-flex items-center gap-2">
+                Tool Result
+                <DotSeparator />
+                Missing Tool
+              </span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -276,7 +325,11 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Unknown</span>
+              <span className="inline-flex items-center gap-2">
+                Tool Result
+                <DotSeparator />
+                Unknown
+              </span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -421,14 +474,14 @@ function EventItem({
             {label}
             <span
               className={cn(
-                "text-fg-muted inline-flex transition-transform duration-200",
-                isExpanded ? "rotate-90" : "rotate-0",
+                "text-fg-muted inline-flex",
+                isExpanded && "rotate-180",
               )}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronDown className="h-4 w-4" />
             </span>
             {isPending && !yoloMode && (
-              <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+              <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-900 dark:text-orange-200">
                 Action Required
               </span>
             )}
@@ -436,15 +489,16 @@ function EventItem({
         ) : (
           label
         )}
-        <div className="text-fg-muted flex items-center gap-1.5 text-xs">
-          {eventIsToolEvent && (
-            <>
-              <ToolEventId id={getToolCallEventId(event)} />
-              <span aria-hidden="true">&middot;</span>
-            </>
-          )}
-          <TableItemTime timestamp={event.created_at} />
-        </div>
+        {eventIsToolEvent ? (
+          <ToolEventMetadata
+            toolCallEventId={getToolCallEventId(event)}
+            timestamp={event.created_at}
+          />
+        ) : (
+          <div className="text-fg-muted text-xs">
+            <TableItemTime timestamp={event.created_at} />
+          </div>
+        )}
       </div>
       {shouldShowDetails && summary.description && (
         <>

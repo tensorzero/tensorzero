@@ -211,10 +211,11 @@ export function ChatInput({
           disabled={!canSend}
           className={cn(
             "absolute right-2 bottom-1",
-            "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md",
-            "text-fg-primary hover:text-fg-secondary",
-            "disabled:cursor-not-allowed disabled:opacity-50",
+            "flex h-9 w-9 items-center justify-center rounded-md",
             "transition-colors",
+            canSend
+              ? "text-fg-primary hover:text-fg-secondary cursor-pointer"
+              : "text-fg-muted cursor-not-allowed opacity-50",
           )}
           aria-label="Send message"
         >
