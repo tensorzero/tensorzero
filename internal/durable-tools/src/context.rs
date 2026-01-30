@@ -441,6 +441,10 @@ impl<'a> ToolContext<'a> {
     /// This is a checkpointed operation - results are cached on restart.
     /// Streaming inference is not supported and will return an error.
     ///
+    /// The inference step will automatically fail if the model returns an empty output:
+    /// - For chat functions: no content blocks in the response
+    /// - For JSON functions: `raw` field is `None`
+    ///
     /// # Example
     ///
     /// ```ignore
@@ -453,7 +457,7 @@ impl<'a> ToolContext<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if the inference call fails.
+    /// Returns an error if the inference call fails or if the output is empty.
     pub async fn inference(
         &mut self,
         params: ClientInferenceParams,
@@ -467,13 +471,31 @@ impl<'a> ToolContext<'a> {
                 .unwrap_or("unknown")
         );
 
-        self.step(&step_name, params, |params, state| async move {
-            state
-                .t0_client
-                .inference(params)
-                .await
-                .map_err(|e| anyhow::anyhow!("{e}"))
-        })
+        self.step(
+            &step_name,
+            (params, step_name.clone()),
+            |(params, step_name), state| async move {
+                let response = state
+                    .t0_client
+                    .inference(params)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+                // Check for empty output inside the step so it can be retried
+                let is_empty = match &response {
+                    InferenceResponse::Chat(chat) => chat.content.is_empty(),
+                    InferenceResponse::Json(json) => json.output.raw.is_none(),
+                };
+
+                if is_empty {
+                    return Err(anyhow::anyhow!(
+                        "Inference `{step_name}` returned empty output"
+                    ));
+                }
+
+                Ok(response)
+            },
+        )
         .await
     }
 }

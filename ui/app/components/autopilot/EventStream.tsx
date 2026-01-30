@@ -1,4 +1,10 @@
-import { AlertCircle, AlertTriangle, ChevronRight } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  ChevronRight,
+  RotateCcw,
+} from "lucide-react";
+import { Button } from "~/components/ui/button";
 import { Component, type RefObject, useState } from "react";
 import {
   AnimatedEllipsis,
@@ -49,6 +55,8 @@ type EventStreamProps = {
   className?: string;
   isLoadingOlder?: boolean;
   hasReachedStart?: boolean;
+  loadError?: string | null;
+  onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
   authLoadingStates?: Map<string, "approving" | "rejecting">;
@@ -545,28 +553,60 @@ function StatusIndicator({ status }: { status: AutopilotStatus }) {
   );
 }
 
+function LoadErrorNotice({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-2 text-sm text-amber-600">
+      <span>Failed to load older messages</span>
+      {onRetry && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRetry}
+          className="h-6 gap-1 px-2 text-amber-600 hover:text-amber-700"
+        >
+          <RotateCcw className="h-3 w-3" />
+          Retry
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function EventStream({
   events,
   className,
   isLoadingOlder = false,
   hasReachedStart = false,
+  loadError,
+  onRetryLoad,
   topSentinelRef,
   pendingToolCallIds,
   optimisticMessages = [],
   status,
 }: EventStreamProps) {
+  // Determine what to show at the top: sentinel, error, or session start
+  const showSessionStart =
+    (hasReachedStart || optimisticMessages.length > 0) &&
+    !isLoadingOlder &&
+    !loadError;
+
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* Session start indicator, or sentinel for loading more */}
-      {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
-      {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
-        <SessionStartDivider />
-      ) : (
+      {/* Sentinel for loading more - always present unless showing session start */}
+      {/* Must stay in DOM during loading/error so IntersectionObserver keeps working */}
+      {!showSessionStart && (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
       )}
 
-      {/* Loading skeletons at the top */}
-      {isLoadingOlder && <EventSkeletons count={3} />}
+      {/* Error state - show retry notice (after sentinel so it appears below) */}
+      {loadError && <LoadErrorNotice onRetry={onRetryLoad} />}
+
+      {/* Session start indicator */}
+      {showSessionStart && <SessionStartDivider />}
+
+      {/* Always show 3 skeletons when more content exists above */}
+      {/* This prevents layout jump when loading starts */}
+      {!showSessionStart && !loadError && <EventSkeletons count={3} />}
 
       {events.map((event) => (
         <EventErrorBoundary key={event.id} eventId={event.id}>

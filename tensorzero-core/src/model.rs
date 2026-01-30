@@ -1058,6 +1058,46 @@ impl ProviderConfig {
             ProviderConfig::Dummy(_) => Cow::Borrowed(crate::providers::dummy::PROVIDER_TYPE),
         }
     }
+
+    /// Returns whether this provider supports provider tools (e.g., web_search, bash).
+    /// This is an exhaustive match to ensure compile-time safety when adding new providers.
+    pub fn supports_provider_tools(&self) -> bool {
+        match self {
+            // Providers that support provider tools
+            ProviderConfig::Anthropic(_) => true,
+            ProviderConfig::GCPVertexAnthropic(_) => true,
+            ProviderConfig::OpenAI(provider) => provider.supports_provider_tools(),
+            // Providers that do NOT support provider tools
+            //
+            // NB: AWS Bedrock supports them, but it's tricky because there are different fields for different models.
+            //
+            // Claude: uses `additionalModelRequestFields`
+            //
+            // ```
+            // aws bedrock-runtime converse --model-id us.anthropic.claude-sonnet-4-5-20250929-v1:0 --messages '[{"role": "user", "content": [{"text": "Can you ping google.com using curl?"}]}]' --inference-config '{"maxTokens": 512}' --additional-model-request-fields '{"tools": [{"type": "bash_20250124", "name": "bash"}]}' --region us-east-1
+            // ```
+            //
+            // Nova: uses `toolConfig` instead (https://docs.aws.amazon.com/nova/latest/nova2-userguide/web-grounding.html)
+            ProviderConfig::AWSBedrock(_) => false,
+            ProviderConfig::AWSSagemaker(_) => false,
+            ProviderConfig::Azure(_) => false,
+            ProviderConfig::DeepSeek(_) => false,
+            ProviderConfig::Fireworks(_) => false,
+            ProviderConfig::GCPVertexGemini(_) => false,
+            ProviderConfig::GoogleAIStudioGemini(_) => false,
+            ProviderConfig::Groq(_) => false,
+            ProviderConfig::Hyperbolic(_) => false,
+            ProviderConfig::Mistral(_) => false,
+            ProviderConfig::OpenRouter(_) => false,
+            ProviderConfig::SGLang(_) => false,
+            ProviderConfig::TGI(_) => false,
+            ProviderConfig::Together(_) => false,
+            ProviderConfig::VLLM(_) => false,
+            ProviderConfig::XAI(_) => false,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(_) => false,
+        }
+    }
 }
 
 /// Processed AWS provider configuration.
@@ -1168,6 +1208,8 @@ pub enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
         beta_structured_outputs: bool,
+        #[serde(default)]
+        provider_tools: Vec<Value>,
     },
     #[strum(serialize = "aws_bedrock")]
     #[serde(rename = "aws_bedrock")]
@@ -1221,6 +1263,8 @@ pub enum UninitializedProviderConfig {
         project_id: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         credential_location: Option<CredentialLocationWithFallback>,
+        #[serde(default)]
+        provider_tools: Vec<Value>,
     },
     #[strum(serialize = "gcp_vertex_gemini")]
     #[serde(rename = "gcp_vertex_gemini")]
@@ -1336,6 +1380,7 @@ impl UninitializedProviderConfig {
                 api_base,
                 api_key_location,
                 beta_structured_outputs,
+                provider_tools,
             } => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
                 api_base,
@@ -1346,6 +1391,7 @@ impl UninitializedProviderConfig {
                     )
                     .await?,
                 beta_structured_outputs,
+                provider_tools,
             )),
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
@@ -1473,6 +1519,7 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
+                provider_tools,
             } => ProviderConfig::GCPVertexAnthropic(
                 GCPVertexAnthropicProvider::new(
                     model_id,
@@ -1480,6 +1527,7 @@ impl UninitializedProviderConfig {
                     project_id,
                     api_key_location,
                     provider_type_default_credentials,
+                    provider_tools,
                 )
                 .await?,
             ),
@@ -1765,6 +1813,38 @@ impl ModelProvider {
         }
     }
 
+    /// Validates that provider_tools are not used with providers that don't support them.
+    /// Returns an error if dynamic provider_tools are scoped to this provider but it doesn't support them.
+    fn validate_provider_tools_support(
+        &self,
+        request: &ModelProviderRequest<'_>,
+    ) -> Result<(), Error> {
+        // Skip validation if the provider supports provider_tools
+        if self.config.supports_provider_tools() {
+            return Ok(());
+        }
+
+        // Check if there are any dynamic provider_tools scoped to this provider
+        if let Some(tool_config) = &request.request.tool_config {
+            let scoped_provider_tools =
+                tool_config.get_scoped_provider_tools(request.model_name, request.provider_name);
+            if !scoped_provider_tools.is_empty() {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Provider `{}` does not support `provider_tools`, but {} provider tool(s) were configured for model `{}` / provider `{}`. \
+                        Provider tools are only supported by: Anthropic, GCP Vertex Anthropic, and OpenAI (Responses API only).",
+                        self.config.thought_block_provider_type(),
+                        scoped_provider_tools.len(),
+                        request.model_name,
+                        request.provider_name,
+                    ),
+                }));
+            }
+        }
+
+        Ok(())
+    }
+
     #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference", stream = false))]
     async fn infer(
         &self,
@@ -1773,6 +1853,10 @@ impl ModelProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
+
+        // Validate that provider_tools are not used with unsupported providers
+        self.validate_provider_tools_support(&request)?;
+
         let ticket_borrow = clients
             .rate_limiting_manager
             .consume_tickets(&clients.scope_info, request.request)
@@ -1903,6 +1987,10 @@ impl ModelProvider {
         clients: &InferenceClients,
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
+
+        // Validate that provider_tools are not used with unsupported providers
+        self.validate_provider_tools_support(&request)?;
+
         let ticket_borrow = clients
             .rate_limiting_manager
             .consume_tickets(&clients.scope_info, request.request)
@@ -2568,6 +2656,8 @@ impl ShorthandModelConfig for ModelConfig {
                     .await?,
                 // We don't support beta structured output for shorthand models
                 false,
+                // No provider tools for shorthand models
+                vec![],
             )),
             "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(
                 model_name,
@@ -3708,6 +3798,7 @@ mod tests {
                 None,
                 AnthropicCredentials::None,
                 false,
+                vec![],
             ))
         })
         .await;
@@ -4011,5 +4102,36 @@ mod tests {
             }
             _ => panic!("Expected Location(Dynamic)"),
         }
+    }
+
+    /// Test that `supports_provider_tools()` returns correct values for all providers.
+    /// This test exists to ensure we don't forget to update the method when adding new providers.
+    /// The exhaustive match in `supports_provider_tools()` provides compile-time safety,
+    /// and this test verifies the expected runtime behavior.
+    #[test]
+    fn test_supports_provider_tools_coverage() {
+        use crate::providers::dummy::DummyProvider;
+
+        // Providers that SHOULD support provider_tools
+        let anthropic = ProviderConfig::Anthropic(AnthropicProvider::new(
+            "claude".to_string(),
+            None,
+            AnthropicCredentials::None,
+            false,
+            vec![],
+        ));
+        assert!(
+            anthropic.supports_provider_tools(),
+            "Anthropic should support provider_tools"
+        );
+
+        // Providers that should NOT support provider_tools
+        let dummy = ProviderConfig::Dummy(DummyProvider::new("test".to_string(), None).unwrap());
+        assert!(
+            !dummy.supports_provider_tools(),
+            "Dummy provider should not support provider_tools"
+        );
+
+        // Note: OpenAI support depends on api_type, tested separately in openai module
     }
 }
