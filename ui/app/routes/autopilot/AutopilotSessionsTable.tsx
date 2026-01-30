@@ -148,6 +148,13 @@ export function SessionsTableRows({
           <TableCell className="w-0 text-right whitespace-nowrap">
             <TableItemTime timestamp={session.created_at} />
           </TableCell>
+          <TableCell className="w-0 text-right whitespace-nowrap">
+            {session.last_event_at ? (
+              <TableItemTime timestamp={session.last_event_at} />
+            ) : (
+              <span className="text-fg-muted">—</span>
+            )}
+          </TableCell>
         </TableRow>
       ))}
     </>
@@ -166,6 +173,9 @@ export default function AutopilotSessionsTable({
           <TableHead>Session ID</TableHead>
           <TableHead className="w-0 text-right whitespace-nowrap">
             Created
+          </TableHead>
+          <TableHead className="w-0 text-right whitespace-nowrap">
+            Last Activity
           </TableHead>
         </TableRow>
       </TableHeader>

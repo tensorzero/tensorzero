@@ -17,7 +17,7 @@ import type {
  */
 export class AutopilotClient extends BaseTensorZeroClient {
   /**
-   * Lists autopilot sessions with optional pagination.
+   * Lists autopilot sessions with optional pagination and sorting.
    */
   async listAutopilotSessions(
     params?: ListSessionsParams,
@@ -25,6 +25,8 @@ export class AutopilotClient extends BaseTensorZeroClient {
     const searchParams = new URLSearchParams();
     if (params?.limit) searchParams.set("limit", params.limit.toString());
     if (params?.offset) searchParams.set("offset", params.offset.toString());
+    if (params?.sort_by) searchParams.set("sort_by", params.sort_by);
+    if (params?.sort_order) searchParams.set("sort_order", params.sort_order);
     const queryString = searchParams.toString();
     const endpoint = `/internal/autopilot/v1/sessions${queryString ? `?${queryString}` : ""}`;
 
