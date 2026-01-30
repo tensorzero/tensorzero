@@ -1331,7 +1331,7 @@ jobs:
       force_no_auth: true
     needs:
       [
-        build-gateway-container,
+        build-gateway-e2e-container,
         build-ui-container,
         build-mock-provider-api-container,
       ]
