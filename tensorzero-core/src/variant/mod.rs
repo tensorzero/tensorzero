@@ -257,6 +257,17 @@ pub trait Variant {
 }
 
 impl VariantConfig {
+    /// Returns the variant type as a string, matching the serde serialization format.
+    pub fn variant_type(&self) -> &'static str {
+        match self {
+            VariantConfig::ChatCompletion(_) => "chat_completion",
+            VariantConfig::BestOfNSampling(_) => "best_of_n_sampling",
+            VariantConfig::Dicl(_) => "dicl",
+            VariantConfig::MixtureOfN(_) => "mixture_of_n",
+            VariantConfig::ChainOfThought(_) => "chain_of_thought",
+        }
+    }
+
     pub fn weight(&self) -> Option<f64> {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight(),

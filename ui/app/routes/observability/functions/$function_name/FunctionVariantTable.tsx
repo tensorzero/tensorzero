@@ -21,20 +21,16 @@ import {
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
-import type { InferenceCountByVariant } from "~/types/tensorzero";
+import type { VariantStats } from "~/types/tensorzero";
 import { Input } from "~/components/ui/input";
 
-type VariantCountsWithMetadata = InferenceCountByVariant & {
-  type: string;
-};
-
-const columnHelper = createColumnHelper<VariantCountsWithMetadata>();
+const columnHelper = createColumnHelper<VariantStats>();
 
 export default function FunctionVariantTable({
-  variant_counts,
+  variant_stats,
   function_name,
 }: {
-  variant_counts: VariantCountsWithMetadata[];
+  variant_stats: VariantStats[];
   function_name: string;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -55,24 +51,31 @@ export default function FunctionVariantTable({
           </VariantLink>
         ),
       }),
-      columnHelper.accessor("type", {
+      columnHelper.accessor("variant_type", {
         header: "Type",
         cell: (info) => <Code>{info.getValue()}</Code>,
       }),
       columnHelper.accessor("inference_count", {
         header: "Count",
-        cell: (info) => info.getValue(),
+        cell: (info) => Number(info.getValue()),
       }),
       columnHelper.accessor("last_used_at", {
         header: "Last Used",
-        cell: (info) => <TableItemTime timestamp={info.getValue()} />,
+        cell: (info) => {
+          const value = info.getValue();
+          return value ? (
+            <TableItemTime timestamp={value} />
+          ) : (
+            <span className="text-fg-muted">—</span>
+          );
+        },
       }),
     ],
     [function_name],
   );
 
   const table = useReactTable({
-    data: variant_counts,
+    data: variant_stats,
     columns,
     state: {
       sorting,

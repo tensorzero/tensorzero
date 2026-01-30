@@ -62,12 +62,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const tensorZeroClient = getTensorZeroClient();
   const metricsWithFeedbackPromise =
     tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
-  const variantCountsPromise = tensorZeroClient.getInferenceCount(
-    function_name,
-    {
-      groupBy: "variant",
-    },
-  );
+  const variantStatsPromise = tensorZeroClient.listVariants(function_name);
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
@@ -116,7 +111,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
-    variant_counts,
+    variant_stats,
     variant_throughput,
     feedback_timeseries,
     variant_sampling_probabilities,
@@ -125,56 +120,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     numInferencesPromise,
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
-    variantCountsPromise,
+    variantStatsPromise,
     variantThroughputPromise,
     feedbackTimeseriesPromise,
     variantSamplingProbabilitiesPromise,
   ]);
-
-  const variant_counts_with_metadata = (
-    variant_counts.count_by_variant ?? []
-  ).map((variant_count) => {
-    let variant_config = function_config.variants[
-      variant_count.variant_name
-    ] || {
-      inner: {
-        // In case the variant is not found, we still want to display the variant name
-        type: "unknown",
-        weight: 0,
-      },
-    };
-
-    if (function_name === DEFAULT_FUNCTION) {
-      variant_config = {
-        inner: {
-          type: "chat_completion",
-          model: variant_count.variant_name,
-          weight: null,
-          templates: {},
-          temperature: null,
-          top_p: null,
-          max_tokens: null,
-          presence_penalty: null,
-          frequency_penalty: null,
-          seed: null,
-          stop_sequences: null,
-          json_mode: null,
-          retries: { num_retries: 0, max_delay_s: 0 },
-        },
-        timeouts: {
-          non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null },
-        },
-      };
-      function_config.variants[variant_count.variant_name] = variant_config;
-    }
-
-    return {
-      ...variant_count,
-      type: variant_config.inner.type,
-      weight: variant_config.inner.weight,
-    };
-  });
 
   // Handle pagination from listInferenceMetadata response
   const {
@@ -195,7 +145,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    variant_counts: variant_counts_with_metadata,
+    variant_stats: variant_stats.variants,
     feedback_timeseries,
     variant_sampling_probabilities,
   };
@@ -211,7 +161,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    variant_counts,
+    variant_stats,
     feedback_timeseries,
     variant_sampling_probabilities,
   } = loaderData;
@@ -281,7 +231,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Variants" />
           <FunctionVariantTable
-            variant_counts={variant_counts}
+            variant_stats={variant_stats}
             function_name={function_name}
           />
         </SectionLayout>

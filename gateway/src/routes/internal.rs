@@ -22,6 +22,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
         )
         .route(
+            "/internal/functions/{function_name}/variants",
+            get(endpoints::internal::variants::list_variants_handler),
+        )
+        .route(
             "/internal/functions/{function_name}/metrics",
             get(endpoints::functions::internal::get_function_metrics_handler),
         )

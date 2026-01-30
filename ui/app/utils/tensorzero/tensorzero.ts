@@ -73,6 +73,7 @@ import type {
   ListFunctionsWithInferenceCountResponse,
   ListInferenceMetadataResponse,
   ListInferencesRequest,
+  ListVariantsResponse,
   ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
   ListWorkflowEvaluationRunsResponse,
   MetricsWithFeedbackResponse,
@@ -717,6 +718,25 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     return (response.count_by_variant ?? []).map(
       (v: InferenceCountByVariant) => v.variant_name,
     );
+  }
+
+  /**
+   * Lists all configured variants for a function with their usage statistics.
+   * Returns all variants from config, enriched with inference counts from the database.
+   * Variants without inferences will have inference_count: 0 and last_used_at: undefined.
+   * @param functionName - The name of the function to get variants for
+   * @returns A promise that resolves with all variants and their statistics
+   * @throws Error if the request fails
+   */
+  async listVariants(functionName: string): Promise<ListVariantsResponse> {
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variants`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ListVariantsResponse;
   }
 
   /**

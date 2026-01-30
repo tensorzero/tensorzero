@@ -6,3 +6,4 @@ pub mod inference_count;
 pub mod inference_metadata;
 pub mod model_inferences;
 pub mod models;
+pub mod variants;
