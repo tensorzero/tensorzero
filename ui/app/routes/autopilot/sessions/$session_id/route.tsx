@@ -10,7 +10,6 @@ import {
 import {
   Await,
   data,
-  isRouteErrorResponse,
   useAsyncError,
   useFetcher,
   useNavigate,
@@ -33,6 +32,7 @@ import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
+import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { getFeatureFlags } from "~/utils/feature_flags";
 
@@ -810,29 +810,5 @@ export default function AutopilotSessionEventsPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
+  return <LayoutErrorBoundary error={error} />;
 }
