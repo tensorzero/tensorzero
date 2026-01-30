@@ -887,6 +887,8 @@ impl InferenceProvider for DummyProvider {
 
         let err_in_stream = self.model_name == "err_in_stream";
         let fatal_stream_error = self.model_name == "fatal_stream_error";
+        let fatal_stream_error_with_raw_response =
+            self.model_name == "fatal_stream_error_with_raw_response";
 
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
             "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
@@ -918,6 +920,18 @@ impl InferenceProvider for DummyProvider {
                     }));
                     sleep_excluding_latency(Duration::from_secs(5)).await;
                     continue;
+                }
+                if fatal_stream_error_with_raw_response && i == 2 {
+                    yield Err(Error::new(ErrorDetails::FatalStreamError {
+                        message: "Dummy fatal error with raw_response".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: Some(
+                            r#"{"error": "fatal_stream_error", "chunk_index": 2}"#.to_string(),
+                        ),
+                    }));
+                    return;
                 }
                 if err_in_stream && i == 3 {
                     yield Err(Error::new(ErrorDetails::InferenceClient {
@@ -1045,6 +1059,25 @@ impl EmbeddingProvider for DummyProvider {
         dynamic_api_keys: &InferenceCredentials,
         _model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
+        // Handle error_with_raw_response first (before generic "error" check)
+        if self.model_name == "error_with_raw_response" {
+            return Err(ErrorDetails::InferenceClient {
+                message: format!(
+                    "Error from Dummy provider for embedding model '{}'.",
+                    self.model_name
+                ),
+                raw_request: Some("raw request".to_string()),
+                raw_response: Some(
+                    r#"{"error": {"message": "Intentional embedding test error", "type": "embedding_test_error"}}"#
+                        .to_string(),
+                ),
+                relay_raw_responses: None,
+                status_code: Some(reqwest::StatusCode::BAD_REQUEST),
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
+            }
+            .into());
+        }
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
                 message: format!(

@@ -1256,9 +1256,15 @@ pub async fn get_config_no_verify_credentials(
 // should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
 #[doc(hidden)]
 pub fn err_to_http(e: Error) -> TensorZeroError {
+    let raw_responses = e.collect_raw_responses();
+    let mut body = serde_json::json!({"error": e.to_string()});
+    if !raw_responses.is_empty() {
+        body["raw_response"] = serde_json::to_value(&raw_responses)
+            .unwrap_or_else(|e| serde_json::json!(e.to_string()));
+    }
     TensorZeroError::Http {
         status_code: e.status_code().as_u16(),
-        text: Some(serde_json::json!({"error": e.to_string()}).to_string()),
+        text: Some(body.to_string()),
         source: e.into(),
     }
 }

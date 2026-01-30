@@ -14,22 +14,22 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_non_stream() {
+async fn test_mixture_of_n_dummy_candidates_dummy_judge_non_stream() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
-    e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
+    test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
+    test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_streaming() {
+async fn test_mixture_of_n_dummy_candidates_dummy_judge_streaming() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
-    e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
+    test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
+    test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
 }
 
-async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
+async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
     random_input: Uuid,
     should_be_cached: bool,
     stream: bool,
@@ -249,20 +249,20 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_non_stream() {
-    e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(false).await;
+async fn test_mixture_of_n_dummy_candidates_real_judge_non_stream() {
+    test_mixture_of_n_dummy_candidates_real_judge_inner(false).await;
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_streaming() {
-    e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(true).await;
+async fn test_mixture_of_n_dummy_candidates_real_judge_streaming() {
+    test_mixture_of_n_dummy_candidates_real_judge_inner(true).await;
 }
 
 /// This test calls a function which currently uses mixture of n.
 /// We call 2 models that each give a different response, and then use GPT4o-mini to fuse them.
 /// Besides checking that the response is well-formed and everything is stored correctly,
 /// we also check that the input to GPT4o-mini is correct (as this is the most critical part).
-async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
+async fn test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -562,7 +562,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]
-async fn e2e_test_mixture_of_n_json_real_judge() {
+async fn test_mixture_of_n_json_real_judge() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -782,7 +782,7 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_extra_body() {
+async fn test_mixture_of_n_extra_body() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -917,7 +917,7 @@ async fn e2e_test_mixture_of_n_extra_body() {
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
+async fn test_mixture_of_n_bad_fuser_streaming() {
     let episode_id = Uuid::now_v7();
     let payload = json!({
         "function_name": "mixture_of_n",
@@ -1089,9 +1089,9 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_single_candidate_streaming() {
+async fn test_mixture_of_n_single_candidate_streaming() {
     let episode_id = Uuid::now_v7();
-    e2e_test_mixture_of_n_single_candidate_inner(true, episode_id, json!({
+    test_mixture_of_n_single_candidate_inner(true, episode_id, json!({
         "function_name": "mixture_of_n_single_candidate",
         "variant_name": "mixture_of_n_variant",
         "episode_id": episode_id,
@@ -1109,11 +1109,7 @@ async fn e2e_test_mixture_of_n_single_candidate_streaming() {
     })).await;
 }
 
-async fn e2e_test_mixture_of_n_single_candidate_inner(
-    stream: bool,
-    episode_id: Uuid,
-    payload: Value,
-) {
+async fn test_mixture_of_n_single_candidate_inner(stream: bool, episode_id: Uuid, payload: Value) {
     let builder = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload);

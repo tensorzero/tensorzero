@@ -19,7 +19,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 
 /// This test calls a function which calls a model where the provider is flaky but with retries.
 #[tokio::test]
-async fn e2e_test_inference_flaky() {
+async fn test_inference_flaky() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -162,7 +162,7 @@ async fn e2e_test_inference_flaky() {
 
 /// This test checks that streaming inference works as expected with a flaky provider and retries.
 #[tokio::test]
-async fn e2e_test_streaming_flaky() {
+async fn test_streaming_flaky() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -355,7 +355,7 @@ async fn e2e_test_streaming_flaky() {
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]
-async fn e2e_test_best_of_n_dummy_candidates_flaky_judge() {
+async fn test_best_of_n_dummy_candidates_flaky_judge() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

@@ -9,43 +9,41 @@ mod openai_compatible;
 mod retries;
 
 use futures::StreamExt;
-use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{Value, json};
+use serde_json::{Map, json};
+use tensorzero::test_helpers::make_embedded_gateway_e2e_with_unique_db;
+use tensorzero::{
+    ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
+};
+use tensorzero_core::inference::types::usage::{ApiType, RawResponseEntry};
+use tensorzero_core::inference::types::{Arguments, Role, System, Template, Text};
 use uuid::Uuid;
 
-use crate::common::get_gateway_endpoint;
-
 /// Helper to assert raw_response entry structure is valid
-fn assert_raw_response_entry(entry: &Value) {
+fn assert_raw_response_entry(entry: &RawResponseEntry) {
     assert!(
-        entry.get("model_inference_id").is_some(),
+        entry.model_inference_id.is_some(),
         "raw_response entry should have model_inference_id"
     );
     assert!(
-        entry.get("provider_type").is_some(),
+        !entry.provider_type.is_empty(),
         "raw_response entry should have provider_type"
     );
-    assert!(
-        entry.get("api_type").is_some(),
-        "raw_response entry should have api_type"
-    );
-    assert!(
-        entry.get("data").is_some(),
-        "raw_response entry should have data field"
-    );
+    // api_type is always present as it's not an Option
 
     // Verify api_type is a valid value
-    let api_type = entry.get("api_type").unwrap().as_str().unwrap();
     assert!(
-        ["chat_completions", "responses", "embeddings"].contains(&api_type),
-        "api_type should be 'chat_completions', 'responses', or 'embeddings', got: {api_type}"
+        matches!(
+            entry.api_type,
+            ApiType::ChatCompletions | ApiType::Responses | ApiType::Embeddings | ApiType::Other
+        ),
+        "api_type should be a valid ApiType variant, got: {:?}",
+        entry.api_type
     );
 
-    // Verify data is a string (raw response from provider)
+    // Verify data is a non-empty string (raw response from provider)
     assert!(
-        entry.get("data").unwrap().is_string(),
-        "data should be a string (raw response from provider)"
+        !entry.data.is_empty(),
+        "data should be a non-empty string (raw response from provider)"
     );
 }
 
@@ -53,147 +51,146 @@ fn assert_raw_response_entry(entry: &Value) {
 // Chat Completions API Tests (api_type = "chat_completions")
 // =============================================================================
 
-#[tokio::test]
-async fn e2e_test_raw_response_chat_completions_non_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_chat_completions_non_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_chat_completions_non_streaming")
+            .await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "WeatherBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is the weather in Tokyo? {random_suffix}")
-                }
-            ]
-        },
-        "stream": false,
-        "include_raw_response": true
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("WeatherBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is the weather in Tokyo? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "Response should be successful"
-    );
-
-    let response_json: Value = response.json().await.unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
 
     // Check raw_response exists at response level
-    let raw_response = response_json
-        .get("raw_response")
+    let raw_response = response
+        .raw_response()
         .expect("Response should have raw_response when include_raw_response=true");
-    assert!(raw_response.is_array(), "raw_response should be an array");
 
-    let raw_response_array = raw_response.as_array().unwrap();
     assert!(
-        !raw_response_array.is_empty(),
+        !raw_response.is_empty(),
         "raw_response should have at least one entry"
     );
 
     // Validate first entry structure
-    let first_entry = &raw_response_array[0];
+    let first_entry = &raw_response[0];
     assert_raw_response_entry(first_entry);
 
-    // For OpenAI chat completions, api_type should be "chat_completions"
-    let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
+    // For OpenAI chat completions, api_type should be ChatCompletions
     assert_eq!(
-        api_type, "chat_completions",
-        "OpenAI chat completions should have api_type 'chat_completions'"
+        first_entry.api_type,
+        ApiType::ChatCompletions,
+        "OpenAI chat completions should have api_type ChatCompletions"
     );
 
     // Provider type should be "openai"
-    let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
-    assert_eq!(provider_type, "openai", "Provider type should be 'openai'");
+    assert_eq!(
+        first_entry.provider_type, "openai",
+        "Provider type should be 'openai'"
+    );
 
     // The data field should be a non-empty string (raw response from provider)
-    let data = first_entry.get("data").unwrap().as_str().unwrap();
-    assert!(!data.is_empty(), "data should not be empty");
+    assert!(!first_entry.data.is_empty(), "data should not be empty");
 }
 
-#[tokio::test]
-async fn e2e_test_raw_response_chat_completions_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_chat_completions_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_chat_completions_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "WeatherBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is the weather in Paris? {random_suffix}")
-                }
-            ]
-        },
-        "stream": true,
-        "include_raw_response": true
-    });
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("WeatherBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is the weather in Paris? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut found_raw_chunk = false;
     let mut content_chunks_count: usize = 0;
     let mut chunks_with_raw_chunk: usize = 0;
-    let mut all_chunks: Vec<Value> = Vec::new();
+    let mut all_chunks_count: usize = 0;
 
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+        all_chunks_count += 1;
+
+        // Check if this is a content chunk and if it has raw_chunk
+        let (has_content, has_raw_chunk) = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => {
+                (!c.content.is_empty(), c.raw_chunk.is_some())
+            }
+            tensorzero::InferenceResponseChunk::Json(j) => {
+                (!j.raw.is_empty(), j.raw_chunk.is_some())
+            }
         };
-        if chunk.data == "[DONE]" {
-            break;
-        }
 
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
-
-        all_chunks.push(chunk_json.clone());
-
-        // Check if this is a content chunk (has content field with actual deltas)
-        if chunk_json.get("content").is_some() {
+        if has_content {
             content_chunks_count += 1;
         }
 
-        // Check if this chunk has raw_chunk
-        if let Some(raw_chunk) = chunk_json.get("raw_chunk") {
+        if has_raw_chunk {
             found_raw_chunk = true;
             chunks_with_raw_chunk += 1;
-            assert!(
-                raw_chunk.is_string(),
-                "raw_chunk should be a string, got: {raw_chunk:?}"
-            );
         }
     }
 
     assert!(
         found_raw_chunk,
         "Streaming response should include raw_chunk in at least one chunk.\n\
-        Total chunks received: {}\n\
-        Content chunks: {}\n\
-        Last few chunks:\n{:#?}",
-        all_chunks.len(),
-        content_chunks_count,
-        all_chunks.iter().rev().take(3).collect::<Vec<_>>()
+        Total chunks received: {all_chunks_count}\n\
+        Content chunks: {content_chunks_count}"
     );
 
     // Most content chunks should have raw_chunk (allow first/last to not have it)
@@ -207,113 +204,114 @@ async fn e2e_test_raw_response_chat_completions_streaming() {
 // Responses API Tests (api_type = "responses")
 // =============================================================================
 
-#[tokio::test]
-async fn e2e_test_raw_response_responses_api_non_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_responses_api_non_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_responses_api_non_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": "openai-responses",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "WeatherBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is the weather in London? {random_suffix}")
-                }
-            ]
-        },
-        "stream": false,
-        "include_raw_response": true
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai-responses".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("WeatherBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is the weather in London? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "Response should be successful"
-    );
-
-    let response_json: Value = response.json().await.unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
 
     // Check raw_response exists at response level
-    let raw_response = response_json
-        .get("raw_response")
+    let raw_response = response
+        .raw_response()
         .expect("Response should have raw_response when include_raw_response=true");
-    assert!(raw_response.is_array(), "raw_response should be an array");
 
-    let raw_response_array = raw_response.as_array().unwrap();
     assert!(
-        !raw_response_array.is_empty(),
+        !raw_response.is_empty(),
         "raw_response should have at least one entry for responses API"
     );
 
-    // For OpenAI Responses API, api_type should be "responses"
-    let first_entry = &raw_response_array[0];
+    // For OpenAI Responses API, api_type should be Responses
+    let first_entry = &raw_response[0];
     assert_raw_response_entry(first_entry);
 
-    let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
     assert_eq!(
-        api_type, "responses",
-        "OpenAI Responses API should have api_type 'responses'"
+        first_entry.api_type,
+        ApiType::Responses,
+        "OpenAI Responses API should have api_type Responses"
     );
 }
 
-#[tokio::test]
-async fn e2e_test_raw_response_responses_api_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_responses_api_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_responses_api_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": "openai-responses",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "WeatherBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is the weather in Berlin? {random_suffix}")
-                }
-            ]
-        },
-        "stream": true,
-        "include_raw_response": true
-    });
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai-responses".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("WeatherBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is the weather in Berlin? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut found_raw_chunk = false;
-    let mut all_chunks: Vec<Value> = Vec::new();
+    let mut all_chunks_count: usize = 0;
 
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
-            break;
-        }
-
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
-
-        all_chunks.push(chunk_json.clone());
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+        all_chunks_count += 1;
 
         // Check if this chunk has raw_chunk
-        if chunk_json.get("raw_chunk").is_some() {
+        let has_raw_chunk = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_chunk.is_some(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_chunk.is_some(),
+        };
+        if has_raw_chunk {
             found_raw_chunk = true;
         }
     }
@@ -321,10 +319,7 @@ async fn e2e_test_raw_response_responses_api_streaming() {
     assert!(
         found_raw_chunk,
         "Streaming response should include raw_chunk for Responses API.\n\
-        Total chunks received: {}\n\
-        Last few chunks:\n{:#?}",
-        all_chunks.len(),
-        all_chunks.iter().rev().take(3).collect::<Vec<_>>()
+        Total chunks received: {all_chunks_count}"
     );
 }
 
@@ -332,93 +327,106 @@ async fn e2e_test_raw_response_responses_api_streaming() {
 // Raw response NOT requested - should not be included
 // =============================================================================
 
-#[tokio::test]
-async fn e2e_test_raw_response_not_requested_non_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_not_requested_non_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_not_requested_non_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "WeatherBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is the weather in Sydney? {random_suffix}")
-                }
-            ]
-        },
-        "stream": false,
-        // include_raw_response is NOT set (defaults to false)
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("WeatherBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is the weather in Sydney? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            // include_raw_response is NOT set (defaults to false)
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let response_json: Value = response.json().await.unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
 
     // raw_response should NOT be present at response level when not requested
     assert!(
-        response_json.get("raw_response").is_none(),
+        response.raw_response().is_none(),
         "raw_response should not be present when include_raw_response is not set"
     );
 }
 
-#[tokio::test]
-async fn e2e_test_raw_response_not_requested_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_not_requested_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_not_requested_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "weather_helper",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "WeatherBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is the weather in Madrid? {random_suffix}")
-                }
-            ]
-        },
-        "stream": true,
-        // include_raw_response is NOT set
-    });
-
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("weather_helper".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("WeatherBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is the weather in Madrid? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            // include_raw_response is NOT set
+            ..Default::default()
+        })
+        .await
         .unwrap();
 
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.unwrap();
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
-            break;
-        }
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
-        let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
 
         // raw_chunk should NOT be present at chunk level when not requested
+        let (has_raw_chunk, has_raw_response) = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => {
+                (c.raw_chunk.is_some(), c.raw_response.is_some())
+            }
+            tensorzero::InferenceResponseChunk::Json(j) => {
+                (j.raw_chunk.is_some(), j.raw_response.is_some())
+            }
+        };
+
         assert!(
-            chunk_json.get("raw_chunk").is_none(),
+            !has_raw_chunk,
             "raw_chunk should not be present in streaming chunks when not requested"
         );
-        // raw_response should also NOT be present
         assert!(
-            chunk_json.get("raw_response").is_none(),
+            !has_raw_response,
             "raw_response should not be present in streaming chunks when not requested"
         );
     }
@@ -428,136 +436,137 @@ async fn e2e_test_raw_response_not_requested_streaming() {
 // Multi-Inference Variant Tests (Best-of-N)
 // =============================================================================
 
-#[tokio::test]
-async fn e2e_test_raw_response_best_of_n_non_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_best_of_n_non_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_best_of_n_non_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "best_of_n",
-        "variant_name": "best_of_n_variant_openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("Hello, what is your name? {random_suffix}")
-                }
-            ]
-        },
-        "stream": false,
-        "include_raw_response": true
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("best_of_n".to_string()),
+            variant_name: Some("best_of_n_variant_openai".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("Hello, what is your name? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "Response should be successful"
-    );
-
-    let response_json: Value = response.json().await.unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
 
     // Check raw_response exists at response level
-    let raw_response = response_json
-        .get("raw_response")
+    let raw_response = response
+        .raw_response()
         .expect("Response should have raw_response when include_raw_response=true");
-    assert!(raw_response.is_array(), "raw_response should be an array");
-
-    let raw_response_array = raw_response.as_array().unwrap();
 
     // Best-of-N should have multiple entries:
     // - 2 candidate inferences (openai_variant0 and openai_variant1)
     // - 1 evaluator/judge inference
     // Total: 3 model inferences
     assert!(
-        raw_response_array.len() >= 3,
+        raw_response.len() >= 3,
         "Best-of-N should have at least 3 raw_response entries (2 candidates + 1 judge), got {}",
-        raw_response_array.len()
+        raw_response.len()
     );
 
     // Validate each entry has required fields
-    for entry in raw_response_array {
+    for entry in raw_response {
         assert_raw_response_entry(entry);
     }
 
-    // All entries should have api_type = "chat_completions" for this variant
-    for entry in raw_response_array {
-        let api_type = entry.get("api_type").unwrap().as_str().unwrap();
+    // All entries should have api_type = ChatCompletions for this variant
+    for entry in raw_response {
         assert_eq!(
-            api_type, "chat_completions",
-            "All Best-of-N inferences should have api_type 'chat_completions'"
+            entry.api_type,
+            ApiType::ChatCompletions,
+            "All Best-of-N inferences should have api_type ChatCompletions"
         );
     }
 }
 
-#[tokio::test]
-async fn e2e_test_raw_response_best_of_n_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_best_of_n_streaming() {
+    let client = make_embedded_gateway_e2e_with_unique_db("raw_response_best_of_n_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "best_of_n",
-        "variant_name": "best_of_n_variant_openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is your favorite color? {random_suffix}")
-                }
-            ]
-        },
-        "stream": true,
-        "include_raw_response": true
-    });
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("best_of_n".to_string()),
+            variant_name: Some("best_of_n_variant_openai".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is your favorite color? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut found_raw_response = false;
     let mut found_raw_chunk = false;
-    let mut raw_response_count = 0;
+    let mut raw_response_entries: Vec<RawResponseEntry> = Vec::new();
 
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
-            break;
-        }
-
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
 
         // Check for raw_chunk (current streaming inference)
-        if chunk_json.get("raw_chunk").is_some() {
+        let has_raw_chunk = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_chunk.is_some(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_chunk.is_some(),
+        };
+        if has_raw_chunk {
             found_raw_chunk = true;
         }
 
         // Check for raw_response (previous model inferences - candidates + evaluator)
-        if let Some(raw_response) = chunk_json.get("raw_response") {
+        let entries = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_response.as_ref(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_response.as_ref(),
+        };
+        if let Some(entries) = entries {
             found_raw_response = true;
-            if let Some(arr) = raw_response.as_array() {
-                raw_response_count += arr.len();
-
-                // Validate each entry has required fields
-                for entry in arr {
-                    assert_raw_response_entry(entry);
-                }
+            // Validate each entry has required fields
+            for entry in entries {
+                assert_raw_response_entry(entry);
             }
+            raw_response_entries.extend(entries.iter().cloned());
         }
     }
 
@@ -575,8 +584,9 @@ async fn e2e_test_raw_response_best_of_n_streaming() {
 
     // Best-of-N should have at least the 2 candidates in raw_response
     assert!(
-        raw_response_count >= 2,
-        "Best-of-N streaming should have at least 2 raw_response entries (2 candidates), got {raw_response_count}"
+        raw_response_entries.len() >= 2,
+        "Best-of-N streaming should have at least 2 raw_response entries (2 candidates), got {}",
+        raw_response_entries.len()
     );
 }
 
@@ -584,127 +594,129 @@ async fn e2e_test_raw_response_best_of_n_streaming() {
 // Mixture-of-N Tests
 // =============================================================================
 
-#[tokio::test]
-async fn e2e_test_raw_response_mixture_of_n_non_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_mixture_of_n_non_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_mixture_of_n_non_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "mixture_of_n",
-        "variant_name": "mixture_of_n_variant",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("Please write a short sentence. {random_suffix}")
-                }
-            ]
-        },
-        "stream": false,
-        "include_raw_response": true
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("mixture_of_n".to_string()),
+            variant_name: Some("mixture_of_n_variant".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("Please write a short sentence. {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "Response should be successful"
-    );
-
-    let response_json: Value = response.json().await.unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
 
     // Check raw_response exists at response level
-    let raw_response = response_json
-        .get("raw_response")
+    let raw_response = response
+        .raw_response()
         .expect("Response should have raw_response when include_raw_response=true");
-    assert!(raw_response.is_array(), "raw_response should be an array");
-
-    let raw_response_array = raw_response.as_array().unwrap();
 
     // Mixture-of-N should have multiple entries:
     // - 2 candidate inferences
     // - 1 fuser inference
     // Total: 3 model inferences
     assert!(
-        raw_response_array.len() >= 3,
+        raw_response.len() >= 3,
         "Mixture-of-N should have at least 3 raw_response entries (2 candidates + 1 fuser), got {}",
-        raw_response_array.len()
+        raw_response.len()
     );
 
     // Validate each entry has required fields
-    for entry in raw_response_array {
+    for entry in raw_response {
         assert_raw_response_entry(entry);
     }
 }
 
-#[tokio::test]
-async fn e2e_test_raw_response_mixture_of_n_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_mixture_of_n_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_mixture_of_n_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "mixture_of_n",
-        "variant_name": "mixture_of_n_variant",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("Tell me a fun fact. {random_suffix}")
-                }
-            ]
-        },
-        "stream": true,
-        "include_raw_response": true
-    });
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("mixture_of_n".to_string()),
+            variant_name: Some("mixture_of_n_variant".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("Tell me a fun fact. {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut found_raw_response = false;
     let mut found_raw_chunk = false;
-    let mut raw_response_count = 0;
+    let mut raw_response_entries: Vec<RawResponseEntry> = Vec::new();
 
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
-            break;
-        }
-
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
 
         // Check for raw_chunk (current streaming inference)
-        if chunk_json.get("raw_chunk").is_some() {
+        let has_raw_chunk = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_chunk.is_some(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_chunk.is_some(),
+        };
+        if has_raw_chunk {
             found_raw_chunk = true;
         }
 
         // Check for raw_response (previous model inferences - candidates)
-        if let Some(raw_response) = chunk_json.get("raw_response") {
+        let entries = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_response.as_ref(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_response.as_ref(),
+        };
+        if let Some(entries) = entries {
             found_raw_response = true;
-            if let Some(arr) = raw_response.as_array() {
-                raw_response_count += arr.len();
-
-                // Validate each entry has required fields
-                for entry in arr {
-                    assert_raw_response_entry(entry);
-                }
+            // Validate each entry has required fields
+            for entry in entries {
+                assert_raw_response_entry(entry);
             }
+            raw_response_entries.extend(entries.iter().cloned());
         }
     }
 
@@ -723,8 +735,9 @@ async fn e2e_test_raw_response_mixture_of_n_streaming() {
 
     // Mixture-of-N should have at least the 2 candidates in raw_response (fuser is streaming)
     assert!(
-        raw_response_count >= 2,
-        "Mixture-of-N streaming should have at least 2 raw_response entries (2 candidates), got {raw_response_count}"
+        raw_response_entries.len() >= 2,
+        "Mixture-of-N streaming should have at least 2 raw_response entries (2 candidates), got {}",
+        raw_response_entries.len()
     );
 }
 
@@ -732,75 +745,71 @@ async fn e2e_test_raw_response_mixture_of_n_streaming() {
 // DICL Tests (api_type includes "embeddings")
 // =============================================================================
 
-#[tokio::test]
-async fn e2e_test_raw_response_dicl_non_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_dicl_non_streaming() {
+    let client = make_embedded_gateway_e2e_with_unique_db("raw_response_dicl_non_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": "dicl",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is the capital of France? {random_suffix}")
-                }
-            ]
-        },
-        "stream": false,
-        "include_raw_response": true
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("dicl".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is the capital of France? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "Response should be successful"
-    );
-
-    let response_json: Value = response.json().await.unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
 
     // Check raw_response exists at response level
-    let raw_response = response_json
-        .get("raw_response")
+    let raw_response = response
+        .raw_response()
         .expect("Response should have raw_response when include_raw_response=true");
-    assert!(raw_response.is_array(), "raw_response should be an array");
-
-    let raw_response_array = raw_response.as_array().unwrap();
 
     // DICL should have exactly 2 entries:
-    // - 1 embedding call (api_type = "embeddings")
-    // - 1 chat completion call (api_type = "chat_completions")
+    // - 1 embedding call (api_type = Embeddings)
+    // - 1 chat completion call (api_type = ChatCompletions)
     assert_eq!(
-        raw_response_array.len(),
+        raw_response.len(),
         2,
         "DICL should have exactly 2 raw_response entries (1 embedding + 1 chat), got {}. raw_response:\n{:#?}",
-        raw_response_array.len(),
-        raw_response_array
+        raw_response.len(),
+        raw_response
     );
 
     // Validate each entry has required fields
-    for entry in raw_response_array {
+    for entry in raw_response {
         assert_raw_response_entry(entry);
     }
 
     // Check that we have exactly one of each api_type
-    let embedding_count = raw_response_array
+    let embedding_count = raw_response
         .iter()
-        .filter(|e| e.get("api_type").and_then(|v| v.as_str()) == Some("embeddings"))
+        .filter(|e| e.api_type == ApiType::Embeddings)
         .count();
-    let chat_completions_count = raw_response_array
+    let chat_completions_count = raw_response
         .iter()
-        .filter(|e| e.get("api_type").and_then(|v| v.as_str()) == Some("chat_completions"))
+        .filter(|e| e.api_type == ApiType::ChatCompletions)
         .count();
 
     assert_eq!(
@@ -813,65 +822,68 @@ async fn e2e_test_raw_response_dicl_non_streaming() {
     );
 }
 
-#[tokio::test]
-async fn e2e_test_raw_response_dicl_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_dicl_streaming() {
+    let client = make_embedded_gateway_e2e_with_unique_db("raw_response_dicl_streaming").await;
+
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": "dicl",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": format!("What is the capital of Germany? {random_suffix}")
-                }
-            ]
-        },
-        "stream": true,
-        "include_raw_response": true
-    });
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("dicl".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: format!("What is the capital of Germany? {random_suffix}"),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut found_raw_response = false;
     let mut found_raw_chunk = false;
-    let mut api_types: Vec<String> = Vec::new();
+    let mut api_types: Vec<ApiType> = Vec::new();
 
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
-            break;
-        }
-
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
 
         // Check for raw_chunk
-        if chunk_json.get("raw_chunk").is_some() {
+        let has_raw_chunk = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_chunk.is_some(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_chunk.is_some(),
+        };
+        if has_raw_chunk {
             found_raw_chunk = true;
         }
 
         // Check for raw_response (previous model inferences - embedding)
-        if let Some(raw_response) = chunk_json.get("raw_response") {
+        let entries = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_response.as_ref(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_response.as_ref(),
+        };
+        if let Some(entries) = entries {
             found_raw_response = true;
-            if let Some(arr) = raw_response.as_array() {
-                for entry in arr {
-                    assert_raw_response_entry(entry);
-                    if let Some(api_type) = entry.get("api_type").and_then(|v| v.as_str()) {
-                        api_types.push(api_type.to_string());
-                    }
-                }
+            for entry in entries {
+                assert_raw_response_entry(entry);
+                api_types.push(entry.api_type);
             }
         }
     }
@@ -888,8 +900,8 @@ async fn e2e_test_raw_response_dicl_streaming() {
 
     // DICL streaming should have embeddings in raw_response (chat is streamed via raw_chunk)
     assert!(
-        api_types.iter().any(|t| t == "embeddings"),
-        "DICL streaming should have an entry with api_type `embeddings` in raw_response, got: {api_types:?}"
+        api_types.contains(&ApiType::Embeddings),
+        "DICL streaming should have an entry with api_type Embeddings in raw_response, got: {api_types:?}"
     );
 }
 
@@ -897,103 +909,114 @@ async fn e2e_test_raw_response_dicl_streaming() {
 // JSON Function Tests
 // =============================================================================
 
-#[tokio::test]
-async fn e2e_test_raw_response_json_function_non_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_json_function_non_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_json_function_non_streaming").await;
+
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "json_success",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "JsonBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
-                }
-            ]
-        },
-        "stream": false,
-        "include_raw_response": true
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("json_success".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("JsonBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments({
+                            let mut args = Map::new();
+                            args.insert("country".to_string(), json!("Japan"));
+                            args
+                        }),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
         .await
         .unwrap();
 
-    let status = response.status();
-    let body = response.text().await.unwrap();
-    assert_eq!(
-        status,
-        StatusCode::OK,
-        "Response should be successful. Body: {body}"
-    );
-    let response_json: Value = serde_json::from_str(&body).unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
 
     // Check raw_response exists at response level
-    let raw_response = response_json
-        .get("raw_response")
+    let raw_response = response
+        .raw_response()
         .expect("Response should have raw_response when include_raw_response=true");
-    assert!(raw_response.is_array(), "raw_response should be an array");
 
-    let raw_response_array = raw_response.as_array().unwrap();
     assert!(
-        !raw_response_array.is_empty(),
+        !raw_response.is_empty(),
         "raw_response should have at least one entry for JSON function"
     );
 
     // Validate entry structure
-    let first_entry = &raw_response_array[0];
+    let first_entry = &raw_response[0];
     assert_raw_response_entry(first_entry);
 }
 
-#[tokio::test]
-async fn e2e_test_raw_response_json_function_streaming() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_json_function_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_json_function_streaming").await;
+
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "json_success",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "JsonBot"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "template", "name": "user", "arguments": {"country": "France"}}]
-                }
-            ]
-        },
-        "stream": true,
-        "include_raw_response": true
-    });
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("json_success".to_string()),
+            variant_name: Some("openai".to_string()),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("JsonBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments({
+                            let mut args = Map::new();
+                            args.insert("country".to_string(), json!("France"));
+                            args
+                        }),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
-    let mut chunks = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .expect("Failed to create eventsource for streaming request");
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
 
     let mut found_raw_chunk = false;
 
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.expect("Failed to receive chunk from stream");
-        let Event::Message(chunk) = chunk else {
-            continue;
-        };
-        if chunk.data == "[DONE]" {
-            break;
-        }
-
-        let chunk_json: Value =
-            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
 
         // Check for raw_chunk
-        if chunk_json.get("raw_chunk").is_some() {
+        let has_raw_chunk = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_chunk.is_some(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_chunk.is_some(),
+        };
+        if has_raw_chunk {
             found_raw_chunk = true;
         }
     }
@@ -1001,5 +1024,266 @@ async fn e2e_test_raw_response_json_function_streaming() {
     assert!(
         found_raw_chunk,
         "Streaming JSON function response should include raw_chunk"
+    );
+}
+
+// =============================================================================
+// Failed Candidate Tests (Best-of-N and Mixture-of-N)
+// =============================================================================
+
+/// Test that failed candidates in best-of-n have their raw_response captured
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_best_of_n_failed_candidate() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_bon_failed_candidate").await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("best_of_n_with_failing_candidate".to_string()),
+            variant_name: Some("best_of_n".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
+
+    // raw_response should include entries from the failed candidate
+    let raw_response = response
+        .raw_response()
+        .expect("Should have raw_response when include_raw_response=true");
+
+    // Should have entries from: working candidate + evaluator + failed candidate
+    // The failed candidate's raw_response should be captured
+    assert!(
+        raw_response.len() >= 2,
+        "Should have raw_response entries from successful inferences + failed candidate, got {}",
+        raw_response.len()
+    );
+
+    // At least one entry should be from the failed candidate (contains error data)
+    let has_failed_entry = raw_response.iter().any(|e| e.data.contains("test_error"));
+    assert!(
+        has_failed_entry,
+        "Should include raw_response from failed candidate containing error data. Entries: {:?}",
+        raw_response.iter().map(|e| &e.data).collect::<Vec<_>>()
+    );
+}
+
+/// Test that failed candidates in best-of-n streaming have their raw_response captured
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_best_of_n_failed_candidate_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_bon_failed_candidate_streaming")
+            .await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("best_of_n_with_failing_candidate".to_string()),
+            variant_name: Some("best_of_n".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello streaming".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
+
+    let mut raw_response_entries: Vec<RawResponseEntry> = Vec::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+
+        // Check for raw_response (previous model inferences - including failed candidates)
+        let entries = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_response.as_ref(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_response.as_ref(),
+        };
+        if let Some(entries) = entries {
+            raw_response_entries.extend(entries.iter().cloned());
+        }
+    }
+
+    // Should have entries from: working candidate + evaluator + failed candidate
+    assert!(
+        raw_response_entries.len() >= 2,
+        "Should have raw_response entries from successful inferences + failed candidate, got {}",
+        raw_response_entries.len()
+    );
+
+    // At least one entry should be from the failed candidate (contains error data)
+    let has_failed_entry = raw_response_entries
+        .iter()
+        .any(|e| e.data.contains("test_error"));
+    assert!(
+        has_failed_entry,
+        "Should include raw_response from failed candidate in streaming. Entries: {:?}",
+        raw_response_entries
+            .iter()
+            .map(|e| &e.data)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Test that failed candidates in mixture-of-n have their raw_response captured
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_mixture_of_n_failed_candidate() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_mon_failed_candidate").await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("mixture_of_n_with_failing_candidate".to_string()),
+            variant_name: Some("mixture_of_n".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello mixture".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
+
+    // raw_response should include entries from the failed candidate
+    let raw_response = response
+        .raw_response()
+        .expect("Should have raw_response when include_raw_response=true");
+
+    // Should have entries from: working candidate + fuser + failed candidate
+    assert!(
+        raw_response.len() >= 2,
+        "Should have raw_response entries from successful inferences + failed candidate, got {}",
+        raw_response.len()
+    );
+
+    // At least one entry should be from the failed candidate (contains error data)
+    let has_failed_entry = raw_response.iter().any(|e| e.data.contains("test_error"));
+    assert!(
+        has_failed_entry,
+        "Should include raw_response from failed candidate containing error data. Entries: {:?}",
+        raw_response.iter().map(|e| &e.data).collect::<Vec<_>>()
+    );
+}
+
+/// Test that failed candidates in mixture-of-n streaming have their raw_response captured
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_mixture_of_n_failed_candidate_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_mon_failed_candidate_streaming")
+            .await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("mixture_of_n_with_failing_candidate".to_string()),
+            variant_name: Some("mixture_of_n".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello streaming mixture".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
+
+    let mut raw_response_entries: Vec<RawResponseEntry> = Vec::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+
+        // Check for raw_response (previous model inferences - including failed candidates)
+        let entries = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_response.as_ref(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_response.as_ref(),
+        };
+        if let Some(entries) = entries {
+            raw_response_entries.extend(entries.iter().cloned());
+        }
+    }
+
+    // Should have entries from: working candidate + fuser + failed candidate
+    assert!(
+        raw_response_entries.len() >= 2,
+        "Should have raw_response entries from successful inferences + failed candidate, got {}",
+        raw_response_entries.len()
+    );
+
+    // At least one entry should be from the failed candidate (contains error data)
+    let has_failed_entry = raw_response_entries
+        .iter()
+        .any(|e| e.data.contains("test_error"));
+    assert!(
+        has_failed_entry,
+        "Should include raw_response from failed candidate in streaming. Entries: {:?}",
+        raw_response_entries
+            .iter()
+            .map(|e| &e.data)
+            .collect::<Vec<_>>()
     );
 }

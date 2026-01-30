@@ -209,6 +209,8 @@ pub struct ModelUsedInfo {
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts before this successful one.
     pub failed_raw_responses: Vec<RawResponseEntry>,
+    /// Passed-through raw response entries from downstream (for relay mode).
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 pub trait Variant {
@@ -867,6 +869,7 @@ async fn infer_model_request_stream<'request>(
         cached,
         model_inference_id,
         failed_raw_responses,
+        relay_raw_response: None,
     };
     let config_type = function.config_type();
     let stream =

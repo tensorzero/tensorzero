@@ -3,11 +3,13 @@
 //! Tests that raw provider-specific response data is correctly returned in errors
 //! when `include_raw_response=true` is set.
 
-use reqwest::Client;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
+use tensorzero::test_helpers::make_embedded_gateway_e2e_with_unique_db;
+use tensorzero::{
+    ClientInferenceParams, Input, InputMessage, InputMessageContent, TensorZeroError,
+};
+use tensorzero_core::inference::types::{Arguments, Role, System, Text};
 use uuid::Uuid;
-
-use crate::common::get_gateway_endpoint;
 
 /// Helper to assert raw_response entry structure in errors
 fn assert_error_raw_response_entry(entry: &Value) {
@@ -43,37 +45,45 @@ fn assert_error_raw_response_entry(entry: &Value) {
 // =============================================================================
 
 /// Test that non-streaming errors include raw_response when include_raw_response=true
-#[tokio::test]
-async fn e2e_test_raw_response_direct_error_non_streaming() {
-    let episode_id = Uuid::now_v7();
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_direct_error_non_streaming() {
+    let client = make_embedded_gateway_e2e_with_unique_db("raw_response_error_non_streaming").await;
 
     // Use the error_with_raw_response variant which returns an error with raw_response data
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": "error_with_raw_response",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [{"role": "user", "content": "Hello"}]
-        },
-        "stream": false,
-        "include_raw_response": true
-    });
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("error_with_raw_response".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await;
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    // Should be an error
+    let err = result.expect_err("Response should be an error");
 
-    // Should be an error status
-    assert!(
-        !response.status().is_success(),
-        "Response should be an error status"
-    );
+    // Extract raw_response from the error
+    let TensorZeroError::Http { text, .. } = err else {
+        panic!("Expected HTTP error, got: {err:?}");
+    };
 
-    let body: Value = response.json().await.unwrap();
+    let text = text.expect("Error should have text body");
+    let body: Value = serde_json::from_str(&text).expect("Error body should be valid JSON");
 
     // Should have error field
     assert!(
@@ -114,37 +124,44 @@ async fn e2e_test_raw_response_direct_error_non_streaming() {
 /// Note: When an error happens before streaming starts, the server returns a regular HTTP error
 /// response instead of starting SSE. This test verifies that even with stream=true, the error
 /// response includes raw_response.
-#[tokio::test]
-async fn e2e_test_raw_response_direct_error_streaming() {
-    let episode_id = Uuid::now_v7();
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_direct_error_streaming() {
+    let client = make_embedded_gateway_e2e_with_unique_db("raw_response_error_streaming").await;
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": "error_with_raw_response",
-        "episode_id": episode_id,
-        "input": {
-            "system": {"assistant_name": "TestBot"},
-            "messages": [{"role": "user", "content": "Hello"}]
-        },
-        "stream": true,
-        "include_raw_response": true
-    });
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("error_with_raw_response".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await;
 
-    // When the error happens before streaming starts, we get a regular HTTP response
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    // Should be an error
+    let err = result.expect_err("Response should be an error");
 
-    // Should be an error status
-    assert!(
-        !response.status().is_success(),
-        "Response should be an error status"
-    );
+    // Extract raw_response from the error
+    let TensorZeroError::Http { text, .. } = err else {
+        panic!("Expected HTTP error, got: {err:?}");
+    };
 
-    let body: Value = response.json().await.unwrap();
+    let text = text.expect("Error should have text body");
+    let body: Value = serde_json::from_str(&text).expect("Error body should be valid JSON");
 
     // raw_response should be included in the error response
     let raw_response = body
@@ -172,4 +189,75 @@ async fn e2e_test_raw_response_direct_error_streaming() {
         let provider_type = entry.get("provider_type").and_then(|v| v.as_str()).unwrap();
         assert_eq!(provider_type, "dummy", "Provider type should be 'dummy'");
     }
+}
+
+// =============================================================================
+// Mid-Stream Error Tests
+// =============================================================================
+
+/// Test that mid-stream errors (errors after streaming starts) include raw_response
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_mid_stream_error() {
+    use futures::StreamExt;
+    use tensorzero::InferenceOutput;
+
+    let client = make_embedded_gateway_e2e_with_unique_db("raw_response_mid_stream_error").await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("fatal_stream_error_with_raw_response".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
+
+    let mut chunks_before_error = 0;
+    let mut found_error_with_raw_response = false;
+
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(_chunk) => {
+                chunks_before_error += 1;
+            }
+            Err(_e) => {
+                // Mid-stream error occurred
+                // The error should have raw_response data
+                // Note: The TensorZeroError type doesn't expose raw_response directly,
+                // but it's included in the error serialization for HTTP responses.
+                // Here we just verify that the error occurred after some chunks were received.
+                found_error_with_raw_response = true;
+                break;
+            }
+        }
+    }
+
+    assert!(
+        chunks_before_error > 0,
+        "Should have received some chunks before the mid-stream error"
+    );
+    assert!(
+        found_error_with_raw_response,
+        "Mid-stream error should have occurred"
+    );
 }

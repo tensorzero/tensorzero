@@ -40,6 +40,12 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 max_tokens = 100
 retries = { num_retries = 3, max_delay_s = 0.1 }
 
+[functions.basic_test.variants.fatal_stream_error_with_raw_response]
+type = "chat_completion"
+model = "fatal_stream_error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.slow]
 type = "chat_completion"
 model = "slow"

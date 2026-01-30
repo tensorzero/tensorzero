@@ -174,6 +174,8 @@ struct InferenceMetadata {
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts before the successful one.
     pub failed_raw_responses: Vec<RawResponseEntry>,
+    /// Passed-through raw response entries from downstream (for relay mode streaming).
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -734,6 +736,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 .fetch_and_encode_input_files_before_inference,
             model_inference_id: model_used_info.model_inference_id,
             failed_raw_responses: model_used_info.failed_raw_responses,
+            relay_raw_response: model_used_info.relay_raw_response,
         };
 
         let stream = create_stream(
@@ -1000,6 +1003,24 @@ fn create_previous_raw_response_chunk(
             }),
     );
 
+    // For fake streams (e.g., best-of-N streaming), also include the current model's raw_response
+    // since the fake stream chunks don't include raw_response themselves.
+    // This is identified by metadata.raw_response being Some (set by stream_inference_from_non_stream).
+    if metadata.raw_response.is_some() {
+        // For relay mode, use the passed-through downstream entries
+        if let Some(relay_entries) = &metadata.relay_raw_response {
+            entries.extend(relay_entries.clone());
+        } else if let Some(raw_response) = &metadata.raw_response {
+            // Otherwise, generate an entry for the current model
+            entries.push(RawResponseEntry {
+                model_inference_id: Some(metadata.model_inference_id),
+                provider_type: metadata.model_provider_name.to_string(),
+                api_type: ApiType::ChatCompletions,
+                data: raw_response.clone(),
+            });
+        }
+    }
+
     if entries.is_empty() {
         return None;
     }
@@ -1157,6 +1178,7 @@ fn create_stream(
                 include_raw_usage: _,
                 model_inference_id,
                 failed_raw_responses: _,
+                relay_raw_response: _,
             } = metadata;
 
             let config = config.clone();
@@ -2157,6 +2179,7 @@ mod tests {
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
             failed_raw_responses: Vec::new(),
+            relay_raw_response: None,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2225,6 +2248,7 @@ mod tests {
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
             failed_raw_responses: Vec::new(),
+            relay_raw_response: None,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2620,6 +2644,7 @@ mod tests {
             include_raw_usage: true,
             model_inference_id: Uuid::now_v7(),
             failed_raw_responses: Vec::new(),
+            relay_raw_response: None,
         }
     }
 

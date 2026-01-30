@@ -2,14 +2,15 @@
 //!
 //! Tests that raw provider-specific response data is correctly returned when requested
 //! via the OpenAI-compatible endpoint.
+//!
+//! These tests use HTTP gateways with unique databases for test isolation.
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
+use tensorzero::test_helpers::make_http_gateway_with_unique_db;
 use uuid::Uuid;
-
-use crate::common::get_gateway_endpoint;
 
 fn assert_raw_response_entry_structure(entry: &Value) {
     assert!(
@@ -43,8 +44,10 @@ fn assert_raw_response_entry_structure(entry: &Value) {
 }
 
 /// Test that tensorzero::include_raw_response returns tensorzero_raw_response in non-streaming response
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_raw_response_non_streaming() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("raw_response_openai_non_streaming").await;
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -67,7 +70,7 @@ async fn test_openai_compatible_raw_response_non_streaming() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .post(format!("{base_url}/openai/v1/chat/completions"))
         .json(&payload)
         .send()
         .await
@@ -112,8 +115,10 @@ async fn test_openai_compatible_raw_response_non_streaming() {
 }
 
 /// Test that tensorzero_raw_response is NOT returned when tensorzero::include_raw_response is false
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_raw_response_not_requested() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("raw_response_openai_not_requested").await;
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -136,7 +141,7 @@ async fn test_openai_compatible_raw_response_not_requested() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .post(format!("{base_url}/openai/v1/chat/completions"))
         .json(&payload)
         .send()
         .await
@@ -154,8 +159,10 @@ async fn test_openai_compatible_raw_response_not_requested() {
 }
 
 /// Test that tensorzero::include_raw_response returns tensorzero_raw_chunk in streaming response
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_raw_response_streaming() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("raw_response_openai_streaming").await;
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -178,7 +185,7 @@ async fn test_openai_compatible_raw_response_streaming() {
     });
 
     let mut chunks = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .post(format!("{base_url}/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
         .expect("Failed to create eventsource for streaming request");
@@ -237,8 +244,10 @@ async fn test_openai_compatible_raw_response_streaming() {
 }
 
 /// Test that tensorzero_raw_chunk is NOT returned when tensorzero::include_raw_response is false in streaming
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_raw_response_streaming_not_requested() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("raw_response_openai_streaming_not_requested").await;
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -261,7 +270,7 @@ async fn test_openai_compatible_raw_response_streaming_not_requested() {
     });
 
     let mut chunks = client
-        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .post(format!("{base_url}/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
         .expect("Failed to create eventsource for streaming request");
@@ -290,4 +299,128 @@ async fn test_openai_compatible_raw_response_streaming_not_requested() {
             "tensorzero_raw_response should not be present when not requested"
         );
     }
+}
+
+// =============================================================================
+// Error Tests with raw_response
+// =============================================================================
+
+/// Test that errors include raw_response when tensorzero::include_raw_response is true (non-streaming)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openai_compatible_raw_response_error_non_streaming() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("raw_response_openai_error_non_streaming").await;
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // Use error_with_raw_response model via shorthand
+    let payload = json!({
+        "model": "tensorzero::model_name::dummy::error_with_raw_response",
+        "messages": [{"role": "user", "content": "Hello"}],
+        "stream": false,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::include_raw_response": true
+    });
+
+    let response = client
+        .post(format!("{base_url}/openai/v1/chat/completions"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Should be an error status
+    let status = response.status();
+    assert!(
+        !status.is_success(),
+        "Response should be an error, got status: {status}"
+    );
+
+    let body: Value = response.json().await.unwrap();
+
+    // Should have raw_response in error response
+    let raw_response = body
+        .get("raw_response")
+        .expect("Error should include raw_response when tensorzero::include_raw_response=true");
+    assert!(raw_response.is_array(), "raw_response should be an array");
+
+    let entries = raw_response.as_array().unwrap();
+    assert!(
+        !entries.is_empty(),
+        "Should have at least one raw_response entry"
+    );
+
+    // Verify entry contains error data
+    let entry = &entries[0];
+    assert_eq!(
+        entry.get("provider_type").and_then(|v| v.as_str()),
+        Some("dummy"),
+        "Provider type should be 'dummy'"
+    );
+    assert_eq!(
+        entry.get("api_type").and_then(|v| v.as_str()),
+        Some("chat_completions"),
+        "API type should be 'chat_completions'"
+    );
+
+    let data = entry.get("data").and_then(|d| d.as_str()).unwrap();
+    assert!(
+        data.contains("test_error"),
+        "raw_response data should contain error info"
+    );
+}
+
+/// Test that errors include raw_response when tensorzero::include_raw_response is true (streaming)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openai_compatible_raw_response_error_streaming() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("raw_response_openai_error_streaming").await;
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // Use error_with_raw_response model - errors happen before streaming starts
+    // so we get a regular HTTP error response, not SSE
+    let payload = json!({
+        "model": "tensorzero::model_name::dummy::error_with_raw_response",
+        "messages": [{"role": "user", "content": "Hello"}],
+        "stream": true,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::include_raw_response": true
+    });
+
+    let response = client
+        .post(format!("{base_url}/openai/v1/chat/completions"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Should be an error status (not SSE)
+    let status = response.status();
+    assert!(
+        !status.is_success(),
+        "Response should be an error, got status: {status}"
+    );
+
+    let body: Value = response.json().await.unwrap();
+
+    // raw_response should be included in the error
+    let raw_response = body
+        .get("raw_response")
+        .expect("Streaming error should include raw_response");
+    assert!(raw_response.is_array(), "raw_response should be an array");
+
+    let entries = raw_response.as_array().unwrap();
+    assert!(
+        !entries.is_empty(),
+        "Error should have raw_response entries"
+    );
+
+    // Verify provider is dummy
+    let entry = &entries[0];
+    assert_eq!(
+        entry.get("provider_type").and_then(|v| v.as_str()),
+        Some("dummy"),
+        "Provider type should be 'dummy'"
+    );
 }

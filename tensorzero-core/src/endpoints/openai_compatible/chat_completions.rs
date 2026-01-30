@@ -119,7 +119,7 @@ pub async fn chat_completions_handler(
         .into()),
     }?;
 
-    let response = Box::pin(inference(
+    let inference_result = Box::pin(inference(
         config,
         &http_client,
         clickhouse_connection_info,
@@ -129,8 +129,23 @@ pub async fn chat_completions_handler(
         params,
         api_key_ext,
     ))
-    .await?
-    .output;
+    .await;
+
+    let response = match inference_result {
+        Ok(result) => result.output,
+        Err(e) => {
+            // For inference errors, include raw_response if requested
+            if include_raw_response {
+                let raw_responses = e.collect_raw_responses();
+                return Ok(super::OpenAICompatibleErrorWithRawResponse {
+                    error: e,
+                    raw_responses,
+                }
+                .into_response());
+            }
+            return Err(e.into());
+        }
+    };
 
     match response {
         InferenceOutput::NonStreaming(response) => {

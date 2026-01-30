@@ -952,3 +952,72 @@ async fn test_relay_raw_response_error_streaming() {
 // test_relay_raw_response_streaming test which uses OpenAI. The dummy provider
 // doesn't produce raw_response entries in streaming the same way, so we don't
 // duplicate that test here.
+
+/// Test that relay passes through raw_response from downstream embedding errors
+#[tokio::test]
+async fn test_relay_raw_response_embeddings_error() {
+    // Configure downstream with dummy embedding provider that errors with raw_response
+    let downstream_config = r#"
+[embedding_models.error-embedding]
+routing = ["dummy"]
+
+[embedding_models.error-embedding.providers.dummy]
+type = "dummy"
+model_name = "error_with_raw_response"
+"#;
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/openai/v1/embeddings", env.relay.addr))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::error-embedding",
+            "tensorzero::include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Should be an error status
+    assert!(
+        !response.status().is_success(),
+        "Response should be an error"
+    );
+
+    let body: Value = response.json().await.unwrap();
+
+    // raw_response should be passed through from downstream
+    let raw_response = body
+        .get("raw_response")
+        .expect("Relay embedding error should pass through raw_response from downstream");
+    assert!(raw_response.is_array(), "raw_response should be an array");
+
+    let entries = raw_response.as_array().unwrap();
+    assert!(
+        !entries.is_empty(),
+        "Should have raw_response entries from downstream embedding error"
+    );
+
+    // Verify provider_type is "dummy" (from downstream), not "relay"
+    for entry in entries {
+        let provider_type = entry.get("provider_type").and_then(|v| v.as_str()).unwrap();
+        assert_eq!(
+            provider_type, "dummy",
+            "raw_response should be from downstream provider, not relay"
+        );
+
+        // Verify api_type is embeddings
+        let api_type = entry.get("api_type").and_then(|v| v.as_str()).unwrap();
+        assert_eq!(api_type, "embeddings");
+
+        // Verify error data is present
+        let data = entry.get("data").and_then(|d| d.as_str()).unwrap();
+        assert!(
+            data.contains("embedding_test_error"),
+            "raw_response should contain downstream error data"
+        );
+    }
+}

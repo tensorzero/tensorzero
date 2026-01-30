@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 /// Test that non-streaming responses include raw_response from failed retry attempts
 #[tokio::test(flavor = "multi_thread")]
-async fn e2e_test_raw_response_includes_failed_retry_attempts_non_streaming() {
+async fn test_raw_response_includes_failed_retry_attempts_non_streaming() {
     let client = make_embedded_gateway_e2e_with_unique_db("raw_response_retry_non_streaming").await;
 
     // Use retry_once_with_raw_response model - always fails first, succeeds on retry
@@ -79,7 +79,7 @@ async fn e2e_test_raw_response_includes_failed_retry_attempts_non_streaming() {
 
 /// Test that streaming responses include raw_response from failed retry attempts
 #[tokio::test(flavor = "multi_thread")]
-async fn e2e_test_raw_response_includes_failed_retry_attempts_streaming() {
+async fn test_raw_response_includes_failed_retry_attempts_streaming() {
     let client = make_embedded_gateway_e2e_with_unique_db("raw_response_retry_streaming").await;
 
     // Use retry_once_with_raw_response model - always fails first, succeeds on retry

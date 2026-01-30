@@ -4,6 +4,8 @@
 //! providing compatibility with the OpenAI Embeddings API format. It converts between
 //! OpenAI's embedding request format and TensorZero's internal embedding system.
 
+use axum::body::Body;
+use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json, extract::State};
 
 use crate::endpoints::embeddings::embeddings;
@@ -27,7 +29,8 @@ pub async fn embeddings_handler(
     OpenAIStructuredJson(openai_compatible_params): OpenAIStructuredJson<
         OpenAICompatibleEmbeddingParams,
     >,
-) -> Result<Json<OpenAIEmbeddingResponse>, OpenAICompatibleError> {
+) -> Result<Response<Body>, OpenAICompatibleError> {
+    let include_raw_response = openai_compatible_params.tensorzero_include_raw_response;
     let embedding_params = openai_compatible_params.try_into()?;
     let response = embeddings(
         config,
@@ -39,6 +42,23 @@ pub async fn embeddings_handler(
         embedding_params,
         api_key_ext,
     )
-    .await?;
-    Ok(Json(response.into()))
+    .await;
+    match response {
+        Ok(response) => {
+            let openai_response: OpenAIEmbeddingResponse = response.into();
+            Ok(Json(openai_response).into_response())
+        }
+        Err(e) => {
+            // For embedding errors, include raw_response if requested
+            if include_raw_response {
+                let raw_responses = e.collect_raw_responses();
+                return Ok(super::OpenAICompatibleErrorWithRawResponse {
+                    error: e,
+                    raw_responses,
+                }
+                .into_response());
+            }
+            Err(e.into())
+        }
+    }
 }

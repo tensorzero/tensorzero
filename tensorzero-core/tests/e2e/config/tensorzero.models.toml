@@ -663,6 +663,13 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "error_with_raw_response"
 
+[models.fatal_stream_error_with_raw_response]
+routing = ["dummy"]
+
+[models.fatal_stream_error_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "fatal_stream_error_with_raw_response"
+
 [models.flaky_with_raw_response]
 routing = ["dummy"]
 
@@ -915,3 +922,11 @@ routing = ["openai"]
 type = "openai"
 model_name = "text-embedding-3-small"
 extra_headers = [{ name = "Authorization", value = "Bearer invalid_openai_auth" }]
+
+# Embedding model that returns an error with raw_response
+[embedding_models.error_with_raw_response]
+routing = ["dummy"]
+
+[embedding_models.error_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "error_with_raw_response"

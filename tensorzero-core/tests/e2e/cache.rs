@@ -48,7 +48,7 @@ use tensorzero_core::inference::types::{RequestMessage, StoredContentBlock, Stor
 
 use crate::common::get_gateway_endpoint;
 use tensorzero::test_helpers::{
-    make_embedded_gateway_e2e_with_unique_db, start_http_gateway_with_unique_db,
+    make_embedded_gateway_e2e_with_unique_db, make_http_gateway_with_unique_db,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
@@ -879,7 +879,7 @@ async fn test_streaming_cache_usage_only_in_final_chunk_native() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
     let (base_url, _shutdown_handle) =
-        start_http_gateway_with_unique_db("cache_usage_final_chunk_openai").await;
+        make_http_gateway_with_unique_db("cache_usage_final_chunk_openai").await;
 
     let input = "cache_usage_openai_test: Tell me a story";
 

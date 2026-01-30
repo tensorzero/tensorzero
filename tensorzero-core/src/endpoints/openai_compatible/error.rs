@@ -43,6 +43,33 @@ impl IntoResponse for OpenAICompatibleError {
     }
 }
 
+/// An OpenAI-compatible error with raw response data.
+///
+/// This is used to provide `raw_response` in error responses when requested via
+/// the `tensorzero::include_raw_response` parameter. It wraps an error and includes
+/// raw response entries collected from provider errors.
+pub struct OpenAICompatibleErrorWithRawResponse {
+    pub error: Error,
+    pub raw_responses: Vec<crate::inference::types::usage::RawResponseEntry>,
+}
+
+impl IntoResponse for OpenAICompatibleErrorWithRawResponse {
+    fn into_response(self) -> Response {
+        let message = self.error.to_string();
+        let mut body = serde_json::json!({
+            "error": {"message": message},
+        });
+        if !self.raw_responses.is_empty() {
+            body["raw_response"] = serde_json::to_value(&self.raw_responses)
+                .unwrap_or_else(|e| serde_json::json!(e.to_string()));
+        }
+        let status_code = self.error.status_code();
+        let mut response = (status_code, Json(body)).into_response();
+        response.extensions_mut().insert(self.error);
+        response
+    }
+}
+
 /// A JSON extractor for OpenAI-compatible endpoints that returns errors in OpenAI format.
 ///
 /// This is similar to `StructuredJson` but uses `OpenAICompatibleError` as its rejection type

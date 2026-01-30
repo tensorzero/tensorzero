@@ -19,6 +19,7 @@ use crate::inference::types::chat_completion_inference_params::ChatCompletionInf
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
+use crate::inference::types::usage::RawResponseEntry;
 use crate::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceResponseWithMetadata, RequestMessage, Role,
     System, batch::StartBatchModelInferenceWithMetadata,
@@ -184,7 +185,7 @@ impl Variant for BestOfNSamplingConfig {
         _inference_params: InferenceParams,
     ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
         async move {
-            let candidate_inference_results = self
+            let (candidate_inference_results, failed_candidate_raw_responses) = self
                 .infer_candidates(
                     &input,
                     &models,
@@ -199,6 +200,7 @@ impl Variant for BestOfNSamplingConfig {
                 &inference_config,
                 &clients,
                 candidate_inference_results,
+                failed_candidate_raw_responses,
             )
             .await
         }
@@ -213,7 +215,7 @@ impl Variant for BestOfNSamplingConfig {
         clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        let candidate_inference_results = self
+        let (candidate_inference_results, failed_candidate_raw_responses) = self
             .infer_candidates(
                 &input,
                 &models,
@@ -229,6 +231,7 @@ impl Variant for BestOfNSamplingConfig {
                 &inference_config,
                 &clients,
                 candidate_inference_results,
+                failed_candidate_raw_responses,
             )
             .await?;
 
@@ -319,6 +322,7 @@ impl Variant for BestOfNSamplingConfig {
 
 impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
+    /// Returns a tuple of (successful_results, failed_candidate_raw_responses).
     async fn infer_candidates(
         &self,
         input: &LazyResolvedInput,
@@ -326,7 +330,7 @@ impl BestOfNSamplingConfig {
         function: &Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
         clients: &InferenceClients,
-    ) -> Result<Vec<InferenceResult>, Error> {
+    ) -> Result<(Vec<InferenceResult>, Vec<RawResponseEntry>), Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
             .candidates
@@ -393,15 +397,20 @@ impl BestOfNSamplingConfig {
         )
         .await;
 
-        // Collect the successful results
+        // Collect the successful results and failed candidate raw_responses
         let mut successful_results = Vec::new();
+        let mut failed_candidate_raw_responses = Vec::new();
         for (_candidate_name, result) in inference_results {
-            if let Ok(res) = result {
-                successful_results.push(res);
+            match result {
+                Ok(res) => successful_results.push(res),
+                Err(e) => {
+                    // Extract raw_response from failed candidate
+                    failed_candidate_raw_responses.extend(e.collect_raw_responses());
+                }
             }
         }
 
-        Ok(successful_results)
+        Ok((successful_results, failed_candidate_raw_responses))
     }
 
     /// Gets the best candidate using the evaluator config.
@@ -414,6 +423,7 @@ impl BestOfNSamplingConfig {
         inference_config: &InferenceConfig,
         clients: &InferenceClients,
         candidates: Vec<InferenceResult>,
+        failed_candidate_raw_responses: Vec<RawResponseEntry>,
     ) -> Result<InferenceResult, Error> {
         if candidates.is_empty() {
             return Err(ErrorDetails::Inference {
@@ -423,11 +433,20 @@ impl BestOfNSamplingConfig {
         }
         if candidates.len() == 1 {
             let mut candidates = candidates;
-            return candidates.pop().ok_or_else(|| {
+            let mut result = candidates.pop().ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
                     message: "Expected one candidate but found none".to_string(),
                 })
-            });
+            })?;
+            // Add failed candidate raw_responses even when only 1 candidate succeeds
+            if !failed_candidate_raw_responses.is_empty()
+                && let Some(first_result) = result.mut_model_inference_results().first_mut()
+            {
+                first_result
+                    .failed_raw_responses
+                    .extend(failed_candidate_raw_responses);
+            }
+            return Ok(result);
         }
         // If the evaluator fails, we randomly select one of the candidates
         // As long as the evaluator returns an inference result, we want to include it in the observability
@@ -475,6 +494,15 @@ impl BestOfNSamplingConfig {
             selected_candidate
                 .mut_model_inference_results()
                 .push(inference_result);
+        }
+
+        // Add failed candidate raw_responses to the first model inference result
+        if !failed_candidate_raw_responses.is_empty()
+            && let Some(first_result) = selected_candidate.mut_model_inference_results().first_mut()
+        {
+            first_result
+                .failed_raw_responses
+                .extend(failed_candidate_raw_responses);
         }
 
         Ok(selected_candidate)
@@ -1435,6 +1463,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                Vec::new(),
             )
             .await
             .expect("Failed to select best candidate");
@@ -1518,6 +1547,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                Vec::new(),
             )
             .await;
 
@@ -1594,6 +1624,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                Vec::new(),
             )
             .await;
 
@@ -1617,6 +1648,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 empty_candidates.clone(),
+                Vec::new(),
             )
             .await;
         let err = result.unwrap_err();
@@ -1681,6 +1713,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                Vec::new(),
             )
             .await;
         // we gracefully handle the error and return a random candidate
