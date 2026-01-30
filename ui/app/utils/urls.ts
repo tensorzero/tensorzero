@@ -95,3 +95,11 @@ export function toWorkflowEvaluationProjectUrl(projectName: string): string {
 export function toSupervisedFineTuningJobUrl(jobId: string): string {
   return `/optimization/supervised-fine-tuning/${encodeURIComponent(jobId)}`;
 }
+
+// ============================================================================
+// Autopilot
+// ============================================================================
+
+export function toAutopilotSessionUrl(sessionId: string): string {
+  return `/autopilot/sessions/${encodeURIComponent(sessionId)}`;
+}

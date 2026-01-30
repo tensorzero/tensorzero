@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import SessionSearchBar from "./SessionSearchBar";
 
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_PAGE_SIZE = 20;
@@ -171,6 +172,7 @@ export default function AutopilotSessionsPage({
     <PageLayout>
       <PageHeader heading="Autopilot Sessions" />
       <SectionLayout>
+        <SessionSearchBar />
         <ActionBar>
           <Button
             variant="outline"
