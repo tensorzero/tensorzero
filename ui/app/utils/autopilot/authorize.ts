@@ -4,8 +4,6 @@
 
 import type { AuthorizationStatus } from "./types";
 
-export type { AuthorizationStatus };
-
 /**
  * Authorize (approve or reject) a single tool call.
  *
