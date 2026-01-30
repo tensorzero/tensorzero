@@ -17,6 +17,7 @@ use tensorzero_core::db::feedback::{
     DemonstrationFeedbackInsert, FeedbackQueries, FeedbackRow, FloatMetricFeedbackInsert,
     GetVariantPerformanceParams, StaticEvaluationHumanFeedbackInsert,
 };
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::function::FunctionConfigType;
 use uuid::Uuid;
 
@@ -941,7 +942,7 @@ async fn test_get_variant_performances_ask_question_num_questions_with_variant(
 }
 make_db_test!(test_get_variant_performances_ask_question_num_questions_with_variant);
 
-async fn test_insert_boolean_feedback(conn: impl FeedbackQueries) {
+async fn test_insert_boolean_feedback(conn: impl FeedbackQueries + TestDatabaseHelpers) {
     let feedback_id = Uuid::now_v7();
     // Use a known inference ID from the test database
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
@@ -965,8 +966,7 @@ async fn test_insert_boolean_feedback(conn: impl FeedbackQueries) {
         .await
         .expect("Boolean feedback insert should succeed");
 
-    // Wait for ClickHouse to process the insert
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the feedback
     let feedback = conn
@@ -983,7 +983,7 @@ async fn test_insert_boolean_feedback(conn: impl FeedbackQueries) {
 }
 make_db_test!(test_insert_boolean_feedback);
 
-async fn test_insert_float_feedback(conn: impl FeedbackQueries) {
+async fn test_insert_float_feedback(conn: impl FeedbackQueries + TestDatabaseHelpers) {
     let feedback_id = Uuid::now_v7();
     // Use a known inference ID from the test database
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
@@ -1003,8 +1003,7 @@ async fn test_insert_float_feedback(conn: impl FeedbackQueries) {
         .await
         .expect("Float feedback insert should succeed");
 
-    // Wait for ClickHouse to process the insert
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the feedback
     let feedback = conn
@@ -1021,7 +1020,9 @@ async fn test_insert_float_feedback(conn: impl FeedbackQueries) {
 }
 make_db_test!(test_insert_float_feedback);
 
-async fn test_insert_comment_feedback_inference_level(conn: impl FeedbackQueries) {
+async fn test_insert_comment_feedback_inference_level(
+    conn: impl FeedbackQueries + TestDatabaseHelpers,
+) {
     let feedback_id = Uuid::now_v7();
     // Use a known inference ID from the test database
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
@@ -1041,8 +1042,7 @@ async fn test_insert_comment_feedback_inference_level(conn: impl FeedbackQueries
         .await
         .expect("Comment feedback insert should succeed");
 
-    // Wait for ClickHouse to process the insert
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the feedback
     let feedback = conn
@@ -1059,7 +1059,9 @@ async fn test_insert_comment_feedback_inference_level(conn: impl FeedbackQueries
 }
 make_db_test!(test_insert_comment_feedback_inference_level);
 
-async fn test_insert_comment_feedback_episode_level(conn: impl FeedbackQueries) {
+async fn test_insert_comment_feedback_episode_level(
+    conn: impl FeedbackQueries + TestDatabaseHelpers,
+) {
     let feedback_id = Uuid::now_v7();
     // Use a known episode ID from the test database
     let target_id = Uuid::parse_str("0192e14c-09b8-7d3e-8618-46aed8c213dc").unwrap();
@@ -1083,8 +1085,7 @@ async fn test_insert_comment_feedback_episode_level(conn: impl FeedbackQueries) 
         .await
         .expect("Comment feedback insert should succeed");
 
-    // Wait for ClickHouse to process the insert
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the feedback
     let feedback = conn
@@ -1101,7 +1102,7 @@ async fn test_insert_comment_feedback_episode_level(conn: impl FeedbackQueries) 
 }
 make_db_test!(test_insert_comment_feedback_episode_level);
 
-async fn test_insert_demonstration_feedback(conn: impl FeedbackQueries) {
+async fn test_insert_demonstration_feedback(conn: impl FeedbackQueries + TestDatabaseHelpers) {
     let feedback_id = Uuid::now_v7();
     // Use a known inference ID from the test database
     let inference_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
@@ -1120,8 +1121,7 @@ async fn test_insert_demonstration_feedback(conn: impl FeedbackQueries) {
         .await
         .expect("Demonstration feedback insert should succeed");
 
-    // Wait for ClickHouse to process the insert
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the feedback using demonstration-specific query
     let feedback = conn
@@ -1137,7 +1137,9 @@ async fn test_insert_demonstration_feedback(conn: impl FeedbackQueries) {
 }
 make_db_test!(test_insert_demonstration_feedback);
 
-async fn test_insert_static_eval_feedback(conn: impl FeedbackQueries + EvaluationQueries) {
+async fn test_insert_static_eval_feedback(
+    conn: impl FeedbackQueries + EvaluationQueries + TestDatabaseHelpers,
+) {
     let feedback_id = Uuid::now_v7();
     let datapoint_id = Uuid::now_v7();
     let evaluator_inference_id = Uuid::now_v7();
@@ -1158,8 +1160,7 @@ async fn test_insert_static_eval_feedback(conn: impl FeedbackQueries + Evaluatio
         .await
         .expect("Static eval feedback insert should succeed");
 
-    // Wait for ClickHouse to process the insert
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the feedback using evaluation queries
     let feedback = conn
@@ -1186,7 +1187,7 @@ async fn test_insert_static_eval_feedback(conn: impl FeedbackQueries + Evaluatio
 make_clickhouse_only_test!(test_insert_static_eval_feedback);
 
 async fn test_insert_static_eval_feedback_without_evaluator_inference_id(
-    conn: impl FeedbackQueries + EvaluationQueries,
+    conn: impl FeedbackQueries + EvaluationQueries + TestDatabaseHelpers,
 ) {
     let feedback_id = Uuid::now_v7();
     let datapoint_id = Uuid::now_v7();
@@ -1207,8 +1208,7 @@ async fn test_insert_static_eval_feedback_without_evaluator_inference_id(
         .await
         .expect("Static eval feedback insert without evaluator_inference_id should succeed");
 
-    // Wait for ClickHouse to process the insert
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the feedback using evaluation queries
     let feedback = conn
@@ -1242,7 +1242,9 @@ make_clickhouse_only_test!(test_insert_static_eval_feedback_without_evaluator_in
 /// This verifies the SQL semantics of:
 /// `SELECT DISTINCT ON (target_id) ... ORDER BY target_id, created_at DESC`
 /// which should keep only the latest feedback per target_id.
-async fn test_get_variant_performances_distinct_on_semantics(conn: impl FeedbackQueries) {
+async fn test_get_variant_performances_distinct_on_semantics(
+    conn: impl FeedbackQueries + TestDatabaseHelpers,
+) {
     // Use the inference ID from fixture data for write_haiku function
     let target_id = Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2").unwrap();
     let unique_metric_name = format!("e2e_distinct_on_test_{}", Uuid::now_v7());
@@ -1279,7 +1281,7 @@ async fn test_get_variant_performances_distinct_on_semantics(conn: impl Feedback
         .expect("Second feedback insert should succeed");
 
     // Wait for database to process (especially for ClickHouse)
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Query variant performances
     let metric_config = MetricConfig {
@@ -1326,7 +1328,7 @@ async fn test_get_variant_performances_distinct_on_semantics(conn: impl Feedback
 }
 make_db_test!(test_get_variant_performances_distinct_on_semantics);
 
-async fn test_insert_feedback_with_multiple_tags(conn: impl FeedbackQueries) {
+async fn test_insert_feedback_with_multiple_tags(conn: impl FeedbackQueries + TestDatabaseHelpers) {
     let feedback_id = Uuid::now_v7();
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
     let metric_name = format!("e2e_test_with_tags_{feedback_id}");
@@ -1351,8 +1353,7 @@ async fn test_insert_feedback_with_multiple_tags(conn: impl FeedbackQueries) {
         .await
         .expect("Feedback insert with multiple tags should succeed");
 
-    // Wait for ClickHouse to process the insert
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the feedback
     let feedback = conn

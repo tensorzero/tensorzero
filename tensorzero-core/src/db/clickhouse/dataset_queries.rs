@@ -9,6 +9,7 @@ use crate::db::clickhouse::query_builder::QueryParameter;
 use crate::db::clickhouse::{
     ClickHouseConnectionInfo, ExternalDataInfo, escape_string_for_clickhouse_literal,
 };
+use crate::db::query_helpers::json_escape_string_without_quotes;
 use crate::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTerm};
 use crate::endpoints::shared_types::OrderDirection;
 // TODO: move things somewhere sensible
@@ -679,16 +680,6 @@ fn get_order_by_clause(
         .collect();
 
     Ok(format!("ORDER BY {}", order_parts.join(", ")))
-}
-
-/// Escapes a string for JSON without quotes.
-/// This is used to escape the text query when doing a substring match on input and output strings, because
-/// input and output strings are JSON-escaped in ClickHouse.
-fn json_escape_string_without_quotes(s: &str) -> Result<String, Error> {
-    let mut json_escaped = serde_json::to_string(s)?;
-    json_escaped.remove(0);
-    json_escaped.pop();
-    Ok(json_escaped)
 }
 
 impl ClickHouseConnectionInfo {

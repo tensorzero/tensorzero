@@ -31,13 +31,17 @@ pub struct GetConfigResponse {
 }
 
 impl GetConfigResponse {
-    fn from_snapshot(snapshot: ConfigSnapshot) -> Self {
-        Self {
+    fn from_snapshot(snapshot: ConfigSnapshot) -> Result<Self, Error> {
+        Ok(Self {
             hash: snapshot.hash.to_string(),
-            config: snapshot.config.into(),
+            config: snapshot.config.try_into().map_err(|e: &'static str| {
+                Error::new(ErrorDetails::Config {
+                    message: e.to_string(),
+                })
+            })?,
             extra_templates: snapshot.extra_templates,
             tags: snapshot.tags,
-        }
+        })
     }
 }
 
@@ -55,7 +59,7 @@ pub async fn get_live_config_handler(
         .get_config_snapshot(hash)
         .await?;
 
-    Ok(Json(GetConfigResponse::from_snapshot(snapshot)))
+    Ok(Json(GetConfigResponse::from_snapshot(snapshot)?))
 }
 
 /// Handler for `GET /internal/config/{hash}`
@@ -78,7 +82,7 @@ pub async fn get_config_by_hash_handler(
         .get_config_snapshot(snapshot_hash)
         .await?;
 
-    Ok(Json(GetConfigResponse::from_snapshot(snapshot)))
+    Ok(Json(GetConfigResponse::from_snapshot(snapshot)?))
 }
 
 /// Request body for writing a config snapshot.

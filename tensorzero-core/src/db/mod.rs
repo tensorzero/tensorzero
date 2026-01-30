@@ -23,8 +23,10 @@ pub mod inference_count;
 pub mod inferences;
 pub mod model_inferences;
 pub mod postgres;
+pub mod query_helpers;
 pub mod rate_limiting;
 pub mod stored_datapoint;
+pub mod test_helpers;
 pub mod valkey;
 pub mod workflow_evaluation_queries;
 
@@ -36,9 +38,6 @@ pub trait ClickHouseConnection:
     SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync
 {
 }
-
-#[async_trait]
-pub trait PostgresConnection: RateLimitQueries + HealthCheckable + Send + Sync {}
 
 #[async_trait]
 pub trait HealthCheckable {
@@ -173,11 +172,6 @@ pub struct TableBounds {
     pub first_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_id: Option<Uuid>,
-}
-
-impl<T: RateLimitQueries + ExperimentationQueries + HealthCheckable + Send + Sync>
-    PostgresConnection for T
-{
 }
 
 pub trait ExperimentationQueries {

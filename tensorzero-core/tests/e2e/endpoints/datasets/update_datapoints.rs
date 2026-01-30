@@ -8,13 +8,12 @@ use std::time::Duration;
 use tensorzero::{FunctionTool, GetDatapointParams};
 use uuid::Uuid;
 
-use tensorzero_core::db::clickhouse::test_helpers::{
-    clickhouse_flush_async_insert, get_clickhouse,
-};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::datasets::v1::types::{
     DatapointMetadataUpdate, UpdateDatapointMetadataRequest, UpdateDatapointsMetadataRequest,
 };
@@ -114,7 +113,7 @@ async fn test_update_chat_datapoint_output() {
 
     // Wait for async inserts and give ClickHouse time to merge the staled version
 
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the old datapoint is staled
@@ -394,7 +393,7 @@ async fn test_update_multiple_datapoints() {
 
     // Wait for async inserts and give ClickHouse time to merge the staled versions
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify both old datapoints are staled
@@ -1340,7 +1339,7 @@ async fn test_update_metadata_chat_datapoint() {
 
     // Wait for async inserts
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the datapoint has updated name
@@ -1439,7 +1438,7 @@ async fn test_update_metadata_json_datapoint() {
 
     // Wait for async inserts
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the datapoint has updated name
@@ -1522,7 +1521,7 @@ async fn test_update_metadata_set_name_to_null() {
     assert!(resp.status().is_success());
 
     // Wait for async inserts
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify name is now null
@@ -1649,7 +1648,7 @@ async fn test_update_metadata_multiple_datapoints() {
     assert_eq!(returned_ids.len(), 2);
 
     // Wait for async inserts
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify both datapoints have updated names
@@ -1838,7 +1837,7 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
     assert_ne!(new_id, datapoint_id, "Should create a new datapoint ID");
 
     // Wait for async inserts
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the new datapoint has the modified output
@@ -1994,7 +1993,7 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
     assert_ne!(new_id, datapoint_id, "Should create a new datapoint ID");
 
     // Wait for async inserts
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the new datapoint has the modified output and name

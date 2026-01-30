@@ -956,7 +956,15 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-            } = original_snapshot.config.clone().into();
+            } = original_snapshot
+                .config
+                .clone()
+                .try_into()
+                .map_err(|e: &'static str| {
+                    Error::new(ErrorDetails::Config {
+                        message: e.to_string(),
+                    })
+                })?;
 
             // Reconstruct with overlaid values for snapshot hash computation
             let overlaid_config = UninitializedConfig {

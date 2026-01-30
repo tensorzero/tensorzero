@@ -1482,7 +1482,11 @@ impl ClientExt for Client {
                         .map_err(err_to_http)?;
                     Ok(GetConfigResponse {
                         hash: snapshot.hash.to_string(),
-                        config: snapshot.config.into(),
+                        config: snapshot.config.try_into().map_err(|e: &'static str| {
+                            err_to_http(Error::new(ErrorDetails::Config {
+                                message: e.to_string(),
+                            }))
+                        })?,
                         extra_templates: snapshot.extra_templates,
                         tags: snapshot.tags,
                     })

@@ -17,6 +17,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
     v1::{list_datapoints, types::ListDatapointsRequest},
@@ -45,8 +46,8 @@ use tensorzero_core::config::{
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
-        clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
-        select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
+        get_clickhouse, select_chat_inference_clickhouse, select_feedback_by_target_id_clickhouse,
+        select_json_inference_clickhouse,
     },
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
 };
@@ -145,7 +146,7 @@ async fn run_evaluations_json() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -345,7 +346,7 @@ async fn run_evaluations_json() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -612,7 +613,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
 
     let output_str = String::from_utf8(output).unwrap();
@@ -706,7 +707,7 @@ async fn run_exact_match_evaluation_chat() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -847,7 +848,7 @@ async fn run_llm_judge_evaluation_chat() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -997,7 +998,7 @@ async fn run_llm_judge_evaluation_chat() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1075,7 +1076,7 @@ async fn run_image_evaluation() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1297,7 +1298,7 @@ async fn check_invalid_image_evaluation() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1659,7 +1660,7 @@ async fn run_evaluations_errors() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2104,7 +2105,7 @@ async fn run_evaluations_best_of_3() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2297,7 +2298,7 @@ async fn run_evaluations_mixture_of_3() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2493,7 +2494,7 @@ async fn run_evaluations_dicl() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -3026,7 +3027,7 @@ async fn test_precision_targets_parameter() {
             .await
             .expect("ClickHouse batch writer should complete before tag assertions");
     }
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
 
     let inference_id =
