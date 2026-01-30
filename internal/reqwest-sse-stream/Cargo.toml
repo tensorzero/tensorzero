@@ -1,0 +1,18 @@
+[package]
+name = "reqwest-sse-stream"
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+sse-stream = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+futures = { workspace = true }
+http = { workspace = true }
+thiserror = { workspace = true }
+http-body = "1.0.1"
+async-stream.workspace = true
+
+[lints]
+workspace = true

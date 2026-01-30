@@ -8,7 +8,7 @@ use crate::providers::common::E2ETestProvider;
 use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use uuid::Uuid;
@@ -162,6 +162,7 @@ pub async fn test_raw_usage_inference_with_provider_streaming(provider: E2ETestP
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap_or_else(|e| {
             panic!(
                 "Failed to create eventsource for streaming request for provider {}: {e}",

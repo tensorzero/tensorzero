@@ -16,7 +16,7 @@ use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
 use futures::{Stream, future::try_join_all};
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::time::Instant;

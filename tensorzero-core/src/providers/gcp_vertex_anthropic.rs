@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use futures::StreamExt;
 use futures::future::try_join_all;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use tensorzero_derive::TensorZeroDeserialize;

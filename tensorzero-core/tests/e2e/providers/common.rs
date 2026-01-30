@@ -27,7 +27,7 @@ use object_store::path::Path;
 
 use rand::Rng;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use std::future::IntoFuture;
 use tensorzero::{
@@ -2001,6 +2001,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
             .post(get_gateway_endpoint("/inference"))
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
 
         let mut chunks = vec![];
@@ -2205,6 +2206,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             .post(get_gateway_endpoint("/inference"))
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
 
         let mut chunks = vec![];
@@ -3733,14 +3735,15 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(event) = event_source.next().await {
-        if let Ok(reqwest_eventsource::Event::Open) = event {
+        if let Ok(reqwest_sse_stream::Event::Open) = event {
             continue;
         }
         let err = event.unwrap_err();
-        let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = err else {
+        let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = err else {
             panic!("Unexpected error: {err:?}")
         };
         assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
@@ -3858,6 +3861,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -4436,6 +4440,7 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -5080,6 +5085,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -5697,6 +5703,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -6300,6 +6307,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -6913,6 +6921,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -7577,6 +7586,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -8240,6 +8250,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -8924,6 +8935,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -10402,6 +10414,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -11350,6 +11363,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -12270,6 +12284,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -12915,6 +12930,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
@@ -13027,6 +13043,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
             .post(get_gateway_endpoint("/inference"))
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
         let mut chunks = vec![];
         while let Some(event) = event_source.next().await {

@@ -21,7 +21,7 @@ members = [
     "internal/durable-tools",
     "internal/tensorzero-types",
     "internal/tensorzero-types-providers",
-    "internal/autopilot-worker",
+    "internal/autopilot-worker", "internal/reqwest-sse-stream",
 ]
 resolver = "2"
 
@@ -44,7 +44,6 @@ uuid = { version = "1.20.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "0.9.11", features = ["preserve_order"] }
-reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 async-trait = "0.1.89"
 http = "1.4.0"
@@ -60,6 +59,8 @@ clap = { version = "4.5.55", features = ["derive"] }
 futures = "0.3.30"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
+sse-stream = "0.2.1"
+reqwest-sse-stream = { path = "internal/reqwest-sse-stream" }
 minijinja = { version = "2.15.1", features = [
     "loader",
     "debug",

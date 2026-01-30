@@ -25,7 +25,7 @@ use crate::{
     utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey},
 };
 use reqwest::header::HeaderMap;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
 use tokio::time::error::Elapsed;
@@ -206,15 +206,29 @@ impl HTTPGateway {
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<InferenceStream, TensorZeroError> {
-        let event_source =
-            self.customize_builder(builder)
-                .eventsource()
-                .map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::JsonRequest {
-                        message: format!("Error constructing event stream: {e:?}"),
+        let event_source = match self.customize_builder(builder).eventsource().await {
+            Ok(es) => es,
+            Err(e) => {
+                let err_str = format!("Error in streaming response: {e:?}");
+                let inner_err = Error::new(ErrorDetails::StreamError {
+                    source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
+                });
+                if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = e
+                {
+                    return Err(TensorZeroError::Http {
+                        status_code: code.as_u16(),
+                        text: resp.text().await.ok(),
+                        source: inner_err.into(),
+                    });
+                }
+                return Err(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::StreamError {
+                        source: Box::new(inner_err),
                     })
                     .into(),
-                })?;
+                });
+            }
+        };
 
         let mut event_source = event_source.peekable();
         let first = event_source.peek().await;
@@ -229,7 +243,7 @@ impl HTTPGateway {
             let inner_err = Error::new(ErrorDetails::StreamError {
                 source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
             });
-            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = *e {
+            if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = *e {
                 return Err(TensorZeroError::Http {
                     status_code: code.as_u16(),
                     text: resp.text().await.ok(),
@@ -248,9 +262,6 @@ impl HTTPGateway {
             while let Some(ev) = event_source.next().await {
                 match ev {
                     Err(e) => {
-                        if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
-                            break;
-                        }
                         yield Err(Error::new(ErrorDetails::StreamError {
                             source: Box::new(Error::new(ErrorDetails::Serialization {
                                 message: format!("Error in streaming response: {}", DisplayOrDebug {
