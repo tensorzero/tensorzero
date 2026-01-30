@@ -35,6 +35,7 @@ use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use crate::providers::xai::XAIAPIType;
 use aws_types::region::Region;
 
 use crate::inference::WrappedProvider;
@@ -1343,6 +1344,8 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        #[serde(default)]
+        api_type: XAIAPIType,
     },
     TGI {
         api_base: Url,
@@ -1667,6 +1670,7 @@ impl UninitializedProviderConfig {
             UninitializedProviderConfig::XAI {
                 model_name,
                 api_key_location,
+                api_type,
             } => ProviderConfig::XAI(XAIProvider::new(
                 model_name,
                 XAIKind
@@ -1675,6 +1679,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                api_type,
             )),
             UninitializedProviderConfig::SGLang {
                 model_name,
@@ -2747,6 +2752,7 @@ impl ShorthandModelConfig for ModelConfig {
                 XAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                XAIAPIType::default(),
             )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
