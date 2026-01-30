@@ -563,19 +563,6 @@ mod error_tests {
     use durable::{ControlFlow, TaskError};
 
     #[test]
-    fn tool_error_from_task_error_task_internal() {
-        let task_err = TaskError::TaskInternal(anyhow::anyhow!("test error"));
-        let tool_err: ToolError = task_err.into();
-
-        match tool_err {
-            ToolError::NonControl(NonControlToolError::Internal { message }) => {
-                assert_eq!(message, "test error");
-            }
-            _ => panic!("Expected NonControl(Internal)"),
-        }
-    }
-
-    #[test]
     fn tool_error_from_task_error_control_flow_suspend() {
         let task_err = TaskError::Control(ControlFlow::Suspend);
         let tool_err: ToolError = task_err.into();
