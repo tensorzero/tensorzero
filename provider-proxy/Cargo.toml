@@ -41,5 +41,5 @@ workspace = true
 axum.workspace = true
 rand = "0.9.1"
 async-stream.workspace = true
-reqwest-eventsource.workspace = true
+reqwest-sse-stream.workspace = true
 futures-util = "0.3.31"

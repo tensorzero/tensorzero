@@ -3,8 +3,8 @@
 use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
 use aws_types::region::Region;
 use bytes::BytesMut;
-use eventsource_stream::Eventsource;
 use futures::StreamExt;
+use reqwest_sse_stream::SseStream;
 use serde::Serialize;
 use std::time::Instant;
 
@@ -24,7 +24,6 @@ use crate::inference::types::{
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError, WrappedProvider};
 use crate::model::ModelProvider;
-use eventsource_stream::EventStreamError;
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Sagemaker";
@@ -317,7 +316,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                                         // The payload contains the raw bytes from the hosted model
                                         let payload = message.payload();
                                         if !payload.is_empty() {
-                                            yield Ok(payload.to_vec());
+                                            yield Ok(bytes::Bytes::copy_from_slice(payload));
                                         }
                                     }
                                 }
@@ -343,20 +342,27 @@ impl InferenceProvider for AWSSagemakerProvider {
             }
         };
 
-        // Second, convert the byte stream to SSE events using eventsource_stream
+        // Second, convert the byte stream to SSE events using sse_stream
         // The payload bytes contain SSE text from the hosted model (OpenAI/TGI)
-        let event_stream = futures::stream::iter([Ok(reqwest_eventsource::Event::Open)]).chain(
-            sagemaker_byte_stream.eventsource().map(|r| match r {
-                Ok(msg) => Ok(reqwest_eventsource::Event::Message(msg)),
-                Err(e) => match e {
-                    EventStreamError::Utf8(err) => Err(TensorZeroEventError::EventSource(
-                        Box::new(reqwest_eventsource::Error::Utf8(err)),
-                    )),
-                    EventStreamError::Parser(err) => Err(TensorZeroEventError::EventSource(
-                        Box::new(reqwest_eventsource::Error::Parser(err)),
-                    )),
-                    EventStreamError::Transport(err) => Err(err),
-                },
+        let event_stream = futures::stream::iter([Ok(reqwest_sse_stream::Event::Open)]).chain(
+            SseStream::from_byte_stream(sagemaker_byte_stream).filter_map(|r| async {
+                match r {
+                    Ok(sse) => {
+                        // Only yield Message events when data is present
+                        sse.data.map(|data| {
+                            Ok(reqwest_sse_stream::Event::Message(
+                                reqwest_sse_stream::MessageEvent {
+                                    event: sse.event.unwrap_or_default(),
+                                    data,
+                                    id: sse.id.unwrap_or_default(),
+                                },
+                            ))
+                        })
+                    }
+                    Err(e) => Some(Err(TensorZeroEventError::EventSource(Box::new(
+                        reqwest_sse_stream::ReqwestSseStreamError::SseError(e),
+                    )))),
+                }
             }),
         );
 

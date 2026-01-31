@@ -46,7 +46,7 @@ fn assert_raw_response_entry(entry: &Value) {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_embeddings_raw_response_requested() {
+async fn test_embeddings_raw_response_requested() {
     let payload = json!({
         "input": "Hello, world!",
         "model": "tensorzero::embedding_model_name::text-embedding-3-small",
@@ -115,7 +115,7 @@ async fn e2e_test_embeddings_raw_response_requested() {
 }
 
 #[tokio::test]
-async fn e2e_test_embeddings_raw_response_not_requested() {
+async fn test_embeddings_raw_response_not_requested() {
     let payload = json!({
         "input": "Hello, world!",
         "model": "tensorzero::embedding_model_name::text-embedding-3-small"
@@ -145,7 +145,7 @@ async fn e2e_test_embeddings_raw_response_not_requested() {
 }
 
 #[tokio::test]
-async fn e2e_test_embeddings_raw_response_explicitly_false() {
+async fn test_embeddings_raw_response_explicitly_false() {
     let payload = json!({
         "input": "Hello, world!",
         "model": "tensorzero::embedding_model_name::text-embedding-3-small",
@@ -175,7 +175,7 @@ async fn e2e_test_embeddings_raw_response_explicitly_false() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_embeddings_raw_response_batch() {
+async fn test_embeddings_raw_response_batch() {
     let inputs = vec![
         "Hello, world!",
         "How are you today?",
@@ -233,7 +233,7 @@ async fn e2e_test_embeddings_raw_response_batch() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_embeddings_raw_response_with_cache() {
+async fn test_embeddings_raw_response_with_cache() {
     let input_text = format!(
         "This is a cache test for embeddings raw_response - {}",
         rand::random::<u32>()
@@ -316,7 +316,7 @@ async fn e2e_test_embeddings_raw_response_with_cache() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_embeddings_raw_response_entry_structure() {
+async fn test_embeddings_raw_response_entry_structure() {
     let payload = json!({
         "input": "Test entry structure",
         "model": "tensorzero::embedding_model_name::text-embedding-3-small",
@@ -373,7 +373,7 @@ async fn e2e_test_embeddings_raw_response_entry_structure() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_embeddings_raw_response_with_dimensions() {
+async fn test_embeddings_raw_response_with_dimensions() {
     let payload = json!({
         "input": "Test with specific dimensions",
         "model": "tensorzero::embedding_model_name::text-embedding-3-small",

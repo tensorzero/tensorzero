@@ -14,6 +14,7 @@ use crate::db::inferences::{
     DEFAULT_INFERENCE_QUERY_LIMIT, FunctionInfo, InferenceMetadata, InferenceOutputSource,
     InferenceQueries, ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
 };
+use crate::db::query_helpers::json_escape_string_without_quotes;
 use crate::function::FunctionConfigType;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::deserialize_optional_tool_info;
@@ -559,16 +560,6 @@ fn generate_list_inference_metadata_sql(
     (query, query_params)
 }
 
-/// Escapes a string for JSON without quotes.
-/// This is used to escape the text query when we doing a substring match on input and output strings, because
-/// input and output strings are JSON-escaped in ClickHouse.
-fn json_escape_string_without_quotes(s: &str) -> Result<String, Error> {
-    let mut json_escaped = serde_json::to_string(s)?;
-    json_escaped.remove(0);
-    json_escaped.pop();
-    Ok(json_escaped)
-}
-
 /// Validates that before/after pagination works with the rest of the request:
 /// - If order_by is provided, only timestamp ordering is supported.
 /// - Offset must not be provided.
@@ -1100,43 +1091,6 @@ mod tests {
     use crate::db::inferences::{InferenceOutputSource, ListInferencesParams};
 
     use super::generate_list_inferences_sql;
-
-    mod json_escape_string_without_quotes_tests {
-        use crate::db::clickhouse::inference_queries::json_escape_string_without_quotes;
-
-        #[test]
-        fn test_json_escape_string_without_quotes() {
-            assert_eq!(
-                json_escape_string_without_quotes("").unwrap(),
-                String::new()
-            );
-            assert_eq!(
-                json_escape_string_without_quotes("test").unwrap(),
-                "test".to_string()
-            );
-            assert_eq!(
-                json_escape_string_without_quotes("123").unwrap(),
-                "123".to_string()
-            );
-            assert_eq!(
-                json_escape_string_without_quotes("he's").unwrap(),
-                "he's".to_string()
-            );
-        }
-
-        #[test]
-        fn test_json_escape_string_escapes_correctly() {
-            assert_eq!(
-                json_escape_string_without_quotes(r#""test""#).unwrap(),
-                r#"\"test\""#.to_string()
-            );
-
-            assert_eq!(
-                json_escape_string_without_quotes(r"end of line\next line").unwrap(),
-                r"end of line\\next line".to_string()
-            );
-        }
-    }
 
     async fn get_e2e_config() -> Config {
         // Read the e2e config file
