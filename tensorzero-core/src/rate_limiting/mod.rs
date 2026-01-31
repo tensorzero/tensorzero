@@ -9,6 +9,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, ReturnTicketsRequest};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use tensorzero_auth::key::PUBLIC_ID_LENGTH;
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 mod rate_limiting_manager;
@@ -736,6 +737,9 @@ impl<'de> Deserialize<'de> for TagValueScope {
         match s.as_str() {
             "tensorzero::each" => Ok(TagValueScope::Each),
             "tensorzero::total" => Ok(TagValueScope::Total),
+            _ if s.starts_with("tensorzero::") => Err(serde::de::Error::custom(
+                r#"Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with "tensorzero::"."#,
+            )),
             _ => Ok(TagValueScope::Concrete(s)),
         }
     }
@@ -767,9 +771,18 @@ impl<'de> Deserialize<'de> for ApiKeyPublicIdValueScope {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        match s.as_str() {
-            "tensorzero::each" => Ok(ApiKeyPublicIdValueScope::Each),
-            _ => Ok(ApiKeyPublicIdValueScope::Concrete(s)),
+        if s == "tensorzero::each" {
+            Ok(ApiKeyPublicIdValueScope::Each)
+        } else if s.starts_with("tensorzero::") {
+            Err(serde::de::Error::custom(
+                r#"API key public ID values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
+            ))
+        } else if s.len() != PUBLIC_ID_LENGTH {
+            Err(serde::de::Error::custom(format!(
+                "API key public ID `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public ID."
+            )))
+        } else {
+            Ok(ApiKeyPublicIdValueScope::Concrete(s))
         }
     }
 }
@@ -2183,5 +2196,80 @@ mod tests {
             }
             RateLimitResourceUsage::Exact { .. } => panic!("Expected UnderEstimate variant"),
         }
+    }
+
+    #[test]
+    fn test_tag_value_scope_deserialization_valid() {
+        // Valid special values
+        let each: TagValueScope = serde_json::from_str(r#""tensorzero::each""#).unwrap();
+        assert_eq!(each, TagValueScope::Each);
+
+        let total: TagValueScope = serde_json::from_str(r#""tensorzero::total""#).unwrap();
+        assert_eq!(total, TagValueScope::Total);
+
+        // Valid concrete value
+        let concrete: TagValueScope = serde_json::from_str(r#""my_value""#).unwrap();
+        assert_eq!(concrete, TagValueScope::Concrete("my_value".to_string()));
+    }
+
+    #[test]
+    fn test_tag_value_scope_deserialization_invalid_tensorzero_prefix() {
+        // Invalid tensorzero:: prefix
+        let result: Result<TagValueScope, _> = serde_json::from_str(r#""tensorzero::foo""#);
+        assert!(result.is_err(), "Should reject invalid tensorzero:: prefix");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("may not start with \"tensorzero::\""),
+            "Error should mention tensorzero:: restriction: {err}"
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_valid() {
+        // Valid special value
+        let each: ApiKeyPublicIdValueScope = serde_json::from_str(r#""tensorzero::each""#).unwrap();
+        assert_eq!(each, ApiKeyPublicIdValueScope::Each);
+
+        // Valid concrete value (12 characters)
+        let concrete: ApiKeyPublicIdValueScope = serde_json::from_str(r#""abcdefghijkl""#).unwrap();
+        assert_eq!(
+            concrete,
+            ApiKeyPublicIdValueScope::Concrete("abcdefghijkl".to_string())
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_invalid_tensorzero_prefix() {
+        // Invalid tensorzero:: prefix (not "each")
+        let result: Result<ApiKeyPublicIdValueScope, _> =
+            serde_json::from_str(r#""tensorzero::foo""#);
+        assert!(result.is_err(), "Should reject invalid tensorzero:: prefix");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("may not start with \"tensorzero::\""),
+            "Error should mention tensorzero:: restriction: {err}"
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_invalid_length() {
+        // Too short
+        let result: Result<ApiKeyPublicIdValueScope, _> = serde_json::from_str(r#""abc""#);
+        assert!(result.is_err(), "Should reject short public ID");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must be 12 characters long"),
+            "Error should mention length requirement: {err}"
+        );
+
+        // Too long
+        let result: Result<ApiKeyPublicIdValueScope, _> =
+            serde_json::from_str(r#""abcdefghijklmno""#);
+        assert!(result.is_err(), "Should reject long public ID");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must be 12 characters long"),
+            "Error should mention length requirement: {err}"
+        );
     }
 }
