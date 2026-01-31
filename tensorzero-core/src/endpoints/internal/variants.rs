@@ -73,15 +73,6 @@ async fn list_variants(
     // Get the function config (validates function exists)
     let function = config.get_function(function_name)?;
 
-    // For the default function, we can't list variants from config
-    // Return empty list (caller can use getUsedVariants for observed variants)
-    if function_name == DEFAULT_FUNCTION_NAME {
-        return Ok(ListVariantsResponse { variants: vec![] });
-    }
-
-    // Get all configured variants (source of truth)
-    let configured_variants = function.variants();
-
     // Query ClickHouse for inference counts by variant
     let count_params = CountInferencesParams {
         function_name,
@@ -89,6 +80,26 @@ async fn list_variants(
         variant_name: None,
     };
     let variant_counts = database.count_inferences_by_variant(count_params).await?;
+
+    // For the default function, variants are dynamic (model names from ClickHouse)
+    // There's no config to use as source of truth, so we return observed variants only
+    if function_name == DEFAULT_FUNCTION_NAME {
+        let mut variants: Vec<VariantStats> = variant_counts
+            .into_iter()
+            .map(|row| VariantStats {
+                variant_name: row.variant_name,
+                variant_type: "chat_completion".to_string(),
+                weight: None,
+                inference_count: row.inference_count,
+                last_used_at: Some(row.last_used_at),
+            })
+            .collect();
+        variants.sort_by(|a, b| a.variant_name.cmp(&b.variant_name));
+        return Ok(ListVariantsResponse { variants });
+    }
+
+    // Get all configured variants (source of truth)
+    let configured_variants = function.variants();
 
     // Build a map of variant_name -> (inference_count, last_used_at) from ClickHouse data
     let counts_map: HashMap<String, (u64, String)> = variant_counts
@@ -224,11 +235,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_list_variants_default_function_returns_empty() {
+    async fn test_list_variants_default_function_returns_observed_variants() {
         let config = Arc::new(Config::default());
         let gateway_handle = get_unit_test_gateway_handle(config);
 
-        let mock_clickhouse = MockClickHouseConnectionInfo::new();
+        // Mock ClickHouse to return observed model variants
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_count_queries
+            .expect_count_inferences_by_variant()
+            .times(1)
+            .returning(|_| {
+                Box::pin(async move {
+                    Ok(vec![
+                        CountByVariant {
+                            variant_name: "openai::gpt-4o".to_string(),
+                            inference_count: 50,
+                            last_used_at: "2024-01-15T10:00:00Z".to_string(),
+                        },
+                        CountByVariant {
+                            variant_name: "anthropic::claude-sonnet-4-5".to_string(),
+                            inference_count: 30,
+                            last_used_at: "2024-01-14T08:00:00Z".to_string(),
+                        },
+                    ])
+                })
+            });
 
         let result = list_variants(
             &gateway_handle.app_state,
@@ -239,10 +271,25 @@ mod tests {
 
         assert!(result.is_ok());
         let response = result.unwrap();
-        assert!(
-            response.variants.is_empty(),
-            "Default function should return empty variants list"
+        assert_eq!(
+            response.variants.len(),
+            2,
+            "Default function should return observed variants from ClickHouse"
         );
+
+        // Variants should be sorted by name
+        assert_eq!(
+            response.variants[0].variant_name,
+            "anthropic::claude-sonnet-4-5"
+        );
+        assert_eq!(response.variants[0].variant_type, "chat_completion");
+        assert_eq!(response.variants[0].weight, None);
+        assert_eq!(response.variants[0].inference_count, 30);
+
+        assert_eq!(response.variants[1].variant_name, "openai::gpt-4o");
+        assert_eq!(response.variants[1].variant_type, "chat_completion");
+        assert_eq!(response.variants[1].weight, None);
+        assert_eq!(response.variants[1].inference_count, 50);
     }
 
     #[tokio::test]
