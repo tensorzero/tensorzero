@@ -36,7 +36,7 @@ The TOML types in this file handle the shorthand format and convert to the runti
 // ============================================================================
 
 /// TOML-specific version of `UninitializedRateLimitingConfig` that uses shorthand format
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct TomlUninitializedRateLimitingConfig {
     #[serde(default)]
     pub(crate) rules: Vec<TomlRateLimitingConfigRule>,
@@ -44,6 +44,16 @@ pub struct TomlUninitializedRateLimitingConfig {
     pub(crate) enabled: bool,
     #[serde(default)]
     pub(crate) backend: RateLimitingBackend,
+}
+
+impl Default for TomlUninitializedRateLimitingConfig {
+    fn default() -> Self {
+        Self {
+            rules: Vec::new(),
+            enabled: true,
+            backend: RateLimitingBackend::default(),
+        }
+    }
 }
 
 fn default_enabled() -> bool {
@@ -808,6 +818,26 @@ mod tests {
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 0);
         assert!(config.enabled());
+    }
+
+    #[test]
+    fn test_default_enabled_when_section_missing() {
+        // When the entire [rate_limiting] section is missing from the TOML config,
+        // serde uses Default::default() for the struct. This test ensures that
+        // rate limiting is enabled by default in that case.
+        let default_config = TomlUninitializedRateLimitingConfig::default();
+        assert!(
+            default_config.enabled,
+            "Rate limiting should be enabled by default when section is missing"
+        );
+
+        // Also test that an empty string deserializes with enabled = true
+        let toml_str = "";
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        assert!(
+            toml_config.enabled,
+            "Rate limiting should be enabled by default when section is empty"
+        );
     }
 
     // Error case tests
