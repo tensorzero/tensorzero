@@ -110,6 +110,9 @@ impl ConfigWriter {
         &mut self,
         payload: &UpsertVariantPayload,
     ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+        path_resolver::validate_path_component(&payload.function_name, "function_name")?;
+        path_resolver::validate_path_component(&payload.variant_name, "variant_name")?;
+
         let location = locator::locate_function(&mut self.files, &payload.function_name)?;
         let toml_file_dir = location
             .file
@@ -153,6 +156,8 @@ impl ConfigWriter {
         &mut self,
         payload: &UpsertExperimentationPayload,
     ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+        path_resolver::validate_path_component(&payload.function_name, "function_name")?;
+
         let location = locator::locate_function(&mut self.files, &payload.function_name)?;
 
         // Serialize the experimentation config to a TOML item
@@ -178,6 +183,8 @@ impl ConfigWriter {
         &mut self,
         payload: &UpsertEvaluationPayload,
     ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+        path_resolver::validate_path_component(&payload.evaluation_name, "evaluation_name")?;
+
         let (location, _is_new) =
             locator::locate_evaluation(&mut self.files, &payload.evaluation_name)?;
         let toml_file_dir = location
@@ -200,6 +207,7 @@ impl ConfigWriter {
             let evaluator_names: Vec<String> =
                 evaluators.iter().map(|(k, _)| k.to_string()).collect();
             for evaluator_name in evaluator_names {
+                path_resolver::validate_path_component(&evaluator_name, "evaluator_name")?;
                 if let Some(evaluator_item) = evaluators.get_mut(&evaluator_name)
                     && let Some(variants) = evaluator_item
                         .as_table_mut()
@@ -209,6 +217,7 @@ impl ConfigWriter {
                     let variant_names: Vec<String> =
                         variants.iter().map(|(k, _)| k.to_string()).collect();
                     for variant_name in variant_names {
+                        path_resolver::validate_path_component(&variant_name, "variant_name")?;
                         if let Some(variant_item) = variants.get_mut(&variant_name) {
                             let variant_files = toml_writer::extract_resolved_paths_evaluator(
                                 variant_item,
@@ -247,6 +256,9 @@ impl ConfigWriter {
         &mut self,
         payload: &UpsertEvaluatorPayload,
     ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+        path_resolver::validate_path_component(&payload.evaluation_name, "evaluation_name")?;
+        path_resolver::validate_path_component(&payload.evaluator_name, "evaluator_name")?;
+
         let location =
             locator::locate_evaluation_required(&mut self.files, &payload.evaluation_name)?;
         let toml_file_dir = location
@@ -269,6 +281,7 @@ impl ConfigWriter {
         {
             let variant_names: Vec<String> = variants.iter().map(|(k, _)| k.to_string()).collect();
             for variant_name in variant_names {
+                path_resolver::validate_path_component(&variant_name, "variant_name")?;
                 if let Some(variant_item) = variants.get_mut(&variant_name) {
                     let variant_files = toml_writer::extract_resolved_paths_evaluator(
                         variant_item,

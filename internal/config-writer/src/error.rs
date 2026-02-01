@@ -27,6 +27,13 @@ pub enum ConfigWriterError {
 
     #[error("Invalid ResolvedTomlPathData: {message}")]
     InvalidResolvedPathData { message: String },
+
+    #[error("Invalid {field_name}: `{value}` - {reason}")]
+    InvalidPathComponent {
+        field_name: String,
+        value: String,
+        reason: String,
+    },
 }
 
 impl ConfigWriterError {

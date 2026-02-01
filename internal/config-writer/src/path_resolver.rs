@@ -2,6 +2,36 @@ use std::path::{Path, PathBuf};
 
 use crate::error::ConfigWriterError;
 
+/// Validates that a name is safe to use as a path component.
+/// Rejects names containing path separators, parent directory references, or null bytes.
+pub fn validate_path_component(name: &str, field_name: &str) -> Result<(), ConfigWriterError> {
+    if name.is_empty() {
+        return Err(ConfigWriterError::InvalidPathComponent {
+            field_name: field_name.to_string(),
+            value: name.to_string(),
+            reason: "name cannot be empty".to_string(),
+        });
+    }
+
+    if name.starts_with('.') {
+        return Err(ConfigWriterError::InvalidPathComponent {
+            field_name: field_name.to_string(),
+            value: name.to_string(),
+            reason: "name cannot start with `.`".to_string(),
+        });
+    }
+
+    if name.contains('/') || name.contains('\\') || name.contains('\0') {
+        return Err(ConfigWriterError::InvalidPathComponent {
+            field_name: field_name.to_string(),
+            value: name.to_string(),
+            reason: "name cannot contain path separators (`/`, `\\`) or null bytes".to_string(),
+        });
+    }
+
+    Ok(())
+}
+
 /// Information about a template or schema file that needs to be written.
 #[derive(Debug, Clone)]
 pub struct FileToWrite {
@@ -144,5 +174,65 @@ mod tests {
         let to = Path::new("/project/config/functions/my_fn/variants/v1/template.minijinja");
         let result = compute_relative_path(from, to).expect("should compute relative path");
         assert_eq!(result, "functions/my_fn/variants/v1/template.minijinja");
+    }
+
+    #[test]
+    fn test_validate_path_component_rejects_traversal() {
+        assert!(
+            validate_path_component("../etc", "function_name").is_err(),
+            "should reject parent directory traversal"
+        );
+        assert!(
+            validate_path_component("foo/bar", "function_name").is_err(),
+            "should reject forward slash"
+        );
+        assert!(
+            validate_path_component("foo\\bar", "function_name").is_err(),
+            "should reject backslash"
+        );
+        assert!(
+            validate_path_component(".hidden", "function_name").is_err(),
+            "should reject dot prefix"
+        );
+        assert!(
+            validate_path_component("..hidden", "function_name").is_err(),
+            "should reject double dot prefix"
+        );
+        assert!(
+            validate_path_component("", "function_name").is_err(),
+            "should reject empty string"
+        );
+        assert!(
+            validate_path_component("foo\0bar", "function_name").is_err(),
+            "should reject null byte"
+        );
+    }
+
+    #[test]
+    fn test_validate_path_component_allows_valid_names() {
+        assert!(
+            validate_path_component("my_function", "function_name").is_ok(),
+            "should allow underscores"
+        );
+        assert!(
+            validate_path_component("my-variant", "variant_name").is_ok(),
+            "should allow hyphens"
+        );
+        assert!(
+            validate_path_component("eval_v1", "evaluation_name").is_ok(),
+            "should allow alphanumeric with underscores"
+        );
+        assert!(
+            validate_path_component("judge-1", "evaluator_name").is_ok(),
+            "should allow alphanumeric with hyphens"
+        );
+        assert!(
+            validate_path_component("CamelCase", "function_name").is_ok(),
+            "should allow mixed case"
+        );
+        assert!(
+            validate_path_component("name123", "function_name").is_ok(),
+            "should allow trailing numbers"
+        );
     }
 }
