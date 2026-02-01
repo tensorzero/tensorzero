@@ -97,8 +97,7 @@ impl<T: FlagValue> FlagDefinition<T> {
     pub fn get(&self) -> T {
         self.value
             .get_or_init(|| {
-                let flag_value = self
-                    .read_from_env()
+                self.read_from_env()
                     .inspect_err(|e| {
                         tracing::error!(
                             "Failed to parse flag value: {:?}. Using default value: {:?}",
@@ -106,9 +105,7 @@ impl<T: FlagValue> FlagDefinition<T> {
                             self.default,
                         );
                     })
-                    .unwrap_or(self.default.clone());
-
-                flag_value
+                    .unwrap_or_else(|_| self.default.clone())
             })
             .clone()
     }
