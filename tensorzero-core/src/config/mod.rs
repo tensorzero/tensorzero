@@ -1750,22 +1750,70 @@ impl UninitializedConfig {
     }
 }
 
+/// TOML-specific version of `UninitializedConfig` that uses TOML shorthand for rate limiting
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TomlUninitializedConfig {
+    #[serde(default)]
+    gateway: UninitializedGatewayConfig,
+    #[serde(default)]
+    postgres: PostgresConfig,
+    #[serde(default)]
+    rate_limiting: rate_limiting::TomlUninitializedRateLimitingConfig,
+    object_storage: Option<StorageKind>,
+    #[serde(default)]
+    models: HashMap<Arc<str>, UninitializedModelConfig>,
+    #[serde(default)]
+    embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>,
+    #[serde(default)]
+    functions: HashMap<String, UninitializedFunctionConfig>,
+    #[serde(default)]
+    metrics: HashMap<String, MetricConfig>,
+    #[serde(default)]
+    tools: HashMap<String, UninitializedToolConfig>,
+    #[serde(default)]
+    evaluations: HashMap<String, UninitializedEvaluationConfig>,
+    #[serde(default)]
+    provider_types: ProviderTypesConfig,
+    #[serde(default)]
+    optimizers: HashMap<String, UninitializedOptimizerInfo>,
+}
+
+impl From<TomlUninitializedConfig> for UninitializedConfig {
+    fn from(toml_config: TomlUninitializedConfig) -> Self {
+        Self {
+            gateway: toml_config.gateway,
+            postgres: toml_config.postgres,
+            rate_limiting: toml_config.rate_limiting.into(),
+            object_storage: toml_config.object_storage,
+            models: toml_config.models,
+            embedding_models: toml_config.embedding_models,
+            functions: toml_config.functions,
+            metrics: toml_config.metrics,
+            tools: toml_config.tools,
+            evaluations: toml_config.evaluations,
+            provider_types: toml_config.provider_types,
+            optimizers: toml_config.optimizers,
+        }
+    }
+}
+
 /// Deserialize a TOML table into `UninitializedConfig`
 impl TryFrom<toml::Table> for UninitializedConfig {
     type Error = Error;
 
     fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
-        match serde_path_to_error::deserialize(table) {
-            Ok(config) => Ok(config),
-            Err(e) => {
+        // First deserialize into TOML-specific config, then convert to runtime config
+        let toml_config: TomlUninitializedConfig = serde_path_to_error::deserialize(table)
+            .map_err(|e| {
                 let path = e.path().clone();
-                Err(Error::new(ErrorDetails::Config {
+                Error::new(ErrorDetails::Config {
                     // Extract the underlying message from the toml error, as
                     // the path-tracking from the toml crate will be incorrect
                     message: format!("{}: {}", path, e.into_inner().message()),
-                }))
-            }
-        }
+                })
+            })?;
+        Ok(toml_config.into())
     }
 }
 
