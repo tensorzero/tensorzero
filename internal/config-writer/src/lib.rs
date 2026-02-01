@@ -42,13 +42,13 @@ impl ConfigWriter {
             }
         })?;
 
-        if config_glob.paths.is_empty() {
-            return Err(ConfigWriterError::NoConfigFiles {
-                pattern: glob_pattern.to_string(),
-            });
+        let mut glob_base = config_glob.base_path();
+        if glob_base.is_file() {
+            glob_base = glob_base
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_path_buf();
         }
-
-        let glob_base = config_glob.base_path();
 
         // Load all config files using toml_edit for format preservation
         let mut files = Vec::new();
@@ -180,9 +180,51 @@ impl ConfigWriter {
     ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
         let (location, _is_new) =
             locator::locate_evaluation(&mut self.files, &payload.evaluation_name)?;
+        let toml_file_dir = location
+            .file
+            .path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
 
         // Serialize the evaluation to a TOML item
-        let evaluation_item = toml_writer::serialize_to_item(&payload.evaluation)?;
+        let mut evaluation_item = toml_writer::serialize_to_item(&payload.evaluation)?;
+
+        // Extract any ResolvedTomlPathData fields from evaluator variants in this evaluation
+        let mut template_files = Vec::new();
+        if let Some(evaluators) = evaluation_item
+            .as_table_mut()
+            .and_then(|t| t.get_mut("evaluators"))
+            .and_then(|v| v.as_table_mut())
+        {
+            let evaluator_names: Vec<String> =
+                evaluators.iter().map(|(k, _)| k.to_string()).collect();
+            for evaluator_name in evaluator_names {
+                if let Some(evaluator_item) = evaluators.get_mut(&evaluator_name)
+                    && let Some(variants) = evaluator_item
+                        .as_table_mut()
+                        .and_then(|t| t.get_mut("variants"))
+                        .and_then(|v| v.as_table_mut())
+                {
+                    let variant_names: Vec<String> =
+                        variants.iter().map(|(k, _)| k.to_string()).collect();
+                    for variant_name in variant_names {
+                        if let Some(variant_item) = variants.get_mut(&variant_name) {
+                            let variant_files = toml_writer::extract_resolved_paths_evaluator(
+                                variant_item,
+                                &self.glob_base,
+                                &toml_file_dir,
+                                &payload.evaluation_name,
+                                &evaluator_name,
+                                &variant_name,
+                                None,
+                            )?;
+                            template_files.extend(variant_files);
+                        }
+                    }
+                }
+            }
+        }
 
         // Apply the edit to the document
         toml_writer::upsert_evaluation(
@@ -191,13 +233,12 @@ impl ConfigWriter {
             evaluation_item,
         );
 
-        // Prepare files to write (just the TOML file for now)
-        // Note: evaluations may contain evaluators with templates, but those would be
-        // handled when upserting individual evaluators
-        let files = vec![FileToWrite {
+        // Prepare files to write
+        let mut files = template_files;
+        files.push(FileToWrite {
             absolute_path: location.file.path.clone(),
             content: location.file.document.to_string(),
-        }];
+        });
 
         Ok(files)
     }
@@ -280,8 +321,20 @@ impl ConfigWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::fs;
+    use std::sync::Arc;
     use tempfile::TempDir;
+    use tensorzero_core::config::path::ResolvedTomlPathData;
+    use tensorzero_core::evaluations::{
+        LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize, LLMJudgeOutputType,
+        UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
+        UninitializedInferenceEvaluationConfig, UninitializedLLMJudgeChatCompletionVariantConfig,
+        UninitializedLLMJudgeConfig, UninitializedLLMJudgeVariantConfig,
+        UninitializedLLMJudgeVariantInfo,
+    };
+    use tensorzero_core::utils::retries::RetryConfig;
+    use tensorzero_core::variant::JsonMode;
 
     fn setup_test_config(dir: &Path) {
         fs::write(
@@ -389,5 +442,148 @@ type = "exact_match"
             .expect("failed to locate");
         assert!(is_new);
         assert!(location.file.path.ends_with("tensorzero.toml"));
+    }
+
+    #[tokio::test]
+    async fn test_config_writer_base_path_for_single_file_glob() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let config_path = tmp.path().join("tensorzero.toml");
+        let glob = config_path.display().to_string();
+        let writer = ConfigWriter::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        assert_eq!(
+            writer.glob_base(),
+            tmp.path(),
+            "expected glob_base to be the parent dir for a single-file path"
+        );
+        assert!(
+            writer.glob_base().is_dir(),
+            "expected glob_base to be a directory path"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_apply_upsert_evaluation_extracts_templates() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigWriter::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        let system_instructions = ResolvedTomlPathData::new_fake_path(
+            "inline".to_string(),
+            "You are a friendly judge.".to_string(),
+        );
+        let variant = UninitializedLLMJudgeVariantInfo {
+            inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                UninitializedLLMJudgeChatCompletionVariantConfig {
+                    active: Some(true),
+                    model: Arc::from("gpt-4"),
+                    system_instructions,
+                    temperature: None,
+                    top_p: None,
+                    max_tokens: None,
+                    presence_penalty: None,
+                    frequency_penalty: None,
+                    seed: None,
+                    json_mode: JsonMode::Strict,
+                    stop_sequences: None,
+                    reasoning_effort: None,
+                    service_tier: None,
+                    thinking_budget_tokens: None,
+                    verbosity: None,
+                    retries: RetryConfig::default(),
+                    extra_body: None,
+                    extra_headers: None,
+                },
+            ),
+            timeouts: None,
+        };
+
+        let mut variants = HashMap::new();
+        variants.insert("v1".to_string(), variant);
+
+        let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Messages,
+            variants,
+            output_type: LLMJudgeOutputType::Boolean,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig::default(),
+            cutoff: None,
+            description: None,
+        });
+
+        let mut evaluators = HashMap::new();
+        evaluators.insert("judge".to_string(), evaluator);
+
+        let evaluation =
+            UninitializedEvaluationConfig::Inference(UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: "my_function".to_string(),
+                description: None,
+            });
+
+        let edit = EditPayload::UpsertEvaluation(UpsertEvaluationPayload {
+            evaluation_name: "my_evaluation".to_string(),
+            evaluation,
+        });
+
+        let written_paths = writer
+            .apply_edit(&edit)
+            .await
+            .expect("failed to apply evaluation edit");
+
+        let expected_template_path = tmp
+            .path()
+            .join("evaluations")
+            .join("my_evaluation")
+            .join("evaluators")
+            .join("judge")
+            .join("variants")
+            .join("v1")
+            .join("system_instructions.txt");
+
+        assert!(
+            expected_template_path.exists(),
+            "expected evaluator system_instructions template to be written"
+        );
+        let template_contents =
+            fs::read_to_string(&expected_template_path).expect("failed to read template file");
+        assert_eq!(
+            template_contents, "You are a friendly judge.",
+            "expected template file to contain system_instructions data"
+        );
+        assert!(
+            written_paths
+                .iter()
+                .any(|path| path == &expected_template_path),
+            "expected written_paths to include evaluator template path"
+        );
+
+        let toml_contents =
+            fs::read_to_string(tmp.path().join("tensorzero.toml")).expect("failed to read config");
+        let doc: toml_edit::DocumentMut =
+            toml_contents.parse().expect("failed to parse updated TOML");
+        let system_instructions = doc
+            .get("evaluations")
+            .and_then(|v| v.get("my_evaluation"))
+            .and_then(|v| v.get("evaluators"))
+            .and_then(|v| v.get("judge"))
+            .and_then(|v| v.get("variants"))
+            .and_then(|v| v.get("v1"))
+            .and_then(|v| v.get("system_instructions"))
+            .and_then(|v| v.as_str())
+            .expect("expected system_instructions to be a string");
+        assert_eq!(
+            system_instructions,
+            "evaluations/my_evaluation/evaluators/judge/variants/v1/system_instructions.txt",
+            "expected TOML to reference the extracted system_instructions path"
+        );
     }
 }

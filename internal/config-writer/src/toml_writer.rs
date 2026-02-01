@@ -100,12 +100,16 @@ pub fn extract_resolved_paths(
     match item {
         Item::Table(table) => {
             // Check if this table is a ResolvedTomlPathData
-            if table.contains_key("__tensorzero_remapped_path") && table.contains_key("__data") {
+            if table.contains_key("__tensorzero_remapped_path") {
                 let data = table
                     .get("__data")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
+                    .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
+                        message: format!(
+                            "`{}` must contain string `__data`",
+                            current_key.unwrap_or("<root>")
+                        ),
+                    })?;
 
                 // Determine the file type based on the current key
                 let ctx = VariantPathContext {
@@ -159,7 +163,7 @@ pub fn extract_resolved_paths(
 
                 files_to_write.push(FileToWrite {
                     absolute_path,
-                    content: data,
+                    content: data.to_string(),
                 });
 
                 // Replace the table with a simple string value
@@ -223,12 +227,16 @@ pub fn extract_resolved_paths_evaluator(
     match item {
         Item::Table(table) => {
             // Check if this table is a ResolvedTomlPathData
-            if table.contains_key("__tensorzero_remapped_path") && table.contains_key("__data") {
+            if table.contains_key("__tensorzero_remapped_path") {
                 let data = table
                     .get("__data")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
+                    .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
+                        message: format!(
+                            "`{}` must contain string `__data`",
+                            current_key.unwrap_or("<root>")
+                        ),
+                    })?;
 
                 let ctx = EvaluatorPathContext {
                     glob_base,
@@ -280,7 +288,7 @@ pub fn extract_resolved_paths_evaluator(
 
                 files_to_write.push(FileToWrite {
                     absolute_path,
-                    content: data,
+                    content: data.to_string(),
                 });
 
                 // Replace the table with a simple string value
@@ -327,4 +335,36 @@ pub fn extract_resolved_paths_evaluator(
     }
 
     Ok(files_to_write)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_resolved_paths_requires_data() {
+        let mut table = Table::new();
+        table.insert(
+            "__tensorzero_remapped_path",
+            Item::Value(Value::from("inline")),
+        );
+        let mut item = Item::Table(table);
+
+        let result = extract_resolved_paths(
+            &mut item,
+            Path::new("."),
+            Path::new("."),
+            "my_function",
+            "variant_a",
+            Some("system_template"),
+        );
+
+        assert!(
+            matches!(
+                result,
+                Err(ConfigWriterError::InvalidResolvedPathData { .. })
+            ),
+            "expected missing __data to return InvalidResolvedPathData"
+        );
+    }
 }

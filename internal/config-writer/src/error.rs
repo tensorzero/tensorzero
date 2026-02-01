@@ -22,11 +22,11 @@ pub enum ConfigWriterError {
     #[error("Invalid glob pattern `{pattern}`: {message}")]
     InvalidGlob { pattern: String, message: String },
 
-    #[error("No config files found matching pattern `{pattern}`")]
-    NoConfigFiles { pattern: String },
-
     #[error("Path error: {message}")]
     Path { message: String },
+
+    #[error("Invalid ResolvedTomlPathData: {message}")]
+    InvalidResolvedPathData { message: String },
 }
 
 impl ConfigWriterError {
