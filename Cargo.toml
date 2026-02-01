@@ -21,7 +21,9 @@ members = [
     "internal/durable-tools",
     "internal/tensorzero-types",
     "internal/tensorzero-types-providers",
-    "internal/autopilot-worker", "internal/reqwest-sse-stream",
+    "internal/autopilot-worker",
+    "internal/reqwest-sse-stream",
+    "internal/config-writer",
 ]
 resolver = "2"
 
@@ -114,6 +116,10 @@ tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
 redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager"] }
 redis-test = { version = "1.0.1", features = ["aio"] }
+globset = "0.4.18"
+walkdir = "2.5.0"
+tempfile = "3.21.0"
+toml_edit = "0.24"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

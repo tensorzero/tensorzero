@@ -1,0 +1,32 @@
+[package]
+name = "config-writer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tensorzero-core = { path = "../../tensorzero-core", default-features = false }
+pathdiff = "0.2"
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
+toml = { workspace = true }
+toml_edit = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[features]
+default = []
+ts-bindings = ["dep:ts-rs"]
+
+[dependencies.ts-rs]
+workspace = true
+optional = true
+
+[lints]
+workspace = true
