@@ -4,7 +4,7 @@ use serde::Serialize;
 use toml_edit::{DocumentMut, Item, Table, Value};
 
 use crate::error::ConfigWriterError;
-use crate::path_resolver::{FileToWrite, VariantPathContext};
+use crate::path_resolver::{EvaluatorPathContext, FileToWrite, PathContext, VariantPathContext};
 
 /// Serialize a value to a TOML Item using toml_edit.
 pub fn serialize_to_item<T: Serialize>(value: &T) -> Result<Item, ConfigWriterError> {
@@ -81,6 +81,83 @@ pub fn upsert_evaluator(
     evaluators_table.insert(evaluator_name, evaluator_item);
 }
 
+/// Internal implementation that extracts resolved paths using a PathContext.
+/// This is the core logic shared by both variant and evaluator path extraction.
+fn extract_resolved_paths_impl<C: PathContext>(
+    item: &mut Item,
+    ctx: &C,
+    current_key: Option<&str>,
+) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+    let mut files_to_write = Vec::new();
+
+    match item {
+        Item::Table(table) => {
+            // Check if this table is a ResolvedTomlPathData
+            if table.contains_key("__tensorzero_remapped_path") {
+                let data = table
+                    .get("__data")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
+                        message: format!(
+                            "`{}` must contain string `__data`",
+                            current_key.unwrap_or("<root>")
+                        ),
+                    })?;
+
+                // Try to resolve the key using the context, fall back to original path
+                let (absolute_path, relative_path) =
+                    if let Some(result) = current_key.and_then(|k| ctx.resolve_key(k)) {
+                        result?
+                    } else {
+                        // Default to using the original path structure
+                        let original_path = table
+                            .get("__tensorzero_remapped_path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let filename = Path::new(original_path)
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("file");
+                        ctx.fallback_path(filename)?
+                    };
+
+                files_to_write.push(FileToWrite {
+                    absolute_path,
+                    content: data.to_string(),
+                });
+
+                // Replace the table with a simple string value
+                *item = Item::Value(Value::from(relative_path));
+            } else {
+                // Recursively process nested tables
+                let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
+                for key in keys {
+                    if let Some(inner_item) = table.get_mut(&key) {
+                        let nested_files =
+                            extract_resolved_paths_impl(inner_item, ctx, Some(&key))?;
+                        files_to_write.extend(nested_files);
+                    }
+                }
+            }
+        }
+        Item::ArrayOfTables(array) => {
+            for table in array.iter_mut() {
+                let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
+                for key in keys {
+                    if let Some(inner_item) = table.get_mut(&key) {
+                        let nested_files =
+                            extract_resolved_paths_impl(inner_item, ctx, Some(&key))?;
+                        files_to_write.extend(nested_files);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    Ok(files_to_write)
+}
+
 /// Process a TOML Item, extracting ResolvedTomlPathData fields and converting them
 /// to relative file paths. Returns a list of files that need to be written.
 ///
@@ -95,119 +172,13 @@ pub fn extract_resolved_paths(
     variant_name: &str,
     current_key: Option<&str>,
 ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
-    let mut files_to_write = Vec::new();
-
-    match item {
-        Item::Table(table) => {
-            // Check if this table is a ResolvedTomlPathData
-            if table.contains_key("__tensorzero_remapped_path") {
-                let data = table
-                    .get("__data")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
-                        message: format!(
-                            "`{}` must contain string `__data`",
-                            current_key.unwrap_or("<root>")
-                        ),
-                    })?;
-
-                // Determine the file type based on the current key
-                let ctx = VariantPathContext {
-                    glob_base,
-                    toml_file_dir,
-                    function_name,
-                    variant_name,
-                };
-
-                let (absolute_path, relative_path) = match current_key {
-                    Some("system_template") => ctx.template_path("system_template")?,
-                    Some("user_template") => ctx.template_path("user_template")?,
-                    Some("assistant_template") => ctx.template_path("assistant_template")?,
-                    Some("system_instructions") => ctx.system_instructions_path()?,
-                    Some("system_schema") => ctx.schema_path("system_schema")?,
-                    Some("user_schema") => ctx.schema_path("user_schema")?,
-                    Some("assistant_schema") => ctx.schema_path("assistant_schema")?,
-                    Some("output_schema") => ctx.schema_path("output_schema")?,
-                    _ => {
-                        // Default to using the original path structure
-                        let original_path = table
-                            .get("__tensorzero_remapped_path")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        let filename = Path::new(original_path)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("file");
-                        let absolute = glob_base
-                            .join("functions")
-                            .join(function_name)
-                            .join("variants")
-                            .join(variant_name)
-                            .join(filename);
-                        let relative = pathdiff::diff_paths(&absolute, toml_file_dir)
-                            .ok_or_else(|| ConfigWriterError::Path {
-                                message: format!(
-                                    "Cannot compute relative path from `{}` to `{}`",
-                                    toml_file_dir.display(),
-                                    absolute.display()
-                                ),
-                            })?
-                            .to_str()
-                            .ok_or_else(|| ConfigWriterError::Path {
-                                message: "Path contains invalid UTF-8".to_string(),
-                            })?
-                            .to_string();
-                        (absolute, relative)
-                    }
-                };
-
-                files_to_write.push(FileToWrite {
-                    absolute_path,
-                    content: data.to_string(),
-                });
-
-                // Replace the table with a simple string value
-                *item = Item::Value(Value::from(relative_path));
-            } else {
-                // Recursively process nested tables
-                let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
-                for key in keys {
-                    if let Some(inner_item) = table.get_mut(&key) {
-                        let nested_files = extract_resolved_paths(
-                            inner_item,
-                            glob_base,
-                            toml_file_dir,
-                            function_name,
-                            variant_name,
-                            Some(&key),
-                        )?;
-                        files_to_write.extend(nested_files);
-                    }
-                }
-            }
-        }
-        Item::ArrayOfTables(array) => {
-            for table in array.iter_mut() {
-                let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
-                for key in keys {
-                    if let Some(inner_item) = table.get_mut(&key) {
-                        let nested_files = extract_resolved_paths(
-                            inner_item,
-                            glob_base,
-                            toml_file_dir,
-                            function_name,
-                            variant_name,
-                            Some(&key),
-                        )?;
-                        files_to_write.extend(nested_files);
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
-
-    Ok(files_to_write)
+    let ctx = VariantPathContext {
+        glob_base,
+        toml_file_dir,
+        function_name,
+        variant_name,
+    };
+    extract_resolved_paths_impl(item, &ctx, current_key)
 }
 
 /// Similar to extract_resolved_paths, but for evaluator contexts.
@@ -220,121 +191,14 @@ pub fn extract_resolved_paths_evaluator(
     variant_name: &str,
     current_key: Option<&str>,
 ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
-    use crate::path_resolver::EvaluatorPathContext;
-
-    let mut files_to_write = Vec::new();
-
-    match item {
-        Item::Table(table) => {
-            // Check if this table is a ResolvedTomlPathData
-            if table.contains_key("__tensorzero_remapped_path") {
-                let data = table
-                    .get("__data")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
-                        message: format!(
-                            "`{}` must contain string `__data`",
-                            current_key.unwrap_or("<root>")
-                        ),
-                    })?;
-
-                let ctx = EvaluatorPathContext {
-                    glob_base,
-                    toml_file_dir,
-                    evaluation_name,
-                    evaluator_name,
-                    variant_name,
-                };
-
-                let (absolute_path, relative_path) = match current_key {
-                    Some("system_instructions") => ctx.system_instructions_path()?,
-                    Some("system_template") => ctx.template_path("system_template")?,
-                    Some("user_template") => ctx.template_path("user_template")?,
-                    Some("assistant_template") => ctx.template_path("assistant_template")?,
-                    _ => {
-                        // Default to using the original path structure
-                        let original_path = table
-                            .get("__tensorzero_remapped_path")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        let filename = Path::new(original_path)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("file");
-                        let absolute = glob_base
-                            .join("evaluations")
-                            .join(evaluation_name)
-                            .join("evaluators")
-                            .join(evaluator_name)
-                            .join("variants")
-                            .join(variant_name)
-                            .join(filename);
-                        let relative = pathdiff::diff_paths(&absolute, toml_file_dir)
-                            .ok_or_else(|| ConfigWriterError::Path {
-                                message: format!(
-                                    "Cannot compute relative path from `{}` to `{}`",
-                                    toml_file_dir.display(),
-                                    absolute.display()
-                                ),
-                            })?
-                            .to_str()
-                            .ok_or_else(|| ConfigWriterError::Path {
-                                message: "Path contains invalid UTF-8".to_string(),
-                            })?
-                            .to_string();
-                        (absolute, relative)
-                    }
-                };
-
-                files_to_write.push(FileToWrite {
-                    absolute_path,
-                    content: data.to_string(),
-                });
-
-                // Replace the table with a simple string value
-                *item = Item::Value(Value::from(relative_path));
-            } else {
-                // Recursively process nested tables
-                let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
-                for key in keys {
-                    if let Some(inner_item) = table.get_mut(&key) {
-                        let nested_files = extract_resolved_paths_evaluator(
-                            inner_item,
-                            glob_base,
-                            toml_file_dir,
-                            evaluation_name,
-                            evaluator_name,
-                            variant_name,
-                            Some(&key),
-                        )?;
-                        files_to_write.extend(nested_files);
-                    }
-                }
-            }
-        }
-        Item::ArrayOfTables(array) => {
-            for table in array.iter_mut() {
-                let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
-                for key in keys {
-                    if let Some(inner_item) = table.get_mut(&key) {
-                        let nested_files = extract_resolved_paths_evaluator(
-                            inner_item,
-                            glob_base,
-                            toml_file_dir,
-                            evaluation_name,
-                            evaluator_name,
-                            variant_name,
-                            Some(&key),
-                        )?;
-                        files_to_write.extend(nested_files);
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
-
-    Ok(files_to_write)
+    let ctx = EvaluatorPathContext {
+        glob_base,
+        toml_file_dir,
+        evaluation_name,
+        evaluator_name,
+        variant_name,
+    };
+    extract_resolved_paths_impl(item, &ctx, current_key)
 }
 
 #[cfg(test)]

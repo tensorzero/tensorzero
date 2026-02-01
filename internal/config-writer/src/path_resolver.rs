@@ -41,6 +41,19 @@ pub struct FileToWrite {
     pub content: String,
 }
 
+/// Trait for path contexts that can resolve keys to file paths.
+/// This allows generic handling of path resolution for both variants and evaluators.
+pub trait PathContext {
+    /// Resolve a key to an absolute and relative path.
+    /// Returns `Some(Ok(...))` if the key is recognized.
+    /// Returns `Some(Err(...))` if the key is recognized but path computation fails.
+    /// Returns `None` if the key is not recognized (will use fallback).
+    fn resolve_key(&self, key: &str) -> Option<Result<(PathBuf, String), ConfigWriterError>>;
+
+    /// Generate a fallback path for an unknown key using the original filename.
+    fn fallback_path(&self, filename: &str) -> Result<(PathBuf, String), ConfigWriterError>;
+}
+
 /// Context for generating standardized paths for a variant.
 pub struct VariantPathContext<'a> {
     pub glob_base: &'a Path,
@@ -106,6 +119,35 @@ impl<'a> VariantPathContext<'a> {
         let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
         Ok((absolute, relative))
     }
+
+    fn variant_base_path(&self) -> PathBuf {
+        self.glob_base
+            .join("functions")
+            .join(self.function_name)
+            .join("variants")
+            .join(self.variant_name)
+    }
+}
+
+impl PathContext for VariantPathContext<'_> {
+    fn resolve_key(&self, key: &str) -> Option<Result<(PathBuf, String), ConfigWriterError>> {
+        match key {
+            "system_template" | "user_template" | "assistant_template" => {
+                Some(self.template_path(key))
+            }
+            "system_instructions" => Some(self.system_instructions_path()),
+            "system_schema" | "user_schema" | "assistant_schema" | "output_schema" => {
+                Some(self.schema_path(key))
+            }
+            _ => None,
+        }
+    }
+
+    fn fallback_path(&self, filename: &str) -> Result<(PathBuf, String), ConfigWriterError> {
+        let absolute = self.variant_base_path().join(filename);
+        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
+        Ok((absolute, relative))
+    }
 }
 
 impl<'a> EvaluatorPathContext<'a> {
@@ -142,6 +184,34 @@ impl<'a> EvaluatorPathContext<'a> {
             .join(self.variant_name)
             .join(format!("{template_kind}.minijinja"));
 
+        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
+        Ok((absolute, relative))
+    }
+
+    fn evaluator_variant_base_path(&self) -> PathBuf {
+        self.glob_base
+            .join("evaluations")
+            .join(self.evaluation_name)
+            .join("evaluators")
+            .join(self.evaluator_name)
+            .join("variants")
+            .join(self.variant_name)
+    }
+}
+
+impl PathContext for EvaluatorPathContext<'_> {
+    fn resolve_key(&self, key: &str) -> Option<Result<(PathBuf, String), ConfigWriterError>> {
+        match key {
+            "system_template" | "user_template" | "assistant_template" => {
+                Some(self.template_path(key))
+            }
+            "system_instructions" => Some(self.system_instructions_path()),
+            _ => None,
+        }
+    }
+
+    fn fallback_path(&self, filename: &str) -> Result<(PathBuf, String), ConfigWriterError> {
+        let absolute = self.evaluator_variant_base_path().join(filename);
         let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
         Ok((absolute, relative))
     }

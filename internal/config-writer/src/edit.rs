@@ -49,32 +49,3 @@ pub struct UpsertEvaluatorPayload {
     pub evaluator_name: String,
     pub evaluator: UninitializedEvaluatorConfig,
 }
-
-impl EditPayload {
-    /// Returns a description of the edit operation for logging/debugging.
-    pub fn describe(&self) -> String {
-        match self {
-            EditPayload::UpsertVariant(payload) => {
-                format!(
-                    "upsert variant `{}` in function `{}`",
-                    payload.variant_name, payload.function_name
-                )
-            }
-            EditPayload::UpsertExperimentation(payload) => {
-                format!(
-                    "upsert experimentation config in function `{}`",
-                    payload.function_name
-                )
-            }
-            EditPayload::UpsertEvaluation(payload) => {
-                format!("upsert evaluation `{}`", payload.evaluation_name)
-            }
-            EditPayload::UpsertEvaluator(payload) => {
-                format!(
-                    "upsert evaluator `{}` in evaluation `{}`",
-                    payload.evaluator_name, payload.evaluation_name
-                )
-            }
-        }
-    }
-}
