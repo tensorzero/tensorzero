@@ -11,7 +11,11 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{WriteConfigRequest, WriteConfigResponse};
-use tensorzero_core::config::UninitializedConfig;
+use tensorzero_core::{
+    config::{UninitializedConfig, UninitializedVariantInfo},
+    evaluations::{UninitializedEvaluationConfig, UninitializedEvaluatorConfig},
+    experimentation::UninitializedExperimentationConfig,
+};
 
 use autopilot_client::AutopilotSideInfo;
 
@@ -27,16 +31,39 @@ pub struct WriteConfigToolParams {
     pub edit: Option<EditPayload>,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "operation", rename_all = "snake_case")]
 pub enum EditPayload {
-    Upsert(UpsertPayload),
+    UpsertVariant(Box<UpsertVariantPayload>),
+    UpsertExperimentation(UpsertExperimentationPayload),
+    UpsertEvaluation(UpsertEvaluationPayload),
+    UpsertEvaluator(UpsertEvaluatorPayload),
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct UpsertPayload {
-    pub path: Vec<String>, // The keys that make up the full TOML path to where the edit is being made
-    pub value: Value,      // The value being upserted at that path
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertVariantPayload {
+    pub function_name: String,
+    pub variant_name: String,
+    pub variant: UninitializedVariantInfo, // Re-exported from tensorzero-core
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertExperimentationPayload {
+    pub function_name: String,
+    pub experimentation: UninitializedExperimentationConfig,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertEvaluationPayload {
+    pub evaluation_name: String,
+    pub evaluation: UninitializedEvaluationConfig,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertEvaluatorPayload {
+    pub evaluation_name: String,
+    pub evaluator_name: String,
+    pub evaluator: UninitializedEvaluatorConfig,
 }
 
 /// Tool for writing config snapshots.
