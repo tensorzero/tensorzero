@@ -7,10 +7,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { v7 as uuid } from "uuid";
 import {
   Await,
   data,
-  isRouteErrorResponse,
   useAsyncError,
   useFetcher,
   useNavigate,
@@ -33,6 +33,7 @@ import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
+import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { getFeatureFlags } from "~/utils/feature_flags";
 
@@ -441,11 +442,12 @@ export default function AutopilotSessionEventsPage({
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
 
-  // Reset loading/error state when navigating to a different session
-  // Note: key={sessionId} on Suspense remounts EventStreamContent, which will call onLoaded
+  // Reset state when navigating to a different session
+  // Note: key={sessionId} on EventStreamContent ensures a fresh mount that will call onLoaded
+  // We don't set isEventsLoading here because the effect ordering with Suspense is unpredictable -
+  // EventStreamContent's onLoaded may run before this effect, causing isEventsLoading to get stuck
   useEffect(() => {
     setOptimisticMessages([]);
-    setIsEventsLoading(!isNewSession);
     setHasLoadError(false);
     setHasReachedStart(false);
     setAutopilotStatus({ status: "idle" });
@@ -659,7 +661,7 @@ export default function AutopilotSessionEventsPage({
       setOptimisticMessages((prev) => [
         ...prev,
         {
-          tempId: crypto.randomUUID(),
+          tempId: uuid(),
           eventId: response.event_id,
           text,
           status: "sending",
@@ -810,29 +812,5 @@ export default function AutopilotSessionEventsPage({
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
+  return <LayoutErrorBoundary error={error} />;
 }

@@ -3020,8 +3020,9 @@ mod tests {
             tokens_per_second = 10
             always = true
         ";
-        let uninitialized_config: UninitializedRateLimitingConfig =
+        let toml_config: crate::config::rate_limiting::TomlUninitializedRateLimitingConfig =
             toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let clients = InferenceClients {

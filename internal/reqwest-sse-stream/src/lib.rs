@@ -130,6 +130,7 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
         match start_stream_with_headers(self).await {
             Ok((mut sse_stream, headers)) => Ok((
                 Box::pin(async_stream::stream! {
+                    yield Ok(Event::Open);
                     while let Some(event) = sse_stream.next().await {
                         match event {
                             Ok(sse) => {
