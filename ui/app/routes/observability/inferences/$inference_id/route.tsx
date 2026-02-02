@@ -16,7 +16,9 @@ import {
   SectionsGroup,
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
-import { PageErrorContent } from "~/components/ui/error/ErrorContent";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { getPageErrorInfo } from "~/utils/tensorzero/errors";
+import { AlertTriangle } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
 import { BasicInfoLayoutSkeleton } from "~/components/layout/BasicInfoLayout";
 import { InputElement } from "~/components/input_output/InputElement";
@@ -313,6 +315,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ params, error }: Route.ErrorBoundaryProps) {
+  const { title, message, status } = getPageErrorInfo(error);
+
   return (
     <PageLayout>
       <PageHeader
@@ -325,7 +329,13 @@ export function ErrorBoundary({ params, error }: Route.ErrorBoundaryProps) {
         }
         name={params.inference_id}
       />
-      <PageErrorContent error={error} />
+      <SectionsGroup>
+        <SectionErrorNotice
+          icon={AlertTriangle}
+          title={status ? `Error ${status}` : title}
+          description={message}
+        />
+      </SectionsGroup>
     </PageLayout>
   );
 }
