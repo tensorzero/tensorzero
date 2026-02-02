@@ -6500,6 +6500,7 @@ dependencies = [
 name = "tensorzero-node"
 version = "2026.1.8"
 dependencies = [
+ "config-writer",
  "napi",
  "napi-build",
  "napi-derive",
@@ -6507,6 +6508,7 @@ dependencies = [
  "serde_json",
  "tensorzero-auth",
  "tensorzero-core",
+ "tokio",
 ]
 
 [[package]]
