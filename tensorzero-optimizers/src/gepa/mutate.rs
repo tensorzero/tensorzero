@@ -11,7 +11,7 @@
 //! The child variant inherits the parent's configuration but with improved templates based on
 //! the analyses. Template validation ensures the LLM doesn't hallucinate missing or extra templates.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::Deserialize;
 use serde_json::{Map, from_value, json, to_value};
@@ -102,7 +102,8 @@ fn build_mutate_input(
     } = function_context;
 
     // Extract templates map from variant config
-    let templates_map: HashMap<String, String> = variant_config
+    // Use BTreeMap for deterministic serialization order (important for caching)
+    let templates_map: BTreeMap<String, String> = variant_config
         .templates
         .inner
         .iter()
