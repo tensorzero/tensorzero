@@ -21,22 +21,23 @@ import {
   Cached,
 } from "~/components/icons/Icons";
 import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
-import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
+import { formatDateWithSeconds } from "~/utils/date";
+import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import type { ModelInferencesData } from "./inference-data.server";
 
-// Section - self-contained with Suspense/Await (no SectionLayout - lives in PageHeader)
-interface BasicInfoSectionProps {
+// Streaming wrapper with Suspense/Await (lives in PageHeader, not SectionsGroup)
+interface BasicInfoStreamingProps {
   inference: StoredInference;
   promise: Promise<ModelInferencesData>;
   locationKey: string;
 }
 
-export function BasicInfoSection({
+export function BasicInfoStreaming({
   inference,
   promise,
   locationKey,
-}: BasicInfoSectionProps) {
+}: BasicInfoStreamingProps) {
   return (
     <Suspense key={locationKey} fallback={<BasicInfoSkeleton />}>
       <Await resolve={promise} errorElement={<BasicInfoError />}>
@@ -88,7 +89,7 @@ export function BasicInfo({
       ? "chat_completion"
       : "unknown");
 
-  const timestampTooltip = createTimestampTooltip(inference.timestamp);
+  const timestampTooltip = <TimestampTooltip timestamp={inference.timestamp} />;
   const functionIconConfig = getFunctionTypeIcon(inference.type);
 
   const hasCachedInferences = modelInferences.some((mi) => mi.cached);
@@ -182,20 +183,6 @@ export function BasicInfo({
         </BasicInfoItemContent>
       </BasicInfoItem>
     </BasicInfoLayout>
-  );
-}
-
-// Helpers
-function createTimestampTooltip(timestamp: string | number | Date) {
-  const { formattedDate, formattedTime, relativeTime } =
-    getTimestampTooltipData(timestamp);
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div>{formattedDate}</div>
-      <div>{formattedTime}</div>
-      <div>{relativeTime}</div>
-    </div>
   );
 }
 

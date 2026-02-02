@@ -31,10 +31,10 @@ export function InferenceActionBar({
   onFeedbackAdded,
 }: InferenceActionBarProps) {
   return (
-    <Suspense fallback={<ActionBarSkeleton />}>
-      <Await resolve={actionBarData} errorElement={<ActionBarError />}>
+    <Suspense fallback={<InferenceActionBarSkeleton />}>
+      <Await resolve={actionBarData} errorElement={<InferenceActionBarError />}>
         {(resolvedActionBarData) => (
-          <ActionBarContent
+          <InferenceActionBarContent
             inference={inference}
             actionBarData={resolvedActionBarData}
             inputPromise={inputPromise}
@@ -48,7 +48,7 @@ export function InferenceActionBar({
 }
 
 // Skeleton
-function ActionBarSkeleton() {
+function InferenceActionBarSkeleton() {
   return (
     <div className="flex flex-wrap gap-2">
       <Skeleton className="h-8 w-36" />
@@ -59,7 +59,7 @@ function ActionBarSkeleton() {
 }
 
 // Error
-function ActionBarError() {
+function InferenceActionBarError() {
   const error = useAsyncError();
   const message =
     error instanceof Error ? error.message : "Failed to load actions";
@@ -72,7 +72,7 @@ function ActionBarError() {
 }
 
 // Content - Composes sub-actions
-interface ActionBarContentProps {
+interface InferenceInferenceActionBarContentProps {
   inference: StoredInference;
   actionBarData: ActionBarData;
   inputPromise: Promise<Input>;
@@ -80,13 +80,13 @@ interface ActionBarContentProps {
   onFeedbackAdded: (redirectUrl?: string) => void;
 }
 
-function ActionBarContent({
+function InferenceActionBarContent({
   inference,
   actionBarData,
   inputPromise,
   modelInferencesPromise,
   onFeedbackAdded,
-}: ActionBarContentProps) {
+}: InferenceInferenceActionBarContentProps) {
   const { hasDemonstration, usedVariants } = actionBarData;
   const config = useConfig();
   const functionConfig = useFunctionConfig(inference.function_name);

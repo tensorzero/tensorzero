@@ -7,11 +7,11 @@ import type {
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useConfig, useFunctionConfig } from "~/context/config";
-import { BasicInfo } from "~/routes/observability/inferences/$inference_id/BasicInfoSection";
+import { BasicInfo } from "~/routes/observability/inferences/$inference_id/BasicInfo";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
-import { ParameterCard } from "~/routes/observability/inferences/$inference_id/InferenceParameters";
+import { ParameterCard } from "~/routes/observability/inferences/$inference_id/ParameterCard";
 import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
 import { ModelInferencesContent } from "~/routes/observability/inferences/$inference_id/ModelInferencesSection";

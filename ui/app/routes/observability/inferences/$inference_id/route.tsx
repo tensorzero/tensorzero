@@ -16,7 +16,7 @@ import { AlertTriangle } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
-import { ParameterCard } from "./InferenceParameters";
+import { ParameterCard } from "./ParameterCard";
 import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
 
@@ -29,7 +29,7 @@ import {
 } from "./inference-data.server";
 
 // Self-contained section components
-import { BasicInfoSection } from "./BasicInfoSection";
+import { BasicInfoStreaming } from "./BasicInfo";
 import { InferenceActionBar } from "./InferenceActionBar";
 import { InputSection } from "./InputSection";
 import { FeedbackSection } from "./FeedbackSection";
@@ -137,7 +137,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         }
         name={inference.inference_id}
       >
-        <BasicInfoSection
+        <BasicInfoStreaming
           inference={inference}
           promise={modelInferences}
           locationKey={location.key}
