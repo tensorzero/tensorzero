@@ -18,9 +18,10 @@ use uuid::Uuid;
 
 use autopilot_client::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
-    CreateEventResponse, EventPayload, GatewayListEventsResponse, GatewayStreamUpdate,
-    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListSessionsParams,
-    ListSessionsResponse, StreamEventsParams,
+    CreateEventResponse, EventPayload, GatewayEvent, GatewayListConfigWritesResponse,
+    GatewayListEventsResponse, GatewayStreamUpdate, ListConfigWritesParams,
+    ListConfigWritesResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
+    StreamEventsParams,
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -169,15 +170,35 @@ pub async fn interrupt_session(
 /// List config writes (write_config tool calls) for a session from the Autopilot API.
 ///
 /// This is the core function called by both the HTTP handler and embedded client.
+/// Returns `GatewayListConfigWritesResponse` which uses narrower types that exclude
+/// `NotAvailable` authorization status.
 pub async fn list_config_writes(
     autopilot_client: &AutopilotClient,
     session_id: Uuid,
     params: ListConfigWritesParams,
-) -> Result<ListConfigWritesResponse, Error> {
-    autopilot_client
+) -> Result<GatewayListConfigWritesResponse, Error> {
+    let response: ListConfigWritesResponse = autopilot_client
         .list_config_writes(session_id, params)
         .await
-        .map_err(Error::from)
+        .map_err(Error::from)?;
+
+    // Convert to gateway types
+    let gateway_config_writes: Vec<GatewayEvent> = response
+        .config_writes
+        .into_iter()
+        .map(|event| {
+            event.try_into().map_err(|e| {
+                Error::new(ErrorDetails::Autopilot {
+                    message: format!("Event conversion failed: {e}"),
+                    status_code: None,
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(GatewayListConfigWritesResponse {
+        config_writes: gateway_config_writes,
+    })
 }
 
 // =============================================================================
@@ -301,7 +322,7 @@ pub async fn list_config_writes_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
     Query(params): Query<ListConfigWritesParams>,
-) -> Result<Json<ListConfigWritesResponse>, Error> {
+) -> Result<Json<GatewayListConfigWritesResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
     let response = list_config_writes(&client, session_id, params).await?;
     Ok(Json(response))
