@@ -23,11 +23,13 @@ import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
+import { WriteAllConfigsButton } from "~/components/autopilot/WriteAllConfigsButton";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
 import { logger } from "~/utils/logger";
 import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
+import { getEnv } from "~/utils/env.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
@@ -78,6 +80,9 @@ export async function loader({ params }: Route.LoaderArgs) {
     throw data("Session ID is required", { status: 400 });
   }
 
+  const env = getEnv();
+  const configWriteEnabled = Boolean(env.TENSORZERO_UI_CONFIG_FILE);
+
   // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
     return {
@@ -89,6 +94,7 @@ export async function loader({ params }: Route.LoaderArgs) {
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
+      configWriteEnabled,
     };
   }
 
@@ -124,6 +130,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     sessionId,
     eventsData: eventsDataPromise,
     isNewSession: false,
+    configWriteEnabled,
   };
 }
 
@@ -183,6 +190,7 @@ function EventStreamContent({
   onPendingToolCallsChange,
   onErrorChange,
   onHasReachedStartChange,
+  configWriteEnabled,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -195,6 +203,7 @@ function EventStreamContent({
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
   onHasReachedStartChange: (hasReachedStart: boolean) => void;
+  configWriteEnabled: boolean;
 }) {
   const {
     events: initialEvents,
@@ -363,6 +372,8 @@ function EventStreamContent({
       pendingToolCallIds={pendingToolCallIds}
       optimisticMessages={visibleOptimisticMessages}
       status={isNewSession ? undefined : status}
+      configWriteEnabled={configWriteEnabled}
+      sessionId={sessionId}
     />
   );
 }
@@ -370,7 +381,8 @@ function EventStreamContent({
 export default function AutopilotSessionEventsPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { sessionId, eventsData, isNewSession } = loaderData;
+  const { sessionId, eventsData, isNewSession, configWriteEnabled } =
+    loaderData;
   const navigate = useNavigate();
   const { toast } = useToast();
   const interruptFetcher = useFetcher();
@@ -703,7 +715,7 @@ export default function AutopilotSessionEventsPage({
         <div className="container mx-auto px-8">
           {/* Header background - matches message width with slight outset */}
           <div ref={headerRef} className="bg-bg-secondary -mx-2 px-2 pt-4 pb-5">
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto flex items-center justify-between">
               <Breadcrumbs
                 segments={
                   isNewSession
@@ -717,6 +729,12 @@ export default function AutopilotSessionEventsPage({
                       ]
                 }
               />
+              {configWriteEnabled && !isNewSession && (
+                <WriteAllConfigsButton
+                  sessionId={sessionId}
+                  disabled={isEventsLoading || hasLoadError}
+                />
+              )}
             </div>
             {sseError.error && sseError.isRetrying && (
               <ErrorBanner>Failed to fetch events. Retrying...</ErrorBanner>
@@ -759,6 +777,7 @@ export default function AutopilotSessionEventsPage({
                   onPendingToolCallsChange={handlePendingToolCallsChange}
                   onErrorChange={handleErrorChange}
                   onHasReachedStartChange={handleHasReachedStartChange}
+                  configWriteEnabled={configWriteEnabled}
                 />
               )}
             </Await>

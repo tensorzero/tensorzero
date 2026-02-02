@@ -73,6 +73,14 @@ export default [
       "autopilot/sessions/:session_id/actions/interrupt",
       "routes/api/autopilot/sessions/$session_id/actions/interrupt.route.ts",
     ),
+    route(
+      "autopilot/sessions/:session_id/config-writes/write",
+      "routes/api/autopilot/sessions/$session_id/config-writes/write.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/config-writes/write-all",
+      "routes/api/autopilot/sessions/$session_id/config-writes/write-all.route.ts",
+    ),
   ]),
 
   // Datasets
