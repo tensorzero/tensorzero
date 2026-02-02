@@ -1,24 +1,18 @@
 /**
- * Feature Flags Module
+ * Feature Flags Server Module
  *
- * Feature flags are loaded server-side from environment variables and passed
- * to the client via React Context. Use `useFeatureFlags()` hook in components.
+ * This file is server-only (.server.ts convention in React Router).
+ * It loads feature flags from environment variables.
  *
- * For server-side code (loaders, actions), use `loadFeatureFlags()`.
+ * For client-side access, use `useFeatureFlags()` hook from `~/context/feature-flags`.
  */
-
-// Re-export the hook and types for convenient access
-export {
-  useFeatureFlags,
-  type FeatureFlags,
-  DEFAULT_FEATURE_FLAGS,
-} from "~/context/feature-flags";
 
 import type { FeatureFlags } from "~/context/feature-flags";
 
+export type { FeatureFlags } from "~/context/feature-flags";
+
 /**
  * Load feature flags from environment variables.
- * This should only be called server-side (in loaders/actions).
  */
 export function loadFeatureFlags(): FeatureFlags {
   return {
@@ -37,7 +31,6 @@ interface ExtraInferenceOptions {
 
 /**
  * Returns extra parameters for inference calls.
- * Only call server-side.
  */
 export function getExtraInferenceOptions(): ExtraInferenceOptions {
   if (loadFeatureFlags().FORCE_CACHE_ON) {

@@ -38,7 +38,10 @@ import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { AppProviders } from "./providers/app-providers";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
-import { loadFeatureFlags, type FeatureFlags } from "./utils/feature_flags";
+import {
+  loadFeatureFlags,
+  type FeatureFlags,
+} from "./utils/feature_flags.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
