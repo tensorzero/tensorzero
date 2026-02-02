@@ -19,7 +19,8 @@ use uuid::Uuid;
 use autopilot_client::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
     CreateEventResponse, EventPayload, GatewayListEventsResponse, GatewayStreamUpdate,
-    ListEventsParams, ListSessionsParams, ListSessionsResponse, StreamEventsParams,
+    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListSessionsParams,
+    ListSessionsResponse, StreamEventsParams,
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -165,6 +166,20 @@ pub async fn interrupt_session(
         .map_err(Error::from)
 }
 
+/// List config writes (write_config tool calls) for a session from the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn list_config_writes(
+    autopilot_client: &AutopilotClient,
+    session_id: Uuid,
+    params: ListConfigWritesParams,
+) -> Result<ListConfigWritesResponse, Error> {
+    autopilot_client
+        .list_config_writes(session_id, params)
+        .await
+        .map_err(Error::from)
+}
+
 // =============================================================================
 // HTTP Handlers
 // =============================================================================
@@ -275,6 +290,21 @@ pub async fn interrupt_session_handler(
 ) -> Result<(), Error> {
     let client = get_autopilot_client(&app_state)?;
     interrupt_session(&client, session_id).await
+}
+
+/// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/config-writes`
+///
+/// Lists config writes (write_config tool calls) for a session from the Autopilot API.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "autopilot.list_config_writes", skip_all, fields(session_id = %session_id))]
+pub async fn list_config_writes_handler(
+    State(app_state): AppState,
+    Path(session_id): Path<Uuid>,
+    Query(params): Query<ListConfigWritesParams>,
+) -> Result<Json<ListConfigWritesResponse>, Error> {
+    let client = get_autopilot_client(&app_state)?;
+    let response = list_config_writes(&client, session_id, params).await?;
+    Ok(Json(response))
 }
 
 /// Handler for `GET /internal/autopilot/status`
