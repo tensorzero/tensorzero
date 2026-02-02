@@ -16,6 +16,7 @@ import {
   SectionsGroup,
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
+import { PageErrorContent } from "~/components/ui/error/ErrorContent";
 import { useToast } from "~/hooks/use-toast";
 import { BasicInfoLayoutSkeleton } from "~/components/layout/BasicInfoLayout";
 import { InputElement } from "~/components/input_output/InputElement";
@@ -307,6 +308,24 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </Suspense>
         </SectionLayout>
       </SectionsGroup>
+    </PageLayout>
+  );
+}
+
+export function ErrorBoundary({ params, error }: Route.ErrorBoundaryProps) {
+  return (
+    <PageLayout>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Inferences", href: "/observability/inferences" },
+            ]}
+          />
+        }
+        name={params.inference_id}
+      />
+      <PageErrorContent error={error} />
     </PageLayout>
   );
 }
