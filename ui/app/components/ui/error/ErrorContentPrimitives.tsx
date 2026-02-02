@@ -315,7 +315,7 @@ export function ActionBarAsyncError({
   const message = getAsyncErrorMessage({ error, defaultMessage });
 
   return (
-    <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+    <div className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
       <AlertCircle className="h-4 w-4 flex-shrink-0" />
       <span>{message}</span>
     </div>
