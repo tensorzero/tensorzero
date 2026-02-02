@@ -429,7 +429,8 @@ export default function AutopilotSessionEventsPage({
   const [hasLoadError, setHasLoadError] = useState(false);
 
   // Track whether we've reached the start of the conversation (for top fade)
-  const [hasReachedStart, setHasReachedStart] = useState(false);
+  // For new sessions, we know there's no older content from the start
+  const [hasReachedStart, setHasReachedStart] = useState(isNewSession);
 
   const handleHasReachedStartChange = useCallback((reached: boolean) => {
     setHasReachedStart(reached);
@@ -449,7 +450,9 @@ export default function AutopilotSessionEventsPage({
   useEffect(() => {
     setOptimisticMessages([]);
     setHasLoadError(false);
-    setHasReachedStart(false);
+    // For new sessions, we know there's no older content - set hasReachedStart=true
+    // For existing sessions, reset to false until infinite scroll confirms
+    setHasReachedStart(isNewSession);
     setAutopilotStatus({ status: "idle" });
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
@@ -629,10 +632,10 @@ export default function AutopilotSessionEventsPage({
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const target = e.currentTarget;
-      setShowTopFade(target.scrollTop > 20 || !hasReachedStart);
+      setShowTopFade(target.scrollTop > 0 || !hasReachedStart);
       const distanceFromBottom =
         target.scrollHeight - target.scrollTop - target.clientHeight;
-      setShowBottomFade(distanceFromBottom > 20);
+      setShowBottomFade(distanceFromBottom > 0);
     },
     [hasReachedStart],
   );
@@ -642,7 +645,7 @@ export default function AutopilotSessionEventsPage({
   useEffect(() => {
     if (hasReachedStart) {
       const container = scrollContainerRef.current;
-      if (container && container.scrollTop <= 20) {
+      if (container && container.scrollTop === 0) {
         setShowTopFade(false);
       }
     }
@@ -726,6 +729,7 @@ export default function AutopilotSessionEventsPage({
             direction={FadeDirection.Top}
             visible={showTopFade}
             className="-mx-2"
+            data-testid="scroll-fade-top"
           />
         </div>
       </div>
@@ -773,6 +777,7 @@ export default function AutopilotSessionEventsPage({
             direction={FadeDirection.Bottom}
             visible={showBottomFade}
             className="-mx-2"
+            data-testid="scroll-fade-bottom"
           />
           {/* Footer background - matches message width with slight outset */}
           <div ref={footerRef} className="bg-bg-secondary -mx-2 px-2">
