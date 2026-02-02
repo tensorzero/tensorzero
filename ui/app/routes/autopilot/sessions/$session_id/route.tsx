@@ -626,13 +626,14 @@ export default function AutopilotSessionEventsPage({
 
   // Update fade overlay visibility based on scroll position
   // Top fade stays visible until we've reached the start of the conversation
+  // Use 1px threshold to handle subpixel scrolling (fractional values from zoom/HiDPI)
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const target = e.currentTarget;
-      setShowTopFade(target.scrollTop > 0 || !hasReachedStart);
+      setShowTopFade(target.scrollTop > 1 || !hasReachedStart);
       const distanceFromBottom =
         target.scrollHeight - target.scrollTop - target.clientHeight;
-      setShowBottomFade(distanceFromBottom > 0);
+      setShowBottomFade(distanceFromBottom > 1);
     },
     [hasReachedStart],
   );
@@ -642,7 +643,7 @@ export default function AutopilotSessionEventsPage({
   useEffect(() => {
     if (hasReachedStart) {
       const container = scrollContainerRef.current;
-      if (container && container.scrollTop === 0) {
+      if (container && container.scrollTop <= 1) {
         setShowTopFade(false);
       }
     }
