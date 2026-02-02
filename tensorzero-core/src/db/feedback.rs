@@ -19,7 +19,7 @@ use crate::serde_util::deserialize_u64;
 // ===== Insert types for write operations =====
 
 /// Row to insert into boolean_metric_feedback
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct BooleanMetricFeedbackInsert {
     pub id: Uuid,
     pub target_id: Uuid,
@@ -30,7 +30,7 @@ pub struct BooleanMetricFeedbackInsert {
 }
 
 /// Row to insert into float_metric_feedback
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct FloatMetricFeedbackInsert {
     pub id: Uuid,
     pub target_id: Uuid,
@@ -41,7 +41,7 @@ pub struct FloatMetricFeedbackInsert {
 }
 
 /// Row to insert into comment_feedback
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct CommentFeedbackInsert {
     pub id: Uuid,
     pub target_id: Uuid,
@@ -52,7 +52,7 @@ pub struct CommentFeedbackInsert {
 }
 
 /// Row to insert into demonstration_feedback
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct DemonstrationFeedbackInsert {
     pub id: Uuid,
     pub inference_id: Uuid,
@@ -62,7 +62,7 @@ pub struct DemonstrationFeedbackInsert {
 }
 
 /// Row to insert into static_evaluation_human_feedback
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StaticEvaluationHumanFeedbackInsert {
     pub feedback_id: Uuid,
     pub metric_name: String,

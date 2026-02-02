@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{DemonstrationFeedbackRow, FeedbackQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -39,10 +38,7 @@ pub async fn get_demonstration_feedback_handler(
     Path(inference_id): Path<Uuid>,
     Query(params): Query<GetDemonstrationFeedbackParams>,
 ) -> Result<Json<GetDemonstrationFeedbackResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database_connection();
     let response = get_demonstration_feedback(
         &database,
         inference_id,

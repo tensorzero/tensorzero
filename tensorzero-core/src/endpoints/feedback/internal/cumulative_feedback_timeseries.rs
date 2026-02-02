@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::db::TimeWindow;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{CumulativeFeedbackTimeSeriesPoint, FeedbackQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -44,10 +43,7 @@ pub async fn get_cumulative_feedback_timeseries_handler(
     State(app_state): AppState,
     Query(params): Query<GetCumulativeFeedbackTimeseriesParams>,
 ) -> Result<Json<GetCumulativeFeedbackTimeseriesResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database_connection();
 
     let variant_names = params.variant_names.map(|s| {
         s.split(',')
