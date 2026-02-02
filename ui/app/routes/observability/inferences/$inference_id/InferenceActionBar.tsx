@@ -1,11 +1,12 @@
 import { Suspense, useState, useEffect } from "react";
-import { Await, useAsyncError } from "react-router";
+import { Await } from "react-router";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBar } from "~/components/layout/ActionBar";
+import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
@@ -32,7 +33,7 @@ export function InferenceActionBar({
 }: InferenceActionBarProps) {
   return (
     <Suspense fallback={<InferenceActionBarSkeleton />}>
-      <Await resolve={actionBarData} errorElement={<InferenceActionBarError />}>
+      <Await resolve={actionBarData} errorElement={<ActionBarAsyncError />}>
         {(resolvedActionBarData) => (
           <InferenceActionBarContent
             inference={inference}
@@ -58,21 +59,8 @@ function InferenceActionBarSkeleton() {
   );
 }
 
-// Error
-function InferenceActionBarError() {
-  const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load actions";
-
-  return (
-    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-      {message}
-    </div>
-  );
-}
-
 // Content - Composes sub-actions
-interface InferenceInferenceActionBarContentProps {
+interface InferenceActionBarContentProps {
   inference: StoredInference;
   actionBarData: ActionBarData;
   inputPromise: Promise<Input>;
@@ -86,7 +74,7 @@ function InferenceActionBarContent({
   inputPromise,
   modelInferencesPromise,
   onFeedbackAdded,
-}: InferenceInferenceActionBarContentProps) {
+}: InferenceActionBarContentProps) {
   const { hasDemonstration, usedVariants } = actionBarData;
   const config = useConfig();
   const functionConfig = useFunctionConfig(inference.function_name);

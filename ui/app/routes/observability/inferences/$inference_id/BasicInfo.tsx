@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Await, useAsyncError } from "react-router";
+import { Await } from "react-router";
 import type { StoredInference } from "~/types/tensorzero";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { useFunctionConfig } from "~/context/config";
@@ -24,6 +24,7 @@ import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
 import { formatDateWithSeconds } from "~/utils/date";
 import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
+import { InlineAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import type { ModelInferencesData } from "./inference-data.server";
 
 // Streaming wrapper with Suspense/Await (lives in PageHeader, not SectionsGroup)
@@ -40,7 +41,12 @@ export function BasicInfoStreaming({
 }: BasicInfoStreamingProps) {
   return (
     <Suspense key={locationKey} fallback={<BasicInfoSkeleton />}>
-      <Await resolve={promise} errorElement={<BasicInfoError />}>
+      <Await
+        resolve={promise}
+        errorElement={
+          <InlineAsyncError defaultMessage="Failed to load inference details" />
+        }
+      >
         {(modelInferences) => (
           <BasicInfoContent
             inference={inference}
@@ -189,17 +195,4 @@ export function BasicInfo({
 // Skeleton
 function BasicInfoSkeleton() {
   return <BasicInfoLayoutSkeleton rows={5} />;
-}
-
-// Error
-function BasicInfoError() {
-  const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load inference details";
-
-  return (
-    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-      {message}
-    </div>
-  );
 }

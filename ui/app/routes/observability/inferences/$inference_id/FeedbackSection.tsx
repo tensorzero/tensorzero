@@ -1,19 +1,17 @@
 import { Suspense, useEffect } from "react";
 import { Await, useAsyncError, useNavigate } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableRow } from "~/components/ui/table";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
-import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+  TableErrorNotice,
+  getAsyncErrorMessage,
+} from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle } from "lucide-react";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import FeedbackTable from "~/components/feedback/FeedbackTable";
+import FeedbackTable, {
+  FeedbackTableHeaders,
+} from "~/components/feedback/FeedbackTable";
 import type { FeedbackData } from "./inference-data.server";
 
 // Section - self-contained with Suspense/Await
@@ -119,20 +117,6 @@ function FeedbackContent({
 }
 
 // Skeleton
-function FeedbackTableHeaders() {
-  return (
-    <TableHeader>
-      <TableRow>
-        <TableHead>ID</TableHead>
-        <TableHead>Metric</TableHead>
-        <TableHead>Value</TableHead>
-        <TableHead>Tags</TableHead>
-        <TableHead>Time</TableHead>
-      </TableRow>
-    </TableHeader>
-  );
-}
-
 function FeedbackSkeleton() {
   return (
     <>
@@ -168,8 +152,7 @@ function FeedbackSkeleton() {
 // Error
 function FeedbackError() {
   const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load feedback";
+  const message = getAsyncErrorMessage(error, "Failed to load feedback");
 
   return (
     <>
