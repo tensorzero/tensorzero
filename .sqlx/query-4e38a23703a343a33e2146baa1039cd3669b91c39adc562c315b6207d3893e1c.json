@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT (\n                (SELECT COUNT(*) FROM tensorzero.boolean_metric_feedback WHERE target_id = $1) +\n                (SELECT COUNT(*) FROM tensorzero.float_metric_feedback WHERE target_id = $1) +\n                (SELECT COUNT(*) FROM tensorzero.comment_feedback WHERE target_id = $1) +\n                (SELECT COUNT(*) FROM tensorzero.demonstration_feedback WHERE inference_id = $1)\n            )::BIGINT as \"total!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4e38a23703a343a33e2146baa1039cd3669b91c39adc562c315b6207d3893e1c"
+}

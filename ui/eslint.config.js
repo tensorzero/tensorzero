@@ -86,6 +86,12 @@ export default [
           message:
             "Do not import types directly from 'tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
         },
+        {
+          selector:
+            "CallExpression[callee.object.name='crypto'][callee.property.name='randomUUID']",
+          message:
+            "Do not use crypto.randomUUID(). Use `import { v7 as uuid } from 'uuid'` and call `uuid()` instead for UUIDv7.",
+        },
       ],
     },
   },

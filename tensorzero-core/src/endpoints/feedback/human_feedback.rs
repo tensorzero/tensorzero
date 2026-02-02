@@ -1,12 +1,11 @@
 use super::throttled_get_function_info;
+use crate::db::feedback::{FeedbackQueries, StaticEvaluationHumanFeedbackInsert};
 use crate::db::inferences::{FunctionInfo, InferenceQueries};
 use crate::{
     config::MetricConfigLevel,
-    db::clickhouse::{ClickHouseConnectionInfo, TableName},
     error::{Error, ErrorDetails},
 };
 
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -21,8 +20,10 @@ use uuid::Uuid;
 /// Instead we read & write to the table here.
 /// This is only necessary if: the feedback contains tags "tensorzero::human_feedback",
 /// "tensorzero::evaluator_inference_id", and "tensorzero::datapoint_id": "uuid"
+#[expect(clippy::too_many_arguments)]
 pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
-    clickhouse: &ClickHouseConnectionInfo,
+    read_database: &(dyn InferenceQueries + Sync),
+    write_database: &(dyn FeedbackQueries + Sync),
     maybe_function_info: Option<FunctionInfo>,
     metric_name: &str,
     tags: &HashMap<String, String>,
@@ -36,11 +37,11 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
     let function_info = match maybe_function_info {
         Some(info) => info,
         None => {
-            throttled_get_function_info(clickhouse, &MetricConfigLevel::Inference, &target_id)
+            throttled_get_function_info(read_database, &MetricConfigLevel::Inference, &target_id)
                 .await?
         }
     };
-    let output = clickhouse
+    let output = read_database
         .get_inference_output(&function_info, target_id)
         .await?
         .ok_or_else(|| {
@@ -48,7 +49,7 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
                 inference_id: target_id,
             })
         })?;
-    let row = StaticEvaluationHumanFeedback {
+    let row = StaticEvaluationHumanFeedbackInsert {
         output,
         feedback_id,
         metric_name: metric_name.to_string(),
@@ -56,9 +57,7 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
         datapoint_id: info.datapoint_id,
         evaluator_inference_id: Some(info.evaluator_inference_id),
     };
-    clickhouse
-        .write_batched(&[row], TableName::StaticEvaluationHumanFeedback)
-        .await?;
+    write_database.insert_static_eval_feedback(&row).await?;
     Ok(())
 }
 
@@ -106,21 +105,6 @@ fn get_static_evaluation_human_feedback_info(
 struct InferenceEvaluationInfo {
     datapoint_id: Uuid,
     evaluator_inference_id: Uuid,
-}
-
-/// Represents a row in the StaticEvaluationHumanFeedback database table.
-///
-/// Note: The "Static" prefix is retained for backward compatibility with existing
-/// database schemas. This feature is now called "Inference Evaluations" in the
-/// product, configuration, and user-facing documentation.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct StaticEvaluationHumanFeedback {
-    pub metric_name: String,
-    pub datapoint_id: Uuid,
-    pub output: String,
-    pub value: String,
-    pub feedback_id: Uuid,
-    pub evaluator_inference_id: Option<Uuid>,
 }
 
 #[cfg(test)]

@@ -18,10 +18,12 @@ The variant optimized with DICL materially outperforms the baseline variant.
 ## Setup
 
 1. Set the `OPENAI_API_KEY` environment variable.
-2. Install the Python (3.9+) dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+2. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
+
+```bash
+uv sync
+```
+
 3. Launch TensorZero:
    ```bash
    docker compose up

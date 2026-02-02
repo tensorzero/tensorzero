@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::db::TimeWindow;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{CumulativeFeedbackTimeSeriesPoint, FeedbackQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -43,6 +44,11 @@ pub async fn get_cumulative_feedback_timeseries_handler(
     State(app_state): AppState,
     Query(params): Query<GetCumulativeFeedbackTimeseriesParams>,
 ) -> Result<Json<GetCumulativeFeedbackTimeseriesResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
     let variant_names = params.variant_names.map(|s| {
         s.split(',')
             .map(|v| v.trim().to_string())
@@ -51,7 +57,7 @@ pub async fn get_cumulative_feedback_timeseries_handler(
     });
 
     let response = get_cumulative_feedback_timeseries(
-        &app_state.clickhouse_connection_info,
+        &database,
         params.function_name,
         params.metric_name,
         variant_names,
@@ -64,14 +70,14 @@ pub async fn get_cumulative_feedback_timeseries_handler(
 
 /// Core business logic for getting cumulative feedback time series
 pub async fn get_cumulative_feedback_timeseries(
-    clickhouse: &impl FeedbackQueries,
+    database: &(dyn FeedbackQueries + Sync),
     function_name: String,
     metric_name: String,
     variant_names: Option<Vec<String>>,
     time_window: TimeWindow,
     max_periods: u32,
 ) -> Result<GetCumulativeFeedbackTimeseriesResponse, Error> {
-    let timeseries = clickhouse
+    let timeseries = database
         .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
@@ -92,9 +98,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_cumulative_feedback_timeseries_calls_clickhouse() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
-        mock_clickhouse
+        mock_db
             .expect_get_cumulative_feedback_timeseries()
             .withf(|function, metric, variants, window, periods| {
                 function == "my_function"
@@ -131,7 +137,7 @@ mod tests {
             });
 
         let result = get_cumulative_feedback_timeseries(
-            &mock_clickhouse,
+            &mock_db,
             "my_function".to_string(),
             "accuracy".to_string(),
             Some(vec!["variant_a".to_string()]),
@@ -149,9 +155,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_cumulative_feedback_timeseries_without_variant_filter() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
-        mock_clickhouse
+        mock_db
             .expect_get_cumulative_feedback_timeseries()
             .withf(|function, metric, variants, window, periods| {
                 function == "test_function"
@@ -176,7 +182,7 @@ mod tests {
             });
 
         let result = get_cumulative_feedback_timeseries(
-            &mock_clickhouse,
+            &mock_db,
             "test_function".to_string(),
             "task_success".to_string(),
             None,
@@ -193,15 +199,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_cumulative_feedback_timeseries_empty_result() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
-        mock_clickhouse
+        mock_db
             .expect_get_cumulative_feedback_timeseries()
             .times(1)
             .returning(|_, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result = get_cumulative_feedback_timeseries(
-            &mock_clickhouse,
+            &mock_db,
             "my_function".to_string(),
             "nonexistent_metric".to_string(),
             None,
@@ -218,10 +224,10 @@ mod tests {
     async fn test_get_cumulative_feedback_timeseries_cumulative_window_returns_error() {
         use crate::error::{Error, ErrorDetails};
 
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
         // The ClickHouse implementation returns an error for Cumulative time window
-        mock_clickhouse
+        mock_db
             .expect_get_cumulative_feedback_timeseries()
             .withf(|_, _, _, window, _| matches!(window, TimeWindow::Cumulative))
             .times(1)
@@ -235,7 +241,7 @@ mod tests {
             });
 
         let result = get_cumulative_feedback_timeseries(
-            &mock_clickhouse,
+            &mock_db,
             "my_function".to_string(),
             "quality".to_string(),
             None,

@@ -5,8 +5,8 @@ use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_sse_stream::Event;
+use reqwest_sse_stream::RequestBuilderExt;
 use serde_json::Value;
 use serde_json::json;
 use tensorzero::Role;
@@ -279,7 +279,7 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
 pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::{Event, RequestBuilderExt};
     use serde_json::Value;
 
     use crate::common::get_gateway_endpoint;
@@ -314,6 +314,7 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -850,6 +851,7 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];

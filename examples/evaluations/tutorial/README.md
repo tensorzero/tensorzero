@@ -15,7 +15,7 @@ We provide a configuration file (`./config/tensorzero.toml`) that specifies:
 
 1. Install Docker.
 2. Install Python 3.10+.
-3. Install the Python dependencies with `pip install -r requirements.txt`.
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 4. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 
 ### Setup

@@ -15,17 +15,16 @@ export AZURE_API_KEY="..." # Replace with your Azure OpenAI API key
 <details open>
 <summary><b>Python (OpenAI SDK)</b></summary>
 
-a. Install the dependencies:
+a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
-# We recommend using Python 3.9+ and a virtual environment
-pip install -r requirements.txt
+uv sync
 ```
 
 b. Run the example:
 
 ```bash
-python openai_sdk.py
+uv run openai_sdk.py
 ```
 
 </details>

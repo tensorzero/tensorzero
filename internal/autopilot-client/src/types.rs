@@ -88,6 +88,12 @@ pub struct Session {
     pub deployment_id: String,
     pub tensorzero_version: String,
     pub created_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub last_event_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub short_summary: Option<String>,
 }
 
 /// Internal event type - consumers should use `GatewayEvent` instead.
@@ -374,7 +380,7 @@ impl AutopilotSideInfo {
             "tensorzero::autopilot::config_snapshot_hash".to_string(),
             self.config_snapshot_hash.clone(),
         );
-        tags.insert("tensorzero::autopilot".to_string(), String::new());
+        tags.insert("tensorzero::autopilot".to_string(), "true".to_string());
         tags
     }
 }

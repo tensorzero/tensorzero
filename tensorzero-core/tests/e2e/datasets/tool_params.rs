@@ -10,11 +10,10 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::time::Duration;
-use tensorzero_core::db::clickhouse::test_helpers::{
-    clickhouse_flush_async_insert, get_clickhouse,
-};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
@@ -299,7 +298,7 @@ async fn test_datapoint_update_tool_params() {
     assert_ne!(new_id, original_id, "Should create a new datapoint ID");
 
     // Wait for writes
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify old datapoint is staled
@@ -860,7 +859,7 @@ async fn test_datapoint_tool_params_three_states() {
         .parse()
         .unwrap();
 
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let resp1 = http_client
@@ -905,7 +904,7 @@ async fn test_datapoint_tool_params_three_states() {
         .parse()
         .unwrap();
 
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let resp2 = http_client
@@ -981,7 +980,7 @@ async fn test_datapoint_tool_params_three_states() {
         .parse()
         .unwrap();
 
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let resp3 = http_client

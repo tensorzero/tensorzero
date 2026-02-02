@@ -5,13 +5,12 @@ use uuid::Uuid;
 
 use object_store::path::Path as ObjectStorePath;
 use tensorzero::{GetDatapointParams, GetDatasetMetadataParams, OrderDirection, Role};
-use tensorzero_core::db::clickhouse::test_helpers::{
-    clickhouse_flush_async_insert, get_clickhouse,
-};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{DatasetMetadata, DatasetQueries, GetDatapointsParams};
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 use tensorzero_core::inference::types::stored_input::StoredFile;
@@ -119,8 +118,7 @@ async fn test_count_datapoints_for_dataset_chat() {
             .unwrap();
     }
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     let new_count = clickhouse
         .count_datapoints_for_dataset(&dataset_name, Some(function_name))
@@ -183,8 +181,7 @@ async fn test_count_datapoints_for_dataset_json() {
             .unwrap();
     }
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     let new_count = clickhouse
         .count_datapoints_for_dataset(&dataset_name, Some(function_name))
@@ -235,8 +232,7 @@ async fn test_insert_datapoint_chat() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Verify it was inserted by selecting
     let inserted_datapoint = clickhouse
@@ -293,8 +289,7 @@ async fn test_insert_datapoint_json() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Verify it was inserted by selecting
     let inserted_datapoint = clickhouse
@@ -548,10 +543,9 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         .unwrap();
 
     // Flush async insert to ensure datapoint is visible before deletion
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Test retrieval
     let retrieved_datapoint = clickhouse
@@ -580,10 +574,9 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         .unwrap();
 
     // Flush async insert to ensure datapoint is deleted
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Try to get the datapoint (should return error since it's staled)
     let staled_result = clickhouse
@@ -658,8 +651,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Test retrieval
     let retrieved_datapoint = clickhouse
@@ -687,8 +679,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Try to get the datapoint (should return error since it's staled)
     let staled_result = clickhouse
@@ -957,8 +948,7 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Retrieve using get_datapoints
     let result = clickhouse
@@ -1024,8 +1014,7 @@ async fn test_get_datapoints_with_single_json_datapoint() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Retrieve using get_datapoints
     let result = clickhouse
@@ -1155,8 +1144,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Retrieve all three datapoints
     let result = clickhouse
@@ -1236,8 +1224,7 @@ async fn test_get_datapoints_with_non_existent_ids() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Query with both existing and non-existent IDs
     let non_existent_id = Uuid::now_v7();
@@ -1366,8 +1353,7 @@ async fn test_get_datapoints_with_search_query() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Retrieve all three datapoints
     let result = clickhouse
@@ -1434,8 +1420,7 @@ async fn test_get_datapoints_with_search_query_with_json_encoded_term() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Retrieve all three datapoints
     let result = clickhouse
@@ -1500,8 +1485,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Verify we can retrieve it before staling
     let result = clickhouse
@@ -1526,8 +1510,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Try to retrieve with allow_stale=false
     let result = clickhouse
@@ -1588,8 +1571,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Stale the datapoint
     clickhouse
@@ -1597,8 +1579,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Try to retrieve with allow_stale=true
     let result = clickhouse
@@ -1668,8 +1649,7 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Try to retrieve with different dataset name
     let wrong_dataset = format!("wrong_{dataset_name}");
@@ -1748,8 +1728,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Retrieve the datapoint
     let retrieved_datapoint = clickhouse
@@ -1837,8 +1816,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Retrieve the datapoint
     let retrieved_datapoint = clickhouse
@@ -1947,8 +1925,7 @@ async fn test_datapoint_with_mixed_file_types() {
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     // Retrieve the datapoint
     let retrieved_datapoint = clickhouse
@@ -2058,7 +2035,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        clickhouse.sleep_for_writes_to_be_visible().await;
 
         // Verify by retrieving the datapoint
         let retrieved_datapoint = clickhouse
@@ -2159,7 +2136,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        clickhouse.sleep_for_writes_to_be_visible().await;
 
         let retrieved_datapoint = clickhouse
             .get_datapoint(&GetDatapointParams {
@@ -2250,7 +2227,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        clickhouse.sleep_for_writes_to_be_visible().await;
 
         let retrieved_datapoint = clickhouse
             .get_datapoint(&GetDatapointParams {
@@ -2340,7 +2317,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        clickhouse.sleep_for_writes_to_be_visible().await;
 
         let retrieved_datapoint = clickhouse
             .get_datapoint(&GetDatapointParams {
@@ -2419,7 +2396,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        clickhouse.sleep_for_writes_to_be_visible().await;
 
         let retrieved_datapoint = clickhouse
             .get_datapoint(&GetDatapointParams {
@@ -2491,7 +2468,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        clickhouse.sleep_for_writes_to_be_visible().await;
 
         let retrieved_datapoint = clickhouse
             .get_datapoint(&GetDatapointParams {
@@ -2571,7 +2548,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        clickhouse.sleep_for_writes_to_be_visible().await;
 
         let retrieved_datapoint = clickhouse
             .get_datapoint(&GetDatapointParams {
@@ -2659,7 +2636,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        clickhouse.sleep_for_writes_to_be_visible().await;
 
         let retrieved_datapoint = clickhouse
             .get_datapoint(&GetDatapointParams {

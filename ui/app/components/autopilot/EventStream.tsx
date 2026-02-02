@@ -2,9 +2,14 @@ import {
   AlertCircle,
   AlertTriangle,
   ChevronRight,
-  Loader2,
+  RotateCcw,
 } from "lucide-react";
+import { Button } from "~/components/ui/button";
 import { Component, type RefObject, useState } from "react";
+import {
+  AnimatedEllipsis,
+  EllipsisMode,
+} from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
@@ -50,6 +55,8 @@ type EventStreamProps = {
   className?: string;
   isLoadingOlder?: boolean;
   hasReachedStart?: boolean;
+  loadError?: string | null;
+  onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
   authLoadingStates?: Map<string, "approving" | "rejecting">;
@@ -483,14 +490,18 @@ function EventSkeletons({ count = 3 }: { count?: number }) {
   );
 }
 
-function SessionStartedDivider() {
+function Divider({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-4 py-2">
+    <div className="flex items-center gap-5 py-2">
       <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted text-xs">Started</span>
+      <span className="text-fg-muted relative text-xs">{children}</span>
       <div className="border-border flex-1 border-t" />
     </div>
   );
+}
+
+function SessionStartDivider() {
+  return <Divider>Start</Divider>;
 }
 
 function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
@@ -509,41 +520,54 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
   );
 }
 
-function getStatusLabel(status: AutopilotStatus): string {
+function getStatusLabel(status: AutopilotStatus): {
+  text: string;
+  showEllipsis: boolean;
+} {
   switch (status.status) {
     case "idle":
-      return "Ready";
+      return { text: "Ready", showEllipsis: false };
     case "server_side_processing":
-      return "Thinking...";
+      return { text: "Thinking", showEllipsis: true };
     case "waiting_for_tool_call_authorization":
-      return "Waiting";
+      return { text: "Waiting", showEllipsis: false };
     case "waiting_for_tool_execution":
-      return "Executing tool...";
+      return { text: "Executing tool", showEllipsis: true };
     case "waiting_for_retry":
-      return "Something went wrong. Retrying...";
+      return { text: "Something went wrong. Retrying", showEllipsis: true };
     case "failed":
-      return "Something went wrong. Please try again.";
+      return {
+        text: "Something went wrong. Please try again.",
+        showEllipsis: false,
+      };
   }
 }
 
-function isLoadingStatus(status: AutopilotStatus): boolean {
+function StatusIndicator({ status }: { status: AutopilotStatus }) {
+  const { text, showEllipsis } = getStatusLabel(status);
   return (
-    status.status === "server_side_processing" ||
-    status.status === "waiting_for_tool_execution" ||
-    status.status === "waiting_for_retry"
+    <Divider>
+      {text}
+      {showEllipsis && <AnimatedEllipsis mode={EllipsisMode.Absolute} />}
+    </Divider>
   );
 }
 
-function StatusIndicator({ status }: { status: AutopilotStatus }) {
-  const showSpinner = isLoadingStatus(status);
+function LoadErrorNotice({ onRetry }: { onRetry?: () => void }) {
   return (
-    <div className="flex items-center gap-4 py-2">
-      <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted flex items-center gap-1.5 text-xs">
-        {getStatusLabel(status)}
-        {showSpinner && <Loader2 className="h-3 w-3 animate-spin" />}
-      </span>
-      <div className="border-border flex-1 border-t" />
+    <div className="flex items-center justify-center gap-2 py-2 text-sm text-amber-600">
+      <span>Failed to load older messages</span>
+      {onRetry && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRetry}
+          className="h-6 gap-1 px-2 text-amber-600 hover:text-amber-700"
+        >
+          <RotateCcw className="h-3 w-3" />
+          Retry
+        </Button>
+      )}
     </div>
   );
 }
@@ -553,23 +577,40 @@ export default function EventStream({
   className,
   isLoadingOlder = false,
   hasReachedStart = false,
+  loadError,
+  onRetryLoad,
   topSentinelRef,
   pendingToolCallIds,
   optimisticMessages = [],
   status,
 }: EventStreamProps) {
+  // Determine what to show at the top: sentinel, error, or session start
+  // Only show session start when there's content to display (events or optimistic messages)
+  const showSessionStart =
+    (hasReachedStart || optimisticMessages.length > 0) &&
+    !isLoadingOlder &&
+    !loadError &&
+    (events.length > 0 || optimisticMessages.length > 0);
+
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* Session started indicator, or sentinel for loading more */}
-      {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
-      {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
-        <SessionStartedDivider />
-      ) : (
+      {/* Sentinel for loading more - always present unless showing session start */}
+      {/* Must stay in DOM during loading/error so IntersectionObserver keeps working */}
+      {!showSessionStart && (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
       )}
 
-      {/* Loading skeletons at the top */}
-      {isLoadingOlder && <EventSkeletons count={3} />}
+      {/* Error state - show retry notice (after sentinel so it appears below) */}
+      {loadError && <LoadErrorNotice onRetry={onRetryLoad} />}
+
+      {/* Session start indicator */}
+      {showSessionStart && <SessionStartDivider />}
+
+      {/* Show skeletons when more content exists above (not yet loaded) */}
+      {/* This prevents layout jump when loading starts */}
+      {!showSessionStart && !hasReachedStart && !loadError && (
+        <EventSkeletons count={3} />
+      )}
 
       {events.map((event) => (
         <EventErrorBoundary key={event.id} eventId={event.id}>

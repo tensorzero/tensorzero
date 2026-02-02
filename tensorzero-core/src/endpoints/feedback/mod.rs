@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
-use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CommentTargetType,
     DemonstrationFeedbackInsert, FeedbackQueries, FloatMetricFeedbackInsert,
@@ -124,6 +124,7 @@ pub async fn feedback(
     AppStateData {
         config,
         clickhouse_connection_info,
+        postgres_connection_info,
         deferred_tasks,
         ..
     }: AppStateData,
@@ -178,10 +179,23 @@ pub async fn feedback(
         .increment(1);
     }
 
+    // Note: InferenceQueries is only implemented for ClickHouse currently.
+    // When Postgres implements InferenceQueries, we can use ENABLE_POSTGRES_READ to select.
+    //
+    // TODO(shuyangli): Also implement InferenceQueries for DelegatingDatabaseConnection and only pass one in
+    let read_database: Arc<dyn InferenceQueries + Send + Sync> =
+        Arc::new(clickhouse_connection_info.clone());
+    let write_database: Arc<dyn FeedbackQueries + Send + Sync> =
+        Arc::new(DelegatingDatabaseConnection::new(
+            clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
+        ));
+
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
-                clickhouse_connection_info,
+                read_database,
+                write_database,
                 &deferred_tasks,
                 &params,
                 feedback_metadata.target_id,
@@ -195,7 +209,8 @@ pub async fn feedback(
         }
         FeedbackType::Demonstration => {
             write_demonstration(
-                clickhouse_connection_info,
+                read_database,
+                write_database,
                 &deferred_tasks,
                 &config,
                 &params,
@@ -207,7 +222,8 @@ pub async fn feedback(
         }
         FeedbackType::Float => {
             write_float(
-                clickhouse_connection_info,
+                read_database,
+                write_database,
                 &deferred_tasks,
                 &config,
                 params,
@@ -220,7 +236,8 @@ pub async fn feedback(
         }
         FeedbackType::Boolean => {
             write_boolean(
-                clickhouse_connection_info,
+                read_database,
+                write_database,
                 &deferred_tasks,
                 &config,
                 params,
@@ -299,7 +316,8 @@ fn get_feedback_metadata<'a>(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_comment(
-    connection_info: ClickHouseConnectionInfo,
+    read_database: Arc<dyn InferenceQueries + Send + Sync>,
+    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     params: &Params,
     target_id: Uuid,
@@ -312,7 +330,7 @@ async fn write_comment(
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
     if !disable_validation {
-        let _ = throttled_get_function_info(&connection_info, level, &target_id).await?;
+        let _ = throttled_get_function_info(read_database.as_ref(), level, &target_id).await?;
     }
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
@@ -329,16 +347,19 @@ async fn write_comment(
         tags: tags.clone(),
         snapshot_hash,
     };
+
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = connection_info.insert_comment_feedback(&insert).await;
+            let _ = write_database.insert_comment_feedback(&insert).await;
         });
     }
     Ok(())
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn write_demonstration(
-    connection_info: ClickHouseConnectionInfo,
+    read_database: Arc<dyn InferenceQueries + Send + Sync>,
+    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: &Params,
@@ -348,14 +369,14 @@ async fn write_demonstration(
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     let function_info = throttled_get_function_info(
-        &connection_info,
+        read_database.as_ref(),
         &MetricConfigLevel::Inference,
         &inference_id,
     )
     .await?;
     let function_config = config.get_function(&function_info.function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
-        &connection_info,
+        read_database.as_ref(),
         inference_id,
         &function_info.function_name,
         &function_config,
@@ -376,9 +397,10 @@ async fn write_demonstration(
         tags: tags.clone(),
         snapshot_hash: config.hash.clone(),
     };
+
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = connection_info.insert_demonstration_feedback(&insert).await;
+            let _ = write_database.insert_demonstration_feedback(&insert).await;
         });
     }
     Ok(())
@@ -386,7 +408,8 @@ async fn write_demonstration(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_float(
-    connection_info: ClickHouseConnectionInfo,
+    read_database: Arc<dyn InferenceQueries + Send + Sync>,
+    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
@@ -406,7 +429,10 @@ async fn write_float(
         None
     } else {
         // This will also throw if the function does not exist.
-        Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
+        Some(
+            throttled_get_function_info(read_database.as_ref(), &metric_config.level, &target_id)
+                .await?,
+        )
     };
 
     let float_value = value.as_f64().ok_or_else(|| {
@@ -422,12 +448,13 @@ async fn write_float(
         tags: tags.clone(),
         snapshot_hash: config.hash.clone(),
     };
+
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let clickhouse = connection_info;
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
-                    &clickhouse,
+                    read_database.as_ref(),
+                    write_database.as_ref(),
                     maybe_function_info,
                     &metric_name,
                     &tags,
@@ -435,7 +462,7 @@ async fn write_float(
                     &value,
                     target_id
                 ),
-                clickhouse.insert_float_feedback(&insert)
+                write_database.insert_float_feedback(&insert)
             );
         });
     }
@@ -444,7 +471,8 @@ async fn write_float(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_boolean(
-    connection_info: ClickHouseConnectionInfo,
+    read_database: Arc<dyn InferenceQueries + Send + Sync>,
+    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
@@ -464,7 +492,10 @@ async fn write_boolean(
         None
     } else {
         // This will also throw if the function does not exist.
-        Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
+        Some(
+            throttled_get_function_info(read_database.as_ref(), &metric_config.level, &target_id)
+                .await?,
+        )
     };
     let bool_value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
@@ -479,12 +510,13 @@ async fn write_boolean(
         tags: tags.clone(),
         snapshot_hash: config.hash.clone(),
     };
+
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let clickhouse = connection_info;
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
-                    &clickhouse,
+                    read_database.as_ref(),
+                    write_database.as_ref(),
                     maybe_function_info,
                     &metric_name,
                     &tags,
@@ -492,7 +524,7 @@ async fn write_boolean(
                     &value,
                     target_id
                 ),
-                clickhouse.insert_boolean_feedback(&insert)
+                write_database.insert_boolean_feedback(&insert)
             );
         });
     }
@@ -507,7 +539,7 @@ async fn write_boolean(
 /// We then poll every 500ms until that time has passed.
 /// If the time has passed and the id is still not found, we return an error.
 async fn throttled_get_function_info(
-    connection_info: &ClickHouseConnectionInfo,
+    db_client: &(dyn InferenceQueries + Sync),
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
 ) -> Result<FunctionInfo, Error> {
@@ -537,7 +569,7 @@ async fn throttled_get_function_info(
     // Poll every 500ms until the deadline is reached.
     loop {
         // If an error occurs during lookup (distinct from the target_id not existing), we bail out immediately.
-        let feedback_target_info = connection_info
+        let feedback_target_info = db_client
             .get_function_info(target_id, metric_config_level.clone())
             .await?;
         match feedback_target_info {
@@ -715,7 +747,7 @@ pub enum DynamicDemonstrationInfo {
 /// This function grabs either the tool call or output schema information that was used at the
 /// time of the actual inference in order to validate the demonstration data.
 async fn get_dynamic_demonstration_info(
-    clickhouse_client: &ClickHouseConnectionInfo,
+    db_client: &(dyn InferenceQueries + Sync),
     inference_id: Uuid,
     function_name: &str,
     function_config: &FunctionConfig,
@@ -723,7 +755,7 @@ async fn get_dynamic_demonstration_info(
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
-            let tool_params = clickhouse_client
+            let tool_params = db_client
                 .get_chat_inference_tool_params(function_name, inference_id)
                 .await?;
 
@@ -736,7 +768,7 @@ async fn get_dynamic_demonstration_info(
             ))
         }
         FunctionConfig::Json(..) => {
-            let output_schema = clickhouse_client
+            let output_schema = db_client
                 .get_json_inference_output_schema(function_name, inference_id)
                 .await?
                 .ok_or_else(|| {

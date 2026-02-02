@@ -1,7 +1,7 @@
 //! Tool for running evaluations on datasets.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::{borrow::Cow, time::Duration};
 
 use async_trait::async_trait;
 use durable_tools::{
@@ -143,6 +143,10 @@ impl ToolMetadata for RunEvaluationTool {
             .into()
         })
     }
+
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(30 * 60)
+    }
 }
 
 #[async_trait]
@@ -175,13 +179,10 @@ impl SimpleTool for RunEvaluationTool {
         //     .await
         //     .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
 
-        let snapshot_hash: SnapshotHash =
-            side_info
-                .config_snapshot_hash
-                .parse()
-                .map_err(|_: std::convert::Infallible| {
-                    AutopilotToolError::validation("Invalid snapshot hash")
-                })?;
+        let snapshot_hash: SnapshotHash = side_info
+            .config_snapshot_hash
+            .parse()
+            .map_err(|_| AutopilotToolError::validation("Invalid snapshot hash"))?;
 
         let response = ctx
             .client()

@@ -7,7 +7,6 @@ use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
-use crate::feature_flags;
 use crate::http::TensorzeroResponseWrapper;
 use crate::http::{DEFAULT_HTTP_CLIENT_TIMEOUT, TensorzeroHttpClient, TensorzeroRequestBuilder};
 use crate::inference::types::stored_input::StoragePathResolver;
@@ -25,7 +24,7 @@ use crate::{
     utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey},
 };
 use reqwest::header::HeaderMap;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
 use tokio::time::error::Elapsed;
@@ -206,15 +205,29 @@ impl HTTPGateway {
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<InferenceStream, TensorZeroError> {
-        let event_source =
-            self.customize_builder(builder)
-                .eventsource()
-                .map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::JsonRequest {
-                        message: format!("Error constructing event stream: {e:?}"),
+        let event_source = match self.customize_builder(builder).eventsource().await {
+            Ok(es) => es,
+            Err(e) => {
+                let err_str = format!("Error in streaming response: {e:?}");
+                let inner_err = Error::new(ErrorDetails::StreamError {
+                    source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
+                });
+                if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = e
+                {
+                    return Err(TensorZeroError::Http {
+                        status_code: code.as_u16(),
+                        text: resp.text().await.ok(),
+                        source: inner_err.into(),
+                    });
+                }
+                return Err(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::StreamError {
+                        source: Box::new(inner_err),
                     })
                     .into(),
-                })?;
+                });
+            }
+        };
 
         let mut event_source = event_source.peekable();
         let first = event_source.peek().await;
@@ -229,7 +242,7 @@ impl HTTPGateway {
             let inner_err = Error::new(ErrorDetails::StreamError {
                 source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
             });
-            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = *e {
+            if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = *e {
                 return Err(TensorZeroError::Http {
                     status_code: code.as_u16(),
                     text: resp.text().await.ok(),
@@ -248,9 +261,6 @@ impl HTTPGateway {
             while let Some(ev) = event_source.next().await {
                 match ev {
                     Err(e) => {
-                        if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
-                            break;
-                        }
                         yield Err(Error::new(ErrorDetails::StreamError {
                             source: Box::new(Error::new(ErrorDetails::Serialization {
                                 message: format!("Error in streaming response: {}", DisplayOrDebug {
@@ -398,8 +408,6 @@ pub enum ClientBuilderError {
     GatewayVersion(String),
     #[error("Failed to set up embedded gateway: {0}")]
     EmbeddedGatewaySetup(TensorZeroError),
-    #[error("Failed to initialize feature flags: {0}")]
-    FeatureFlags(TensorZeroError),
 }
 
 // Helper type to choose between using Debug or Display for a type
@@ -531,11 +539,6 @@ impl ClientBuilder {
 
     /// Constructs a `Client`, returning an error if the configuration is invalid.
     pub async fn build(self) -> Result<Client, ClientBuilderError> {
-        // Initialize feature flags (for embedded clients).
-        feature_flags::init_flags().map_err(|e| {
-            ClientBuilderError::FeatureFlags(TensorZeroError::Other { source: e.into() })
-        })?;
-
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => {
                 let client = self.build_http()?;
@@ -1269,6 +1272,7 @@ pub use crate::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::feature_flags;
     use tempfile::NamedTempFile;
     #[tokio::test]
     async fn test_missing_clickhouse() {
