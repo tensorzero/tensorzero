@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
@@ -31,8 +32,9 @@ pub struct WriteConfigToolParams {
     pub edit: Option<EditPayload>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "operation", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
+#[serde(tag = "operation")]
+#[serde(rename_all = "snake_case")]
 pub enum EditPayload {
     UpsertVariant(Box<UpsertVariantPayload>),
     UpsertExperimentation(UpsertExperimentationPayload),

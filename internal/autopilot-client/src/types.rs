@@ -644,12 +644,23 @@ pub struct ListConfigWritesParams {
     pub offset: Option<u32>,
 }
 
-/// Response from listing config writes.
+/// Internal response type - consumers should use `GatewayListConfigWritesResponse` instead.
+///
+/// Note: TS derive is needed for types that reference this, but we don't export it.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListConfigWritesResponse {
+    pub config_writes: Vec<Event>,
+}
+
+/// Response from listing config writes as seen by gateway consumers.
+///
+/// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct ListConfigWritesResponse {
-    pub config_writes: Vec<Event>,
+pub struct GatewayListConfigWritesResponse {
+    pub config_writes: Vec<GatewayEvent>,
 }
 
 /// Response from approving all pending tool calls.

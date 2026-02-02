@@ -18,8 +18,8 @@ use uuid::Uuid;
 
 use autopilot_client::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
-    CreateEventResponse, EventPayload, GatewayListEventsResponse, GatewayStreamUpdate,
-    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListSessionsParams,
+    CreateEventResponse, EventPayload, GatewayListConfigWritesResponse, GatewayListEventsResponse,
+    GatewayStreamUpdate, ListConfigWritesParams, ListEventsParams, ListSessionsParams,
     ListSessionsResponse, StreamEventsParams,
 };
 
@@ -169,11 +169,13 @@ pub async fn interrupt_session(
 /// List config writes (write_config tool calls) for a session from the Autopilot API.
 ///
 /// This is the core function called by both the HTTP handler and embedded client.
+/// Returns `GatewayListConfigWritesResponse` which uses narrower types that exclude
+/// `NotAvailable` authorization status.
 pub async fn list_config_writes(
     autopilot_client: &AutopilotClient,
     session_id: Uuid,
     params: ListConfigWritesParams,
-) -> Result<ListConfigWritesResponse, Error> {
+) -> Result<GatewayListConfigWritesResponse, Error> {
     autopilot_client
         .list_config_writes(session_id, params)
         .await
@@ -301,7 +303,7 @@ pub async fn list_config_writes_handler(
     State(app_state): AppState,
     Path(session_id): Path<Uuid>,
     Query(params): Query<ListConfigWritesParams>,
-) -> Result<Json<ListConfigWritesResponse>, Error> {
+) -> Result<Json<GatewayListConfigWritesResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
     let response = list_config_writes(&client, session_id, params).await?;
     Ok(Json(response))
