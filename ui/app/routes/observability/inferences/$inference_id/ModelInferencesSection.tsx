@@ -139,10 +139,10 @@ function ModelInferencesSkeleton() {
 // Error
 function ModelInferencesError() {
   const error = useAsyncError();
-  const message = getAsyncErrorMessage(
+  const message = getAsyncErrorMessage({
     error,
-    "Failed to load model inferences",
-  );
+    defaultMessage: "Failed to load model inferences",
+  });
 
   return (
     <Table>

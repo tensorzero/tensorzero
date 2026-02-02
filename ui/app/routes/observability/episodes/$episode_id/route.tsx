@@ -207,7 +207,10 @@ function InferencePaginationContent({ data }: { data: InferencesData }) {
 
 function FeedbackSectionError() {
   const error = useAsyncError();
-  const message = getAsyncErrorMessage(error, "Failed to load feedback");
+  const message = getAsyncErrorMessage({
+    error,
+    defaultMessage: "Failed to load feedback",
+  });
 
   return (
     <>

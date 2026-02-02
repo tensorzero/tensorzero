@@ -152,7 +152,10 @@ function FeedbackSkeleton() {
 // Error
 function FeedbackError() {
   const error = useAsyncError();
-  const message = getAsyncErrorMessage(error, "Failed to load feedback");
+  const message = getAsyncErrorMessage({
+    error,
+    defaultMessage: "Failed to load feedback",
+  });
 
   return (
     <>
