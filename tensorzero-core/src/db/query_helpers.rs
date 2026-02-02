@@ -1,6 +1,6 @@
 use crate::error::Error;
 
-/// Escapes a string for JSON without quotes.
+/// Escapes a string for JSON, without the surrounding quotes.
 ///
 /// This is used to escape the text query when doing a substring match on input and output strings, because
 /// input and output strings are JSON-escaped in ClickHouse (and json::text is also JSON-escaped in Postgres).
@@ -9,6 +9,16 @@ pub fn json_escape_string_without_quotes(s: &str) -> Result<String, Error> {
     json_escaped.remove(0);
     json_escaped.pop();
     Ok(json_escaped)
+}
+
+/// Double-escapes a string for JSON, without the surrounding quotes.
+///
+/// For searching in input and output strings in ClickHouse and Postgres, we need to double-escape the string,
+/// because input and output are JSON objects where any quoted search query will be escaped twice.
+/// (something like {"input": "\"quoted text\""} will be stored as {\"input\": \"\\\"quoted text\\\"\"}).
+pub fn json_double_escape_string_without_quotes(s: &str) -> Result<String, Error> {
+    let json_escaped = json_escape_string_without_quotes(s)?;
+    json_escape_string_without_quotes(&json_escaped)
 }
 
 #[cfg(test)]
@@ -45,6 +55,14 @@ mod tests {
         assert_eq!(
             json_escape_string_without_quotes(r"end of line\next line").unwrap(),
             r"end of line\\next line".to_string()
+        );
+    }
+
+    #[test]
+    fn test_json_double_escape_string_without_quotes() {
+        assert_eq!(
+            json_double_escape_string_without_quotes(r#""test""#).unwrap(),
+            r#"\\\"test\\\""#.to_string()
         );
     }
 }
