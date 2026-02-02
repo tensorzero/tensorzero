@@ -638,8 +638,8 @@ export default function AutopilotSessionEventsPage({
     [hasReachedStart],
   );
 
-  // Update top fade when hasReachedStart changes (not just on scroll)
-  // Without this, fade lingers if user is at top when reaching start
+  // Hide top fade when hasReachedStart becomes true and user is already at top
+  // (scroll handler won't fire if user hasn't scrolled)
   useEffect(() => {
     if (hasReachedStart) {
       const container = scrollContainerRef.current;
