@@ -1,36 +1,30 @@
-import { canUseDOM } from "./common";
+/**
+ * Feature Flags Module
+ *
+ * Feature flags are loaded server-side from environment variables and passed
+ * to the client via React Context. Use `useFeatureFlags()` hook in components.
+ *
+ * For server-side code (loaders, actions), use `loadFeatureFlags()`.
+ */
 
-interface FeatureFlags {
-  /// When set, sets `cache_options.enabled = "on"` on all inference calls
-  /// Normally, we leave this unset, which uses the TensorZero default of 'write_only'
-  /// This is used by e2e tests to allow us to populate the model inference cache
-  /// from regen-fixtures without trampling existing entries, and then to use the cached
-  /// entries from the normal ui e2e tests
-  FORCE_CACHE_ON: boolean;
-  /// When set, enables the interrupt session button in autopilot sessions
-  /// This allows users to interrupt a running autopilot session
-  FF_INTERRUPT_SESSION: boolean;
-}
+// Re-export the hook and types for convenient access
+export {
+  useFeatureFlags,
+  type FeatureFlags,
+  DEFAULT_FEATURE_FLAGS,
+} from "~/context/feature-flags";
+
+import type { FeatureFlags } from "~/context/feature-flags";
 
 /**
- * Get feature flags for the application.
- * This can be accessed from the client.
- * @returns FeatureFlags
+ * Load feature flags from environment variables.
+ * This should only be called server-side (in loaders/actions).
  */
-export function getFeatureFlags(): FeatureFlags {
-  const forceCacheEnv = canUseDOM
-    ? import.meta.env.VITE_TENSORZERO_FORCE_CACHE_ON
-    : process.env.VITE_TENSORZERO_FORCE_CACHE_ON;
-  const FORCE_CACHE_ON = forceCacheEnv === "1";
-
-  const interruptSessionEnv = canUseDOM
-    ? import.meta.env.VITE_TENSORZERO_FF_INTERRUPT_SESSION
-    : process.env.VITE_TENSORZERO_FF_INTERRUPT_SESSION;
-  const FF_INTERRUPT_SESSION = interruptSessionEnv === "1";
-
+export function loadFeatureFlags(): FeatureFlags {
   return {
-    FORCE_CACHE_ON,
-    FF_INTERRUPT_SESSION,
+    FORCE_CACHE_ON: process.env.TENSORZERO_UI_FORCE_CACHE_ON === "1",
+    FF_INTERRUPT_SESSION:
+      process.env.TENSORZERO_UI_FF_INTERRUPT_SESSION === "1",
   };
 }
 
@@ -42,11 +36,11 @@ interface ExtraInferenceOptions {
 }
 
 /**
- * Returns an object containing extra parameters that should be passed to
- * inference calls on our TensorZero client
+ * Returns extra parameters for inference calls.
+ * Only call server-side.
  */
 export function getExtraInferenceOptions(): ExtraInferenceOptions {
-  if (getFeatureFlags().FORCE_CACHE_ON) {
+  if (loadFeatureFlags().FORCE_CACHE_ON) {
     return {
       cache_options: {
         enabled: "on",
