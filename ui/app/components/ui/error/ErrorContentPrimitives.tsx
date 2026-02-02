@@ -190,6 +190,30 @@ export function SectionErrorContainer({
   );
 }
 
+export function ChartErrorContainer({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-80 w-full items-center justify-center">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Convenience wrapper: ErrorNotice inside ChartErrorContainer.
+ * Use for chart error states.
+ */
+export function ChartErrorNotice(props: ErrorNoticeProps) {
+  return (
+    <ChartErrorContainer>
+      <ErrorNotice {...props} />
+    </ChartErrorContainer>
+  );
+}
+
 /**
  * Convenience wrapper: ErrorNotice inside SectionErrorContainer.
  * Use for section-level error states (BasicInfo, Input, Output, etc.).

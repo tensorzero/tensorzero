@@ -1,7 +1,12 @@
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
+import { useAsyncError } from "react-router";
+import { AlertTriangle } from "lucide-react";
 
 import { cn } from "~/utils/common";
+import { ChartErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { BarChartSkeleton } from "~/components/ui/BarChartSkeleton";
+import { LineChartSkeleton } from "~/components/ui/LineChartSkeleton";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
@@ -353,11 +358,31 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config];
 }
 
+function ChartAsyncErrorState({
+  defaultMessage = "Failed to load chart data",
+}: {
+  defaultMessage?: string;
+}) {
+  const error = useAsyncError();
+  const message = error instanceof Error ? error.message : defaultMessage;
+
+  return (
+    <ChartErrorNotice
+      icon={AlertTriangle}
+      title="Chart Error"
+      description={message}
+    />
+  );
+}
+
 export {
+  BarChartSkeleton,
+  ChartAsyncErrorState,
   ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  ChartTooltip,
+  ChartTooltipContent,
+  LineChartSkeleton,
 };
