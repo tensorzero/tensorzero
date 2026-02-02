@@ -1,4 +1,4 @@
-import { Suspense, useState, useEffect } from "react";
+import { Suspense } from "react";
 import { Await } from "react-router";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
@@ -10,6 +10,7 @@ import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitive
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
+import { useResolvedPromise } from "~/hooks/use-resolved-promise";
 import type {
   ActionBarData,
   ModelInferencesData,
@@ -82,38 +83,9 @@ function InferenceActionBarContent({
   const models = [...modelsSet].sort();
   const options = isDefault ? models : variants;
 
-  // Resolve promises for TryWithVariant
-  const [resolvedInput, setResolvedInput] = useState<Input | null>(null);
-  const [resolvedModelInferences, setResolvedModelInferences] =
-    useState<ModelInferencesData | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    inputPromise
-      .then((input) => {
-        if (!cancelled) setResolvedInput(input);
-      })
-      .catch(() => {
-        if (!cancelled) setResolvedInput(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [inputPromise]);
-
-  useEffect(() => {
-    let cancelled = false;
-    modelInferencesPromise
-      .then((mi) => {
-        if (!cancelled) setResolvedModelInferences(mi);
-      })
-      .catch(() => {
-        if (!cancelled) setResolvedModelInferences(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [modelInferencesPromise]);
+  // Resolve promises for TryWithVariant (without suspending)
+  const resolvedInput = useResolvedPromise(inputPromise);
+  const resolvedModelInferences = useResolvedPromise(modelInferencesPromise);
 
   const inferenceUsage = resolvedModelInferences
     ? getTotalInferenceUsage(resolvedModelInferences)
