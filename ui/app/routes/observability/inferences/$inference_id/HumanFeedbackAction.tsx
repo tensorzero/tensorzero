@@ -1,13 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import type { StoredInference } from "~/types/tensorzero";
+import type { FeedbackActionData } from "~/routes/api/feedback/route";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
-
-type FeedbackActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
 
 interface HumanFeedbackActionProps {
   inference: StoredInference;

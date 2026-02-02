@@ -41,6 +41,7 @@ import {
   TableErrorNotice,
   getErrorMessage,
 } from "~/components/ui/error/ErrorContentPrimitives";
+import type { FeedbackActionData } from "~/routes/api/feedback/route";
 import { AlertCircle } from "lucide-react";
 
 export type InferencesData = {
@@ -166,11 +167,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     newFeedbackId,
   };
 }
-
-/** Response type from /api/feedback endpoint */
-type FeedbackActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
 
 function InferencePaginationContent({ data }: { data: InferencesData }) {
   const { inferences, hasNextPage, hasPreviousPage } = data;

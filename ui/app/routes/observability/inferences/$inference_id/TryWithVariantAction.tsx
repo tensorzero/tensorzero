@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
+import type { FeedbackActionData } from "~/routes/api/feedback/route";
 import { useToast } from "~/hooks/use-toast";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { TryWithSelect } from "~/components/inference/TryWithSelect";
@@ -12,10 +13,6 @@ import {
   prepareDemonstrationFromVariantOutput,
 } from "~/routes/api/tensorzero/inference.utils";
 import { logger } from "~/utils/logger";
-
-type FeedbackActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
 
 interface TryWithVariantActionProps {
   inference: StoredInference;
