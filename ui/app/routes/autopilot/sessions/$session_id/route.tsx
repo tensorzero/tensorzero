@@ -453,6 +453,12 @@ export default function AutopilotSessionEventsPage({
     // For new sessions, we know there's no older content - set hasReachedStart=true
     // For existing sessions, reset to false until infinite scroll confirms
     setHasReachedStart(isNewSession);
+    // Reset fades for new session - top fade hidden (no content above), bottom fade hidden (at bottom)
+    // This is needed because the hasReachedStart effect won't trigger if the value doesn't change
+    if (isNewSession) {
+      setShowTopFade(false);
+      setShowBottomFade(false);
+    }
     setAutopilotStatus({ status: "idle" });
     setPendingToolCalls([]);
     setAuthLoadingStates(new Map());
