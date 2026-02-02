@@ -17,9 +17,7 @@ lazy_static::lazy_static! {
 ///
 /// This is not really perfect because we rely on the tests running in the same context as when we
 /// launch the gateway container, but it's true for our CI setup and is good enough for today.
-#[expect(clippy::expect_used)]
 pub fn is_postgres_test() -> bool {
-    feature_flags::init_flags().expect("Failed to initialize feature flags");
     feature_flags::ENABLE_POSTGRES_READ.get() || feature_flags::ENABLE_POSTGRES_WRITE.get()
 }
 

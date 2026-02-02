@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use futures::{StreamExt, future::try_join_all};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -369,9 +369,6 @@ fn stream_google_ai_studio_gemini(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
-                        break;
-                    }
                     yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
                 }
                 Ok(event) => match event {
