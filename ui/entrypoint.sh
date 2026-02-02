@@ -8,6 +8,10 @@ while [[ $# -gt 0 ]]; do
       export TENSORZERO_UI_DEFAULT_CONFIG=1
       shift
       ;;
+    --config-file)
+      export TENSORZERO_UI_CONFIG_FILE="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option $1"
       exit 1
