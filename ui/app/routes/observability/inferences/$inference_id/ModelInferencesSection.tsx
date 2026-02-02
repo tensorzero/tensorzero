@@ -22,7 +22,6 @@ import { ModelInferenceItem } from "./ModelInferenceItem";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import type { ModelInferencesData } from "./inference-data.server";
 
-// Section - self-contained with Suspense/Await
 interface ModelInferencesSectionProps {
   promise: Promise<ModelInferencesData>;
   locationKey: string;
@@ -49,7 +48,6 @@ export function ModelInferencesSection({
   );
 }
 
-// Content (exported for non-streaming InferenceDetailContent)
 export function ModelInferencesContent({
   modelInferences,
 }: {
@@ -103,7 +101,6 @@ export function ModelInferencesContent({
   );
 }
 
-// Shared table headers
 function ModelInferencesTableHeaders() {
   return (
     <TableHeader>
@@ -115,7 +112,6 @@ function ModelInferencesTableHeaders() {
   );
 }
 
-// Skeleton
 function ModelInferencesSkeleton() {
   return (
     <Table>
@@ -136,7 +132,6 @@ function ModelInferencesSkeleton() {
   );
 }
 
-// Error
 function ModelInferencesError() {
   const error = useAsyncError();
   const message = getAsyncErrorMessage({

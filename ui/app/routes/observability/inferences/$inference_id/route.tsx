@@ -19,16 +19,12 @@ import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { ParameterCard } from "./ParameterCard";
 import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
-
-// Data fetching
 import {
   fetchModelInferences,
   fetchActionBarData,
   fetchInput,
   fetchFeedbackData,
 } from "./inference-data.server";
-
-// Self-contained section components
 import { BasicInfoStreaming } from "./BasicInfo";
 import { InferenceActionBar } from "./InferenceActionBar";
 import { InputSection } from "./InputSection";

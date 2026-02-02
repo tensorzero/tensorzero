@@ -14,7 +14,6 @@ import FeedbackTable, {
 } from "~/components/feedback/FeedbackTable";
 import type { FeedbackData } from "./inference-data.server";
 
-// Section - self-contained with Suspense/Await
 interface FeedbackSectionProps {
   promise: Promise<FeedbackData>;
   locationKey: string;
@@ -50,7 +49,6 @@ export function FeedbackSection({
   );
 }
 
-// Content
 function FeedbackContent({
   data,
   onCountUpdate,
@@ -116,7 +114,6 @@ function FeedbackContent({
   );
 }
 
-// Skeleton
 function FeedbackSkeleton() {
   return (
     <>
@@ -149,7 +146,6 @@ function FeedbackSkeleton() {
   );
 }
 
-// Error
 function FeedbackError() {
   const error = useAsyncError();
   const message = getAsyncErrorMessage({

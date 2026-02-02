@@ -15,7 +15,6 @@ import type {
   ModelInferencesData,
 } from "./inference-data.server";
 
-// Main Export - Self-contained with Suspense/Await
 interface InferenceActionBarProps {
   inference: StoredInference;
   actionBarData: Promise<ActionBarData>;
@@ -48,7 +47,6 @@ export function InferenceActionBar({
   );
 }
 
-// Skeleton
 function InferenceActionBarSkeleton() {
   return (
     <div className="flex flex-wrap gap-2">
@@ -59,7 +57,6 @@ function InferenceActionBarSkeleton() {
   );
 }
 
-// Content - Composes sub-actions
 interface InferenceActionBarContentProps {
   inference: StoredInference;
   actionBarData: ActionBarData;

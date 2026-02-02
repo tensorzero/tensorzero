@@ -4,7 +4,6 @@ import type { StoredInference } from "~/types/tensorzero";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
-import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   BasicInfoLayout,
   BasicInfoLayoutSkeleton,
@@ -27,7 +26,6 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { InlineAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import type { ModelInferencesData } from "./inference-data.server";
 
-// Streaming wrapper with Suspense/Await (lives in PageHeader, not SectionsGroup)
 interface BasicInfoStreamingProps {
   inference: StoredInference;
   promise: Promise<ModelInferencesData>;
@@ -40,7 +38,7 @@ export function BasicInfoStreaming({
   locationKey,
 }: BasicInfoStreamingProps) {
   return (
-    <Suspense key={locationKey} fallback={<BasicInfoSkeleton />}>
+    <Suspense key={locationKey} fallback={<BasicInfoLayoutSkeleton rows={5} />}>
       <Await
         resolve={promise}
         errorElement={
@@ -48,46 +46,20 @@ export function BasicInfoStreaming({
         }
       >
         {(modelInferences) => (
-          <BasicInfoContent
-            inference={inference}
-            modelInferences={modelInferences}
-          />
+          <BasicInfo inference={inference} modelInferences={modelInferences} />
         )}
       </Await>
     </Suspense>
   );
 }
 
-// Content
-function BasicInfoContent({
-  inference,
-  modelInferences,
-}: {
-  inference: StoredInference;
-  modelInferences: ModelInferencesData;
-}) {
-  const inferenceUsage = getTotalInferenceUsage(modelInferences);
-  return (
-    <BasicInfo
-      inference={inference}
-      inferenceUsage={inferenceUsage}
-      modelInferences={modelInferences}
-    />
-  );
-}
-
-// Also exported for use by InferenceDetailContent (non-streaming version)
 interface BasicInfoProps {
   inference: StoredInference;
-  inferenceUsage?: InferenceUsage;
   modelInferences?: ParsedModelInferenceRow[];
 }
 
-export function BasicInfo({
-  inference,
-  inferenceUsage,
-  modelInferences = [],
-}: BasicInfoProps) {
+export function BasicInfo({ inference, modelInferences = [] }: BasicInfoProps) {
+  const inferenceUsage = getTotalInferenceUsage(modelInferences);
   const functionConfig = useFunctionConfig(inference.function_name);
   const variantType =
     functionConfig?.variants[inference.variant_name]?.inner.type ??
@@ -95,9 +67,7 @@ export function BasicInfo({
       ? "chat_completion"
       : "unknown");
 
-  const timestampTooltip = <TimestampTooltip timestamp={inference.timestamp} />;
   const functionIconConfig = getFunctionTypeIcon(inference.type);
-
   const hasCachedInferences = modelInferences.some((mi) => mi.cached);
   const allCached =
     modelInferences.length > 0 && modelInferences.every((mi) => mi.cached);
@@ -184,15 +154,10 @@ export function BasicInfo({
           <Chip
             icon={<Calendar className="text-fg-tertiary" />}
             label={formatDateWithSeconds(new Date(inference.timestamp))}
-            tooltip={timestampTooltip}
+            tooltip={<TimestampTooltip timestamp={inference.timestamp} />}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
     </BasicInfoLayout>
   );
-}
-
-// Skeleton
-function BasicInfoSkeleton() {
-  return <BasicInfoLayoutSkeleton rows={5} />;
 }

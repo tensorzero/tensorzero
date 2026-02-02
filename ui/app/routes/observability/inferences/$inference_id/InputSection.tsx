@@ -6,7 +6,6 @@ import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimit
 import { InputElement } from "~/components/input_output/InputElement";
 import type { Input } from "~/types/tensorzero";
 
-// Section - self-contained with Suspense/Await
 interface InputSectionProps {
   promise: Promise<Input>;
   locationKey: string;
@@ -16,7 +15,10 @@ export function InputSection({ promise, locationKey }: InputSectionProps) {
   return (
     <SectionLayout>
       <SectionHeader heading="Input" />
-      <Suspense key={`input-${locationKey}`} fallback={<InputSkeleton />}>
+      <Suspense
+        key={`input-${locationKey}`}
+        fallback={<Skeleton className="h-32 w-full" />}
+      >
         <Await
           resolve={promise}
           errorElement={
@@ -28,9 +30,4 @@ export function InputSection({ promise, locationKey }: InputSectionProps) {
       </Suspense>
     </SectionLayout>
   );
-}
-
-// Skeleton
-function InputSkeleton() {
-  return <Skeleton className="h-32 w-full" />;
 }
