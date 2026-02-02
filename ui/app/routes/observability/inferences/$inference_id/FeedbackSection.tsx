@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useAsyncError, useNavigate } from "react-router";
+import { Suspense, useEffect } from "react";
+import { Await, useAsyncError, useNavigate } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   Table,
@@ -11,12 +11,49 @@ import {
 } from "~/components/ui/table";
 import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle } from "lucide-react";
+import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import type { FeedbackData } from "./inference-data.server";
 
+// Section - self-contained with Suspense/Await
+interface FeedbackSectionProps {
+  promise: Promise<FeedbackData>;
+  locationKey: string;
+  count: number | undefined;
+  onCountUpdate: (count: number) => void;
+}
+
+export function FeedbackSection({
+  promise,
+  locationKey,
+  count,
+  onCountUpdate,
+}: FeedbackSectionProps) {
+  return (
+    <SectionLayout>
+      <SectionHeader
+        heading="Feedback"
+        count={count}
+        badge={{
+          name: "inference",
+          tooltip:
+            "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
+        }}
+      />
+      <Suspense key={`feedback-${locationKey}`} fallback={<FeedbackSkeleton />}>
+        <Await resolve={promise} errorElement={<FeedbackError />}>
+          {(data) => (
+            <FeedbackContent data={data} onCountUpdate={onCountUpdate} />
+          )}
+        </Await>
+      </Suspense>
+    </SectionLayout>
+  );
+}
+
 // Content
-export function FeedbackSectionContent({
+function FeedbackContent({
   data,
   onCountUpdate,
 }: {
@@ -26,7 +63,6 @@ export function FeedbackSectionContent({
   const { feedback, feedback_bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
-  // Update count when data loads
   useEffect(() => {
     onCountUpdate(feedback.length);
   }, [feedback.length, onCountUpdate]);
@@ -54,7 +90,6 @@ export function FeedbackSectionContent({
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  // These are swapped because the table is sorted in descending order
   const disablePrevious =
     !topFeedback?.id ||
     !feedback_bounds.last_id ||
@@ -98,7 +133,7 @@ function FeedbackTableHeaders() {
   );
 }
 
-export function FeedbackSectionSkeleton() {
+function FeedbackSkeleton() {
   return (
     <>
       <Table>
@@ -131,7 +166,7 @@ export function FeedbackSectionSkeleton() {
 }
 
 // Error
-export function FeedbackSectionError() {
+function FeedbackError() {
   const error = useAsyncError();
   const message =
     error instanceof Error ? error.message : "Failed to load feedback";

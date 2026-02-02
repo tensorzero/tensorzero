@@ -1,13 +1,7 @@
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
-import {
-  Await,
-  data,
-  useLocation,
-  useNavigate,
-  type RouteHandle,
-} from "react-router";
+import { data, useLocation, useNavigate, type RouteHandle } from "react-router";
 import {
   PageHeader,
   PageLayout,
@@ -20,16 +14,13 @@ import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives
 import { getPageErrorInfo } from "~/utils/tensorzero/errors";
 import { AlertTriangle } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
-import { BasicInfoLayoutSkeleton } from "~/components/layout/BasicInfoLayout";
-import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { ParameterCard } from "./InferenceParameters";
 import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
-import { ModelInferencesTable } from "./ModelInferencesTable";
 
-// Local imports - data fetching
+// Data fetching
 import {
   fetchModelInferences,
   fetchActionBarData,
@@ -37,23 +28,12 @@ import {
   fetchFeedbackData,
 } from "./inference-data.server";
 
-// Local imports - section components (content, skeleton, error colocated)
-import { BasicInfoContent, BasicInfoError } from "./BasicInfoSection";
-import {
-  InferenceActionBar,
-  ActionBarSkeleton,
-  ActionBarError,
-} from "./InferenceActionBar";
-import { InputSkeleton, InputSectionError } from "./InputSection";
-import {
-  FeedbackSectionContent,
-  FeedbackSectionSkeleton,
-  FeedbackSectionError,
-} from "./FeedbackSection";
-import {
-  ModelInferencesSkeleton,
-  ModelInferencesSectionError,
-} from "./ModelInferencesSection";
+// Self-contained section components
+import { BasicInfoSection } from "./BasicInfoSection";
+import { InferenceActionBar } from "./InferenceActionBar";
+import { InputSection } from "./InputSection";
+import { FeedbackSection } from "./FeedbackSection";
+import { ModelInferencesSection } from "./ModelInferencesSection";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
@@ -67,36 +47,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
 
-  // Validate limit before deferring to ensure proper HTTP status
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  // Check inference exists before deferring to ensure 404 returns proper HTTP status
   const tensorZeroClient = getTensorZeroClient();
   const inferences = await tensorZeroClient.getInferences({
     ids: [inference_id],
     output_source: "inference",
   });
   if (inferences.inferences.length !== 1) {
-    throw data(`No inference found for id ${inference_id}.`, {
-      status: 404,
-    });
+    throw data(`No inference found for id ${inference_id}.`, { status: 404 });
   }
 
   const inference = inferences.inferences[0];
 
-  // Return promises for independent streaming - each section loads as data becomes available
   return {
     inference,
     newFeedbackId,
-    // Stream model inferences - used in BasicInfo header and Model Inferences table
     modelInferences: fetchModelInferences(inference_id),
-    // Stream action bar data - hasDemonstration and usedVariants
     actionBarData: fetchActionBarData(inference_id, inference.function_name),
-    // Stream input data
     input: fetchInput(inference),
-    // Stream feedback data
     feedbackData: fetchFeedbackData(inference_id, {
       newFeedbackId,
       beforeFeedback,
@@ -119,12 +90,11 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Track feedback count for SectionHeader (updated when feedbackData resolves)
   const [feedbackCount, setFeedbackCount] = useState<number | undefined>(
     undefined,
   );
 
-  // Show toast when feedback is successfully added (outside Suspense to avoid repeating)
+  // Show toast when feedback is added
   useEffect(() => {
     if (newFeedbackId) {
       const { dismiss } = toast.success({ title: "Feedback Added" });
@@ -133,12 +103,11 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     return;
   }, [newFeedbackId, toast]);
 
-  // Reset feedback count when location changes (navigating to new page)
+  // Reset feedback count on navigation
   useEffect(() => {
     setFeedbackCount(undefined);
   }, [location.key]);
 
-  // Handle feedback added callback - extract newFeedbackId from the API redirect URL
   const handleFeedbackAdded = useCallback(
     (redirectUrl?: string) => {
       if (redirectUrl) {
@@ -168,52 +137,23 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         }
         name={inference.inference_id}
       >
-        {/* BasicInfo - streams independently when modelInferences resolves */}
-        <Suspense
-          key={location.key}
-          fallback={<BasicInfoLayoutSkeleton rows={5} />}
-        >
-          <Await resolve={modelInferences} errorElement={<BasicInfoError />}>
-            {(resolvedModelInferences) => (
-              <BasicInfoContent
-                inference={inference}
-                modelInferences={resolvedModelInferences}
-              />
-            )}
-          </Await>
-        </Suspense>
-
-        {/* ActionBar - streams when actionBarData resolves */}
-        <Suspense
-          key={`actions-${location.key}`}
-          fallback={<ActionBarSkeleton />}
-        >
-          <Await resolve={actionBarData} errorElement={<ActionBarError />}>
-            {(resolvedActionBarData) => (
-              <InferenceActionBar
-                inference={inference}
-                actionBarData={resolvedActionBarData}
-                inputPromise={input}
-                modelInferencesPromise={modelInferences}
-                onFeedbackAdded={handleFeedbackAdded}
-              />
-            )}
-          </Await>
-        </Suspense>
+        <BasicInfoSection
+          inference={inference}
+          promise={modelInferences}
+          locationKey={location.key}
+        />
+        <InferenceActionBar
+          inference={inference}
+          actionBarData={actionBarData}
+          inputPromise={input}
+          modelInferencesPromise={modelInferences}
+          onFeedbackAdded={handleFeedbackAdded}
+        />
       </PageHeader>
 
       <SectionsGroup>
-        {/* Input section - streams independently */}
-        <SectionLayout>
-          <SectionHeader heading="Input" />
-          <Suspense key={`input-${location.key}`} fallback={<InputSkeleton />}>
-            <Await resolve={input} errorElement={<InputSectionError />}>
-              {(resolvedInput) => <InputElement input={resolvedInput} />}
-            </Await>
-          </Suspense>
-        </SectionLayout>
+        <InputSection promise={input} locationKey={location.key} />
 
-        {/* Output section - renders immediately since inference is sync */}
         <SectionLayout>
           <SectionHeader heading="Output" />
           {inference.type === "json" ? (
@@ -226,36 +166,13 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           )}
         </SectionLayout>
 
-        {/* Feedback section - streams independently */}
-        <SectionLayout>
-          <SectionHeader
-            heading="Feedback"
-            count={feedbackCount}
-            badge={{
-              name: "inference",
-              tooltip:
-                "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
-            }}
-          />
-          <Suspense
-            key={`feedback-${location.key}`}
-            fallback={<FeedbackSectionSkeleton />}
-          >
-            <Await
-              resolve={feedbackData}
-              errorElement={<FeedbackSectionError />}
-            >
-              {(resolvedFeedbackData) => (
-                <FeedbackSectionContent
-                  data={resolvedFeedbackData}
-                  onCountUpdate={setFeedbackCount}
-                />
-              )}
-            </Await>
-          </Suspense>
-        </SectionLayout>
+        <FeedbackSection
+          promise={feedbackData}
+          locationKey={location.key}
+          count={feedbackCount}
+          onCountUpdate={setFeedbackCount}
+        />
 
-        {/* Inference Parameters - renders immediately */}
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
           <ParameterCard
@@ -263,7 +180,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           />
         </SectionLayout>
 
-        {/* Tool Parameters - renders immediately for chat type */}
         {inference.type === "chat" && (
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
@@ -277,7 +193,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
         )}
 
-        {/* Tags - renders immediately */}
         <SectionLayout>
           <SectionHeader heading="Tags" />
           <TagsTable
@@ -290,25 +205,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           />
         </SectionLayout>
 
-        {/* Model Inferences table - streams when modelInferences resolves */}
-        <SectionLayout>
-          <SectionHeader heading="Model Inferences" />
-          <Suspense
-            key={`model-inferences-${location.key}`}
-            fallback={<ModelInferencesSkeleton />}
-          >
-            <Await
-              resolve={modelInferences}
-              errorElement={<ModelInferencesSectionError />}
-            >
-              {(resolvedModelInferences) => (
-                <ModelInferencesTable
-                  modelInferences={resolvedModelInferences}
-                />
-              )}
-            </Await>
-          </Suspense>
-        </SectionLayout>
+        <ModelInferencesSection
+          promise={modelInferences}
+          locationKey={location.key}
+        />
       </SectionsGroup>
     </PageLayout>
   );

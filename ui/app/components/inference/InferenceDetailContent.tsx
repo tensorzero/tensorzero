@@ -7,14 +7,14 @@ import type {
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useConfig, useFunctionConfig } from "~/context/config";
-import BasicInfo from "~/routes/observability/inferences/$inference_id/InferenceBasicInfo";
+import { BasicInfo } from "~/routes/observability/inferences/$inference_id/BasicInfoSection";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "~/routes/observability/inferences/$inference_id/InferenceParameters";
 import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
-import { ModelInferencesTable } from "~/routes/observability/inferences/$inference_id/ModelInferencesTable";
+import { ModelInferencesContent } from "~/routes/observability/inferences/$inference_id/ModelInferencesSection";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   SectionHeader,
@@ -402,7 +402,7 @@ export function InferenceDetailContent({
 
         <SectionLayout>
           <SectionHeader heading="Model Inferences" />
-          <ModelInferencesTable modelInferences={model_inferences} />
+          <ModelInferencesContent modelInferences={model_inferences} />
         </SectionLayout>
       </SectionsGroup>
 
