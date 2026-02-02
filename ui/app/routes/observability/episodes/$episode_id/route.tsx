@@ -39,7 +39,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "~/components/ui/table";
 import {
   TableErrorNotice,
-  getAsyncErrorMessage,
+  getErrorMessage,
 } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle } from "lucide-react";
 
@@ -207,7 +207,7 @@ function InferencePaginationContent({ data }: { data: InferencesData }) {
 
 function FeedbackSectionError() {
   const error = useAsyncError();
-  const message = getAsyncErrorMessage({
+  const message = getErrorMessage({
     error,
     defaultMessage: "Failed to load feedback",
   });

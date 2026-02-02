@@ -222,7 +222,7 @@ export function SectionAsyncErrorState({
     );
   }
 
-  const message = getAsyncErrorMessage({ error, defaultMessage });
+  const message = getErrorMessage({ error, defaultMessage });
 
   return (
     <SectionErrorNotice
@@ -233,19 +233,18 @@ export function SectionAsyncErrorState({
   );
 }
 
-interface GetAsyncErrorMessageParams {
+interface GetErrorMessageParams {
   error: unknown;
   defaultMessage: string;
 }
 
 /**
  * Extract error message from various error types.
- * Shared by async error components.
  */
-export function getAsyncErrorMessage({
+export function getErrorMessage({
   error,
   defaultMessage,
-}: GetAsyncErrorMessageParams): string {
+}: GetErrorMessageParams): string {
   if (isRouteErrorResponse(error)) {
     if (typeof error.data === "string") {
       return error.data;
@@ -280,7 +279,7 @@ export function InlineAsyncError({
     );
   }
 
-  const message = getAsyncErrorMessage({ error, defaultMessage });
+  const message = getErrorMessage({ error, defaultMessage });
 
   return (
     <div className="inline-flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
@@ -312,7 +311,7 @@ export function ActionBarAsyncError({
     );
   }
 
-  const message = getAsyncErrorMessage({ error, defaultMessage });
+  const message = getErrorMessage({ error, defaultMessage });
 
   return (
     <div className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

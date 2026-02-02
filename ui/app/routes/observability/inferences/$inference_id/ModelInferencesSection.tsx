@@ -12,7 +12,7 @@ import {
 } from "~/components/ui/table";
 import {
   TableErrorNotice,
-  getAsyncErrorMessage,
+  getErrorMessage,
 } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle } from "lucide-react";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
@@ -134,7 +134,7 @@ function ModelInferencesSkeleton() {
 
 function ModelInferencesError() {
   const error = useAsyncError();
-  const message = getAsyncErrorMessage({
+  const message = getErrorMessage({
     error,
     defaultMessage: "Failed to load model inferences",
   });
