@@ -5,6 +5,7 @@ import type {
   GatewayListConfigWritesResponse,
   KeyInfo,
   ListConfigWritesParams,
+  WriteConfigToolParams,
 } from "./bindings";
 import type {
   ConfigWriter as NativeConfigWriterType,
@@ -141,7 +142,7 @@ export async function listConfigWrites(
  *
  * @param event - A GatewayEvent that should be a write_config tool call
  * @returns The EditPayload from the event's arguments
- * @throws Error if the event is not a write_config tool call
+ * @throws Error if the event is not a write_config tool call or has no edit payload
  */
 export function extractEditPayloadFromConfigWrite(
   event: GatewayEvent,
@@ -158,7 +159,14 @@ export function extractEditPayloadFromConfigWrite(
     );
   }
 
-  return event.payload.arguments as EditPayload;
+  const args = event.payload.arguments as unknown as WriteConfigToolParams;
+  if (!args.edit) {
+    throw new Error(
+      `Config write event ${event.id} does not have an edit payload. Args: ${JSON.stringify(args)}`,
+    );
+  }
+
+  return args.edit;
 }
 
 /**

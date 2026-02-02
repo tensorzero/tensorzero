@@ -6,7 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
+default = []
 e2e_tests = []
+ts-bindings = ["dep:ts-rs", "config-writer/ts-bindings"]
 
 [dependencies]
 durable-tools = { path = "../durable-tools" }
@@ -30,6 +32,10 @@ uuid.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }
 durable = { workspace = true }
 mockall = "0.14"
+
+[dependencies.ts-rs]
+workspace = true
+optional = true
 
 [lints]
 workspace = true

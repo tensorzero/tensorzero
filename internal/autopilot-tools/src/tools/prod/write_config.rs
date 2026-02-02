@@ -22,7 +22,9 @@ pub use config_writer::{
 };
 
 /// Parameters for the write_config tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct WriteConfigToolParams {
     /// The config to write as a JSON object.
     pub config: Value,
