@@ -21,8 +21,9 @@ use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
-    GatewayListEventsResponse, GatewayStreamUpdate, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
+    GatewayListEventsResponse, GatewayStreamUpdate, ListConfigWritesParams,
+    ListConfigWritesResponse, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -526,6 +527,27 @@ impl AutopilotClient {
         let event: Event = response.json().await?;
         self.cache_tool_call_event(&event);
         Ok(event)
+    }
+
+    /// Lists config writes (write_config tool calls) for a session.
+    pub async fn list_config_writes(
+        &self,
+        session_id: Uuid,
+        params: ListConfigWritesParams,
+    ) -> Result<ListConfigWritesResponse, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/config-writes"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .query(&params)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body: ListConfigWritesResponse = response.json().await?;
+        Ok(body)
     }
 
     /// Creates an event in a session.
