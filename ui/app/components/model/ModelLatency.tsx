@@ -8,7 +8,12 @@ import {
   Tooltip,
 } from "recharts";
 import { useMemo } from "react";
-import { CHART_COLORS } from "~/utils/chart";
+import {
+  CHART_COLORS,
+  CHART_MARGIN,
+  CHART_AXIS_STROKE,
+  formatLatency,
+} from "~/utils/chart";
 import {
   Select,
   SelectItem,
@@ -16,11 +21,7 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-} from "~/components/ui/chart";
+import { ChartContainer, BasicChartLegend } from "~/components/ui/chart";
 
 export type LatencyMetric = "response_time_ms" | "ttft_ms";
 
@@ -79,7 +80,7 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
                 </span>
               </div>
               <span className="text-foreground font-mono font-medium tabular-nums">
-                {Math.round(entry.value)}ms
+                {formatLatency(entry.value)}
               </span>
             </div>
           );
@@ -88,8 +89,6 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
     </div>
   );
 }
-
-const MARGIN = { top: 12, right: 16, bottom: 28, left: 56 };
 
 export function LatencyTimeWindowSelector({
   value,
@@ -169,57 +168,56 @@ export function LatencyQuantileChart({
   );
 
   return (
-    <ChartContainer config={chartConfig} className="h-80 w-full">
-      <LineChart accessibilityLayer data={data} margin={MARGIN}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis
-          dataKey="percentile"
-          domain={[0, 1]}
-          tickLine={false}
-          tickMargin={10}
-          axisLine={true}
-          ticks={[
-            0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
-          ]}
-          tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-        />
-        <YAxis
-          scale="log"
-          domain={["dataMin", "dataMax"]}
-          tickLine={false}
-          tickMargin={10}
-          axisLine={true}
-          tickFormatter={(v) => `${v}ms`}
-        />
-
-        <Tooltip
-          content={<CustomTooltipContent />}
-          cursor={{
-            stroke: "#666666",
-            strokeDasharray: "3 3",
-            strokeWidth: 2,
-          }}
-        />
-
-        <ChartLegend
-          content={<ChartLegendContent className="font-mono text-xs" />}
-        />
-
-        {modelNames.map((name, index) => (
-          <Line
-            key={name}
-            type="monotone"
-            dataKey={name}
-            name={name}
-            stroke={CHART_COLORS[index % CHART_COLORS.length]}
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-            isAnimationActive={false}
+    <div>
+      <ChartContainer config={chartConfig} className="h-72 w-full">
+        <LineChart accessibilityLayer data={data} margin={CHART_MARGIN}>
+          <CartesianGrid />
+          <XAxis
+            dataKey="percentile"
+            domain={[0, 1]}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={{ stroke: CHART_AXIS_STROKE }}
+            ticks={[
+              0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
+            ]}
+            tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
           />
-        ))}
-      </LineChart>
-    </ChartContainer>
+          <YAxis
+            scale="log"
+            domain={["dataMin", "dataMax"]}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={{ stroke: CHART_AXIS_STROKE }}
+            tickFormatter={formatLatency}
+          />
+
+          <Tooltip
+            content={<CustomTooltipContent />}
+            cursor={{
+              stroke: "hsl(var(--chart-4))",
+              strokeDasharray: "3 3",
+              strokeWidth: 2,
+            }}
+          />
+
+          {modelNames.map((name, index) => (
+            <Line
+              key={name}
+              type="monotone"
+              dataKey={name}
+              name={name}
+              stroke={CHART_COLORS[index % CHART_COLORS.length]}
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          ))}
+        </LineChart>
+      </ChartContainer>
+      <BasicChartLegend items={modelNames} colors={CHART_COLORS} />
+    </div>
   );
 }
 

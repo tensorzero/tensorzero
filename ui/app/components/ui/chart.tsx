@@ -55,7 +55,7 @@ const ChartContainer = React.forwardRef<
         data-chart={chartId}
         ref={ref}
         className={cn(
-          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex aspect-video justify-center text-xs [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
+          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex aspect-video justify-center text-xs [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-orange-500/10 [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
           className,
         )}
         {...props}
@@ -375,8 +375,37 @@ function ChartAsyncErrorState({
   );
 }
 
+/**
+ * Standalone chart legend component for use outside of Recharts
+ * Renders a simple flex-wrap legend with colored indicators
+ */
+function BasicChartLegend({
+  items,
+  colors,
+}: {
+  items: string[];
+  colors: readonly string[];
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-4 pt-6">
+      {items.map((name, index) => (
+        <div key={name} className="flex items-center gap-1.5">
+          <div
+            className="h-2 w-2 shrink-0 rounded-[2px]"
+            style={{
+              backgroundColor: colors[index % colors.length],
+            }}
+          />
+          <span className="font-mono text-xs">{name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export {
   BarChartSkeleton,
+  BasicChartLegend,
   ChartAsyncErrorState,
   ChartContainer,
   ChartLegend,

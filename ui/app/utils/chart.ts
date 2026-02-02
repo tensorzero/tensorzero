@@ -11,6 +11,16 @@ export const CHART_COLORS = [
 ] as const;
 
 /**
+ * Standard chart margin for consistent spacing
+ */
+export const CHART_MARGIN = { top: 12, right: 0, bottom: 0, left: 0 } as const;
+
+/**
+ * Standard axis line stroke color
+ */
+export const CHART_AXIS_STROKE = "#e5e5e5";
+
+/**
  * Format numbers for chart axes to avoid overflow with large numbers
  * Uses compact notation (K, M, B) for readability
  */
@@ -80,6 +90,33 @@ export function formatCompactNumber(value: number): string {
   }
   // For decimals < 1, show up to 2 decimal places
   return `${sign}${abs.toFixed(2).replace(/\.?0+$/, "")}`;
+}
+
+/**
+ * Format latency values for chart axes
+ * Converts to appropriate time units (ms or s) for readability
+ */
+export function formatLatency(ms: number): string {
+  if (ms === 0) return "0";
+
+  const abs = Math.abs(ms);
+
+  if (abs >= 1000) {
+    const seconds = abs / 1000;
+    if (seconds >= 100) {
+      return `${Math.round(seconds)}s`;
+    }
+    if (seconds >= 10) {
+      return `${seconds.toFixed(1).replace(/\.0$/, "")}s`;
+    }
+    return `${seconds.toFixed(2).replace(/\.?0+$/, "")}s`;
+  }
+
+  // For ms values, keep it simple
+  if (abs >= 10) {
+    return `${Math.round(abs)}ms`;
+  }
+  return `${abs.toFixed(1).replace(/\.0$/, "")}ms`;
 }
 
 /**

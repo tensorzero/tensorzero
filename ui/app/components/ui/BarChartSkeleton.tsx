@@ -10,8 +10,8 @@ const SKELETON_BAR_HEIGHTS = [45, 65, 35, 80, 55, 40, 70, 50, 60, 30];
 export function BarChartSkeleton({ className }: { className?: string }) {
   return (
     <div className={className}>
-      {/* Chart container - h-80 matches ChartContainer in production */}
-      <div className="flex h-80 w-full flex-col">
+      {/* Chart container - h-72 matches ChartContainer in production */}
+      <div className="flex h-72 w-full flex-col">
         {/* Chart area with Y-axis and bars */}
         <div className="flex flex-1">
           {/* Y-axis labels */}
@@ -51,7 +51,7 @@ export function BarChartSkeleton({ className }: { className?: string }) {
         </div>
       </div>
       {/* Legend */}
-      <div className="flex justify-center gap-4 pt-3">
+      <div className="flex justify-center gap-4 pt-6">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-16" />
