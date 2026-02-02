@@ -9,6 +9,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, ReturnTicketsRequest};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use tensorzero_auth::key::PUBLIC_ID_LENGTH;
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 mod rate_limiting_manager;
@@ -377,7 +378,7 @@ impl ActiveRateLimit {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
@@ -410,7 +411,7 @@ impl RateLimitingConfigRule {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimit {
     pub resource: RateLimitResource,
@@ -535,7 +536,7 @@ impl RateLimitInterval {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, PartialEq, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
@@ -545,9 +546,18 @@ pub enum RateLimitingConfigPriority {
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(try_from = "Vec<RateLimitingConfigScope>")]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
+
+impl TryFrom<Vec<RateLimitingConfigScope>> for RateLimitingConfigScopes {
+    type Error = &'static str;
+
+    fn try_from(scopes: Vec<RateLimitingConfigScope>) -> Result<Self, Self::Error> {
+        Self::new(scopes)
+    }
+}
 
 impl RateLimitingConfigScopes {
     /// Creates a new instance of `RateLimitingConfigScopes`.
@@ -561,12 +571,6 @@ impl RateLimitingConfigScopes {
         // stable order when generating the key
         scopes.sort();
         Ok(RateLimitingConfigScopes(scopes))
-    }
-
-    /// Consumes self and returns the inner Vec.
-    /// Used by stored config serialization.
-    pub(crate) fn into_inner(self) -> Vec<RateLimitingConfigScope> {
-        self.0
     }
 
     /// Returns the key (as a Vec) if the scope matches the given info, or None if it does not.
@@ -589,7 +593,7 @@ trait Scope {
 // and add a test each time that ensures the sort order is maintained as further changes are made.
 //
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(untagged)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -625,13 +629,6 @@ impl TagRateLimitingConfigScope {
     /// Note: This is primarily for internal use by stored config deserialization.
     pub(crate) fn new(tag_key: String, tag_value: TagValueScope) -> Self {
         Self { tag_key, tag_value }
-    }
-
-    /// Consumes self and returns the (tag_key, tag_value) tuple.
-    ///
-    /// Note: This is primarily for internal use by stored config serialization.
-    pub(crate) fn into_parts(self) -> (String, TagValueScope) {
-        (self.tag_key, self.tag_value)
     }
 
     #[cfg(test)]
@@ -684,13 +681,6 @@ impl ApiKeyPublicIdConfigScope {
         Self { api_key_public_id }
     }
 
-    /// Consumes self and returns the inner `ApiKeyPublicIdValueScope`.
-    ///
-    /// Note: This is primarily for internal use by stored config serialization.
-    pub(crate) fn into_inner(self) -> ApiKeyPublicIdValueScope {
-        self.api_key_public_id
-    }
-
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
         match self.api_key_public_id {
             ApiKeyPublicIdValueScope::Concrete(ref key) => {
@@ -738,6 +728,23 @@ impl Serialize for TagValueScope {
     }
 }
 
+impl<'de> Deserialize<'de> for TagValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "tensorzero::each" => Ok(TagValueScope::Each),
+            "tensorzero::total" => Ok(TagValueScope::Total),
+            _ if s.starts_with("tensorzero::") => Err(serde::de::Error::custom(
+                r#"Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with "tensorzero::"."#,
+            )),
+            _ => Ok(TagValueScope::Concrete(s)),
+        }
+    }
+}
+
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -754,6 +761,28 @@ impl Serialize for ApiKeyPublicIdValueScope {
         match self {
             ApiKeyPublicIdValueScope::Concrete(s) => serializer.serialize_str(s),
             ApiKeyPublicIdValueScope::Each => serializer.serialize_str("tensorzero::each"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ApiKeyPublicIdValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "tensorzero::each" {
+            Ok(ApiKeyPublicIdValueScope::Each)
+        } else if s.starts_with("tensorzero::") {
+            Err(serde::de::Error::custom(
+                r#"API key public ID values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
+            ))
+        } else if s.len() != PUBLIC_ID_LENGTH {
+            Err(serde::de::Error::custom(format!(
+                "API key public ID `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public ID."
+            )))
+        } else {
+            Ok(ApiKeyPublicIdValueScope::Concrete(s))
         }
     }
 }
@@ -2167,5 +2196,80 @@ mod tests {
             }
             RateLimitResourceUsage::Exact { .. } => panic!("Expected UnderEstimate variant"),
         }
+    }
+
+    #[test]
+    fn test_tag_value_scope_deserialization_valid() {
+        // Valid special values
+        let each: TagValueScope = serde_json::from_str(r#""tensorzero::each""#).unwrap();
+        assert_eq!(each, TagValueScope::Each);
+
+        let total: TagValueScope = serde_json::from_str(r#""tensorzero::total""#).unwrap();
+        assert_eq!(total, TagValueScope::Total);
+
+        // Valid concrete value
+        let concrete: TagValueScope = serde_json::from_str(r#""my_value""#).unwrap();
+        assert_eq!(concrete, TagValueScope::Concrete("my_value".to_string()));
+    }
+
+    #[test]
+    fn test_tag_value_scope_deserialization_invalid_tensorzero_prefix() {
+        // Invalid tensorzero:: prefix
+        let result: Result<TagValueScope, _> = serde_json::from_str(r#""tensorzero::foo""#);
+        assert!(result.is_err(), "Should reject invalid tensorzero:: prefix");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("may not start with \"tensorzero::\""),
+            "Error should mention tensorzero:: restriction: {err}"
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_valid() {
+        // Valid special value
+        let each: ApiKeyPublicIdValueScope = serde_json::from_str(r#""tensorzero::each""#).unwrap();
+        assert_eq!(each, ApiKeyPublicIdValueScope::Each);
+
+        // Valid concrete value (12 characters)
+        let concrete: ApiKeyPublicIdValueScope = serde_json::from_str(r#""abcdefghijkl""#).unwrap();
+        assert_eq!(
+            concrete,
+            ApiKeyPublicIdValueScope::Concrete("abcdefghijkl".to_string())
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_invalid_tensorzero_prefix() {
+        // Invalid tensorzero:: prefix (not "each")
+        let result: Result<ApiKeyPublicIdValueScope, _> =
+            serde_json::from_str(r#""tensorzero::foo""#);
+        assert!(result.is_err(), "Should reject invalid tensorzero:: prefix");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("may not start with \"tensorzero::\""),
+            "Error should mention tensorzero:: restriction: {err}"
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_invalid_length() {
+        // Too short
+        let result: Result<ApiKeyPublicIdValueScope, _> = serde_json::from_str(r#""abc""#);
+        assert!(result.is_err(), "Should reject short public ID");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must be 12 characters long"),
+            "Error should mention length requirement: {err}"
+        );
+
+        // Too long
+        let result: Result<ApiKeyPublicIdValueScope, _> =
+            serde_json::from_str(r#""abcdefghijklmno""#);
+        assert!(result.is_err(), "Should reject long public ID");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must be 12 characters long"),
+            "Error should mention length requirement: {err}"
+        );
     }
 }

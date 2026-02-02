@@ -90,6 +90,9 @@ pub struct Session {
     pub created_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub last_event_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub short_summary: Option<String>,
 }
 
@@ -213,6 +216,7 @@ pub enum EventPayload {
     ToolCall(EventPayloadToolCall),
     ToolCallAuthorization(EventPayloadToolCallAuthorization),
     ToolResult(EventPayloadToolResult),
+    Visualization(EventPayloadVisualization),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -247,6 +251,7 @@ pub enum GatewayEventPayload {
     ToolCall(EventPayloadToolCall),
     ToolCallAuthorization(GatewayEventPayloadToolCallAuthorization),
     ToolResult(EventPayloadToolResult),
+    Visualization(EventPayloadVisualization),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -265,6 +270,7 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
                 Ok(GatewayEventPayload::ToolCallAuthorization(auth.try_into()?))
             }
             EventPayload::ToolResult(r) => Ok(GatewayEventPayload::ToolResult(r)),
+            EventPayload::Visualization(v) => Ok(GatewayEventPayload::Visualization(v)),
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
     }
@@ -494,6 +500,64 @@ pub enum ToolOutcome {
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
+}
+
+// =============================================================================
+// Visualization Types
+// =============================================================================
+
+/// Summary statistics for a variant's performance.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct VariantSummary {
+    /// Estimated mean performance.
+    pub mean_est: f64,
+    /// Lower confidence bound.
+    pub cs_lower: f64,
+    /// Upper confidence bound.
+    pub cs_upper: f64,
+    /// Number of observations.
+    pub count: u64,
+}
+
+/// Visualization data for a top-k evaluation.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct TopKEvaluationVisualization {
+    /// Map of variant names to their summary statistics.
+    pub variant_summaries: std::collections::HashMap<String, VariantSummary>,
+}
+
+/// Types of visualizations that can be displayed.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
+pub enum VisualizationType {
+    /// Top-k evaluation results showing variant performance comparisons.
+    TopKEvaluation(TopKEvaluationVisualization),
+    /// Unknown visualization type for forward compatibility.
+    /// Old clients can gracefully handle new visualization types they don't recognize.
+    #[serde(untagged)]
+    Unknown(serde_json::Value),
+}
+
+/// Visualization payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadVisualization {
+    /// The ID of the tool execution that generated this visualization.
+    /// For client-side tools, this is the ToolCall event ID.
+    /// For server-side tools, this is the task ID.
+    pub tool_execution_id: Uuid,
+    /// The visualization data.
+    pub visualization: VisualizationType,
 }
 
 // =============================================================================
