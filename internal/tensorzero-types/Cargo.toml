@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-aws-smithy-types = { version = "1.4.0", features = ["byte-stream-poll-next"] }
+aws-smithy-types = { version = "1.4.3", features = ["byte-stream-poll-next"] }
 infer.workspace = true
 mime.workspace = true
 object_store.workspace = true
