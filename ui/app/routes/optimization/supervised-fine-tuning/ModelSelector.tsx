@@ -307,7 +307,7 @@ export function ModelSelector({
                               <CommandItem
                                 value={`custom::${searchValue}`}
                                 onSelect={handleSelectCustom}
-                                className="flex cursor-pointer items-center justify-between gap-2"
+                                className="flex items-center justify-between gap-2"
                               >
                                 <span className="min-w-0 truncate font-mono text-sm">
                                   {searchValue}
@@ -334,7 +334,7 @@ export function ModelSelector({
                               <CommandItem
                                 value={`custom::${field.value.name}`}
                                 onSelect={() => setOpen(false)}
-                                className="flex cursor-pointer items-center justify-between gap-2"
+                                className="flex items-center justify-between gap-2"
                               >
                                 <span className="min-w-0 truncate font-mono text-sm">
                                   {field.value.displayName}
@@ -374,7 +374,7 @@ export function ModelSelector({
                                   key={`${model.provider}::${model.name}`}
                                   value={`${model.provider}::${model.name}`}
                                   onSelect={() => handleSelect(model)}
-                                  className="flex cursor-pointer items-center justify-between"
+                                  className="flex items-center justify-between"
                                 >
                                   <span className="font-mono text-sm">
                                     {model.displayName}
