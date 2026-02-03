@@ -1,7 +1,14 @@
-import { Plus } from "lucide-react";
-import { Suspense, use } from "react";
+import { AlertCircle, Plus } from "lucide-react";
+import { Suspense } from "react";
 import type { Route } from "./+types/route";
-import { data, useLocation, useNavigate } from "react-router";
+import {
+  Await,
+  data,
+  isRouteErrorResponse,
+  useAsyncError,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import {
   PageHeader,
@@ -74,7 +81,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-// Skeleton rows for loading state - matches table columns (Session ID, Created)
 function SkeletonRows() {
   return (
     <>
@@ -92,48 +98,23 @@ function SkeletonRows() {
   );
 }
 
-// Resolves promise and renders table rows
-function TableBodyContent({
-  data,
-  gatewayVersion,
-  uiVersion,
-}: {
-  data: Promise<SessionsData>;
-  gatewayVersion?: string;
-  uiVersion?: string;
-}) {
-  const { sessions } = use(data);
-
+function TableErrorState() {
+  const error = useAsyncError();
+  let message = "Failed to load sessions";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
   return (
-    <SessionsTableRows
-      sessions={sessions}
-      gatewayVersion={gatewayVersion}
-      uiVersion={uiVersion}
-    />
-  );
-}
-
-// Resolves promise and renders pagination
-function PaginationContent({
-  data,
-  offset,
-  onPreviousPage,
-  onNextPage,
-}: {
-  data: Promise<SessionsData>;
-  offset: number;
-  onPreviousPage: () => void;
-  onNextPage: () => void;
-}) {
-  const { hasMore } = use(data);
-
-  return (
-    <PageButtons
-      onPreviousPage={onPreviousPage}
-      onNextPage={onNextPage}
-      disablePrevious={offset <= 0}
-      disableNext={!hasMore}
-    />
+    <TableRow>
+      <TableCell colSpan={2}>
+        <div className="flex items-center justify-center gap-2 py-8 text-red-600">
+          <AlertCircle className="h-4 w-4" />
+          <span>{message}</span>
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -187,21 +168,29 @@ export default function AutopilotSessionsPage({
           </TableHeader>
           <TableBody>
             <Suspense key={location.search} fallback={<SkeletonRows />}>
-              <TableBodyContent
-                data={sessionsData}
-                gatewayVersion={gatewayVersion}
-                uiVersion={uiVersion}
-              />
+              <Await resolve={sessionsData} errorElement={<TableErrorState />}>
+                {({ sessions }) => (
+                  <SessionsTableRows
+                    sessions={sessions}
+                    gatewayVersion={gatewayVersion}
+                    uiVersion={uiVersion}
+                  />
+                )}
+              </Await>
             </Suspense>
           </TableBody>
         </Table>
         <Suspense key={location.search} fallback={<PageButtons disabled />}>
-          <PaginationContent
-            data={sessionsData}
-            offset={offset}
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-          />
+          <Await resolve={sessionsData} errorElement={<PageButtons disabled />}>
+            {({ hasMore }) => (
+              <PageButtons
+                onPreviousPage={handlePreviousPage}
+                onNextPage={handleNextPage}
+                disablePrevious={offset <= 0}
+                disableNext={!hasMore}
+              />
+            )}
+          </Await>
         </Suspense>
       </SectionLayout>
     </PageLayout>
