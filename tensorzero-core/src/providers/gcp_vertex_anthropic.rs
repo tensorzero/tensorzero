@@ -557,8 +557,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             prefill_json_message(&mut messages);
         }
 
-        // GCP Vertex Anthropic does not support structured outputs (beta_structured_outputs = false)
-        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools, false)?;
+        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools)?;
 
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
@@ -897,7 +896,7 @@ mod tests {
             parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, false);
+        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool);
         assert_eq!(
             anthropic_tool,
             AnthropicFunctionTool {
