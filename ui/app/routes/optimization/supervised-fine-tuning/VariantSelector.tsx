@@ -1,15 +1,10 @@
 import type { Control } from "react-hook-form";
 import type { SFTFormValues } from "./types";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
+import { Combobox } from "~/components/ui/combobox";
 import type { ChatCompletionConfig } from "~/types/tensorzero";
 import { TemplateDetailsDialog } from "./TemplateDetailsDialog";
+import { useMemo } from "react";
 
 type VariantSelectorProps = {
   control: Control<SFTFormValues>;
@@ -20,7 +15,11 @@ export function VariantSelector({
   control,
   chatCompletionVariants,
 }: VariantSelectorProps) {
-  const hasVariants = Object.keys(chatCompletionVariants).length > 0;
+  const variantNames = useMemo(
+    () => Object.keys(chatCompletionVariants),
+    [chatCompletionVariants],
+  );
+  const hasVariants = variantNames.length > 0;
 
   return (
     <FormField
@@ -30,28 +29,17 @@ export function VariantSelector({
         <FormItem>
           <FormLabel>Prompt</FormLabel>
           <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-            <Select
-              onValueChange={field.onChange}
-              defaultValue={field.value}
+            <Combobox
+              selected={field.value ?? null}
+              onSelect={(value) => field.onChange(value)}
+              items={variantNames}
+              placeholder={
+                hasVariants ? "Select variant" : "No variants available"
+              }
+              emptyMessage="No variants found"
               disabled={!hasVariants}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    hasVariants
-                      ? "Select a variant name"
-                      : "No variants available"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(chatCompletionVariants).map(([name]) => (
-                  <SelectItem key={name} value={name}>
-                    <span>{name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              ariaLabel="Prompt"
+            />
             <TemplateDetailsDialog
               variant={field.value}
               disabled={!field.value}
