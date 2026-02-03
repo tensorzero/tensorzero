@@ -46,6 +46,7 @@ mod feedback_queries;
 mod inference_count_queries;
 mod inference_queries;
 mod model_inference_queries;
+mod model_provider_statistics_queries;
 mod postgres;
 mod rate_limit_queries;
 mod select_queries;

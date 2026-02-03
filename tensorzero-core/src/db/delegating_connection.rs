@@ -34,6 +34,7 @@ use crate::db::inferences::{
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::stored_datapoint::StoredDatapoint;
+use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint};
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
@@ -609,6 +610,34 @@ impl ModelInferenceQueries for DelegatingDatabaseConnection {
         self.get_read_database()
             .get_model_inferences_by_inference_id(inference_id)
             .await
+    }
+
+    async fn count_distinct_models_used(&self) -> Result<u32, Error> {
+        self.get_read_database().count_distinct_models_used().await
+    }
+
+    async fn get_model_usage_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<ModelUsageTimePoint>, Error> {
+        self.get_read_database()
+            .get_model_usage_timeseries(time_window, max_periods)
+            .await
+    }
+
+    async fn get_model_latency_quantiles(
+        &self,
+        time_window: TimeWindow,
+    ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
+        self.get_read_database()
+            .get_model_latency_quantiles(time_window)
+            .await
+    }
+
+    fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
+        self.get_read_database()
+            .get_model_latency_quantile_function_inputs()
     }
 
     // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
