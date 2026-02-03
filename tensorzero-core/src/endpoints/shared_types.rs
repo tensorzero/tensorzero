@@ -11,3 +11,12 @@ pub enum OrderDirection {
     #[serde(rename = "descending")]
     Desc,
 }
+
+impl OrderDirection {
+    pub fn to_sql_direction(&self) -> &str {
+        match self {
+            OrderDirection::Asc => "ASC",
+            OrderDirection::Desc => "DESC",
+        }
+    }
+}

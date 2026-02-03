@@ -46,4 +46,7 @@ pub use list_datasets::{ListDatasetsTool, ListDatasetsToolParams};
 pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
 pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
-pub use write_config::{WriteConfigTool, WriteConfigToolParams};
+pub use write_config::{
+    EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
+    UpsertVariantPayload, WriteConfigTool, WriteConfigToolParams,
+};
