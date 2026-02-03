@@ -631,7 +631,9 @@ pub(super) fn build_anthropic_tools<'a>(
         Some(c) => {
             let mut all_tools: Vec<AnthropicTool<'a>> = c
                 .strict_tools_available()?
-                .map(|tool| AnthropicTool::Function(AnthropicFunctionTool::new(tool, supports_strict_mode)))
+                .map(|tool| {
+                    AnthropicTool::Function(AnthropicFunctionTool::new(tool, supports_strict_mode))
+                })
                 .collect();
             all_tools.extend(provider_tools.iter().map(AnthropicTool::Provider));
             Ok(Some(all_tools))
