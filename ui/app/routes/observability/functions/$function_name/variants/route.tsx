@@ -111,7 +111,7 @@ async function fetchInferencesData(
     client.listInferenceMetadata({
       function_name,
       variant_name,
-      limit: limit + 1,
+      limit: limit + 1, // Fetch one extra to determine pagination
       before: beforeInference || undefined,
       after: afterInference || undefined,
     }),
@@ -342,6 +342,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   let variant_info = function_config.variants[variant_name];
   if (!variant_info) {
     if (function_name === DEFAULT_FUNCTION) {
+      // For default function, create synthetic variant config
       variant_info = {
         inner: {
           type: "chat_completion",
