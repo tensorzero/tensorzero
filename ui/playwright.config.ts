@@ -15,7 +15,7 @@ const includeAutopilot = process.env.TENSORZERO_PLAYWRIGHT_INCLUDE_AUTOPILOT;
 export default defineConfig({
   testDir: "./e2e_tests",
   /* Exclude autopilot tests by default - they require a separate environment */
-  testIgnore: includeAutopilot ? undefined : "**/autopilot/**",
+  testIgnore: includeAutopilot ? undefined : "autopilot/**",
   /* Global timeout: 60 seconds max per test */
   timeout: 60000,
   /* Run tests in files in parallel */
