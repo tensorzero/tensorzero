@@ -94,6 +94,7 @@ async function fetchProjectData(
     runStats[runId] = statsResults[index];
   });
 
+  // Sort runInfos to match the order from URL params
   runInfos.sort((a, b) => runIds.indexOf(a.id) - runIds.indexOf(b.id));
 
   return {
