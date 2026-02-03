@@ -1,14 +1,7 @@
-import { AlertCircle, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Suspense } from "react";
 import type { Route } from "./+types/route";
-import {
-  Await,
-  data,
-  isRouteErrorResponse,
-  useAsyncError,
-  useLocation,
-  useNavigate,
-} from "react-router";
+import { Await, data, useLocation, useNavigate } from "react-router";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import {
   PageHeader,
@@ -25,6 +18,7 @@ import type { Session } from "~/types/tensorzero";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   Table,
+  TableAsyncErrorState,
   TableBody,
   TableCell,
   TableHead,
@@ -102,26 +96,6 @@ function SkeletonRows() {
   );
 }
 
-function TableErrorState() {
-  const error = useAsyncError();
-  let message = "Failed to load sessions";
-  if (isRouteErrorResponse(error)) {
-    message = typeof error.data === "string" ? error.data : message;
-  } else if (error instanceof Error) {
-    message = error.message;
-  }
-  return (
-    <TableRow>
-      <TableCell colSpan={2}>
-        <div className="flex items-center justify-center gap-2 py-8 text-red-600">
-          <AlertCircle className="h-4 w-4" />
-          <span>{message}</span>
-        </div>
-      </TableCell>
-    </TableRow>
-  );
-}
-
 export default function AutopilotSessionsPage({
   loaderData,
 }: Route.ComponentProps) {
@@ -171,7 +145,15 @@ export default function AutopilotSessionsPage({
           </TableHeader>
           <TableBody>
             <Suspense key={location.search} fallback={<SkeletonRows />}>
-              <Await resolve={sessionsData} errorElement={<TableErrorState />}>
+              <Await
+                resolve={sessionsData}
+                errorElement={
+                  <TableAsyncErrorState
+                    colSpan={3}
+                    defaultMessage="Failed to load sessions"
+                  />
+                }
+              >
                 {({ sessions }) => (
                   <SessionsTableRows
                     sessions={sessions}
