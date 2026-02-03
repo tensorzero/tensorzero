@@ -35,7 +35,7 @@ routing = ["aws_bedrock"]
 [models.claude_haiku_4_5.providers.aws_bedrock]
 type = "aws_bedrock"
 model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-region = "us-east-1"
+# optional: region = "us-east-1"
 
 [functions.my_function_name]
 type = "chat"
@@ -60,17 +60,23 @@ See the [Configuration Reference](/gateway/configuration-reference/) for optiona
 ### Credentials
 
 You must make sure that the gateway has the necessary permissions to access AWS Bedrock.
-The TensorZero Gateway will use the AWS SDK to retrieve the relevant credentials.
+TensorZero supports many AWS authentication methods for AWS Bedrock.
 
-The simplest way is to set the following environment variables before running the gateway:
+TensorZero will attempt the following authentication methods in order:
 
-```bash
-AWS_ACCESS_KEY_ID=...
-AWS_REGION=us-east-1
-AWS_SECRET_ACCESS_KEY=...
-```
+1. Explicit `api_key` in your configuration (bearer auth)
+2. Explicit IAM credentials (`access_key_id`, `secret_access_key`, optionally `session_token`) in your configuration (SigV4)
+3. `AWS_BEARER_TOKEN_BEDROCK` environment variable (bearer auth)
+4. AWS SDK credential chain (SigV4)
 
-Alternatively, you can use other authentication methods supported by the AWS SDK.
+See the [Configuration Reference](/gateway/configuration-reference/) for more details on authentication options.
+
+### Region
+
+TensorZero will attempt to automatically determine the AWS region using the AWS SDK.
+Alternatively, you can also configure an explicit region in your provider's configuration (e.g. `region = "us-east-1"`).
+
+See the [Configuration Reference](/gateway/configuration-reference/) for more details.
 
 ### Deployment (Docker Compose)
 
@@ -78,7 +84,7 @@ Create a minimal Docker Compose configuration:
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
 
 services:
   gateway:
@@ -87,14 +93,15 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:?Environment variable AWS_ACCESS_KEY_ID must be set.}
-      - AWS_REGION=${AWS_REGION:?Environment variable AWS_REGION must be set.}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:?Environment variable AWS_SECRET_ACCESS_KEY must be set.}
+      # AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:?Environment variable AWS_BEARER_TOKEN_BEDROCK must be set.}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?Environment variable AWS_ACCESS_KEY_ID must be set.}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?Environment variable AWS_SECRET_ACCESS_KEY must be set.}
+      # AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:?Environment variable AWS_SESSION_TOKEN must be set.}
     ports:
       - "3000:3000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 ```
+
+Make sure to configure the relevant environment variables (if any) for your AWS setup.
 
 You can start the gateway with `docker compose up`.
 

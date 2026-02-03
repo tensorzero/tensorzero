@@ -692,7 +692,28 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-When specified, `secret_access_key` must also be provided. Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+When specified, `secret_access_key` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
+You can't combine this field with `api_key`.
+
+##### `api_key`
+
+- **Type:** string
+- **Required:** no
+
+API key for bearer token authentication. When set, TensorZero uses `Authorization: Bearer <token>` instead of AWS SigV4 signing.
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+
+If neither `api_key` nor IAM credentials are configured, TensorZero checks for `AWS_BEARER_TOKEN_BEDROCK` environment variable first.
+If found, it uses bearer token authentication.
+Otherwise, it falls back to the AWS SDK credential chain.
+
+You can't combine this field with IAM credentials like `access_key_id`.
 
 ##### `endpoint_url`
 
@@ -804,6 +825,11 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
+When specified, `access_key_id` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
+You can't combine this field with `api_key`.
+
 ##### `session_token`
 
 - **Type:** string
@@ -817,7 +843,10 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-Must use the same source type as `access_key_id` and `secret_access_key`.
+When specified, `access_key_id` and `secret_access_key` must also be provided.
+All three fields must use the same source type (all `env::`, all `dynamic::`, or all `sdk`).
+
+You can't combine this field with `api_key`.
 
 </Accordion>
 
@@ -836,7 +865,8 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-When specified, `secret_access_key` must also be provided. Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+When specified, `secret_access_key` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
 
 ##### `endpoint_name`
 
@@ -971,6 +1001,9 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
+When specified, `access_key_id` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
 ##### `session_token`
 
 - **Type:** string
@@ -984,7 +1017,8 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-Must use the same source type as `access_key_id` and `secret_access_key`.
+When specified, `access_key_id` and `secret_access_key` must also be provided.
+All three fields must use the same source type (all `env::`, all `dynamic::`, or all `sdk`).
 
 </Accordion>
 

@@ -410,7 +410,7 @@ fn validate_aws_credential_location(
 /// AWS authentication method - either API key (bearer token) or IAM credentials (SigV4).
 /// Used by AWS Bedrock to support both bearer token auth and SigV4 signing.
 #[derive(Clone, Debug)]
-pub enum AWSAuth {
+pub enum AWSBedrockAuth {
     /// Bearer token authentication (Authorization: Bearer <token>).
     /// Used with AWS Bedrock API keys.
     ApiKey(SecretString),
@@ -420,7 +420,7 @@ pub enum AWSAuth {
     Credentials(AWSCredentials),
 }
 
-impl AWSAuth {
+impl AWSBedrockAuth {
     /// Create AWSAuth from config fields.
     ///
     /// Priority:
@@ -453,7 +453,7 @@ impl AWSAuth {
 
         // 2. Explicit IAM credentials
         if access_key_id.is_some() || secret_access_key.is_some() {
-            return Ok(AWSAuth::Credentials(AWSCredentials::from_fields(
+            return Ok(AWSBedrockAuth::Credentials(AWSCredentials::from_fields(
                 access_key_id,
                 secret_access_key,
                 session_token,
@@ -464,14 +464,14 @@ impl AWSAuth {
         // 3. Nothing configured - try AWS_BEARER_TOKEN_BEDROCK env var first, then SDK
         if let Ok(token) = std::env::var("AWS_BEARER_TOKEN_BEDROCK") {
             tracing::info!("Using AWS_BEARER_TOKEN_BEDROCK for {provider_type} authentication");
-            return Ok(AWSAuth::ApiKey(SecretString::new(token.into())));
+            return Ok(AWSBedrockAuth::ApiKey(SecretString::new(token.into())));
         }
 
         // 4. Fall back to SDK credential chain (SigV4)
         tracing::debug!(
             "No api_key or AWS_BEARER_TOKEN_BEDROCK found, using SDK credential chain for {provider_type}"
         );
-        Ok(AWSAuth::Credentials(AWSCredentials::Sdk))
+        Ok(AWSBedrockAuth::Credentials(AWSCredentials::Sdk))
     }
 
     fn from_api_key_location(loc: CredentialLocation, provider_type: &str) -> Result<Self, Error> {
@@ -484,21 +484,9 @@ impl AWSAuth {
                         ),
                     })
                 })?;
-                Ok(AWSAuth::ApiKey(SecretString::new(token.into())))
+                Ok(AWSBedrockAuth::ApiKey(SecretString::new(token.into())))
             }
-            CredentialLocation::Dynamic(key) => Ok(AWSAuth::DynamicApiKey(key)),
-            CredentialLocation::Sdk => {
-                // sdk for api_key means auto-detect from AWS_BEARER_TOKEN_BEDROCK
-                if let Ok(token) = std::env::var("AWS_BEARER_TOKEN_BEDROCK") {
-                    Ok(AWSAuth::ApiKey(SecretString::new(token.into())))
-                } else {
-                    Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "`api_key = \"sdk\"` requires AWS_BEARER_TOKEN_BEDROCK env var for `{provider_type}`."
-                        ),
-                    }))
-                }
-            }
+            CredentialLocation::Dynamic(key) => Ok(AWSBedrockAuth::DynamicApiKey(key)),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: format!(
                     "Unsupported credential location for `api_key` in `{provider_type}`. Use `env::` or `dynamic::`."
@@ -509,8 +497,77 @@ impl AWSAuth {
 
     /// Returns true if this auth method uses bearer token authentication.
     pub fn is_bearer_auth(&self) -> bool {
-        matches!(self, AWSAuth::ApiKey(_) | AWSAuth::DynamicApiKey(_))
+        matches!(
+            self,
+            AWSBedrockAuth::ApiKey(_) | AWSBedrockAuth::DynamicApiKey(_)
+        )
     }
+}
+
+/// Process AWS Bedrock provider configuration.
+///
+/// Handles region resolution (including deprecated `allow_auto_detect_region`),
+/// endpoint URL parsing, and authentication (api_key or IAM credentials).
+///
+/// Returns `(region, endpoint_url, auth)`.
+pub fn build_aws_bedrock_provider_config(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    endpoint_url: Option<CredentialLocationOrHardcoded>,
+    api_key: Option<CredentialLocation>,
+    access_key_id: Option<CredentialLocation>,
+    secret_access_key: Option<CredentialLocation>,
+    session_token: Option<CredentialLocation>,
+) -> Result<(AWSRegion, Option<AWSEndpointUrl>, AWSBedrockAuth), Error> {
+    const PROVIDER_TYPE: &str = "aws_bedrock";
+
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{PROVIDER_TYPE}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, PROVIDER_TYPE))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    let aws_region = aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {PROVIDER_TYPE} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })?;
+
+    let endpoint_url = endpoint_url
+        .map(|loc| AWSEndpointUrl::from_credential_location(loc, PROVIDER_TYPE))
+        .transpose()?
+        .flatten();
+
+    // Convert credential fields to AWSBedrockAuth (handles api_key for bearer auth)
+    let auth = AWSBedrockAuth::from_fields(
+        api_key,
+        access_key_id,
+        secret_access_key,
+        session_token,
+        PROVIDER_TYPE,
+    )?;
+
+    Ok((aws_region, endpoint_url, auth))
 }
 
 /// Warn if there's a potential credential exfiltration risk.
