@@ -726,7 +726,6 @@ export default function AutopilotSessionEventsPage({
             direction={FadeDirection.Top}
             visible={showTopFade}
             className="-mx-2"
-            data-testid="scroll-fade-top"
           />
         </div>
       </div>
@@ -774,7 +773,6 @@ export default function AutopilotSessionEventsPage({
             direction={FadeDirection.Bottom}
             visible={showBottomFade}
             className="-mx-2"
-            data-testid="scroll-fade-bottom"
           />
           {/* Footer background - matches message width with slight outset */}
           <div ref={footerRef} className="bg-bg-secondary -mx-2 px-2">
