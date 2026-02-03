@@ -4,7 +4,7 @@
  * Includes links to external job details and raw data visualization.
  */
 
-import { ExternalLink } from "lucide-react";
+import { AlertCircle, ExternalLink } from "lucide-react";
 import { Calendar, Function } from "~/components/icons/Icons";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { RawDataAccordion } from "./RawDataAccordion";
@@ -28,6 +28,7 @@ import type {
   OptimizationJobInfo,
 } from "~/types/tensorzero";
 import { toFunctionUrl } from "~/utils/urls";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 
 export default function LLMFineTuningStatus({
   status,
@@ -90,6 +91,17 @@ export default function LLMFineTuningStatus({
           </BasicInfoItem>
         </BasicInfoLayout>
       </SectionLayout>
+
+      {status.status === "failed" && (
+        <SectionLayout>
+          <SectionHeader heading="Error" />
+          <SectionErrorNotice
+            icon={AlertCircle}
+            title="Fine-tuning job failed"
+            description={status.message}
+          />
+        </SectionLayout>
+      )}
 
       {/* hide if not available from provider, eg fireworks */}
       {status.status === "pending" && status.estimated_finish && (
