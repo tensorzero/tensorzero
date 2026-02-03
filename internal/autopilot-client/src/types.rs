@@ -693,6 +693,40 @@ pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
 }
 
+/// Query parameters for listing config writes.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct ListConfigWritesParams {
+    /// Maximum number of config writes to return. Defaults to 20.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// Offset for pagination.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u32>,
+}
+
+/// Internal response type - consumers should use `GatewayListConfigWritesResponse` instead.
+///
+/// Note: TS derive is needed for types that reference this, but we don't export it.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListConfigWritesResponse {
+    pub config_writes: Vec<Event>,
+}
+
+/// Response from listing config writes as seen by gateway consumers.
+///
+/// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GatewayListConfigWritesResponse {
+    pub config_writes: Vec<GatewayEvent>,
+}
+
 /// Response from approving all pending tool calls.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]

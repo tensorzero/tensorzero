@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
   AutopilotStatus,
   EventPayloadMessageContent,
@@ -471,6 +472,7 @@ function EventItem({
   event: GatewayEvent;
   isPending?: boolean;
 }) {
+  const { yoloMode } = useAutopilotSession();
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
@@ -509,7 +511,7 @@ function EventItem({
             >
               <ChevronRight className="h-4 w-4" />
             </span>
-            {isPending && (
+            {isPending && !yoloMode && (
               <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                 Action Required
               </span>
