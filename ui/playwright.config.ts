@@ -6,12 +6,16 @@ const useUIDocker =
   process.env.TENSORZERO_PLAYWRIGHT_NO_WEBSERVER || process.env.TENSORZERO_CI;
 // Allow docker-compose to override baseURL explicitly (e.g., http://ui:4000 in CI)
 const baseURLOverride = process.env.TENSORZERO_PLAYWRIGHT_BASE_URL;
+// Set to include autopilot tests (excluded by default)
+const includeAutopilot = process.env.TENSORZERO_PLAYWRIGHT_INCLUDE_AUTOPILOT;
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
   testDir: "./e2e_tests",
+  /* Exclude autopilot tests by default - they require a separate environment */
+  testIgnore: includeAutopilot ? undefined : "autopilot/**",
   /* Global timeout: 60 seconds max per test */
   timeout: 60000,
   /* Run tests in files in parallel */
