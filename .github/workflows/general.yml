@@ -6,6 +6,9 @@ on:
     paths-ignore:
       - "docs/**"
   pull_request:
+  push:
+    branches:
+      - "aaron/temp-clickhouse-debug"
   workflow_dispatch:
 
 concurrency:
@@ -707,12 +710,14 @@ jobs:
     runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     # This needs to pull from Docker Hub, so only run in the merge queue, or when running on a PR from the main repository
-    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ github.event_name == 'merge_group' || github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository) }}
     strategy:
       matrix:
-        # Only include replicated: true when running in merge queue
-        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
+        # On push to debug branch: only run latest non-replicated
+        # On merge_group: run both replicated and non-replicated
+        # On PR: run only non-replicated
+        replicated: ${{ github.event_name == 'push' && fromJSON('[false]') || (github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]')) }}
+        clickhouse_version: ${{ github.event_name == 'push' && fromJSON('[{"tag":"latest","prefix":"latest","allow_failure":false}]') || (github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]')) }}
         exclude:
           - replicated: true
             clickhouse_version:
@@ -904,6 +909,10 @@ jobs:
       - name: Print e2e logs
         if: always()
         run: cat e2e_logs.txt
+
+      - name: Sleep forever (debug)
+        if: always()
+        run: sleep infinity
 
   # Run Postgres tests
   # Postgres does not have unit test coverage, because sqlx doesn't expose mocks. We include it here to get early CI signals.
