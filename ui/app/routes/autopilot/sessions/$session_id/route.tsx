@@ -36,7 +36,7 @@ import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
 import { useAutoApproval } from "~/hooks/use-auto-approval";
-import { useManualAuthorization } from "~/hooks/use-manual-approval";
+import { useManualAuthorization } from "~/hooks/use-manual-authorization";
 import type { AuthorizationLoadingAction } from "~/utils/autopilot/types";
 import {
   AutopilotSessionProvider,
