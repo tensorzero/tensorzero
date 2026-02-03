@@ -5,7 +5,7 @@ import {
 import { isErrorLike, JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
 import type { ClientInferenceParams } from "~/types/tensorzero";
-import { getExtraInferenceOptions } from "~/utils/feature_flags";
+import { getExtraInferenceOptions } from "~/utils/feature_flags.server";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
