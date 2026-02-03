@@ -98,7 +98,13 @@ export default function LLMFineTuningStatus({
           <SectionErrorNotice
             icon={AlertCircle}
             title="Fine-tuning job failed"
-            description={status.message}
+            description={
+              status.error
+                ? typeof status.error === "string"
+                  ? status.error
+                  : JSON.stringify(status.error, null, 2)
+                : status.message
+            }
           />
         </SectionLayout>
       )}
