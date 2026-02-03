@@ -20,6 +20,7 @@ use crate::db::inferences::{
 };
 use crate::db::postgres::inference_filter_helpers::{MetricJoinRegistry, apply_inference_filter};
 use crate::db::query_helpers::json_double_escape_string_without_quotes;
+use crate::db::query_helpers::uuid_to_datetime;
 use crate::endpoints::inference::InferenceParams;
 use crate::endpoints::stored_inferences::v1::types::{
     FloatComparisonOperator, TagComparisonOperator, TimeComparisonOperator,
@@ -568,23 +569,6 @@ impl InferenceQueries for PostgresConnectionInfo {
 
         Ok(())
     }
-}
-
-// ===== Helper functions =====
-
-/// Converts a UUIDv7 to a DateTime<Utc> by extracting its embedded timestamp.
-fn uuid_to_datetime(uuid: Uuid) -> Result<DateTime<Utc>, Error> {
-    let timestamp = uuid.get_timestamp().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidUuid {
-            raw_uuid: uuid.to_string(),
-        })
-    })?;
-    let (secs, nanos) = timestamp.to_unix();
-    DateTime::from_timestamp(secs as i64, nanos).ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidUuid {
-            raw_uuid: uuid.to_string(),
-        })
-    })
 }
 
 // ===== Helper types =====

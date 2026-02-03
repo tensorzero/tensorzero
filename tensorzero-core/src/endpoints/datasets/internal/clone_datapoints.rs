@@ -1,9 +1,12 @@
+use std::collections::HashMap;
+
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::db::datasets::DatasetQueries;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, StructuredJson};
 
@@ -36,9 +39,23 @@ pub async fn clone_datapoints_handler(
 ) -> Result<Json<CloneDatapointsResponse>, Error> {
     validate_dataset_name(&path_params.dataset_name)?;
 
-    let new_ids = app_state
-        .clickhouse_connection_info
-        .clone_datapoints(&path_params.dataset_name, &request.datapoint_ids)
+    // Generate UUIDs in the application layer to ensure consistency across databases
+    let id_mappings: HashMap<Uuid, Uuid> = request
+        .datapoint_ids
+        .iter()
+        .map(|id| (*id, Uuid::now_v7()))
+        .collect();
+
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let new_ids = database
+        .clone_datapoints(
+            &path_params.dataset_name,
+            &request.datapoint_ids,
+            &id_mappings,
+        )
         .await?;
 
     Ok(Json(CloneDatapointsResponse {
