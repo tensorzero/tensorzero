@@ -10,3 +10,10 @@ pub mod input_files;
 pub mod streaming;
 pub mod tool;
 pub mod usage;
+
+/// Helper for serde `skip_serializing_if` - returns true if the Option is None or contains an empty Vec.
+// Signature dictated by Serde
+#[expect(clippy::ref_option)]
+pub(crate) fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
+    v.as_ref().is_none_or(Vec::is_empty)
+}

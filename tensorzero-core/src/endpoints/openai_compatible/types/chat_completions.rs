@@ -22,6 +22,7 @@ use crate::endpoints::openai_compatible::types::input_files::{
     OpenAICompatibleFile, OpenAICompatibleImageUrl, OpenAICompatibleInputAudio,
     convert_file_to_base64, convert_image_url_to_file, convert_input_audio_to_file,
 };
+use crate::endpoints::openai_compatible::types::is_none_or_empty;
 use crate::endpoints::openai_compatible::types::tool::{
     ChatCompletionToolChoiceOption, OpenAICompatibleTool, OpenAICompatibleToolCall,
     OpenAICompatibleToolChoiceParams, OpenAICompatibleToolMessage,
@@ -227,12 +228,6 @@ pub struct OpenAICompatibleResponse {
     pub tensorzero_original_response: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
-}
-
-// Signature dictated by Serde
-#[expect(clippy::ref_option)]
-fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
-    v.as_ref().is_none_or(Vec::is_empty)
 }
 
 /// Extra content block for OpenAI-compatible responses (Thought or Unknown)
@@ -620,20 +615,21 @@ pub fn openai_messages_to_input(
                         }
                     }
 
-                    // Second pass: items without insert_index (append to end)
-                    for block in extra_content {
+                    // Second pass: items without insert_index (prepend to beginning)
+                    // We iterate in reverse so the first unindexed item ends up first
+                    for block in extra_content.into_iter().rev() {
                         match block {
                             InputExtraContentBlock::Thought {
                                 insert_index: None,
                                 thought,
                             } => {
-                                message_content.push(InputMessageContent::Thought(thought));
+                                message_content.insert(0, InputMessageContent::Thought(thought));
                             }
                             InputExtraContentBlock::Unknown {
                                 insert_index: None,
                                 unknown,
                             } => {
-                                message_content.push(InputMessageContent::Unknown(unknown));
+                                message_content.insert(0, InputMessageContent::Unknown(unknown));
                             }
                             _ => {} // Already handled
                         }
@@ -1875,9 +1871,9 @@ mod tests {
         // 2. First pass - items with insert_index (in input order):
         //    - "Indexed thought at 2" insert at min(2, 1)=1: ["Response text", "Indexed at 2"]
         //    - "Indexed thought at 0" insert at min(0, 2)=0: ["Indexed at 0", "Response text", "Indexed at 2"]
-        // 3. Second pass - items without insert_index (append to end):
-        //    - Append "Unindexed thought 1": ["Indexed at 0", "Response text", "Indexed at 2", "Unindexed 1"]
-        //    - Append Unknown: ["Indexed at 0", "Response text", "Indexed at 2", "Unindexed 1", Unknown]
+        // 3. Second pass - items without insert_index (prepend to beginning, in reverse order):
+        //    - Insert Unknown at 0: [Unknown, "Indexed at 0", "Response text", "Indexed at 2"]
+        //    - Insert "Unindexed thought 1" at 0: ["Unindexed 1", Unknown, "Indexed at 0", "Response text", "Indexed at 2"]
         assert_eq!(content.len(), 5, "Should have 5 content blocks");
 
         // Verify content order
@@ -1885,24 +1881,44 @@ mod tests {
             InputMessageContent::Thought(t) => {
                 assert_eq!(
                     t.text,
-                    Some("Indexed thought at 0".to_string()),
-                    "First should be indexed thought at 0"
+                    Some("Unindexed thought 1".to_string()),
+                    "First should be unindexed thought 1 (prepended)"
                 );
             }
             _ => panic!("Expected Thought at position 0"),
         }
         match &content[1] {
-            InputMessageContent::Text(t) => {
-                assert_eq!(t.text, "Response text", "Second should be the text content");
+            InputMessageContent::Unknown(u) => {
+                assert_eq!(
+                    u.data,
+                    serde_json::json!({"test": "data"}),
+                    "Second should be the unknown block (prepended)"
+                );
             }
-            _ => panic!("Expected Text at position 1"),
+            _ => panic!("Expected Unknown at position 1"),
         }
         match &content[2] {
             InputMessageContent::Thought(t) => {
                 assert_eq!(
                     t.text,
+                    Some("Indexed thought at 0".to_string()),
+                    "Third should be indexed thought at 0"
+                );
+            }
+            _ => panic!("Expected Thought at position 2"),
+        }
+        match &content[3] {
+            InputMessageContent::Text(t) => {
+                assert_eq!(t.text, "Response text", "Fourth should be the text content");
+            }
+            _ => panic!("Expected Text at position 3"),
+        }
+        match &content[4] {
+            InputMessageContent::Thought(t) => {
+                assert_eq!(
+                    t.text,
                     Some("Indexed thought at 2".to_string()),
-                    "Third should be indexed thought at 2"
+                    "Fifth should be indexed thought at 2"
                 );
                 assert_eq!(
                     t.signature,
@@ -1915,27 +1931,7 @@ mod tests {
                     "Should preserve provider_type"
                 );
             }
-            _ => panic!("Expected Thought at position 2"),
-        }
-        match &content[3] {
-            InputMessageContent::Thought(t) => {
-                assert_eq!(
-                    t.text,
-                    Some("Unindexed thought 1".to_string()),
-                    "Fourth should be unindexed thought 1 (appended)"
-                );
-            }
-            _ => panic!("Expected Thought at position 3"),
-        }
-        match &content[4] {
-            InputMessageContent::Unknown(u) => {
-                assert_eq!(
-                    u.data,
-                    serde_json::json!({"test": "data"}),
-                    "Fifth should be the unknown block (appended)"
-                );
-            }
-            _ => panic!("Expected Unknown at position 4"),
+            _ => panic!("Expected Thought at position 4"),
         }
     }
 
@@ -2041,5 +2037,444 @@ mod tests {
         assert_eq!(json["insert_index"], 5);
         assert_eq!(json["data"], json!({"custom": "data"}));
         assert_eq!(json["model_name"], "test_model");
+    }
+
+    // ==========================================================================
+    // Insert Index Round-Trip Tests
+    // ==========================================================================
+    //
+    // These tests verify that the insert_index algorithm correctly preserves
+    // content ordering through a split→recombine cycle:
+    // 1. Start with an original array of content blocks
+    // 2. Split into main content (text/tool_calls) and extra content (thoughts/unknowns with insert_index)
+    // 3. Recombine using the insertion algorithm
+    // 4. Verify the result matches the original
+
+    /// Represents content blocks for testing (simplified from ContentBlockChatOutput)
+    #[derive(Clone, Debug, PartialEq)]
+    enum TestContentBlock {
+        Text(String),
+        Thought(String),
+        Unknown(String),
+    }
+
+    /// Splits an array of content blocks into main content and extra content with insert_index.
+    /// This simulates what `process_chat_content` does on the output side.
+    fn split_content(
+        original: Vec<TestContentBlock>,
+    ) -> (Vec<TestContentBlock>, Vec<(usize, TestContentBlock)>) {
+        let mut main_content = vec![];
+        let mut extra_content = vec![];
+
+        for (idx, block) in original.into_iter().enumerate() {
+            match block {
+                TestContentBlock::Text(_) => main_content.push(block),
+                TestContentBlock::Thought(_) | TestContentBlock::Unknown(_) => {
+                    extra_content.push((idx, block));
+                }
+            }
+        }
+
+        (main_content, extra_content)
+    }
+
+    /// Recombines main content and extra content using the insert_index algorithm.
+    /// This simulates what `openai_messages_to_input` does on the input side.
+    fn recombine_content(
+        main_content: Vec<TestContentBlock>,
+        extra_content: Vec<(usize, TestContentBlock)>,
+    ) -> Vec<TestContentBlock> {
+        let mut result = main_content;
+
+        // Insert items at their insert_index positions (in input order)
+        for (insert_index, block) in extra_content {
+            let idx = insert_index.min(result.len());
+            result.insert(idx, block);
+        }
+
+        result
+    }
+
+    /// Helper to run a round-trip test case
+    fn assert_roundtrip(original: Vec<TestContentBlock>, description: &str) {
+        let original_clone = original.clone();
+        let (main_content, extra_content) = split_content(original);
+        let recombined = recombine_content(main_content, extra_content);
+        assert_eq!(
+            recombined, original_clone,
+            "Round-trip failed for case: {description}"
+        );
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_simple_interleaving() {
+        // Original: [Thought, Text, Thought]
+        // Split: main=[Text], extra=[(0, Thought), (2, Thought)]
+        // Recombine: insert Thought@0 → [Thought], insert Thought@2 → [Thought, Text, Thought]
+        // (But wait - after first insert, Text is at index 1, so insert at 2 goes after Text)
+        let original = vec![
+            TestContentBlock::Thought("T1".into()),
+            TestContentBlock::Text("Hello".into()),
+            TestContentBlock::Thought("T2".into()),
+        ];
+        assert_roundtrip(original, "simple interleaving");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_multiple_thoughts_at_start() {
+        // Original: [Thought, Thought, Text]
+        let original = vec![
+            TestContentBlock::Thought("T1".into()),
+            TestContentBlock::Thought("T2".into()),
+            TestContentBlock::Text("Hello".into()),
+        ];
+        assert_roundtrip(original, "multiple thoughts at start");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_thoughts_at_end() {
+        // Original: [Text, Thought, Thought]
+        let original = vec![
+            TestContentBlock::Text("Hello".into()),
+            TestContentBlock::Thought("T1".into()),
+            TestContentBlock::Thought("T2".into()),
+        ];
+        assert_roundtrip(original, "thoughts at end");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_mixed_thoughts_and_unknowns() {
+        // Original: [Thought, Text, Unknown, Text, Thought]
+        let original = vec![
+            TestContentBlock::Thought("T1".into()),
+            TestContentBlock::Text("Hello".into()),
+            TestContentBlock::Unknown("U1".into()),
+            TestContentBlock::Text("World".into()),
+            TestContentBlock::Thought("T2".into()),
+        ];
+        assert_roundtrip(original, "mixed thoughts and unknowns");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_all_extra_content() {
+        // Original: [Thought, Unknown, Thought]
+        let original = vec![
+            TestContentBlock::Thought("T1".into()),
+            TestContentBlock::Unknown("U1".into()),
+            TestContentBlock::Thought("T2".into()),
+        ];
+        assert_roundtrip(original, "all extra content, no main content");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_only_main_content() {
+        // Original: [Text, Text]
+        let original = vec![
+            TestContentBlock::Text("Hello".into()),
+            TestContentBlock::Text("World".into()),
+        ];
+        assert_roundtrip(original, "only main content");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_alternating() {
+        // Original: [Text, Thought, Text, Thought, Text]
+        let original = vec![
+            TestContentBlock::Text("A".into()),
+            TestContentBlock::Thought("T1".into()),
+            TestContentBlock::Text("B".into()),
+            TestContentBlock::Thought("T2".into()),
+            TestContentBlock::Text("C".into()),
+        ];
+        assert_roundtrip(original, "alternating text and thoughts");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_complex_sequence() {
+        // Original: [Thought, Text, Thought, Unknown, Text, Thought, Text, Unknown, Thought]
+        let original = vec![
+            TestContentBlock::Thought("T1".into()),
+            TestContentBlock::Text("A".into()),
+            TestContentBlock::Thought("T2".into()),
+            TestContentBlock::Unknown("U1".into()),
+            TestContentBlock::Text("B".into()),
+            TestContentBlock::Thought("T3".into()),
+            TestContentBlock::Text("C".into()),
+            TestContentBlock::Unknown("U2".into()),
+            TestContentBlock::Thought("T4".into()),
+        ];
+        assert_roundtrip(original, "complex mixed sequence");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_empty() {
+        // Original: []
+        let original: Vec<TestContentBlock> = vec![];
+        assert_roundtrip(original, "empty array");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_single_thought() {
+        // Original: [Thought]
+        let original = vec![TestContentBlock::Thought("T1".into())];
+        assert_roundtrip(original, "single thought");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_single_text() {
+        // Original: [Text]
+        let original = vec![TestContentBlock::Text("Hello".into())];
+        assert_roundtrip(original, "single text");
+    }
+
+    #[test]
+    fn test_insert_index_roundtrip_many_thoughts_between_texts() {
+        // Original: [Text, Thought, Thought, Thought, Text]
+        let original = vec![
+            TestContentBlock::Text("Start".into()),
+            TestContentBlock::Thought("T1".into()),
+            TestContentBlock::Thought("T2".into()),
+            TestContentBlock::Thought("T3".into()),
+            TestContentBlock::Text("End".into()),
+        ];
+        assert_roundtrip(original, "many thoughts between two texts");
+    }
+
+    // ==========================================================================
+    // Edge Case Tests for insert_index
+    // ==========================================================================
+
+    #[test]
+    fn test_insert_index_out_of_bounds_clamped() {
+        // When insert_index > len, it gets clamped to len (append)
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: Some(Value::String("Hello".to_string())),
+                tool_calls: None,
+                tensorzero_extra_content_experimental: Some(vec![
+                    InputExtraContentBlock::Thought {
+                        insert_index: Some(999), // Way out of bounds
+                        thought: Thought {
+                            text: Some("Out of bounds thought".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                ]),
+            },
+        )];
+        let input = openai_messages_to_input(messages).unwrap();
+        let content = &input.messages[0].content;
+
+        // Should be clamped to position 1 (after the text)
+        assert_eq!(content.len(), 2, "Should have 2 content blocks");
+        assert!(
+            matches!(&content[0], InputMessageContent::Text(_)),
+            "Text should be first"
+        );
+        assert!(
+            matches!(&content[1], InputMessageContent::Thought(_)),
+            "Thought should be second (clamped to end)"
+        );
+    }
+
+    #[test]
+    fn test_insert_index_empty_main_content() {
+        // insert_index with no main content
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: None,
+                tool_calls: None,
+                tensorzero_extra_content_experimental: Some(vec![
+                    InputExtraContentBlock::Thought {
+                        insert_index: Some(0),
+                        thought: Thought {
+                            text: Some("First".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                    InputExtraContentBlock::Thought {
+                        insert_index: Some(1),
+                        thought: Thought {
+                            text: Some("Second".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                ]),
+            },
+        )];
+        let input = openai_messages_to_input(messages).unwrap();
+        let content = &input.messages[0].content;
+
+        assert_eq!(content.len(), 2, "Should have 2 thoughts");
+        match (&content[0], &content[1]) {
+            (InputMessageContent::Thought(t1), InputMessageContent::Thought(t2)) => {
+                assert_eq!(
+                    t1.text,
+                    Some("First".to_string()),
+                    "First thought should be at position 0"
+                );
+                assert_eq!(
+                    t2.text,
+                    Some("Second".to_string()),
+                    "Second thought should be at position 1"
+                );
+            }
+            _ => panic!("Expected two Thought content blocks"),
+        }
+    }
+
+    #[test]
+    fn test_insert_index_duplicate_indices() {
+        // Multiple items with the same insert_index - should be inserted in input order
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: Some(Value::String("Hello".to_string())),
+                tool_calls: None,
+                tensorzero_extra_content_experimental: Some(vec![
+                    InputExtraContentBlock::Thought {
+                        insert_index: Some(0),
+                        thought: Thought {
+                            text: Some("First at 0".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                    InputExtraContentBlock::Unknown {
+                        insert_index: Some(0),
+                        unknown: Unknown {
+                            data: json!({"id": "second at 0"}),
+                            model_name: None,
+                            provider_name: None,
+                        },
+                    },
+                ]),
+            },
+        )];
+        let input = openai_messages_to_input(messages).unwrap();
+        let content = &input.messages[0].content;
+
+        // With duplicate indices, they're inserted in input order at the same position
+        // First insert at 0: [Thought, "Hello"]
+        // Second insert at 0: [Unknown, Thought, "Hello"]
+        assert_eq!(content.len(), 3, "Should have 3 content blocks");
+        assert!(
+            matches!(&content[0], InputMessageContent::Unknown(_)),
+            "Unknown should be first (inserted second at index 0)"
+        );
+        assert!(
+            matches!(&content[1], InputMessageContent::Thought(_)),
+            "Thought should be second (inserted first at index 0)"
+        );
+        assert!(
+            matches!(&content[2], InputMessageContent::Text(_)),
+            "Text should be third"
+        );
+    }
+
+    #[test]
+    fn test_insert_index_only_unindexed() {
+        // All items have insert_index: None - should be prepended in order
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: Some(Value::String("Hello".to_string())),
+                tool_calls: None,
+                tensorzero_extra_content_experimental: Some(vec![
+                    InputExtraContentBlock::Thought {
+                        insert_index: None,
+                        thought: Thought {
+                            text: Some("Unindexed 1".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                    InputExtraContentBlock::Unknown {
+                        insert_index: None,
+                        unknown: Unknown {
+                            data: json!({"id": "unindexed 2"}),
+                            model_name: None,
+                            provider_name: None,
+                        },
+                    },
+                ]),
+            },
+        )];
+        let input = openai_messages_to_input(messages).unwrap();
+        let content = &input.messages[0].content;
+
+        assert_eq!(content.len(), 3, "Should have 3 content blocks");
+        assert!(
+            matches!(&content[0], InputMessageContent::Thought(_)),
+            "Unindexed Thought should be first (prepended)"
+        );
+        assert!(
+            matches!(&content[1], InputMessageContent::Unknown(_)),
+            "Unindexed Unknown should be second (prepended)"
+        );
+        assert!(
+            matches!(&content[2], InputMessageContent::Text(_)),
+            "Text should be last"
+        );
+    }
+
+    #[test]
+    fn test_insert_index_with_tool_calls() {
+        // Tool calls present before extra_content insertion
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: Some(Value::String("Hello".to_string())),
+                tool_calls: Some(vec![OpenAICompatibleToolCall {
+                    id: "call_1".to_string(),
+                    r#type: "function".to_string(),
+                    function: OpenAICompatibleFunctionCall {
+                        name: "test_tool".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                }]),
+                tensorzero_extra_content_experimental: Some(vec![
+                    InputExtraContentBlock::Thought {
+                        insert_index: Some(0),
+                        thought: Thought {
+                            text: Some("Thought at 0".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                ]),
+            },
+        )];
+        let input = openai_messages_to_input(messages).unwrap();
+        let content = &input.messages[0].content;
+
+        // Content order: text first, then tool_call, then extra content inserted
+        // Before extra: [Text, ToolCall]
+        // After insert at 0: [Thought, Text, ToolCall]
+        assert_eq!(content.len(), 3, "Should have 3 content blocks");
+        assert!(
+            matches!(&content[0], InputMessageContent::Thought(_)),
+            "Thought should be first (inserted at 0)"
+        );
+        assert!(
+            matches!(&content[1], InputMessageContent::Text(_)),
+            "Text should be second"
+        );
+        assert!(
+            matches!(&content[2], InputMessageContent::ToolCall(_)),
+            "ToolCall should be third"
+        );
     }
 }

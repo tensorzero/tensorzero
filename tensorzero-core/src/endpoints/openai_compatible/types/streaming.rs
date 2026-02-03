@@ -7,7 +7,7 @@
 use axum::response::sse::Event;
 use futures::Stream;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tokio_stream::StreamExt;
 
 use crate::error::{Error, ErrorDetails};
@@ -18,6 +18,7 @@ use crate::inference::types::{ContentBlockChunk, FinishReason, current_timestamp
 use crate::endpoints::inference::{InferenceResponseChunk, InferenceStream};
 
 use super::chat_completions::OpenAICompatibleFinishReason;
+use super::is_none_or_empty;
 use super::tool::{OpenAICompatibleToolCallChunk, OpenAICompatibleToolCallDelta};
 use super::usage::OpenAICompatibleUsage;
 
@@ -54,13 +55,6 @@ pub struct OpenAICompatibleChoiceChunk {
     pub delta: OpenAICompatibleDelta,
 }
 
-// Signature dictated by Serde
-#[expect(clippy::ref_option)]
-fn is_none_or_empty<T>(v: &Option<Vec<T>>) -> bool {
-    // if it's None -> skip, or if the Vec is empty -> skip
-    v.as_ref().is_none_or(Vec::is_empty)
-}
-
 /// Extra content block chunk for streaming responses (Thought or Unknown)
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -89,11 +83,27 @@ pub struct OpenAICompatibleDelta {
     pub tensorzero_extra_content_experimental: Option<Vec<ExtraContentBlockChunk>>,
 }
 
+/// State maintained across streaming chunks to track content block positions.
+///
+/// This tracks all content block IDs (text, tool calls, extra content) to ensure
+/// `insert_index` values correctly reflect the position in the full content array,
+/// matching the behavior of non-streaming responses.
+#[derive(Debug, Default)]
+pub struct StreamingContentState {
+    /// Maps tool call IDs to their index in the tool_calls array
+    pub tool_id_to_index: HashMap<String, usize>,
+    /// Maps extra content IDs (thoughts, unknowns) to their insert_index in the full content array
+    pub extra_id_to_index: HashMap<String, usize>,
+    /// Tracks which text block IDs we've seen (to know when a new text block starts)
+    pub text_ids_seen: HashSet<String>,
+    /// Counter for the total number of distinct content blocks seen
+    pub content_block_count: usize,
+}
+
 #[expect(clippy::too_many_arguments)]
 pub fn convert_inference_response_chunk_to_openai_compatible(
     chunk: InferenceResponseChunk,
-    tool_id_to_index: &mut HashMap<String, usize>,
-    extra_id_to_index: &mut HashMap<String, usize>,
+    state: &mut StreamingContentState,
     response_model_prefix: &str,
     is_first_chunk: bool,
     include_usage: bool,
@@ -110,8 +120,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
 
     let response_chunk = match chunk {
         InferenceResponseChunk::Chat(c) => {
-            let (content, tool_calls, extra_content) =
-                process_chat_content_chunk(c.content, tool_id_to_index, extra_id_to_index);
+            let (content, tool_calls, extra_content) = process_chat_content_chunk(c.content, state);
             let usage = if include_usage {
                 c.usage.map(OpenAICompatibleUsage::from)
             } else {
@@ -224,8 +233,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
 
 pub fn process_chat_content_chunk(
     content: Vec<ContentBlockChunk>,
-    tool_id_to_index: &mut HashMap<String, usize>,
-    extra_id_to_index: &mut HashMap<String, usize>,
+    state: &mut StreamingContentState,
 ) -> (
     Option<String>,
     Vec<OpenAICompatibleToolCallChunk>,
@@ -236,17 +244,31 @@ pub fn process_chat_content_chunk(
     let mut extra_content = Vec::new();
     for block in content {
         match block {
-            ContentBlockChunk::Text(text) => match content_str {
-                Some(ref mut content) => content.push_str(&text.text),
-                None => content_str = Some(text.text),
-            },
+            ContentBlockChunk::Text(text) => {
+                // Track new text blocks to maintain correct content_block_count
+                if state.text_ids_seen.insert(text.id.clone()) {
+                    state.content_block_count += 1;
+                }
+                match content_str {
+                    Some(ref mut content) => content.push_str(&text.text),
+                    None => content_str = Some(text.text),
+                }
+            }
             ContentBlockChunk::ToolCall(tool_call) => {
-                let len = tool_id_to_index.len();
-                let is_new = !tool_id_to_index.contains_key(&tool_call.id);
-                let index = tool_id_to_index.entry(tool_call.id.clone()).or_insert(len);
+                use std::collections::hash_map::Entry;
+                let next_tool_index = state.tool_id_to_index.len();
+                let (index, is_new) = match state.tool_id_to_index.entry(tool_call.id.clone()) {
+                    Entry::Occupied(e) => (*e.get(), false),
+                    Entry::Vacant(e) => {
+                        // New tool call: assign next tool index and increment content block count
+                        e.insert(next_tool_index);
+                        state.content_block_count += 1;
+                        (next_tool_index, true)
+                    }
+                };
                 tool_calls.push(OpenAICompatibleToolCallChunk {
                     id: if is_new { Some(tool_call.id) } else { None },
-                    index: *index,
+                    index,
                     r#type: "function".to_string(),
                     function: OpenAICompatibleToolCallDelta {
                         name: tool_call.raw_name.unwrap_or_default(),
@@ -255,16 +277,34 @@ pub fn process_chat_content_chunk(
                 });
             }
             ContentBlockChunk::Thought(chunk) => {
-                let len = extra_id_to_index.len();
-                let insert_index = *extra_id_to_index.entry(chunk.id.clone()).or_insert(len);
+                use std::collections::hash_map::Entry;
+                let insert_index = match state.extra_id_to_index.entry(chunk.id.clone()) {
+                    Entry::Occupied(e) => *e.get(),
+                    Entry::Vacant(e) => {
+                        // New thought: use current content_block_count as insert_index
+                        let idx = state.content_block_count;
+                        e.insert(idx);
+                        state.content_block_count += 1;
+                        idx
+                    }
+                };
                 extra_content.push(ExtraContentBlockChunk::Thought {
                     insert_index,
                     chunk,
                 });
             }
             ContentBlockChunk::Unknown(chunk) => {
-                let len = extra_id_to_index.len();
-                let insert_index = *extra_id_to_index.entry(chunk.id.clone()).or_insert(len);
+                use std::collections::hash_map::Entry;
+                let insert_index = match state.extra_id_to_index.entry(chunk.id.clone()) {
+                    Entry::Occupied(e) => *e.get(),
+                    Entry::Vacant(e) => {
+                        // New unknown: use current content_block_count as insert_index
+                        let idx = state.content_block_count;
+                        e.insert(idx);
+                        state.content_block_count += 1;
+                        idx
+                    }
+                };
                 extra_content.push(ExtraContentBlockChunk::Unknown {
                     insert_index,
                     chunk,
@@ -287,8 +327,7 @@ pub fn prepare_serialized_openai_compatible_events(
     include_raw_response: bool,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let mut is_first_chunk = true;
 
         while let Some(chunk) = stream.next().await {
@@ -300,8 +339,7 @@ pub fn prepare_serialized_openai_compatible_events(
 
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(
                 chunk,
-                &mut tool_id_to_index,
-                &mut extra_id_to_index,
+                &mut state,
                 &response_model_prefix,
                 is_first_chunk,
                 include_usage,
@@ -353,12 +391,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -411,12 +447,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -460,12 +494,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -519,12 +551,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -561,12 +591,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             true,  // include_usage
@@ -614,12 +642,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             false, // include_usage = false
@@ -658,12 +684,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             false, // include_usage
@@ -707,12 +731,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             false, // include_usage
@@ -748,12 +770,10 @@ mod tests {
             raw_response: None,
         });
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let result = convert_inference_response_chunk_to_openai_compatible(
             chunk,
-            &mut tool_id_to_index,
-            &mut extra_id_to_index,
+            &mut state,
             "test_prefix::",
             true,
             false, // include_usage
@@ -792,10 +812,9 @@ mod tests {
                 text: ", world!".to_string(),
             }),
         ];
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let (content_str, tool_calls, extra_content) =
-            process_chat_content_chunk(content, &mut tool_id_to_index, &mut extra_id_to_index);
+            process_chat_content_chunk(content, &mut state);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, Some("1".to_string()));
@@ -806,7 +825,7 @@ mod tests {
 
         let content: Vec<ContentBlockChunk> = vec![];
         let (content_str, tool_calls, extra_content) =
-            process_chat_content_chunk(content, &mut tool_id_to_index, &mut extra_id_to_index);
+            process_chat_content_chunk(content, &mut state);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
         assert!(extra_content.is_empty());
@@ -839,10 +858,9 @@ mod tests {
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
             }),
         ];
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let (content_str, tool_calls, extra_content) =
-            process_chat_content_chunk(content, &mut tool_id_to_index, &mut extra_id_to_index);
+            process_chat_content_chunk(content, &mut state);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())
@@ -861,6 +879,8 @@ mod tests {
 
     #[test]
     fn test_process_chat_content_chunk_with_extra_content() {
+        // Content order: [Thought(0), Text(1), Unknown(2), Thought(same ID), Thought(3)]
+        // The insert_index now reflects position in the FULL content array
         let content = vec![
             ContentBlockChunk::Thought(ThoughtChunk {
                 id: "thought_1".to_string(),
@@ -901,10 +921,9 @@ mod tests {
             }),
         ];
 
-        let mut tool_id_to_index = HashMap::new();
-        let mut extra_id_to_index = HashMap::new();
+        let mut state = StreamingContentState::default();
         let (content_str, tool_calls, extra_content) =
-            process_chat_content_chunk(content, &mut tool_id_to_index, &mut extra_id_to_index);
+            process_chat_content_chunk(content, &mut state);
 
         assert_eq!(
             content_str,
@@ -918,13 +937,16 @@ mod tests {
             "Should have four extra content chunks"
         );
 
-        // First: Thought chunk
+        // First: Thought chunk - position 0 in full content array
         match &extra_content[0] {
             ExtraContentBlockChunk::Thought {
                 insert_index,
                 chunk,
             } => {
-                assert_eq!(*insert_index, 0, "First thought should have insert_index 0");
+                assert_eq!(
+                    *insert_index, 0,
+                    "First thought should have insert_index 0 (first in content array)"
+                );
                 assert_eq!(chunk.id, "thought_1");
                 assert_eq!(chunk.text, Some("Let me think...".to_string()));
                 assert_eq!(chunk.signature, Some("sig123".to_string()));
@@ -933,13 +955,16 @@ mod tests {
             ExtraContentBlockChunk::Unknown { .. } => panic!("Expected Thought at position 0"),
         }
 
-        // Second: Unknown chunk
+        // Second: Unknown chunk - position 2 in full content array (after Thought@0 and Text@1)
         match &extra_content[1] {
             ExtraContentBlockChunk::Unknown {
                 insert_index,
                 chunk,
             } => {
-                assert_eq!(*insert_index, 1, "Unknown should have insert_index 1");
+                assert_eq!(
+                    *insert_index, 2,
+                    "Unknown should have insert_index 2 (after thought_1 and text_1)"
+                );
                 assert_eq!(chunk.id, "unknown_1");
                 assert_eq!(chunk.data, serde_json::json!({"custom": "data"}));
                 assert_eq!(chunk.model_name, Some("test_model".to_string()));
@@ -963,34 +988,113 @@ mod tests {
             ExtraContentBlockChunk::Unknown { .. } => panic!("Expected Thought at position 2"),
         }
 
-        // Fourth: New Thought chunk (new ID, new insert_index)
+        // Fourth: New Thought chunk - position 3 in full content array
         match &extra_content[3] {
             ExtraContentBlockChunk::Thought {
                 insert_index,
                 chunk,
             } => {
-                assert_eq!(*insert_index, 2, "New thought_2 should have insert_index 2");
+                assert_eq!(
+                    *insert_index, 3,
+                    "New thought_2 should have insert_index 3 (after thought_1, text_1, unknown_1)"
+                );
                 assert_eq!(chunk.id, "thought_2");
                 assert_eq!(chunk.text, Some("Different thought".to_string()));
             }
             ExtraContentBlockChunk::Unknown { .. } => panic!("Expected Thought at position 3"),
         }
 
-        // Verify the hashmap tracked the IDs correctly
+        // Verify the state tracked the IDs correctly
         assert_eq!(
-            extra_id_to_index.get("thought_1"),
+            state.extra_id_to_index.get("thought_1"),
             Some(&0),
             "thought_1 should be mapped to index 0"
         );
         assert_eq!(
-            extra_id_to_index.get("unknown_1"),
-            Some(&1),
-            "unknown_1 should be mapped to index 1"
+            state.extra_id_to_index.get("unknown_1"),
+            Some(&2),
+            "unknown_1 should be mapped to index 2"
         );
         assert_eq!(
-            extra_id_to_index.get("thought_2"),
-            Some(&2),
-            "thought_2 should be mapped to index 2"
+            state.extra_id_to_index.get("thought_2"),
+            Some(&3),
+            "thought_2 should be mapped to index 3"
+        );
+    }
+
+    /// Test that demonstrates the bug fix: text before thought should give thought insert_index > 0.
+    ///
+    /// Previously, the streaming code tracked insert_index only by counting extra content IDs,
+    /// so a stream of [Text, Thought] would give Thought insert_index=0 instead of 1.
+    /// This test verifies the fix: insert_index now reflects position in the full content array.
+    #[test]
+    fn test_streaming_insert_index_text_before_thought() {
+        // Scenario: Text appears before Thought in the stream
+        // Expected: Thought should have insert_index=1 (not 0)
+        let content = vec![
+            ContentBlockChunk::Text(TextChunk {
+                id: "text_1".to_string(),
+                text: "Hello ".to_string(),
+            }),
+            ContentBlockChunk::Thought(ThoughtChunk {
+                id: "thought_1".to_string(),
+                text: Some("Thinking...".to_string()),
+                signature: None,
+                summary_id: None,
+                summary_text: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            ContentBlockChunk::Text(TextChunk {
+                id: "text_1".to_string(), // Same text block, more content
+                text: "world!".to_string(),
+            }),
+        ];
+
+        let mut state = StreamingContentState::default();
+        let (content_str, tool_calls, extra_content) =
+            process_chat_content_chunk(content, &mut state);
+
+        assert_eq!(
+            content_str,
+            Some("Hello world!".to_string()),
+            "Text content should be concatenated"
+        );
+        assert!(tool_calls.is_empty(), "No tool calls expected");
+        assert_eq!(
+            extra_content.len(),
+            1,
+            "Should have one extra content chunk"
+        );
+
+        // The key assertion: Thought should have insert_index=1 because Text came first
+        match &extra_content[0] {
+            ExtraContentBlockChunk::Thought {
+                insert_index,
+                chunk,
+            } => {
+                assert_eq!(
+                    *insert_index, 1,
+                    "Thought should have insert_index=1 (after Text at position 0)"
+                );
+                assert_eq!(chunk.id, "thought_1");
+            }
+            ExtraContentBlockChunk::Unknown { .. } => panic!("Expected Thought"),
+        }
+
+        // Verify state tracking
+        assert_eq!(
+            state.content_block_count, 2,
+            "Should have counted 2 content blocks (text + thought)"
+        );
+        assert!(
+            state.text_ids_seen.contains("text_1"),
+            "Text ID should be tracked"
+        );
+        assert_eq!(
+            state.extra_id_to_index.get("thought_1"),
+            Some(&1),
+            "thought_1 should be mapped to index 1"
         );
     }
 

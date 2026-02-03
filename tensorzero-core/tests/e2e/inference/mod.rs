@@ -50,6 +50,7 @@ use uuid::Uuid;
 mod extra_body;
 mod extra_headers;
 pub mod json_mode_tool;
+mod openai_compatible_chat_completions;
 pub mod tool_params;
 
 #[tokio::test]
