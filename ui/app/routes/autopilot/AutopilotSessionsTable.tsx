@@ -145,7 +145,23 @@ export function SessionsTableRows({
               uiVersion={uiVersion}
             />
           </TableCell>
-          <TableCell className="w-0 text-right whitespace-nowrap">
+          <TableCell className="max-w-xs">
+            {session.short_summary ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="block truncate">
+                    {session.short_summary}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-sm">
+                  {session.short_summary}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="text-fg-muted">—</span>
+            )}
+          </TableCell>
+          <TableCell className="w-52 whitespace-nowrap">
             <TableItemTime timestamp={session.created_at} />
           </TableCell>
         </TableRow>
@@ -163,10 +179,9 @@ export default function AutopilotSessionsTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Session ID</TableHead>
-          <TableHead className="w-0 text-right whitespace-nowrap">
-            Created
-          </TableHead>
+          <TableHead className="w-36">Session ID</TableHead>
+          <TableHead>Summary</TableHead>
+          <TableHead className="w-52 whitespace-nowrap">Created</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

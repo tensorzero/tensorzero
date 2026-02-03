@@ -8,8 +8,9 @@ import { getToolCallEventId, isToolEvent, ToolEventId } from "./EventStream";
 type PendingToolCallCardProps = {
   event: GatewayEvent;
   isLoading: boolean;
-  loadingAction?: "approving" | "rejecting";
+  loadingAction?: "approving" | "rejecting" | "approving_all";
   onAuthorize: (approved: boolean) => void;
+  onApproveAll?: () => void;
   additionalCount: number;
   isInCooldown?: boolean;
   className?: string;
@@ -20,6 +21,7 @@ export function PendingToolCallCard({
   isLoading,
   loadingAction,
   onAuthorize,
+  onApproveAll,
   additionalCount,
   isInCooldown = false,
   className,
@@ -124,6 +126,18 @@ export function PendingToolCallCard({
                 <span className="flex h-6 items-center rounded bg-blue-200 px-1.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                   +{additionalCount}
                 </span>
+              )}
+              {additionalCount > 0 && onApproveAll && (
+                <button
+                  type="button"
+                  className="h-6 cursor-pointer rounded border border-green-600 bg-green-50 px-2 text-xs font-medium text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-600 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-900/40"
+                  disabled={isDisabled}
+                  onClick={onApproveAll}
+                >
+                  {loadingAction === "approving_all"
+                    ? "Approving..."
+                    : `Approve All (${additionalCount + 1})`}
+                </button>
               )}
               <button
                 type="button"
