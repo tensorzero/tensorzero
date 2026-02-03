@@ -144,6 +144,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           inputPromise={input}
           modelInferencesPromise={modelInferences}
           onFeedbackAdded={handleFeedbackAdded}
+          locationKey={location.key}
         />
       </PageHeader>
 

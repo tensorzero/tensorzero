@@ -22,6 +22,7 @@ interface InferenceActionBarProps {
   inputPromise: Promise<Input>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
+  locationKey: string;
 }
 
 export function InferenceActionBar({
@@ -30,9 +31,10 @@ export function InferenceActionBar({
   inputPromise,
   modelInferencesPromise,
   onFeedbackAdded,
+  locationKey,
 }: InferenceActionBarProps) {
   return (
-    <Suspense fallback={<InferenceActionBarSkeleton />}>
+    <Suspense key={locationKey} fallback={<InferenceActionBarSkeleton />}>
       <Await resolve={actionBarData} errorElement={<ActionBarAsyncError />}>
         {(resolvedActionBarData) => (
           <InferenceActionBarContent
