@@ -74,6 +74,47 @@ test("should create a session, send a message, approve tool calls, and get a res
   ).toBeVisible({ timeout: 60000 });
 });
 
+test.describe("Chat input validation", () => {
+  test("send button disabled when empty, enabled with text", async ({
+    page,
+  }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const textarea = page.getByRole("textbox");
+    const sendButton = page.getByRole("button", { name: "Send message" });
+
+    // Empty → disabled
+    await expect(sendButton).toBeDisabled();
+
+    // Whitespace only → still disabled
+    await textarea.fill("   ");
+    await expect(sendButton).toBeDisabled();
+
+    // Real text → enabled
+    await textarea.fill("Hello");
+    await expect(sendButton).toBeEnabled();
+
+    // Clear → disabled again
+    await textarea.fill("");
+    await expect(sendButton).toBeDisabled();
+  });
+
+  test("Shift+Enter inserts newline without sending", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const textarea = page.getByRole("textbox");
+    await textarea.fill("Line 1");
+    await textarea.press("Shift+Enter");
+    await textarea.type("Line 2");
+
+    // Should still be on new session page (not submitted)
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/new/);
+    await expect(textarea).toHaveValue("Line 1\nLine 2");
+  });
+});
+
 test.describe("Autopilot New Session Button", () => {
   test("should navigate to new session from existing session page", async ({
     page,
