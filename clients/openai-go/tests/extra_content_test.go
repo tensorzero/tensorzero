@@ -1,5 +1,5 @@
 /**
-Tests for `tensorzero_extra_content_experimental` round-trip support.
+Tests for `tensorzero_extra_content` round-trip support.
 
 These tests verify that extra content blocks (Thought, Unknown) can be:
 1. Received from the API in responses
@@ -44,13 +44,13 @@ func TestExtraContent(t *testing.T) {
 		content := resp.Choices[0].Message.Content
 		require.NotEmpty(t, content, "Response should have content")
 
-		// Check for tensorzero_extra_content_experimental at the message level
-		extraContentField, ok := resp.Choices[0].Message.JSON.ExtraFields["tensorzero_extra_content_experimental"]
-		require.True(t, ok, "Response message should have tensorzero_extra_content_experimental field")
+		// Check for tensorzero_extra_content at the message level
+		extraContentField, ok := resp.Choices[0].Message.JSON.ExtraFields["tensorzero_extra_content"]
+		require.True(t, ok, "Response message should have tensorzero_extra_content field")
 
 		var extraContent []map[string]interface{}
 		err = json.Unmarshal([]byte(extraContentField.Raw()), &extraContent)
-		require.NoError(t, err, "Failed to parse tensorzero_extra_content_experimental")
+		require.NoError(t, err, "Failed to parse tensorzero_extra_content")
 		require.NotEmpty(t, extraContent, "Extra content should have at least one block")
 
 		// Verify the structure of the thought block
@@ -73,7 +73,7 @@ func TestExtraContent(t *testing.T) {
 		assistantMsg := roundtripReq.Messages[1].OfAssistant()
 		if assistantMsg != nil {
 			assistantMsg.SetExtraFields(map[string]any{
-				"tensorzero_extra_content_experimental": extraContent,
+				"tensorzero_extra_content": extraContent,
 			})
 		}
 
@@ -122,7 +122,7 @@ func TestExtraContent(t *testing.T) {
 				}
 
 				// Collect extra content chunks from delta
-				extraContentField, ok := delta.JSON.ExtraFields["tensorzero_extra_content_experimental"]
+				extraContentField, ok := delta.JSON.ExtraFields["tensorzero_extra_content"]
 				if ok {
 					var chunkExtraContent []map[string]interface{}
 					err := json.Unmarshal([]byte(extraContentField.Raw()), &chunkExtraContent)
@@ -160,7 +160,7 @@ func TestExtraContent(t *testing.T) {
 			assistantMsg := roundtripReq.Messages[1].OfAssistant()
 			if assistantMsg != nil {
 				assistantMsg.SetExtraFields(map[string]any{
-					"tensorzero_extra_content_experimental": reconstructedExtraContent,
+					"tensorzero_extra_content": reconstructedExtraContent,
 				})
 			}
 

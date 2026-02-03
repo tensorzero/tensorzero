@@ -80,7 +80,7 @@ pub struct OpenAICompatibleDelta {
     #[serde(skip_serializing_if = "is_none_or_empty")]
     pub tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
     #[serde(skip_serializing_if = "is_none_or_empty")]
-    pub tensorzero_extra_content_experimental: Option<Vec<ExtraContentBlockChunk>>,
+    pub tensorzero_extra_content: Option<Vec<ExtraContentBlockChunk>>,
 }
 
 /// State maintained across streaming chunks to track content block positions.
@@ -158,7 +158,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                         } else {
                             Some(tool_calls)
                         },
-                        tensorzero_extra_content_experimental: if extra_content.is_empty() {
+                        tensorzero_extra_content: if extra_content.is_empty() {
                             None
                         } else {
                             Some(extra_content)
@@ -211,7 +211,7 @@ pub fn convert_inference_response_chunk_to_openai_compatible(
                         role,
                         content: Some(c.raw),
                         tool_calls: None,
-                        tensorzero_extra_content_experimental: None,
+                        tensorzero_extra_content: None,
                     },
                 }],
                 created: current_timestamp() as u32,

@@ -58,8 +58,7 @@ pub struct OpenAICompatibleUserMessage {
 pub struct OpenAICompatibleAssistantMessage {
     pub content: Option<Value>,
     pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
-    #[serde(default)]
-    pub tensorzero_extra_content_experimental: Option<Vec<InputExtraContentBlock>>,
+    pub tensorzero_extra_content: Option<Vec<ExtraContentBlock>>,
 }
 
 #[derive(Clone, Debug, PartialEq, TensorZeroDeserialize)]
@@ -172,11 +171,12 @@ pub struct OpenAICompatibleParams {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleResponseMessage {
-    pub content: Option<String>,
-    pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
     pub role: String,
+    pub content: Option<String>,
     #[serde(skip_serializing_if = "is_none_or_empty")]
-    pub tensorzero_extra_content_experimental: Option<Vec<ExtraContentBlock>>,
+    pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
+    #[serde(skip_serializing_if = "is_none_or_empty")]
+    pub tensorzero_extra_content: Option<Vec<ExtraContentBlock>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -229,32 +229,20 @@ pub struct OpenAICompatibleResponse {
     pub tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
-/// Extra content block for OpenAI-compatible responses (Thought or Unknown)
-#[derive(Clone, Debug, PartialEq, Serialize)]
+/// Extra content block for OpenAI-compatible API (Thought or Unknown).
+/// Used for both input and output - insert_index is optional for input (defaults to prepend)
+/// and always present in output.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExtraContentBlock {
     Thought {
-        insert_index: usize,
-        #[serde(flatten)]
-        thought: Thought,
-    },
-    Unknown {
-        insert_index: usize,
-        #[serde(flatten)]
-        unknown: Unknown,
-    },
-}
-
-/// Extra content block for OpenAI-compatible input (with optional insert_index)
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum InputExtraContentBlock {
-    Thought {
+        #[serde(skip_serializing_if = "Option::is_none")]
         insert_index: Option<usize>,
         #[serde(flatten)]
         thought: Thought,
     },
     Unknown {
+        #[serde(skip_serializing_if = "Option::is_none")]
         insert_index: Option<usize>,
         #[serde(flatten)]
         unknown: Unknown,
@@ -590,11 +578,11 @@ pub fn openai_messages_to_input(
                     }
                 }
                 // Process extra content with index-based insertion
-                if let Some(extra_content) = msg.tensorzero_extra_content_experimental {
+                if let Some(extra_content) = msg.tensorzero_extra_content {
                     // First pass: items with insert_index (in input order)
                     for block in &extra_content {
                         match block {
-                            InputExtraContentBlock::Thought {
+                            ExtraContentBlock::Thought {
                                 insert_index: Some(idx),
                                 thought,
                             } => {
@@ -602,7 +590,7 @@ pub fn openai_messages_to_input(
                                 message_content
                                     .insert(idx, InputMessageContent::Thought(thought.clone()));
                             }
-                            InputExtraContentBlock::Unknown {
+                            ExtraContentBlock::Unknown {
                                 insert_index: Some(idx),
                                 unknown,
                             } => {
@@ -610,7 +598,13 @@ pub fn openai_messages_to_input(
                                 message_content
                                     .insert(idx, InputMessageContent::Unknown(unknown.clone()));
                             }
-                            _ => {} // Handle in second pass
+                            // Items without insert_index are handled in the second pass
+                            ExtraContentBlock::Thought {
+                                insert_index: None, ..
+                            }
+                            | ExtraContentBlock::Unknown {
+                                insert_index: None, ..
+                            } => {}
                         }
                     }
 
@@ -618,19 +612,27 @@ pub fn openai_messages_to_input(
                     // We iterate in reverse so the first unindexed item ends up first
                     for block in extra_content.into_iter().rev() {
                         match block {
-                            InputExtraContentBlock::Thought {
+                            ExtraContentBlock::Thought {
                                 insert_index: None,
                                 thought,
                             } => {
                                 message_content.insert(0, InputMessageContent::Thought(thought));
                             }
-                            InputExtraContentBlock::Unknown {
+                            ExtraContentBlock::Unknown {
                                 insert_index: None,
                                 unknown,
                             } => {
                                 message_content.insert(0, InputMessageContent::Unknown(unknown));
                             }
-                            _ => {} // Already handled
+                            // Items with insert_index were already handled in the first pass
+                            ExtraContentBlock::Thought {
+                                insert_index: Some(_),
+                                ..
+                            }
+                            | ExtraContentBlock::Unknown {
+                                insert_index: Some(_),
+                                ..
+                            } => {}
                         }
                     }
                 }
@@ -792,7 +794,7 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
                             content,
                             tool_calls: Some(tool_calls),
                             role: "assistant".to_string(),
-                            tensorzero_extra_content_experimental: if extra_content.is_empty() {
+                            tensorzero_extra_content: if extra_content.is_empty() {
                                 None
                             } else {
                                 Some(extra_content)
@@ -832,7 +834,7 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
                             content: response.output.raw,
                             tool_calls: None,
                             role: "assistant".to_string(),
-                            tensorzero_extra_content_experimental: None,
+                            tensorzero_extra_content: None,
                         },
                     }],
                     created: current_timestamp() as u32,
@@ -875,13 +877,13 @@ pub fn process_chat_content(
             }
             ContentBlockChatOutput::Thought(thought) => {
                 extra_content.push(ExtraContentBlock::Thought {
-                    insert_index,
+                    insert_index: Some(insert_index),
                     thought,
                 });
             }
             ContentBlockChatOutput::Unknown(unknown) => {
                 extra_content.push(ExtraContentBlock::Unknown {
-                    insert_index,
+                    insert_index: Some(insert_index),
                     unknown,
                 });
             }
@@ -956,7 +958,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_extra_content_experimental: None,
+                tensorzero_extra_content: None,
             }),
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: None,
@@ -968,7 +970,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_extra_content_experimental: None,
+                tensorzero_extra_content: None,
             }),
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: None,
@@ -980,7 +982,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_extra_content_experimental: None,
+                tensorzero_extra_content: None,
             }),
             OpenAICompatibleMessage::Tool(OpenAICompatibleToolMessage {
                 content: Some(Value::String("Tool result 1".to_string())),
@@ -1164,7 +1166,7 @@ mod tests {
                     "city": "Tokyo",
                 }])),
                 tool_calls: None,
-                tensorzero_extra_content_experimental: None,
+                tensorzero_extra_content: None,
             },
         )];
         let input: Input = openai_messages_to_input(messages).unwrap();
@@ -1198,7 +1200,7 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_extra_content_experimental: None,
+                tensorzero_extra_content: None,
             },
         )];
         let input: Input = openai_messages_to_input(messages).unwrap();
@@ -1232,7 +1234,7 @@ mod tests {
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Assistant message".to_string())),
                 tool_calls: None,
-                tensorzero_extra_content_experimental: None,
+                tensorzero_extra_content: None,
             }),
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
                 content: Value::String("System message".to_string()),
@@ -1766,7 +1768,11 @@ mod tests {
                 insert_index,
                 thought,
             } => {
-                assert_eq!(*insert_index, 0, "First thought should have insert_index 0");
+                assert_eq!(
+                    *insert_index,
+                    Some(0),
+                    "First thought should have insert_index 0"
+                );
                 assert_eq!(thought.text, Some("Let me think about this...".to_string()));
                 assert_eq!(thought.signature, Some("sig123".to_string()));
                 assert_eq!(thought.provider_type, Some("anthropic".to_string()));
@@ -1780,7 +1786,7 @@ mod tests {
                 insert_index,
                 unknown,
             } => {
-                assert_eq!(*insert_index, 2, "Unknown should have insert_index 2");
+                assert_eq!(*insert_index, Some(2), "Unknown should have insert_index 2");
                 assert_eq!(unknown.data, serde_json::json!({"custom": "data"}));
                 assert_eq!(unknown.model_name, Some("test_model".to_string()));
             }
@@ -1794,7 +1800,8 @@ mod tests {
                 thought,
             } => {
                 assert_eq!(
-                    *insert_index, 3,
+                    *insert_index,
+                    Some(3),
                     "Second thought should have insert_index 3"
                 );
                 assert_eq!(thought.text, Some("Another thought".to_string()));
@@ -1811,9 +1818,9 @@ mod tests {
             OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Response text".to_string())),
                 tool_calls: None,
-                tensorzero_extra_content_experimental: Some(vec![
+                tensorzero_extra_content: Some(vec![
                     // Unindexed thought - should be appended
-                    InputExtraContentBlock::Thought {
+                    ExtraContentBlock::Thought {
                         insert_index: None,
                         thought: Thought {
                             text: Some("Unindexed thought 1".to_string()),
@@ -1824,7 +1831,7 @@ mod tests {
                         },
                     },
                     // Indexed thought at position 2
-                    InputExtraContentBlock::Thought {
+                    ExtraContentBlock::Thought {
                         insert_index: Some(2),
                         thought: Thought {
                             text: Some("Indexed thought at 2".to_string()),
@@ -1835,7 +1842,7 @@ mod tests {
                         },
                     },
                     // Unindexed unknown - should be appended
-                    InputExtraContentBlock::Unknown {
+                    ExtraContentBlock::Unknown {
                         insert_index: None,
                         unknown: Unknown {
                             data: serde_json::json!({"test": "data"}),
@@ -1844,7 +1851,7 @@ mod tests {
                         },
                     },
                     // Indexed thought at position 0
-                    InputExtraContentBlock::Thought {
+                    ExtraContentBlock::Thought {
                         insert_index: Some(0),
                         thought: Thought {
                             text: Some("Indexed thought at 0".to_string()),
@@ -1940,10 +1947,9 @@ mod tests {
             "signature": "sig789",
             "provider_type": "anthropic"
         });
-        let block: InputExtraContentBlock =
-            serde_json::from_value(json_thought_with_index).unwrap();
+        let block: ExtraContentBlock = serde_json::from_value(json_thought_with_index).unwrap();
         match block {
-            InputExtraContentBlock::Thought {
+            ExtraContentBlock::Thought {
                 insert_index,
                 thought,
             } => {
@@ -1952,7 +1958,7 @@ mod tests {
                 assert_eq!(thought.signature, Some("sig789".to_string()));
                 assert_eq!(thought.provider_type, Some("anthropic".to_string()));
             }
-            InputExtraContentBlock::Unknown { .. } => panic!("Expected Thought variant"),
+            ExtraContentBlock::Unknown { .. } => panic!("Expected Thought variant"),
         }
 
         // Test Thought variant deserialization without insert_index
@@ -1960,10 +1966,9 @@ mod tests {
             "type": "thought",
             "text": "Another thought"
         });
-        let block: InputExtraContentBlock =
-            serde_json::from_value(json_thought_without_index).unwrap();
+        let block: ExtraContentBlock = serde_json::from_value(json_thought_without_index).unwrap();
         match block {
-            InputExtraContentBlock::Thought {
+            ExtraContentBlock::Thought {
                 insert_index,
                 thought,
             } => {
@@ -1971,7 +1976,7 @@ mod tests {
                 assert_eq!(thought.text, Some("Another thought".to_string()));
                 assert_eq!(thought.signature, None);
             }
-            InputExtraContentBlock::Unknown { .. } => panic!("Expected Thought variant"),
+            ExtraContentBlock::Unknown { .. } => panic!("Expected Thought variant"),
         }
 
         // Test Unknown variant deserialization
@@ -1981,9 +1986,9 @@ mod tests {
             "data": {"custom": "value"},
             "model_name": "test_model"
         });
-        let block: InputExtraContentBlock = serde_json::from_value(json_unknown).unwrap();
+        let block: ExtraContentBlock = serde_json::from_value(json_unknown).unwrap();
         match block {
-            InputExtraContentBlock::Unknown {
+            ExtraContentBlock::Unknown {
                 insert_index,
                 unknown,
             } => {
@@ -1991,7 +1996,7 @@ mod tests {
                 assert_eq!(unknown.data, json!({"custom": "value"}));
                 assert_eq!(unknown.model_name, Some("test_model".to_string()));
             }
-            InputExtraContentBlock::Thought { .. } => panic!("Expected Unknown variant"),
+            ExtraContentBlock::Thought { .. } => panic!("Expected Unknown variant"),
         }
     }
 
@@ -1999,7 +2004,7 @@ mod tests {
     fn test_extra_content_block_serialization() {
         // Test Thought variant serialization
         let thought_block = ExtraContentBlock::Thought {
-            insert_index: 3,
+            insert_index: Some(3),
             thought: Thought {
                 text: Some("Thinking...".to_string()),
                 signature: Some("sig_abc".to_string()),
@@ -2019,7 +2024,7 @@ mod tests {
 
         // Test Unknown variant serialization
         let unknown_block = ExtraContentBlock::Unknown {
-            insert_index: 5,
+            insert_index: Some(5),
             unknown: Unknown {
                 data: json!({"custom": "data"}),
                 model_name: Some("test_model".to_string()),
@@ -2246,18 +2251,16 @@ mod tests {
             OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Hello".to_string())),
                 tool_calls: None,
-                tensorzero_extra_content_experimental: Some(vec![
-                    InputExtraContentBlock::Thought {
-                        insert_index: Some(999), // Way out of bounds
-                        thought: Thought {
-                            text: Some("Out of bounds thought".to_string()),
-                            signature: None,
-                            summary: None,
-                            provider_type: None,
-                            extra_data: None,
-                        },
+                tensorzero_extra_content: Some(vec![ExtraContentBlock::Thought {
+                    insert_index: Some(999), // Way out of bounds
+                    thought: Thought {
+                        text: Some("Out of bounds thought".to_string()),
+                        signature: None,
+                        summary: None,
+                        provider_type: None,
+                        extra_data: None,
                     },
-                ]),
+                }]),
             },
         )];
         let input = openai_messages_to_input(messages).unwrap();
@@ -2282,8 +2285,8 @@ mod tests {
             OpenAICompatibleAssistantMessage {
                 content: None,
                 tool_calls: None,
-                tensorzero_extra_content_experimental: Some(vec![
-                    InputExtraContentBlock::Thought {
+                tensorzero_extra_content: Some(vec![
+                    ExtraContentBlock::Thought {
                         insert_index: Some(0),
                         thought: Thought {
                             text: Some("First".to_string()),
@@ -2293,7 +2296,7 @@ mod tests {
                             extra_data: None,
                         },
                     },
-                    InputExtraContentBlock::Thought {
+                    ExtraContentBlock::Thought {
                         insert_index: Some(1),
                         thought: Thought {
                             text: Some("Second".to_string()),
@@ -2334,8 +2337,8 @@ mod tests {
             OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Hello".to_string())),
                 tool_calls: None,
-                tensorzero_extra_content_experimental: Some(vec![
-                    InputExtraContentBlock::Thought {
+                tensorzero_extra_content: Some(vec![
+                    ExtraContentBlock::Thought {
                         insert_index: Some(0),
                         thought: Thought {
                             text: Some("First at 0".to_string()),
@@ -2345,7 +2348,7 @@ mod tests {
                             extra_data: None,
                         },
                     },
-                    InputExtraContentBlock::Unknown {
+                    ExtraContentBlock::Unknown {
                         insert_index: Some(0),
                         unknown: Unknown {
                             data: json!({"id": "second at 0"}),
@@ -2384,8 +2387,8 @@ mod tests {
             OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Hello".to_string())),
                 tool_calls: None,
-                tensorzero_extra_content_experimental: Some(vec![
-                    InputExtraContentBlock::Thought {
+                tensorzero_extra_content: Some(vec![
+                    ExtraContentBlock::Thought {
                         insert_index: None,
                         thought: Thought {
                             text: Some("Unindexed 1".to_string()),
@@ -2395,7 +2398,7 @@ mod tests {
                             extra_data: None,
                         },
                     },
-                    InputExtraContentBlock::Unknown {
+                    ExtraContentBlock::Unknown {
                         insert_index: None,
                         unknown: Unknown {
                             data: json!({"id": "unindexed 2"}),
@@ -2438,18 +2441,16 @@ mod tests {
                         arguments: "{}".to_string(),
                     },
                 }]),
-                tensorzero_extra_content_experimental: Some(vec![
-                    InputExtraContentBlock::Thought {
-                        insert_index: Some(0),
-                        thought: Thought {
-                            text: Some("Thought at 0".to_string()),
-                            signature: None,
-                            summary: None,
-                            provider_type: None,
-                            extra_data: None,
-                        },
+                tensorzero_extra_content: Some(vec![ExtraContentBlock::Thought {
+                    insert_index: Some(0),
+                    thought: Thought {
+                        text: Some("Thought at 0".to_string()),
+                        signature: None,
+                        summary: None,
+                        provider_type: None,
+                        extra_data: None,
                     },
-                ]),
+                }]),
             },
         )];
         let input = openai_messages_to_input(messages).unwrap();

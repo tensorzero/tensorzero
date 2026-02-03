@@ -1,6 +1,6 @@
 # type: ignore
 """
-Tests for `tensorzero_extra_content_experimental` round-trip support.
+Tests for `tensorzero_extra_content` round-trip support.
 
 These tests verify that extra content blocks (Thought, Unknown) can be:
 1. Received from the API in responses
@@ -30,8 +30,8 @@ async def test_extra_content_roundtrip_non_streaming(async_openai_client):
     assert message.content is not None, "Response should have text content"
 
     # Check for extra content (using getattr since it's an extension field)
-    extra_content = getattr(message, "tensorzero_extra_content_experimental", None)
-    assert extra_content is not None, "Response should have tensorzero_extra_content_experimental"
+    extra_content = getattr(message, "tensorzero_extra_content", None)
+    assert extra_content is not None, "Response should have tensorzero_extra_content"
     assert len(extra_content) > 0, "Extra content should have at least one block"
 
     # Verify structure of the thought block
@@ -48,7 +48,7 @@ async def test_extra_content_roundtrip_non_streaming(async_openai_client):
             {
                 "role": "assistant",
                 "content": message.content,
-                "tensorzero_extra_content_experimental": extra_content,
+                "tensorzero_extra_content": extra_content,
             },
             {"role": "user", "content": "Continue"},
         ],
@@ -87,7 +87,7 @@ async def test_extra_content_roundtrip_streaming(async_openai_client):
                 content_text += delta.content
 
             # Collect extra content chunks
-            extra_content = getattr(delta, "tensorzero_extra_content_experimental", None)
+            extra_content = getattr(delta, "tensorzero_extra_content", None)
             if extra_content:
                 extra_content_chunks.extend(extra_content)
 
@@ -106,7 +106,7 @@ async def test_extra_content_roundtrip_streaming(async_openai_client):
                 {
                     "role": "assistant",
                     "content": content_text,
-                    "tensorzero_extra_content_experimental": reconstructed_extra_content,
+                    "tensorzero_extra_content": reconstructed_extra_content,
                 },
                 {"role": "user", "content": "Continue"},
             ],

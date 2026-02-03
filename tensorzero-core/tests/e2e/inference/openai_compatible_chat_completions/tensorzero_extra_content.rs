@@ -1,4 +1,4 @@
-//! E2E tests for `tensorzero_extra_content_experimental` in the OpenAI-compatible API.
+//! E2E tests for `tensorzero_extra_content` in the OpenAI-compatible API.
 //!
 //! Tests that extra content blocks (Thought, Unknown) are correctly returned in responses
 //! and can be round-tripped through the API.
@@ -11,10 +11,10 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
-/// Non-streaming round-trip test for `tensorzero_extra_content_experimental`.
+/// Non-streaming round-trip test for `tensorzero_extra_content`.
 ///
 /// 1. Make an inference request with a model that returns Thought content
-/// 2. Verify the response contains `tensorzero_extra_content_experimental` with proper structure
+/// 2. Verify the response contains `tensorzero_extra_content` with proper structure
 /// 3. Send a follow-up request including the extra_content in an assistant message
 /// 4. Verify the request is processed successfully
 #[tokio::test]
@@ -69,19 +69,19 @@ async fn test_extra_content_roundtrip_non_streaming() {
         "Content should be a string with the text output"
     );
 
-    // Check that tensorzero_extra_content_experimental exists
+    // Check that tensorzero_extra_content exists
     let extra_content = message
-        .get("tensorzero_extra_content_experimental")
-        .expect("Message should have tensorzero_extra_content_experimental");
+        .get("tensorzero_extra_content")
+        .expect("Message should have tensorzero_extra_content");
     assert!(
         extra_content.is_array(),
-        "tensorzero_extra_content_experimental should be an array"
+        "tensorzero_extra_content should be an array"
     );
 
     let extra_content_array = extra_content.as_array().unwrap();
     assert!(
         !extra_content_array.is_empty(),
-        "tensorzero_extra_content_experimental should have at least one entry"
+        "tensorzero_extra_content should have at least one entry"
     );
 
     // Verify the structure of the first extra content block
@@ -111,7 +111,7 @@ async fn test_extra_content_roundtrip_non_streaming() {
             {
                 "role": "assistant",
                 "content": content,
-                "tensorzero_extra_content_experimental": extra_content
+                "tensorzero_extra_content": extra_content
             },
             {
                 "role": "user",
@@ -146,7 +146,7 @@ async fn test_extra_content_roundtrip_non_streaming() {
     );
 }
 
-/// Streaming round-trip test for `tensorzero_extra_content_experimental`.
+/// Streaming round-trip test for `tensorzero_extra_content`.
 ///
 /// 1. Make a streaming inference request with a model that returns Thought content
 /// 2. Collect and verify streaming chunks contain extra_content with proper structure
@@ -206,7 +206,7 @@ async fn test_extra_content_roundtrip_streaming() {
                     }
 
                     // Collect extra content chunks
-                    if let Some(extra) = delta.get("tensorzero_extra_content_experimental")
+                    if let Some(extra) = delta.get("tensorzero_extra_content")
                         && let Some(arr) = extra.as_array()
                     {
                         for block in arr {
@@ -221,7 +221,7 @@ async fn test_extra_content_roundtrip_streaming() {
     // Step 3: Verify we received extra content in streaming
     assert!(
         !extra_content_chunks.is_empty(),
-        "Streaming response should include tensorzero_extra_content_experimental chunks.\n\
+        "Streaming response should include tensorzero_extra_content chunks.\n\
         Total chunks received: {}\n\
         All chunks:\n{:#?}",
         all_chunks.len(),
@@ -262,7 +262,7 @@ async fn test_extra_content_roundtrip_streaming() {
                 {
                     "role": "assistant",
                     "content": content_text,
-                    "tensorzero_extra_content_experimental": reconstructed_extra_content
+                    "tensorzero_extra_content": reconstructed_extra_content
                 },
                 {
                     "role": "user",
@@ -332,7 +332,7 @@ async fn test_extra_content_insert_index_correctness() {
     let message = &response_json["choices"][0]["message"];
 
     let extra_content = message
-        .get("tensorzero_extra_content_experimental")
+        .get("tensorzero_extra_content")
         .expect("Should have extra_content");
     let extra_content_array = extra_content.as_array().unwrap();
 
@@ -371,7 +371,7 @@ async fn test_extra_content_multi_block_roundtrip() {
             {
                 "role": "assistant",
                 "content": "Middle text",
-                "tensorzero_extra_content_experimental": [
+                "tensorzero_extra_content": [
                     {
                         "type": "thought",
                         "insert_index": 0,
@@ -435,7 +435,7 @@ async fn test_extra_content_unindexed_appended() {
             {
                 "role": "assistant",
                 "content": "Some text",
-                "tensorzero_extra_content_experimental": [
+                "tensorzero_extra_content": [
                     {
                         "type": "thought",
                         "text": "Unindexed thought"

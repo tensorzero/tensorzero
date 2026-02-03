@@ -1,5 +1,5 @@
 /**
- * Tests for `tensorzero_extra_content_experimental` round-trip support.
+ * Tests for `tensorzero_extra_content` round-trip support.
  *
  * These tests verify that extra content blocks (Thought, Unknown) can be:
  * 1. Received from the API in responses
@@ -53,9 +53,9 @@ describe("Extra Content", () => {
 
     const extraContent: ExtraContentBlock[] | undefined = (
       result.choices[0].message as unknown as {
-        tensorzero_extra_content_experimental?: ExtraContentBlock[];
+        tensorzero_extra_content?: ExtraContentBlock[];
       }
-    ).tensorzero_extra_content_experimental;
+    ).tensorzero_extra_content;
     expect(extraContent).toBeDefined();
     expect(Array.isArray(extraContent)).toBe(true);
     expect(extraContent!.length).toBeGreaterThan(0);
@@ -73,7 +73,7 @@ describe("Extra Content", () => {
         role: "assistant",
         content: result.choices[0].message.content!,
         // @ts-expect-error - custom TensorZero property
-        tensorzero_extra_content_experimental: extraContent,
+        tensorzero_extra_content: extraContent,
       },
       { role: "user", content: "Continue" },
     ];
@@ -120,9 +120,9 @@ describe("Extra Content", () => {
         // Collect extra content chunks
         const extraContent: ExtraContentBlock[] | undefined = (
           delta as unknown as {
-            tensorzero_extra_content_experimental?: ExtraContentBlock[];
+            tensorzero_extra_content?: ExtraContentBlock[];
           }
-        ).tensorzero_extra_content_experimental;
+        ).tensorzero_extra_content;
         if (extraContent) {
           extraContentChunks.push(...extraContent);
         }
@@ -145,7 +145,7 @@ describe("Extra Content", () => {
           role: "assistant",
           content: contentText,
           // @ts-expect-error - custom TensorZero property
-          tensorzero_extra_content_experimental: reconstructedExtraContent,
+          tensorzero_extra_content: reconstructedExtraContent,
         },
         { role: "user", content: "Continue" },
       ];
