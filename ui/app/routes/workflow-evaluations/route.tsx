@@ -1,5 +1,13 @@
+import { Suspense } from "react";
+import { AlertCircle } from "lucide-react";
 import type { Route } from "./+types/route";
-import { useNavigate } from "react-router";
+import {
+  Await,
+  isRouteErrorResponse,
+  useAsyncError,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -10,6 +18,47 @@ import {
 import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
 import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { Skeleton } from "~/components/ui/skeleton";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+
+type ProjectsData = {
+  projects: Awaited<
+    ReturnType<
+      ReturnType<typeof getTensorZeroClient>["getWorkflowEvaluationProjects"]
+    >
+  >["projects"];
+  count: number;
+};
+
+type RunsData = {
+  runs: Awaited<
+    ReturnType<
+      ReturnType<typeof getTensorZeroClient>["listWorkflowEvaluationRuns"]
+    >
+  >["runs"];
+  count: number;
+};
+
+async function fetchProjectsData(
+  limit: number,
+  offset: number,
+): Promise<ProjectsData> {
+  const client = getTensorZeroClient();
+  const [response, count] = await Promise.all([
+    client.getWorkflowEvaluationProjects(limit, offset),
+    client.countWorkflowEvaluationProjects(),
+  ]);
+  return { projects: response.projects, count };
+}
+
+async function fetchRunsData(limit: number, offset: number): Promise<RunsData> {
+  const client = getTensorZeroClient();
+  const [response, count] = await Promise.all([
+    client.listWorkflowEvaluationRuns(limit, offset),
+    client.countWorkflowEvaluationRuns(),
+  ]);
+  return { runs: response.runs, count };
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -19,27 +68,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const projectOffset = parseInt(searchParams.get("projectOffset") || "0");
   const projectLimit = parseInt(searchParams.get("projectLimit") || "15");
 
-  const tensorZeroClient = getTensorZeroClient();
-  const [
-    workflowEvaluationRunsResponse,
-    count,
-    workflowEvaluationProjectsResponse,
-    projectCount,
-  ] = await Promise.all([
-    tensorZeroClient.listWorkflowEvaluationRuns(runLimit, runOffset),
-    tensorZeroClient.countWorkflowEvaluationRuns(),
-    tensorZeroClient.getWorkflowEvaluationProjects(projectLimit, projectOffset),
-    tensorZeroClient.countWorkflowEvaluationProjects(),
-  ]);
-  const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
-  const workflowEvaluationProjects =
-    workflowEvaluationProjectsResponse.projects;
-
   return {
-    workflowEvaluationRuns,
-    count,
-    workflowEvaluationProjects,
-    projectCount,
+    projectsData: fetchProjectsData(projectLimit, projectOffset),
+    runsData: fetchRunsData(runLimit, runOffset),
     runOffset,
     runLimit,
     projectOffset,
@@ -47,69 +78,165 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+function SectionSkeleton() {
+  return (
+    <>
+      <Skeleton className="mb-2 h-6 w-32" />
+      <Skeleton className="h-48 w-full" />
+    </>
+  );
+}
+
+function ProjectsSectionError() {
+  const error = useAsyncError();
+  let message = "Failed to load projects";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading projects"
+      description={message}
+    />
+  );
+}
+
+function RunsSectionError() {
+  const error = useAsyncError();
+  let message = "Failed to load evaluation runs";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading evaluation runs"
+      description={message}
+    />
+  );
+}
+
+function ProjectsContent({
+  data,
+  offset,
+  limit,
+}: {
+  data: ProjectsData;
+  offset: number;
+  limit: number;
+}) {
+  const navigate = useNavigate();
+  const { projects, count } = data;
+
+  const handleNextPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("projectOffset", String(offset + limit));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handlePreviousPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("projectOffset", String(offset - limit));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  return (
+    <>
+      <SectionHeader heading="Projects" count={count} />
+      <WorkflowEvaluationProjectsTable workflowEvaluationProjects={projects} />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={offset <= 0}
+        disableNext={offset + limit >= count}
+      />
+    </>
+  );
+}
+
+function RunsContent({
+  data,
+  offset,
+  limit,
+}: {
+  data: RunsData;
+  offset: number;
+  limit: number;
+}) {
+  const navigate = useNavigate();
+  const { runs, count } = data;
+
+  const handleNextPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("runOffset", String(offset + limit));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handlePreviousPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("runOffset", String(offset - limit));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  return (
+    <>
+      <SectionHeader heading="Evaluation Runs" count={count} />
+      <WorkflowEvaluationRunsTable workflowEvaluationRuns={runs} />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={offset <= 0}
+        disableNext={offset + limit >= count}
+      />
+    </>
+  );
+}
+
 export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
-  const navigate = useNavigate();
   const {
-    workflowEvaluationRuns,
-    count,
-    workflowEvaluationProjects,
-    projectCount,
+    projectsData,
+    runsData,
     runOffset,
     runLimit,
     projectOffset,
     projectLimit,
   } = loaderData;
-  const handleNextRunPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("runOffset", String(runOffset + runLimit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousRunPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("runOffset", String(runOffset - runLimit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handleNextProjectPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("projectOffset", String(projectOffset + projectLimit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousProjectPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("projectOffset", String(projectOffset - projectLimit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
+  const location = useLocation();
 
   return (
     <PageLayout>
       <PageHeader heading="Workflow Evaluations" />
       <SectionLayout>
-        <SectionHeader heading="Projects" count={projectCount} />
-        <WorkflowEvaluationProjectsTable
-          workflowEvaluationProjects={workflowEvaluationProjects}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousProjectPage}
-          onNextPage={handleNextProjectPage}
-          disablePrevious={projectOffset <= 0}
-          disableNext={projectOffset + projectLimit >= projectCount}
-        />
+        <Suspense
+          key={`projects-${location.key}`}
+          fallback={<SectionSkeleton />}
+        >
+          <Await resolve={projectsData} errorElement={<ProjectsSectionError />}>
+            {(data) => (
+              <ProjectsContent
+                data={data}
+                offset={projectOffset}
+                limit={projectLimit}
+              />
+            )}
+          </Await>
+        </Suspense>
       </SectionLayout>
       <SectionLayout>
-        <SectionHeader heading="Evaluation Runs" count={count} />
-        <WorkflowEvaluationRunsTable
-          workflowEvaluationRuns={workflowEvaluationRuns}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousRunPage}
-          onNextPage={handleNextRunPage}
-          disablePrevious={runOffset <= 0}
-          disableNext={runOffset + runLimit >= count}
-        />
+        <Suspense key={`runs-${location.key}`} fallback={<SectionSkeleton />}>
+          <Await resolve={runsData} errorElement={<RunsSectionError />}>
+            {(data) => (
+              <RunsContent data={data} offset={runOffset} limit={runLimit} />
+            )}
+          </Await>
+        </Suspense>
       </SectionLayout>
     </PageLayout>
   );
