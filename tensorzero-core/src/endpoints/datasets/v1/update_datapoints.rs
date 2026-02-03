@@ -8,6 +8,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -55,6 +56,9 @@ pub async fn update_datapoints_handler(
 /// and inserts the updated datapoints into ClickHouse.
 ///
 /// Returns an error if there are no datapoints, or if there are duplicate datapoint IDs.
+///
+/// TODO(#5691): implement update_datapints on DatasetQueries trait, make Clickhouse call get + insert,
+/// and make Postgres call update directly.
 pub async fn update_datapoints(
     app_state: &AppStateData,
     dataset_name: &str,
@@ -82,14 +86,18 @@ pub async fn update_datapoints(
         object_store_info: &app_state.config.object_store_info,
     };
 
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
     // Fetch all datapoints in a single batch query
     let datapoint_ids: Vec<Uuid> = request
         .datapoints
         .iter()
         .map(UpdateDatapointRequest::id)
         .collect();
-    let datapoints_vec = app_state
-        .clickhouse_connection_info
+    let datapoints_vec = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
@@ -167,10 +175,7 @@ pub async fn update_datapoints(
         }
     }
 
-    app_state
-        .clickhouse_connection_info
-        .insert_datapoints(&datapoints)
-        .await?;
+    database.insert_datapoints(&datapoints).await?;
     Ok(UpdateDatapointsResponse { ids: new_ids })
 }
 

@@ -15,7 +15,7 @@ JSONL_FILES=(
     "demonstration_feedback_examples.jsonl"
     "model_inference_cache_e2e.jsonl"
     "json_inference_datapoint_examples.jsonl"
-    "chat_inference_datapoint_examples.jsonl"
+    "chat_inference_datapoint_examples_20260129.jsonl"
     "dynamic_evaluation_run_episode_examples.jsonl"
     "jaro_winkler_similarity_feedback.jsonl"
     "comment_feedback_examples.jsonl"
