@@ -1194,6 +1194,10 @@ impl Config {
     /// let config = unwritten_config.into_config(&clickhouse).await?;
     /// ```
     async fn load_from_toml(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
+        let is_config_snapshot = match &input {
+            ConfigInput::Snapshot { .. } => true,
+            ConfigInput::Fresh(_) => false,
+        };
         let mut templates = TemplateConfig::new();
         let ProcessedConfigInput {
             tools,
@@ -1228,6 +1232,7 @@ impl Config {
                     &provider_types,
                     &provider_type_default_credentials,
                     relay_mode,
+                    is_config_snapshot,
                 )
                 .await
                 .map(|c| (name, c))

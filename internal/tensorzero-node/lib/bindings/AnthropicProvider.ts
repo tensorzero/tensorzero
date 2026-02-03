@@ -4,6 +4,5 @@ import type { JsonValue } from "./serde_json/JsonValue";
 export type AnthropicProvider = {
   model_name: string;
   api_base: string | null;
-  beta_structured_outputs: boolean;
   provider_tools: Array<JsonValue>;
 };
