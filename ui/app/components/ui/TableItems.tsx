@@ -1,8 +1,7 @@
 import { Link } from "react-router";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
-import { DotSeparator } from "./DotSeparator";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import { formatDateOnly, formatTimeOnly } from "~/utils/date";
+import { formatDate } from "~/utils/date";
 import { useFunctionConfig } from "~/context/config";
 import { useToast } from "~/hooks/use-toast";
 
@@ -55,13 +54,8 @@ interface TableItemTimeProps {
 }
 
 function TableItemTime({ timestamp }: TableItemTimeProps) {
-  const date = new Date(timestamp);
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      {formatDateOnly(date)}
-      <DotSeparator />
-      {formatTimeOnly(date)}
-    </span>
+    <span className="whitespace-nowrap">{formatDate(new Date(timestamp))}</span>
   );
 }
 
@@ -142,10 +136,4 @@ function TableItemFunction({
   return <div className={`${baseClasses} cursor-default`}>{content}</div>;
 }
 
-export {
-  DotSeparator,
-  TableItemFunction,
-  TableItemShortUuid,
-  TableItemText,
-  TableItemTime,
-};
+export { TableItemFunction, TableItemShortUuid, TableItemText, TableItemTime };

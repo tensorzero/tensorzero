@@ -1,27 +1,29 @@
-export const formatDateOnly = (date: Date) => {
-  return date.toLocaleString("en-US", {
+export const formatDate = (date: Date) => {
+  const formattedDate = date.toLocaleString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
-};
 
-export const formatTimeOnly = (date: Date) => {
-  return new Intl.DateTimeFormat("en-US", {
+  const formattedTime = new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
   }).format(date);
-};
 
-export const formatDate = (date: Date) => {
-  return `${formatDateOnly(date)} · ${formatTimeOnly(date)}`;
+  return `${formattedDate} · ${formattedTime}`;
 };
 
 /**
  * Format date with time including seconds
  */
 export const formatDateWithSeconds = (date: Date) => {
+  const formattedDate = date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
   const formattedTime = new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -29,7 +31,7 @@ export const formatDateWithSeconds = (date: Date) => {
     hour12: true,
   }).format(date);
 
-  return `${formatDateOnly(date)} · ${formattedTime}`;
+  return `${formattedDate} · ${formattedTime}`;
 };
 
 /**

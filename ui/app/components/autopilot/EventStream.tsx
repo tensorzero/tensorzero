@@ -13,7 +13,8 @@ import {
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
-import { DotSeparator, TableItemTime } from "~/components/ui/TableItems";
+import { DotSeparator } from "~/components/ui/DotSeparator";
+import { TableItemTime } from "~/components/ui/TableItems";
 import {
   Tooltip,
   TooltipContent,
@@ -262,11 +263,9 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span className="inline-flex items-center gap-2">
-                Tool Result
-                <DotSeparator />
-                Rejected
-              </span>
+              Tool Result
+              <DotSeparator />
+              Rejected
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -286,11 +285,9 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span className="inline-flex items-center gap-2">
-                Tool Result
-                <DotSeparator />
-                Missing Tool
-              </span>
+              Tool Result
+              <DotSeparator />
+              Missing Tool
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -310,11 +307,9 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span className="inline-flex items-center gap-2">
-                Tool Result
-                <DotSeparator />
-                Unknown
-              </span>
+              Tool Result
+              <DotSeparator />
+              Unknown
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
