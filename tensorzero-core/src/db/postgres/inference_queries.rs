@@ -18,10 +18,10 @@ use crate::db::TimeWindow;
 use crate::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
 use crate::db::inferences::{
     CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
-    CountInferencesWithDemonstrationFeedbacksParams, CountInferencesWithFeedbackParams,
-    FunctionInferenceCount, FunctionInfo, GetFunctionThroughputByVariantParams, InferenceMetadata,
-    InferenceOutputSource, InferenceQueries, ListInferenceMetadataParams, ListInferencesParams,
-    PaginationParams, VariantThroughput,
+    CountInferencesWithFeedbackParams, FunctionInferenceCount, FunctionInfo,
+    GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceOutputSource,
+    InferenceQueries, ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
+    VariantThroughput,
 };
 use crate::db::postgres::inference_filter_helpers::{MetricJoinRegistry, apply_inference_filter};
 use crate::db::query_helpers::json_double_escape_string_without_quotes;
@@ -229,8 +229,9 @@ impl InferenceQueries for PostgresConnectionInfo {
         let pool = self.get_pool_result()?;
 
         // Determine which table(s) to query based on function_name
+        // If the function doesn't exist in config, query both tables since we don't know
         let function_config_type = match params.function_name {
-            Some(fn_name) => Some(config.get_function(fn_name)?.config_type()),
+            Some(fn_name) => config.get_function(fn_name).ok().map(|f| f.config_type()),
             None => None,
         };
 
@@ -577,22 +578,6 @@ impl InferenceQueries for PostgresConnectionInfo {
 
     // ===== Inference count methods (merged from InferenceCountQueries trait) =====
 
-    async fn count_inferences_for_function(
-        &self,
-        params: CountInferencesForFunctionParams<'_>,
-    ) -> Result<u64, Error> {
-        let pool = self.get_pool_result()?;
-        let count = count_inferences_for_function_impl(
-            pool,
-            params.function_type,
-            params.function_name,
-            params.variant_name,
-        )
-        .await
-        .map_err(Error::from)?;
-        Ok(count as u64)
-    }
-
     async fn count_inferences_by_variant(
         &self,
         params: CountInferencesForFunctionParams<'_>,
@@ -616,39 +601,6 @@ impl InferenceQueries for PostgresConnectionInfo {
         Err(Error::new(ErrorDetails::NotImplemented {
             message: "count_inferences_with_feedback not yet implemented for Postgres".to_string(),
         }))
-    }
-
-    async fn count_inferences_with_demonstration_feedback(
-        &self,
-        _params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
-    ) -> Result<u64, Error> {
-        // TODO(#5691): Implement when feedback tables are added in step-2
-        Err(Error::new(ErrorDetails::NotImplemented {
-            message:
-                "count_inferences_with_demonstration_feedback not yet implemented for Postgres"
-                    .to_string(),
-        }))
-    }
-
-    async fn count_inferences_for_episode(&self, episode_id: Uuid) -> Result<u64, Error> {
-        let pool = self.get_pool_result()?;
-
-        let mut qb = QueryBuilder::new(
-            r"SELECT COUNT(*) FROM (
-                SELECT id FROM tensorzero.chat_inferences WHERE episode_id = ",
-        );
-        qb.push_bind(episode_id);
-        qb.push(" UNION ALL SELECT id FROM tensorzero.json_inferences WHERE episode_id = ");
-        qb.push_bind(episode_id);
-        qb.push(") AS combined");
-
-        let count: i64 = qb
-            .build_query_scalar()
-            .fetch_one(pool)
-            .await
-            .map_err(Error::from)?;
-
-        Ok(count as u64)
     }
 
     async fn get_function_throughput_by_variant(
@@ -1605,8 +1557,10 @@ fn apply_count_filters(
     config: &Config,
     params: &CountInferencesParams<'_>,
 ) -> Result<(), Error> {
-    // Note: function_name filter is not applied here for UNION ALL queries
-    // since that's used to determine which tables to query
+    if let Some(function_name) = params.function_name {
+        query_builder.push(" AND i.function_name = ");
+        query_builder.push_bind(function_name);
+    }
 
     if let Some(variant_name) = params.variant_name {
         query_builder.push(" AND i.variant_name = ");
@@ -1636,28 +1590,6 @@ fn apply_count_filters(
 }
 
 // ===== Inference count helper functions (merged from inference_count module) =====
-
-/// Builds and executes a count query for inferences.
-async fn count_inferences_for_function_impl(
-    pool: &PgPool,
-    function_type: FunctionConfigType,
-    function_name: &str,
-    variant_name: Option<&str>,
-) -> Result<i64, sqlx::Error> {
-    let table = function_type.postgres_table_name();
-
-    let mut qb = QueryBuilder::new("SELECT COUNT(*) FROM ");
-    qb.push(table);
-    qb.push(" WHERE function_name = ");
-    qb.push_bind(function_name);
-
-    if let Some(variant) = variant_name {
-        qb.push(" AND variant_name = ");
-        qb.push_bind(variant);
-    }
-
-    qb.build_query_scalar().fetch_one(pool).await
-}
 
 /// Builds and executes a count-by-variant query for inferences.
 async fn count_by_variant_impl(

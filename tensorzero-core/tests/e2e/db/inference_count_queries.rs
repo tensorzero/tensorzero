@@ -102,13 +102,13 @@ async fn test_count_inferences_for_json_function_with_variant(conn: impl Inferen
 make_db_test!(test_count_inferences_for_json_function_with_variant);
 
 async fn test_count_inferences_for_nonexistent_function(conn: impl InferenceQueries) {
-    let params = CountInferencesForFunctionParams {
-        function_name: "nonexistent_function",
-        function_type: FunctionConfigType::Chat,
-        variant_name: None,
+    let config = get_e2e_config().await;
+    let params = CountInferencesParams {
+        function_name: Some("nonexistent_function"),
+        ..Default::default()
     };
 
-    let count = conn.count_inferences_for_function(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     assert_eq!(count, 0, "Expected 0 for nonexistent function");
 }

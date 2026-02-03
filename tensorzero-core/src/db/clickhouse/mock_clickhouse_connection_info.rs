@@ -11,10 +11,9 @@ use crate::db::datasets::{
 };
 use crate::db::inferences::{
     CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
-    CountInferencesWithDemonstrationFeedbacksParams, CountInferencesWithFeedbackParams,
-    FunctionInferenceCount, FunctionInfo, GetFunctionThroughputByVariantParams, InferenceMetadata,
-    InferenceQueries, ListInferenceMetadataParams, ListInferencesParams, MockInferenceQueries,
-    VariantThroughput,
+    CountInferencesWithFeedbackParams, FunctionInferenceCount, FunctionInfo,
+    GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceQueries,
+    ListInferenceMetadataParams, ListInferencesParams, MockInferenceQueries, VariantThroughput,
 };
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
@@ -137,15 +136,6 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
 
     // ===== Inference count methods (merged from InferenceCountQueries trait) =====
 
-    async fn count_inferences_for_function(
-        &self,
-        params: CountInferencesForFunctionParams<'_>,
-    ) -> Result<u64, Error> {
-        self.inference_queries
-            .count_inferences_for_function(params)
-            .await
-    }
-
     async fn count_inferences_by_variant(
         &self,
         params: CountInferencesForFunctionParams<'_>,
@@ -161,21 +151,6 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
     ) -> Result<u64, Error> {
         self.inference_queries
             .count_inferences_with_feedback(params)
-            .await
-    }
-
-    async fn count_inferences_with_demonstration_feedback(
-        &self,
-        params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
-    ) -> Result<u64, Error> {
-        self.inference_queries
-            .count_inferences_with_demonstration_feedback(params)
-            .await
-    }
-
-    async fn count_inferences_for_episode(&self, episode_id: Uuid) -> Result<u64, Error> {
-        self.inference_queries
-            .count_inferences_for_episode(episode_id)
             .await
     }
 

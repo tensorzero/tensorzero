@@ -406,12 +406,6 @@ pub struct CountInferencesWithFeedbackParams<'a> {
     pub metric_threshold: Option<f64>,
 }
 
-/// Parameters for counting inferences with demonstration feedbacks
-pub struct CountInferencesWithDemonstrationFeedbacksParams<'a> {
-    pub function_name: &'a str,
-    pub function_type: FunctionConfigType,
-}
-
 /// Parameters for getting function throughput by variant.
 #[derive(Debug)]
 pub struct GetFunctionThroughputByVariantParams<'a> {
@@ -532,34 +526,23 @@ pub trait InferenceQueries {
     ) -> Result<(), Error>;
 
     // ===== Inference count methods (merged from InferenceCountQueries trait) =====
-
-    /// Counts the number of inferences for a function, optionally filtered by variant.
-    async fn count_inferences_for_function(
-        &self,
-        params: CountInferencesForFunctionParams<'_>,
-    ) -> Result<u64, Error>;
+    // Note: count_inferences_for_function, count_inferences_with_demonstration_feedback, and
+    // count_inferences_for_episode were removed as they can be achieved via count_inferences with filters.
 
     /// Counts inferences for a function, optionally filtered by variant, grouped by variant.
+    /// Returns grouped data with variant name, count, and last_used_at timestamps.
     async fn count_inferences_by_variant(
         &self,
         params: CountInferencesForFunctionParams<'_>,
     ) -> Result<Vec<CountByVariant>, Error>;
 
     /// Count the number of inferences with feedback for a metric.
-    /// If `metric_threshold` is Some, only counts inferences with feedback meeting the threshold criteria.
+    /// If `metric_threshold` is Some, only counts inferences with feedback meeting the threshold criteria
+    /// based on the metric config's optimize direction (max/min).
     async fn count_inferences_with_feedback(
         &self,
         params: CountInferencesWithFeedbackParams<'_>,
     ) -> Result<u64, Error>;
-
-    /// Count the number of inferences with demonstration feedbacks for a function.
-    async fn count_inferences_with_demonstration_feedback(
-        &self,
-        params: CountInferencesWithDemonstrationFeedbacksParams<'_>,
-    ) -> Result<u64, Error>;
-
-    /// Counts the number of inferences for an episode.
-    async fn count_inferences_for_episode(&self, episode_id: Uuid) -> Result<u64, Error>;
 
     /// Get function throughput (inference counts) grouped by variant and time period.
     /// Returns throughput data for the last `max_periods` time periods, grouped by variant.
