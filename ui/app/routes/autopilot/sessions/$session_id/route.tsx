@@ -543,8 +543,12 @@ function AutopilotSessionEventsPageContent({
     const displayEventId = eventIds[0];
     const lastEventId = eventIds[eventIds.length - 1];
 
-    // Early bailout if already processed (prevents double-click clearing loading state)
-    if (manualAuthorization.isProcessed(displayEventId)) return;
+    // Early bailout if ALL events are already processed
+    // (allows batch to proceed if some events are still pending)
+    const hasUnprocessedEvents = eventIds.some(
+      (id) => !manualAuthorization.isProcessed(id),
+    );
+    if (!hasUnprocessedEvents) return;
 
     userActionRef.current = true;
     setAuthLoadingStates((prev) =>
