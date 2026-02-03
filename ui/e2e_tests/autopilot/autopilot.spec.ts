@@ -103,3 +103,132 @@ test.describe("Autopilot New Session Button", () => {
     expect(page.url()).toMatch(/\/autopilot\/sessions\/new$/);
   });
 });
+
+test.describe("Tool call authorization deduplication", () => {
+  test("spam-clicking Approve sends only one request", async ({ page }) => {
+    test.setTimeout(120000);
+
+    // Track requests by tool_call_event_id to scope assertion to the clicked tool call
+    const requestsByToolCallId = new Map<string, number>();
+    let firstToolCallId: string | null = null;
+
+    await page.route("**/events/authorize", async (route) => {
+      const body = route.request().postDataJSON();
+      const toolCallId = body?.tool_call_event_id;
+      if (toolCallId) {
+        if (!firstToolCallId) {
+          firstToolCallId = toolCallId;
+        }
+        requestsByToolCallId.set(
+          toolCallId,
+          (requestsByToolCallId.get(toolCallId) ?? 0) + 1,
+        );
+      }
+      await route.continue();
+    });
+
+    await page.goto("/autopilot/sessions/new");
+
+    const messageInput = page.getByRole("textbox");
+    await messageInput.fill(
+      "What functions are available in my TensorZero config?",
+    );
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+      timeout: 30000,
+    });
+
+    // Wait for Approve button to appear
+    const approveButton = page.getByRole("button", { name: "Approve" }).first();
+    await expect(approveButton).toBeVisible({ timeout: 60000 });
+
+    // Spam-click the button rapidly using force to bypass stability checks
+    // (button may be removed/disabled after first click)
+    await Promise.all([
+      approveButton.click({ force: true, noWaitAfter: true }),
+      approveButton.click({ force: true, noWaitAfter: true }),
+      approveButton.click({ force: true, noWaitAfter: true }),
+    ]);
+
+    // Wait for request to complete
+    await page.waitForTimeout(2000);
+
+    // Only count requests for the first tool call (the one we spam-clicked)
+    const requestCount = firstToolCallId
+      ? (requestsByToolCallId.get(firstToolCallId) ?? 0)
+      : 0;
+    expect(
+      requestCount,
+      "Spam-clicking Approve should send only one request for the same tool call",
+    ).toBe(1);
+  });
+
+  test("spam-clicking Reject sends only one request", async ({ page }) => {
+    test.setTimeout(120000);
+
+    // Track requests by tool_call_event_id to scope assertion to the clicked tool call
+    const requestsByToolCallId = new Map<string, number>();
+    let firstToolCallId: string | null = null;
+
+    await page.route("**/events/authorize", async (route) => {
+      const body = route.request().postDataJSON();
+      const toolCallId = body?.tool_call_event_id;
+      if (toolCallId) {
+        if (!firstToolCallId) {
+          firstToolCallId = toolCallId;
+        }
+        requestsByToolCallId.set(
+          toolCallId,
+          (requestsByToolCallId.get(toolCallId) ?? 0) + 1,
+        );
+      }
+      await route.continue();
+    });
+
+    await page.goto("/autopilot/sessions/new");
+
+    const messageInput = page.getByRole("textbox");
+    await messageInput.fill(
+      "What functions are available in my TensorZero config?",
+    );
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+      timeout: 30000,
+    });
+
+    // Wait for Reject button to appear
+    const rejectButton = page.getByRole("button", { name: "Reject" }).first();
+    await expect(rejectButton).toBeVisible({ timeout: 60000 });
+
+    // Click Reject to show confirmation
+    await rejectButton.click();
+
+    // Wait for and spam-click the confirm button (button has aria-label="Confirm rejection")
+    const confirmButton = page
+      .getByRole("button", { name: "Confirm rejection" })
+      .first();
+    await expect(confirmButton).toBeVisible();
+
+    // Spam-click the button rapidly using force to bypass stability checks
+    // (button may be removed/disabled after first click)
+    await Promise.all([
+      confirmButton.click({ force: true, noWaitAfter: true }),
+      confirmButton.click({ force: true, noWaitAfter: true }),
+      confirmButton.click({ force: true, noWaitAfter: true }),
+    ]);
+
+    // Wait for request to complete
+    await page.waitForTimeout(2000);
+
+    // Only count requests for the first tool call (the one we spam-clicked)
+    const requestCount = firstToolCallId
+      ? (requestsByToolCallId.get(firstToolCallId) ?? 0)
+      : 0;
+    expect(
+      requestCount,
+      "Spam-clicking Reject confirm should send only one request for the same tool call",
+    ).toBe(1);
+  });
+});
