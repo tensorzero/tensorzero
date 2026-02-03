@@ -5,7 +5,7 @@
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -175,6 +175,7 @@ async fn test_extra_content_roundtrip_streaming() {
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut all_chunks: Vec<Value> = Vec::new();
@@ -184,32 +185,34 @@ async fn test_extra_content_roundtrip_streaming() {
     // Step 2: Collect streaming chunks
     while let Some(event) = response.next().await {
         let event = event.expect("Failed to receive event");
-        let Event::Message(message) = event else {
-            continue;
-        };
-        if message.data == "[DONE]" {
-            break;
-        }
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
 
-        let chunk_json: Value =
-            serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
-        all_chunks.push(chunk_json.clone());
+                let chunk_json: Value =
+                    serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
+                all_chunks.push(chunk_json.clone());
 
-        // Collect content delta
-        if let Some(choices) = chunk_json.get("choices")
-            && let Some(delta) = choices[0].get("delta")
-        {
-            // Collect text content
-            if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
-                content_text.push_str(content);
-            }
+                // Collect content delta
+                if let Some(choices) = chunk_json.get("choices")
+                    && let Some(delta) = choices[0].get("delta")
+                {
+                    // Collect text content
+                    if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
+                        content_text.push_str(content);
+                    }
 
-            // Collect extra content chunks
-            if let Some(extra) = delta.get("tensorzero_extra_content_experimental")
-                && let Some(arr) = extra.as_array()
-            {
-                for block in arr {
-                    extra_content_chunks.push(block.clone());
+                    // Collect extra content chunks
+                    if let Some(extra) = delta.get("tensorzero_extra_content_experimental")
+                        && let Some(arr) = extra.as_array()
+                    {
+                        for block in arr {
+                            extra_content_chunks.push(block.clone());
+                        }
+                    }
                 }
             }
         }

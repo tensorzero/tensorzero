@@ -173,7 +173,6 @@ pub struct OpenAICompatibleParams {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleResponseMessage {
     pub content: Option<String>,
-    #[serde(skip_serializing_if = "is_none_or_empty")]
     pub tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
     pub role: String,
     #[serde(skip_serializing_if = "is_none_or_empty")]
@@ -791,11 +790,7 @@ impl From<(InferenceResponse, String, bool, bool)> for OpenAICompatibleResponse 
                         finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
                         message: OpenAICompatibleResponseMessage {
                             content,
-                            tool_calls: if tool_calls.is_empty() {
-                                None
-                            } else {
-                                Some(tool_calls)
-                            },
+                            tool_calls: Some(tool_calls),
                             role: "assistant".to_string(),
                             tensorzero_extra_content_experimental: if extra_content.is_empty() {
                                 None
