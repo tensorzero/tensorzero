@@ -2,8 +2,8 @@
 import type { UninitializedLLMJudgeChatCompletionVariantConfig } from "./UninitializedLLMJudgeChatCompletionVariantConfig";
 
 export type UninitializedLLMJudgeBestOfNVariantConfig = {
-  active: boolean | null;
-  timeout_s?: number | null;
+  active?: boolean;
+  timeout_s?: number;
   candidates: Array<string>;
   evaluator: UninitializedLLMJudgeChatCompletionVariantConfig;
 };

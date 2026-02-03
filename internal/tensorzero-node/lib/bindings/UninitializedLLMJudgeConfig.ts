@@ -11,6 +11,6 @@ export type UninitializedLLMJudgeConfig = {
   output_type: LLMJudgeOutputType;
   optimize: LLMJudgeOptimize;
   include: LLMJudgeIncludeConfig;
-  cutoff: number | null;
-  description: string | null;
+  cutoff?: number;
+  description?: string;
 };
