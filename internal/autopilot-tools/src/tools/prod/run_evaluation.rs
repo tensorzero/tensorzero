@@ -1,7 +1,7 @@
 //! Tool for running evaluations on datasets.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::{borrow::Cow, time::Duration};
 
 use async_trait::async_trait;
 use durable_tools::{
@@ -142,6 +142,10 @@ impl ToolMetadata for RunEvaluationTool {
             }
             .into()
         })
+    }
+
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(30 * 60)
     }
 }
 

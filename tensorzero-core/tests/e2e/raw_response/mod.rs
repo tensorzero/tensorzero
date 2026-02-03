@@ -8,7 +8,7 @@ mod openai_compatible;
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -52,7 +52,7 @@ fn assert_raw_response_entry(entry: &Value) {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_response_chat_completions_non_streaming() {
+async fn test_raw_response_chat_completions_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -121,7 +121,7 @@ async fn e2e_test_raw_response_chat_completions_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_response_chat_completions_streaming() {
+async fn test_raw_response_chat_completions_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -146,6 +146,7 @@ async fn e2e_test_raw_response_chat_completions_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_chunk = false;
@@ -206,7 +207,7 @@ async fn e2e_test_raw_response_chat_completions_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_response_responses_api_non_streaming() {
+async fn test_raw_response_responses_api_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -266,7 +267,7 @@ async fn e2e_test_raw_response_responses_api_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_response_responses_api_streaming() {
+async fn test_raw_response_responses_api_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -291,6 +292,7 @@ async fn e2e_test_raw_response_responses_api_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_chunk = false;
@@ -331,7 +333,7 @@ async fn e2e_test_raw_response_responses_api_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_response_not_requested_non_streaming() {
+async fn test_raw_response_not_requested_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -371,7 +373,7 @@ async fn e2e_test_raw_response_not_requested_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_response_not_requested_streaming() {
+async fn test_raw_response_not_requested_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -396,6 +398,7 @@ async fn e2e_test_raw_response_not_requested_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(chunk) = chunks.next().await {
@@ -427,7 +430,7 @@ async fn e2e_test_raw_response_not_requested_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_response_best_of_n_non_streaming() {
+async fn test_raw_response_best_of_n_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -497,7 +500,7 @@ async fn e2e_test_raw_response_best_of_n_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_response_best_of_n_streaming() {
+async fn test_raw_response_best_of_n_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -522,6 +525,7 @@ async fn e2e_test_raw_response_best_of_n_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_response = false;
@@ -583,7 +587,7 @@ async fn e2e_test_raw_response_best_of_n_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_response_mixture_of_n_non_streaming() {
+async fn test_raw_response_mixture_of_n_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -644,7 +648,7 @@ async fn e2e_test_raw_response_mixture_of_n_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_response_mixture_of_n_streaming() {
+async fn test_raw_response_mixture_of_n_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -669,6 +673,7 @@ async fn e2e_test_raw_response_mixture_of_n_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_response = false;
@@ -731,7 +736,7 @@ async fn e2e_test_raw_response_mixture_of_n_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_response_dicl_non_streaming() {
+async fn test_raw_response_dicl_non_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -812,7 +817,7 @@ async fn e2e_test_raw_response_dicl_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_response_dicl_streaming() {
+async fn test_raw_response_dicl_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -837,6 +842,7 @@ async fn e2e_test_raw_response_dicl_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_response = false;
@@ -896,7 +902,7 @@ async fn e2e_test_raw_response_dicl_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_response_json_function_non_streaming() {
+async fn test_raw_response_json_function_non_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -950,7 +956,7 @@ async fn e2e_test_raw_response_json_function_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_response_json_function_streaming() {
+async fn test_raw_response_json_function_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -974,6 +980,7 @@ async fn e2e_test_raw_response_json_function_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_chunk = false;

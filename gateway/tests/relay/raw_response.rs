@@ -6,7 +6,7 @@
 use crate::common::relay::start_relay_test_environment;
 use futures::StreamExt;
 use reqwest::Client;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -152,6 +152,7 @@ async fn test_relay_raw_response_streaming() {
             }
         }))
         .eventsource()
+        .await
         .unwrap();
 
     let mut found_raw_chunk = false;
@@ -276,6 +277,7 @@ async fn test_relay_raw_response_not_requested_streaming() {
             }
         }))
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(event) = stream.next().await {
@@ -458,6 +460,7 @@ reasoning_effort = "minimal"
             "include_raw_response": true
         }))
         .eventsource()
+        .await
         .unwrap();
 
     let mut raw_response_entries: Vec<Value> = Vec::new();

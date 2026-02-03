@@ -15,7 +15,7 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
-import { PageErrorContent } from "~/components/ui/error";
+import { LayoutErrorBoundary, PageErrorContent } from "~/components/ui/error";
 import {
   getPostgresClient,
   isPostgresAvailable,
@@ -314,6 +314,5 @@ export default function ApiKeysPage({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-  return <PageErrorContent error={error} />;
+  return <LayoutErrorBoundary error={error} />;
 }

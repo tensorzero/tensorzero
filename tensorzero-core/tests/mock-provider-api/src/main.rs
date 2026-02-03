@@ -535,7 +535,7 @@ pub async fn status_handler() -> Json<serde_json::Value> {
 mod tests {
 
     use super::*;
-    use eventsource_stream::Eventsource;
+    use sse_stream::SseStream;
     use tokio_stream::StreamExt as _; // for `next`
     use tower::ServiceExt; // for `oneshot`
 
@@ -717,19 +717,22 @@ mod tests {
             "text/event-stream"
         );
 
-        let mut event_stream = response.bytes_stream().eventsource();
+        let mut event_stream = SseStream::from_byte_stream(response.bytes_stream());
 
         // Check we receive all client chunks correctly
         for _ in 0..10 {
-            let event_data: serde_json::Value =
-                serde_json::from_str(&event_stream.next().await.unwrap().unwrap().data).unwrap();
+            let data = event_stream.next().await.unwrap().unwrap().data.unwrap();
+            let event_data: serde_json::Value = serde_json::from_str(&data).unwrap();
 
             // Includes some OpenAI fields
             assert!(event_data.get("choices").is_some());
         }
 
         // Ensure we get the final chunk
-        assert_eq!(event_stream.next().await.unwrap().unwrap().data, "[DONE]");
+        assert_eq!(
+            event_stream.next().await.unwrap().unwrap().data.unwrap(),
+            "[DONE]"
+        );
 
         // Check we've exhausted the client stream
         assert!(event_stream.next().await.is_none());
@@ -777,19 +780,22 @@ mod tests {
             "text/event-stream"
         );
 
-        let mut event_stream = response.bytes_stream().eventsource();
+        let mut event_stream = SseStream::from_byte_stream(response.bytes_stream());
 
         // Check we receive all client chunks correctly
         for _ in 0..16 {
-            let event_data: serde_json::Value =
-                serde_json::from_str(&event_stream.next().await.unwrap().unwrap().data).unwrap();
+            let data = event_stream.next().await.unwrap().unwrap().data.unwrap();
+            let event_data: serde_json::Value = serde_json::from_str(&data).unwrap();
 
             // Includes some OpenAI fields
             assert!(event_data.get("choices").is_some());
         }
 
         // Ensure we get the final chunk
-        assert_eq!(event_stream.next().await.unwrap().unwrap().data, "[DONE]");
+        assert_eq!(
+            event_stream.next().await.unwrap().unwrap().data.unwrap(),
+            "[DONE]"
+        );
 
         // Check we've exhausted the client stream
         assert!(event_stream.next().await.is_none());
@@ -852,12 +858,12 @@ mod tests {
             "text/event-stream"
         );
 
-        let mut event_stream = response.bytes_stream().eventsource();
+        let mut event_stream = SseStream::from_byte_stream(response.bytes_stream());
 
         // Check we receive all client chunks correctly
         for _ in 0..6 {
-            let event_data: serde_json::Value =
-                serde_json::from_str(&event_stream.next().await.unwrap().unwrap().data).unwrap();
+            let data = event_stream.next().await.unwrap().unwrap().data.unwrap();
+            let event_data: serde_json::Value = serde_json::from_str(&data).unwrap();
 
             // Includes some OpenAI fields
             assert!(
@@ -866,12 +872,15 @@ mod tests {
             );
         }
         // this one will just have a finish reason
-        let event_data: serde_json::Value =
-            serde_json::from_str(&event_stream.next().await.unwrap().unwrap().data).unwrap();
+        let data = event_stream.next().await.unwrap().unwrap().data.unwrap();
+        let event_data: serde_json::Value = serde_json::from_str(&data).unwrap();
         assert!(event_data["choices"][0]["finish_reason"].is_string());
 
         // Ensure we get the final chunk
-        assert_eq!(event_stream.next().await.unwrap().unwrap().data, "[DONE]");
+        assert_eq!(
+            event_stream.next().await.unwrap().unwrap().data.unwrap(),
+            "[DONE]"
+        );
 
         // Check we've exhausted the client stream
         assert!(event_stream.next().await.is_none());

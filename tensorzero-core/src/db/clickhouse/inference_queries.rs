@@ -3,18 +3,20 @@ use itertools::Itertools;
 use uuid::Uuid;
 
 use crate::config::MetricConfigLevel;
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
     ClickhouseType, JoinRegistry, OrderByTerm, OrderDirection, QueryParameter,
     generate_order_by_sql,
 };
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::inferences::{
     ClickHouseStoredInferenceWithDispreferredOutputs, CountInferencesParams,
     DEFAULT_INFERENCE_QUERY_LIMIT, FunctionInfo, InferenceMetadata, InferenceOutputSource,
     InferenceQueries, ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
 };
+use crate::db::query_helpers::json_double_escape_string_without_quotes;
 use crate::function::FunctionConfigType;
+use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::deserialize_optional_tool_info;
 use crate::{
@@ -320,6 +322,28 @@ impl InferenceQueries for ClickHouseConnectionInfo {
 
         Ok(Some(result.output))
     }
+
+    // ===== Write methods =====
+
+    async fn insert_chat_inferences(
+        &self,
+        rows: &[ChatInferenceDatabaseInsert],
+    ) -> Result<(), Error> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        self.write_batched(rows, TableName::ChatInference).await
+    }
+
+    async fn insert_json_inferences(
+        &self,
+        rows: &[JsonInferenceDatabaseInsert],
+    ) -> Result<(), Error> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        self.write_batched(rows, TableName::JsonInference).await
+    }
 }
 
 /// Generates the SQL query and parameters for counting inferences.
@@ -456,7 +480,8 @@ fn generate_count_query_for_table(
 
     // Add text query filter
     if let Some(search_query_experimental) = opts.search_query_experimental {
-        let json_escaped_text_query = json_escape_string_without_quotes(search_query_experimental)?;
+        let json_escaped_text_query =
+            json_double_escape_string_without_quotes(search_query_experimental)?;
         let text_query_param = add_parameter(
             json_escaped_text_query,
             ClickhouseType::String,
@@ -559,59 +584,6 @@ fn generate_list_inference_metadata_sql(
     (query, query_params)
 }
 
-/// Escapes a string for JSON without quotes.
-/// This is used to escape the text query when we doing a substring match on input and output strings, because
-/// input and output strings are JSON-escaped in ClickHouse.
-fn json_escape_string_without_quotes(s: &str) -> Result<String, Error> {
-    let mut json_escaped = serde_json::to_string(s)?;
-    json_escaped.remove(0);
-    json_escaped.pop();
-    Ok(json_escaped)
-}
-
-/// Validates that before/after pagination works with the rest of the request:
-/// - If order_by is provided, only timestamp ordering is supported.
-/// - Offset must not be provided.
-///
-/// Returns an error if the request is invalid.
-fn validate_before_after_pagination(opts: &ListInferencesParams<'_>) -> Result<(), Error> {
-    if opts.pagination.is_none() {
-        return Ok(());
-    };
-    let Some(order_by) = opts.order_by else {
-        return Ok(());
-    };
-
-    for order in order_by {
-        match &order.term {
-            OrderByTerm::Timestamp => {
-                // Timestamp ordering is compatible with before/after pagination (UUIDv7 is time-ordered)
-                continue;
-            }
-            OrderByTerm::Metric { name } => {
-                return Err(Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Cannot order by metric '{name}'; only ordering by timestamp is supported with before/after pagination.",
-                    ),
-                }));
-            }
-            OrderByTerm::SearchRelevance => {
-                return Err(Error::new(ErrorDetails::InvalidRequest {
-                    message: "Cannot order by search relevance; only ordering by timestamp is supported with before/after pagination.".to_string(),
-                }));
-            }
-        }
-    }
-
-    if opts.offset != 0 {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "OFFSET is not supported when using before/after pagination".to_string(),
-        }));
-    }
-
-    Ok(())
-}
-
 /// Generates the ClickHouse query and a list of parameters to be set.
 /// The query string will contain placeholders like `{p0:String}`.
 /// The returned `Vec<QueryParameter>` contains the mapping from placeholder names (e.g., "p0")
@@ -628,7 +600,7 @@ pub(crate) fn generate_list_inferences_sql(
     config: &Config,
     opts: &ListInferencesParams<'_>,
 ) -> Result<(String, Vec<QueryParameter>), Error> {
-    validate_before_after_pagination(opts)?;
+    opts.validate_pagination()?;
 
     let mut query_params: Vec<QueryParameter> = Vec::new();
     let mut param_idx_counter = 0;
@@ -1046,7 +1018,8 @@ fn generate_single_table_query_for_type(
 
     // Add text query term frequency columns and filter
     if let Some(search_query_experimental) = opts.search_query_experimental {
-        let json_escaped_text_query = json_escape_string_without_quotes(search_query_experimental)?;
+        let json_escaped_text_query =
+            json_double_escape_string_without_quotes(search_query_experimental)?;
         let text_query_param = add_parameter(
             json_escaped_text_query,
             ClickhouseType::String,
@@ -1100,43 +1073,6 @@ mod tests {
     use crate::db::inferences::{InferenceOutputSource, ListInferencesParams};
 
     use super::generate_list_inferences_sql;
-
-    mod json_escape_string_without_quotes_tests {
-        use crate::db::clickhouse::inference_queries::json_escape_string_without_quotes;
-
-        #[test]
-        fn test_json_escape_string_without_quotes() {
-            assert_eq!(
-                json_escape_string_without_quotes("").unwrap(),
-                String::new()
-            );
-            assert_eq!(
-                json_escape_string_without_quotes("test").unwrap(),
-                "test".to_string()
-            );
-            assert_eq!(
-                json_escape_string_without_quotes("123").unwrap(),
-                "123".to_string()
-            );
-            assert_eq!(
-                json_escape_string_without_quotes("he's").unwrap(),
-                "he's".to_string()
-            );
-        }
-
-        #[test]
-        fn test_json_escape_string_escapes_correctly() {
-            assert_eq!(
-                json_escape_string_without_quotes(r#""test""#).unwrap(),
-                r#"\"test\""#.to_string()
-            );
-
-            assert_eq!(
-                json_escape_string_without_quotes(r"end of line\next line").unwrap(),
-                r"end of line\\next line".to_string()
-            );
-        }
-    }
 
     async fn get_e2e_config() -> Config {
         // Read the e2e config file

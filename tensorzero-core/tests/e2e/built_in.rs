@@ -23,7 +23,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 use uuid::Uuid;
 
 #[tokio::test]
-async fn e2e_test_built_in_hello_chat_with_system_variables() {
+async fn test_built_in_hello_chat_with_system_variables() {
     // Test calling the built-in tensorzero::hello_chat function with system template variables
     // using a dynamic variant config
     let mut payload = json!({
@@ -97,7 +97,7 @@ async fn e2e_test_built_in_hello_chat_with_system_variables() {
 }
 
 #[tokio::test]
-async fn e2e_test_built_in_hello_json() {
+async fn test_built_in_hello_json() {
     // Test calling the built-in tensorzero::hello_json function
     let mut payload = json!({
         "function_name": "tensorzero::hello_json",
@@ -162,7 +162,7 @@ async fn e2e_test_built_in_hello_json() {
 }
 
 #[tokio::test]
-async fn e2e_test_built_in_error_no_variant() {
+async fn test_built_in_error_no_variant() {
     // Test that built-in functions fail gracefully without dynamic variant config
     let payload = json!({
         "function_name": "tensorzero::hello_chat",

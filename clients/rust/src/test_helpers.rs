@@ -215,7 +215,7 @@ pub async fn make_embedded_gateway_e2e_with_unique_db(db_prefix: &str) -> Client
 /// Starts an HTTP gateway with a unique ClickHouse database.
 /// Returns the base URL (e.g., "http://127.0.0.1:12345") and a shutdown handle.
 /// The gateway shuts down when the handle is dropped.
-pub async fn start_http_gateway_with_unique_db(
+pub async fn make_http_gateway_with_unique_db(
     db_prefix: &str,
 ) -> (String, tensorzero_core::utils::gateway::ShutdownHandle) {
     let clickhouse_url = create_unique_clickhouse_url(db_prefix);

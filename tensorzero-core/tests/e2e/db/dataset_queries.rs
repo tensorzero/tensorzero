@@ -1,17 +1,15 @@
-use serde_json::json;
-use std::collections::{HashMap, HashSet};
-use tensorzero_core::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTerm};
-use uuid::Uuid;
+//! Shared test logic for DatasetQueries implementations (ClickHouse and Postgres).
 
 use object_store::path::Path as ObjectStorePath;
+use serde_json::json;
+use std::collections::{HashMap, HashSet};
 use tensorzero::{GetDatapointParams, GetDatasetMetadataParams, OrderDirection, Role};
-use tensorzero_core::db::clickhouse::test_helpers::{
-    clickhouse_flush_async_insert, get_clickhouse,
-};
 use tensorzero_core::db::datasets::{DatasetMetadata, DatasetQueries, GetDatapointsParams};
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTerm};
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 use tensorzero_core::inference::types::stored_input::StoredFile;
@@ -20,19 +18,17 @@ use tensorzero_core::inference::types::{
     StoredInputMessageContent, Text,
 };
 use tensorzero_core::stored_inference::StoredSample;
+use uuid::Uuid;
 
-#[tokio::test]
-async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets() {
+async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets(
+    conn: impl DatasetQueries,
+) {
     let params = GetDatasetMetadataParams {
         function_name: None,
         limit: None,
         offset: None,
     };
-    let metadata = get_clickhouse()
-        .await
-        .get_dataset_metadata(&params)
-        .await
-        .unwrap();
+    let metadata = conn.get_dataset_metadata(&params).await.unwrap();
 
     // We only assert that the result contains the expected datasets
     // Because other tests insert into the table, there could be additional datasets
@@ -47,19 +43,17 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets() {
         last_updated: "2025-03-14T17:38:09Z".to_string(),
     }));
 }
+make_db_test!(test_get_dataset_metadata_returns_correct_counts_for_all_datasets);
 
-#[tokio::test]
-async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function() {
+async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function(
+    conn: impl DatasetQueries,
+) {
     let params = GetDatasetMetadataParams {
         function_name: Some("write_haiku".to_string()),
         limit: None,
         offset: None,
     };
-    let metadata = get_clickhouse()
-        .await
-        .get_dataset_metadata(&params)
-        .await
-        .unwrap();
+    let metadata = conn.get_dataset_metadata(&params).await.unwrap();
 
     // We only assert that the result contains the expected dataset
     // Because other tests insert into the table, there could be additional datasets
@@ -69,16 +63,14 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function(
         last_updated: "2025-03-23T20:03:59Z".to_string(),
     }));
 }
+make_db_test!(test_get_dataset_metadata_returns_correct_counts_for_specific_function);
 
-#[tokio::test]
-async fn test_count_datapoints_for_dataset_chat() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_datapoints_for_dataset_chat(conn: impl DatasetQueries + TestDatabaseHelpers) {
     let dataset_name = format!("test_count_{}", Uuid::now_v7());
     let function_name = "test_function";
 
     // Get initial count
-    let initial_count = clickhouse
+    let initial_count = conn
         .count_datapoints_for_dataset(&dataset_name, Some(function_name))
         .await
         .unwrap();
@@ -113,16 +105,14 @@ async fn test_count_datapoints_for_dataset_chat() {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
     }
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    let new_count = clickhouse
+    let new_count = conn
         .count_datapoints_for_dataset(&dataset_name, Some(function_name))
         .await
         .unwrap();
@@ -132,16 +122,14 @@ async fn test_count_datapoints_for_dataset_chat() {
         "Dataset should have 2 chat datapoints after insertion"
     );
 }
+make_db_test!(test_count_datapoints_for_dataset_chat);
 
-#[tokio::test]
-async fn test_count_datapoints_for_dataset_json() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_datapoints_for_dataset_json(conn: impl DatasetQueries + TestDatabaseHelpers) {
     let dataset_name = format!("test_count_{}", Uuid::now_v7());
     let function_name = "test_function";
 
     // Get initial count
-    let initial_count = clickhouse
+    let initial_count = conn
         .count_datapoints_for_dataset(&dataset_name, Some(function_name))
         .await
         .unwrap();
@@ -177,16 +165,14 @@ async fn test_count_datapoints_for_dataset_json() {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Json(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Json(datapoint)])
             .await
             .unwrap();
     }
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    let new_count = clickhouse
+    let new_count = conn
         .count_datapoints_for_dataset(&dataset_name, Some(function_name))
         .await
         .unwrap();
@@ -196,11 +182,9 @@ async fn test_count_datapoints_for_dataset_json() {
         "Dataset should have 2 json datapoints after insertion"
     );
 }
+make_db_test!(test_count_datapoints_for_dataset_json);
 
-#[tokio::test]
-async fn test_insert_datapoint_chat() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_datapoint_chat(conn: impl DatasetQueries + TestDatabaseHelpers) {
     let mut tags = HashMap::new();
     tags.insert("test".to_string(), "e2e".to_string());
 
@@ -230,16 +214,12 @@ async fn test_insert_datapoint_chat() {
     });
 
     // Insert the datapoint
-    clickhouse
-        .insert_datapoints(&[datapoint_insert])
-        .await
-        .unwrap();
+    conn.insert_datapoints(&[datapoint_insert]).await.unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Verify it was inserted by selecting
-    let inserted_datapoint = clickhouse
+    let inserted_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "test_insert_chat".to_string(),
             datapoint_id: new_datapoint_id,
@@ -253,11 +233,9 @@ async fn test_insert_datapoint_chat() {
         inserted_datapoint.unwrap_err()
     );
 }
+make_db_test!(test_insert_datapoint_chat);
 
-#[tokio::test]
-async fn test_insert_datapoint_json() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_datapoint_json(conn: impl DatasetQueries + TestDatabaseHelpers) {
     let mut tags = HashMap::new();
     tags.insert("test".to_string(), "e2e".to_string());
 
@@ -288,16 +266,12 @@ async fn test_insert_datapoint_json() {
     });
 
     // Insert the datapoint
-    clickhouse
-        .insert_datapoints(&[datapoint_insert])
-        .await
-        .unwrap();
+    conn.insert_datapoints(&[datapoint_insert]).await.unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Verify it was inserted by selecting
-    let inserted_datapoint = clickhouse
+    let inserted_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "test_insert_json".to_string(),
             datapoint_id: new_datapoint_id,
@@ -310,11 +284,11 @@ async fn test_insert_datapoint_json() {
         inserted_datapoint.unwrap_err()
     );
 }
+make_db_test!(test_insert_datapoint_json);
 
-#[tokio::test]
-async fn test_insert_datapoint_validates_dataset_name_builder() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_datapoint_validates_dataset_name_builder(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     // Test reserved name "builder"
     let datapoint = StoredChatInferenceDatapoint {
         dataset_name: "builder".to_string(),
@@ -340,16 +314,16 @@ async fn test_insert_datapoint_validates_dataset_name_builder() {
         snapshot_hash: None,
     };
 
-    let result = clickhouse
+    let result = conn
         .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
         .await;
     assert!(result.is_err());
 }
+make_db_test!(test_insert_datapoint_validates_dataset_name_builder);
 
-#[tokio::test]
-async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     // Test reserved prefix "tensorzero::"
     let datapoint = StoredChatInferenceDatapoint {
         dataset_name: "tensorzero::system".to_string(),
@@ -375,16 +349,17 @@ async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix() {
         snapshot_hash: None,
     };
 
-    let result = clickhouse
+    let result = conn
         .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
         .await;
     assert!(result.is_err());
 }
+make_db_test!(test_insert_datapoint_validates_dataset_name_tensorzero_prefix);
 
-#[tokio::test]
-async fn test_get_datapoint_returns_correct_json_datapoint_with_specific_id() {
-    let clickhouse = get_clickhouse().await;
-    let datapoint = clickhouse
+async fn test_get_datapoint_returns_correct_json_datapoint_with_specific_id(
+    conn: impl DatasetQueries,
+) {
+    let datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "bar".to_string(),
             datapoint_id: Uuid::parse_str("01942e26-c48c-7720-b971-a1f7a3a9ac98").unwrap(),
@@ -451,11 +426,12 @@ async fn test_get_datapoint_returns_correct_json_datapoint_with_specific_id() {
         panic!("Expected json datapoint");
     }
 }
+make_db_test!(test_get_datapoint_returns_correct_json_datapoint_with_specific_id);
 
-#[tokio::test]
-async fn test_get_datapoint_returns_correct_chat_datapoint_with_specific_id() {
-    let clickhouse = get_clickhouse().await;
-    let datapoint = clickhouse
+async fn test_get_datapoint_returns_correct_chat_datapoint_with_specific_id(
+    conn: impl DatasetQueries,
+) {
+    let datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "foo".to_string(),
             datapoint_id: Uuid::parse_str("01934fc5-ea98-71f0-8191-9fd88f34c28b").unwrap(),
@@ -489,11 +465,12 @@ async fn test_get_datapoint_returns_correct_chat_datapoint_with_specific_id() {
         panic!("Expected chat datapoint");
     }
 }
+make_db_test!(test_get_datapoint_returns_correct_chat_datapoint_with_specific_id);
 
-#[tokio::test]
-async fn test_get_datapoint_returns_error_for_non_existent_datapoint() {
-    let clickhouse = get_clickhouse().await;
-    let result = clickhouse
+async fn test_get_datapoint_returns_error_for_non_existent_datapoint(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let result = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "foo".to_string(),
             datapoint_id: Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap(),
@@ -506,10 +483,11 @@ async fn test_get_datapoint_returns_error_for_non_existent_datapoint() {
         "Should return error for non-existent datapoint"
     );
 }
+make_db_test!(test_get_datapoint_returns_error_for_non_existent_datapoint);
 
-#[tokio::test]
-async fn test_chat_datapoint_lifecycle_insert_get_delete() {
-    let clickhouse = get_clickhouse().await;
+async fn test_chat_datapoint_lifecycle_insert_get_delete(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let datapoint_id = Uuid::now_v7();
     let source_inference_id = Uuid::now_v7();
 
@@ -542,19 +520,15 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
     });
 
     // Test insertion
-    clickhouse
-        .insert_datapoints(&[chat_datapoint])
-        .await
-        .unwrap();
+    conn.insert_datapoints(&[chat_datapoint]).await.unwrap();
 
     // Flush async insert to ensure datapoint is visible before deletion
-    clickhouse_flush_async_insert(&clickhouse).await;
+    conn.flush_pending_writes().await;
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Test retrieval
-    let retrieved_datapoint = clickhouse
+    let retrieved_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "test_chat_dataset".to_string(),
             datapoint_id,
@@ -574,19 +548,17 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
     }
 
     // Test staling
-    clickhouse
-        .delete_datapoints("test_chat_dataset", Some(&[datapoint_id]))
+    conn.delete_datapoints("test_chat_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
 
     // Flush async insert to ensure datapoint is deleted
-    clickhouse_flush_async_insert(&clickhouse).await;
+    conn.flush_pending_writes().await;
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Try to get the datapoint (should return error since it's staled)
-    let staled_result = clickhouse
+    let staled_result = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "test_chat_dataset".to_string(),
             datapoint_id,
@@ -600,7 +572,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
     );
 
     // Test retrieval with allow_stale=true
-    let staled_datapoint = clickhouse
+    let staled_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "test_chat_dataset".to_string(),
             datapoint_id,
@@ -620,10 +592,11 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         panic!("Expected chat datapoint");
     }
 }
+make_db_test!(test_chat_datapoint_lifecycle_insert_get_delete);
 
-#[tokio::test]
-async fn test_json_datapoint_lifecycle_insert_get_delete() {
-    let clickhouse = get_clickhouse().await;
+async fn test_json_datapoint_lifecycle_insert_get_delete(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let datapoint_id = Uuid::now_v7();
     let source_inference_id = Uuid::now_v7();
 
@@ -653,16 +626,12 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
     });
 
     // Test insertion
-    clickhouse
-        .insert_datapoints(&[json_datapoint])
-        .await
-        .unwrap();
+    conn.insert_datapoints(&[json_datapoint]).await.unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Test retrieval
-    let retrieved_datapoint = clickhouse
+    let retrieved_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "test_json_dataset".to_string(),
             datapoint_id,
@@ -682,16 +651,14 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
     }
 
     // Test staling
-    clickhouse
-        .delete_datapoints("test_json_dataset", Some(&[datapoint_id]))
+    conn.delete_datapoints("test_json_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Try to get the datapoint (should return error since it's staled)
-    let staled_result = clickhouse
+    let staled_result = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "test_json_dataset".to_string(),
             datapoint_id,
@@ -705,7 +672,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
     );
 
     // Test retrieval with allow_stale=true
-    let staled_datapoint = clickhouse
+    let staled_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "test_json_dataset".to_string(),
             datapoint_id,
@@ -725,11 +692,12 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
         panic!("Expected json datapoint");
     }
 }
+make_db_test!(test_json_datapoint_lifecycle_insert_get_delete);
 
-#[tokio::test]
-async fn test_handles_non_existent_datapoint_retrieval() {
-    let clickhouse = get_clickhouse().await;
-    let result = clickhouse
+async fn test_handles_non_existent_datapoint_retrieval(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let result = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: "non_existent_dataset".to_string(),
             datapoint_id: Uuid::parse_str("01934fc5-ea98-71f0-8191-9fd88f34c30d").unwrap(),
@@ -742,10 +710,11 @@ async fn test_handles_non_existent_datapoint_retrieval() {
         "Should return error for non-existent datapoint"
     );
 }
+make_db_test!(test_handles_non_existent_datapoint_retrieval);
 
-#[tokio::test]
-async fn test_handles_duplicate_insertions_gracefully() {
-    let clickhouse = get_clickhouse().await;
+async fn test_handles_duplicate_insertions_gracefully(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let datapoint_id = Uuid::parse_str("01934fc5-ea98-71f0-8191-9fd88f34c31e").unwrap();
     let source_inference_id = Uuid::now_v7();
 
@@ -779,27 +748,19 @@ async fn test_handles_duplicate_insertions_gracefully() {
     let datapoint_slice = [chat_datapoint];
 
     // First insertion
-    clickhouse
-        .insert_datapoints(&datapoint_slice)
-        .await
-        .unwrap();
+    conn.insert_datapoints(&datapoint_slice).await.unwrap();
 
     // Second insertion with same ID should not throw
-    clickhouse
-        .insert_datapoints(&datapoint_slice)
-        .await
-        .unwrap();
+    conn.insert_datapoints(&datapoint_slice).await.unwrap();
 }
+make_db_test!(test_handles_duplicate_insertions_gracefully);
 
-#[tokio::test]
-async fn test_handles_staling_of_non_existent_datapoint() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_handles_staling_of_non_existent_datapoint(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     // Should not throw when trying to stale a non-existent datapoint
     let datapoint_id = Uuid::now_v7();
-    let result = clickhouse
-        .delete_datapoints("fake", Some(&[datapoint_id]))
-        .await;
+    let result = conn.delete_datapoints("fake", Some(&[datapoint_id])).await;
 
     // This should succeed without error (graceful handling)
     assert!(
@@ -808,11 +769,12 @@ async fn test_handles_staling_of_non_existent_datapoint() {
         result.unwrap_err()
     );
 }
+make_db_test!(test_handles_staling_of_non_existent_datapoint);
 
-#[tokio::test]
-async fn test_count_datapoints_for_dataset_chat_write_haiku() {
-    let clickhouse = get_clickhouse().await;
-    let count = clickhouse
+async fn test_count_datapoints_for_dataset_chat_write_haiku(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let count = conn
         .count_datapoints_for_dataset("foo", Some("write_haiku"))
         .await
         .unwrap();
@@ -821,11 +783,12 @@ async fn test_count_datapoints_for_dataset_chat_write_haiku() {
     // TODO(#3903): Stop making assumptions about what data exists in the database.
     assert!(count > 0, "Should have some chat datapoints");
 }
+make_db_test!(test_count_datapoints_for_dataset_chat_write_haiku);
 
-#[tokio::test]
-async fn test_count_datapoints_for_dataset_json_extract_entities() {
-    let clickhouse = get_clickhouse().await;
-    let count = clickhouse
+async fn test_count_datapoints_for_dataset_json_extract_entities(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let count = conn
         .count_datapoints_for_dataset("foo", Some("extract_entities"))
         .await
         .unwrap();
@@ -834,11 +797,12 @@ async fn test_count_datapoints_for_dataset_json_extract_entities() {
     // TODO(#3903): Stop making assumptions about what data exists in the database.
     assert!(count > 0, "Should have some json datapoints");
 }
+make_db_test!(test_count_datapoints_for_dataset_json_extract_entities);
 
-#[tokio::test]
-async fn test_count_datapoints_for_dataset_non_existent_dataset() {
-    let clickhouse = get_clickhouse().await;
-    let count = clickhouse
+async fn test_count_datapoints_for_dataset_non_existent_dataset(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let count = conn
         .count_datapoints_for_dataset("fake", Some("write_haiku"))
         .await
         .unwrap();
@@ -848,11 +812,12 @@ async fn test_count_datapoints_for_dataset_non_existent_dataset() {
         "Should have 0 datapoints for non-existent dataset"
     );
 }
+make_db_test!(test_count_datapoints_for_dataset_non_existent_dataset);
 
-#[tokio::test]
-async fn test_count_datapoints_for_dataset_non_existent_function() {
-    let clickhouse = get_clickhouse().await;
-    let count = clickhouse
+async fn test_count_datapoints_for_dataset_non_existent_function(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let count = conn
         .count_datapoints_for_dataset("foo", Some("fake"))
         .await
         .unwrap();
@@ -862,10 +827,11 @@ async fn test_count_datapoints_for_dataset_non_existent_function() {
         "Should have 0 datapoints for non-existent function"
     );
 }
+make_db_test!(test_count_datapoints_for_dataset_non_existent_function);
 
-#[tokio::test]
-async fn test_insert_datapoint_handles_invalid_dataset_names() {
-    let clickhouse = get_clickhouse().await;
+async fn test_insert_datapoint_handles_invalid_dataset_names(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let mut tags = HashMap::new();
     tags.insert("test".to_string(), "invalid_name".to_string());
 
@@ -891,19 +857,18 @@ async fn test_insert_datapoint_handles_invalid_dataset_names() {
         snapshot_hash: None,
     });
 
-    let result = clickhouse.insert_datapoints(&[chat_datapoint]).await;
+    let result = conn.insert_datapoints(&[chat_datapoint]).await;
     assert!(
         result.is_err(),
         "Should reject reserved dataset name 'builder'"
     );
 }
+make_db_test!(test_insert_datapoint_handles_invalid_dataset_names);
 
-#[tokio::test]
-async fn test_get_datapoints_with_empty_ids() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_with_empty_ids(conn: impl DatasetQueries + TestDatabaseHelpers) {
     let dataset_name = format!("test_get_datapoints_empty_{}", Uuid::now_v7());
 
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -920,10 +885,11 @@ async fn test_get_datapoints_with_empty_ids() {
 
     assert_eq!(result.len(), 0, "Should return empty vector for empty IDs");
 }
+make_db_test!(test_get_datapoints_with_empty_ids);
 
-#[tokio::test]
-async fn test_get_datapoints_with_single_chat_datapoint() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_with_single_chat_datapoint(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
@@ -952,16 +918,14 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Retrieve using get_datapoints
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -986,10 +950,11 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
         panic!("Expected chat datapoint");
     }
 }
+make_db_test!(test_get_datapoints_with_single_chat_datapoint);
 
-#[tokio::test]
-async fn test_get_datapoints_with_single_json_datapoint() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_with_single_json_datapoint(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
@@ -1019,16 +984,14 @@ async fn test_get_datapoints_with_single_json_datapoint() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Json(datapoint)])
+    conn.insert_datapoints(&[StoredDatapoint::Json(datapoint)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Retrieve using get_datapoints
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -1053,10 +1016,11 @@ async fn test_get_datapoints_with_single_json_datapoint() {
         panic!("Expected json datapoint");
     }
 }
+make_db_test!(test_get_datapoints_with_single_json_datapoint);
 
-#[tokio::test]
-async fn test_get_datapoints_with_multiple_mixed_datapoints() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_with_multiple_mixed_datapoints(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
 
     // Create IDs
@@ -1089,8 +1053,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(chat_dp1)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(chat_dp1)])
         .await
         .unwrap();
 
@@ -1120,8 +1083,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Json(json_dp)])
+    conn.insert_datapoints(&[StoredDatapoint::Json(json_dp)])
         .await
         .unwrap();
 
@@ -1150,16 +1112,14 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(chat_dp2)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(chat_dp2)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Retrieve all three datapoints
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -1199,10 +1159,11 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     assert_eq!(chat_count, 2, "Should have 2 chat datapoints");
     assert_eq!(json_count, 1, "Should have 1 json datapoint");
 }
+make_db_test!(test_get_datapoints_with_multiple_mixed_datapoints);
 
-#[tokio::test]
-async fn test_get_datapoints_with_non_existent_ids() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_with_non_existent_ids(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
@@ -1231,18 +1192,16 @@ async fn test_get_datapoints_with_non_existent_ids() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Query with both existing and non-existent IDs
     let non_existent_id = Uuid::now_v7();
     let another_non_existent_id = Uuid::now_v7();
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -1264,10 +1223,9 @@ async fn test_get_datapoints_with_non_existent_ids() {
     );
     assert_eq!(result[0].id(), datapoint_id);
 }
+make_db_test!(test_get_datapoints_with_non_existent_ids);
 
-#[tokio::test]
-async fn test_get_datapoints_with_search_query() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_with_search_query(conn: impl DatasetQueries + TestDatabaseHelpers) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
 
     // Create IDs
@@ -1300,8 +1258,7 @@ async fn test_get_datapoints_with_search_query() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(chat_dp1)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(chat_dp1)])
         .await
         .unwrap();
 
@@ -1331,8 +1288,7 @@ async fn test_get_datapoints_with_search_query() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Json(json_dp)])
+    conn.insert_datapoints(&[StoredDatapoint::Json(json_dp)])
         .await
         .unwrap();
 
@@ -1361,16 +1317,14 @@ async fn test_get_datapoints_with_search_query() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(chat_dp2)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(chat_dp2)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Retrieve all three datapoints
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -1395,10 +1349,11 @@ async fn test_get_datapoints_with_search_query() {
     assert!(returned_ids.contains(&chat_id1));
     assert!(returned_ids.contains(&chat_id2));
 }
+make_db_test!(test_get_datapoints_with_search_query);
 
-#[tokio::test]
-async fn test_get_datapoints_with_search_query_with_json_encoded_term() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_with_search_query_with_json_encoded_term(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
 
     // Insert json datapoint with escaped content
@@ -1429,16 +1384,14 @@ async fn test_get_datapoints_with_search_query_with_json_encoded_term() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Json(json_dp)])
+    conn.insert_datapoints(&[StoredDatapoint::Json(json_dp)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Retrieve all three datapoints
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -1463,10 +1416,11 @@ async fn test_get_datapoints_with_search_query_with_json_encoded_term() {
     );
     assert_eq!(result[0].id(), json_id);
 }
+make_db_test!(test_get_datapoints_with_search_query_with_json_encoded_term);
 
-#[tokio::test]
-async fn test_get_datapoints_respects_allow_stale_false() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_respects_allow_stale_false(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
@@ -1495,16 +1449,14 @@ async fn test_get_datapoints_respects_allow_stale_false() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Verify we can retrieve it before staling
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -1521,16 +1473,14 @@ async fn test_get_datapoints_respects_allow_stale_false() {
     assert_eq!(result.len(), 1, "Should retrieve datapoint before staling");
 
     // Stale the datapoint
-    clickhouse
-        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
+    conn.delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Try to retrieve with allow_stale=false
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -1551,10 +1501,11 @@ async fn test_get_datapoints_respects_allow_stale_false() {
         "Should not return staled datapoint when allow_stale=false"
     );
 }
+make_db_test!(test_get_datapoints_respects_allow_stale_false);
 
-#[tokio::test]
-async fn test_get_datapoints_respects_allow_stale_true() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_respects_allow_stale_true(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
@@ -1583,25 +1534,21 @@ async fn test_get_datapoints_respects_allow_stale_true() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Stale the datapoint
-    clickhouse
-        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
+    conn.delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Try to retrieve with allow_stale=true
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -1631,10 +1578,11 @@ async fn test_get_datapoints_respects_allow_stale_true() {
         panic!("Expected chat datapoint");
     }
 }
+make_db_test!(test_get_datapoints_respects_allow_stale_true);
 
-#[tokio::test]
-async fn test_get_datapoints_with_wrong_dataset_name() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_datapoints_with_wrong_dataset_name(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
@@ -1663,17 +1611,15 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
         snapshot_hash: None,
     };
 
-    clickhouse
-        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
         .await
         .unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Try to retrieve with different dataset name
     let wrong_dataset = format!("wrong_{dataset_name}");
-    let result = clickhouse
+    let result = conn
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(wrong_dataset),
             function_name: None,
@@ -1694,10 +1640,11 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
         "Should not return datapoint when querying wrong dataset"
     );
 }
+make_db_test!(test_get_datapoints_with_wrong_dataset_name);
 
-#[tokio::test]
-async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
-    let clickhouse = get_clickhouse().await;
+async fn test_chat_datapoint_with_file_object_storage_roundtrip(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let datapoint_id = Uuid::now_v7();
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
@@ -1743,16 +1690,12 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     });
 
     // Insert the datapoint
-    clickhouse
-        .insert_datapoints(&[chat_datapoint])
-        .await
-        .unwrap();
+    conn.insert_datapoints(&[chat_datapoint]).await.unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Retrieve the datapoint
-    let retrieved_datapoint = clickhouse
+    let retrieved_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id,
@@ -1782,10 +1725,11 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
         panic!("Expected chat datapoint");
     }
 }
+make_db_test!(test_chat_datapoint_with_file_object_storage_roundtrip);
 
-#[tokio::test]
-async fn test_json_datapoint_with_file_object_storage_roundtrip() {
-    let clickhouse = get_clickhouse().await;
+async fn test_json_datapoint_with_file_object_storage_roundtrip(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
     let datapoint_id = Uuid::now_v7();
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
@@ -1832,16 +1776,12 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     });
 
     // Insert the datapoint
-    clickhouse
-        .insert_datapoints(&[json_datapoint])
-        .await
-        .unwrap();
+    conn.insert_datapoints(&[json_datapoint]).await.unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Retrieve the datapoint
-    let retrieved_datapoint = clickhouse
+    let retrieved_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id,
@@ -1871,10 +1811,9 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
         panic!("Expected json datapoint");
     }
 }
+make_db_test!(test_json_datapoint_with_file_object_storage_roundtrip);
 
-#[tokio::test]
-async fn test_datapoint_with_mixed_file_types() {
-    let clickhouse = get_clickhouse().await;
+async fn test_datapoint_with_mixed_file_types(conn: impl DatasetQueries + TestDatabaseHelpers) {
     let datapoint_id = Uuid::now_v7();
     let dataset_name = format!("test_mixed_files_{}", Uuid::now_v7());
 
@@ -1942,16 +1881,12 @@ async fn test_datapoint_with_mixed_file_types() {
     });
 
     // Insert the datapoint
-    clickhouse
-        .insert_datapoints(&[chat_datapoint])
-        .await
-        .unwrap();
+    conn.insert_datapoints(&[chat_datapoint]).await.unwrap();
 
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Retrieve the datapoint
-    let retrieved_datapoint = clickhouse
+    let retrieved_datapoint = conn
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id,
@@ -1999,6 +1934,7 @@ async fn test_datapoint_with_mixed_file_types() {
         panic!("Expected chat datapoint");
     }
 }
+make_db_test!(test_datapoint_with_mixed_file_types);
 
 // Tool Call Storage Format Tests (Migration 0041)
 // These tests verify the new decomposed storage format for tool calls
@@ -2011,10 +1947,10 @@ mod tool_call_storage_tests {
         ProviderToolScopeModelProvider, Tool, ToolCallConfigDatabaseInsert, ToolChoice,
     };
 
-    #[tokio::test]
-    async fn test_tool_call_storage_static_tools_only() {
+    async fn test_tool_call_storage_static_tools_only(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
         // Test Case 1: Static tools only (from function config, not provided dynamically)
-        let clickhouse = get_clickhouse().await;
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
@@ -2053,15 +1989,14 @@ mod tool_call_storage_tests {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.sleep_for_writes_to_be_visible().await;
 
         // Verify by retrieving the datapoint
-        let retrieved_datapoint = clickhouse
+        let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
                 dataset_name: dataset_name.clone(),
                 datapoint_id,
@@ -2106,11 +2041,12 @@ mod tool_call_storage_tests {
             panic!("Expected chat datapoint");
         }
     }
+    make_db_test!(test_tool_call_storage_static_tools_only);
 
-    #[tokio::test]
-    async fn test_tool_call_storage_dynamic_tools_only() {
+    async fn test_tool_call_storage_dynamic_tools_only(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
         // Test Case 2: Dynamic tools only (provided at runtime)
-        let clickhouse = get_clickhouse().await;
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
@@ -2154,14 +2090,13 @@ mod tool_call_storage_tests {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.sleep_for_writes_to_be_visible().await;
 
-        let retrieved_datapoint = clickhouse
+        let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
                 dataset_name: dataset_name.clone(),
                 datapoint_id,
@@ -2197,11 +2132,12 @@ mod tool_call_storage_tests {
             panic!("Expected chat datapoint");
         }
     }
+    make_db_test!(test_tool_call_storage_dynamic_tools_only);
 
-    #[tokio::test]
-    async fn test_tool_call_storage_mixed_static_and_dynamic() {
+    async fn test_tool_call_storage_mixed_static_and_dynamic(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
         // Test Case 3: Mixed static + dynamic tools
-        let clickhouse = get_clickhouse().await;
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
@@ -2245,14 +2181,13 @@ mod tool_call_storage_tests {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.sleep_for_writes_to_be_visible().await;
 
-        let retrieved_datapoint = clickhouse
+        let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
                 dataset_name: dataset_name.clone(),
                 datapoint_id,
@@ -2284,11 +2219,12 @@ mod tool_call_storage_tests {
             panic!("Expected chat datapoint");
         }
     }
+    make_db_test!(test_tool_call_storage_mixed_static_and_dynamic);
 
-    #[tokio::test]
-    async fn test_tool_call_storage_provider_tools() {
+    async fn test_tool_call_storage_provider_tools(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
         // Test Case 4: Provider tools (model-provider-specific tools)
-        let clickhouse = get_clickhouse().await;
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
@@ -2335,14 +2271,13 @@ mod tool_call_storage_tests {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.sleep_for_writes_to_be_visible().await;
 
-        let retrieved_datapoint = clickhouse
+        let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
                 dataset_name: dataset_name.clone(),
                 datapoint_id,
@@ -2373,11 +2308,12 @@ mod tool_call_storage_tests {
             panic!("Expected chat datapoint");
         }
     }
+    make_db_test!(test_tool_call_storage_provider_tools);
 
-    #[tokio::test]
-    async fn test_tool_call_storage_function_default_choice() {
+    async fn test_tool_call_storage_function_default_choice(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
         // Test Case 5: AllowedToolsChoice::FunctionDefault
-        let clickhouse = get_clickhouse().await;
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
@@ -2414,14 +2350,13 @@ mod tool_call_storage_tests {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.sleep_for_writes_to_be_visible().await;
 
-        let retrieved_datapoint = clickhouse
+        let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
                 dataset_name: dataset_name.clone(),
                 datapoint_id,
@@ -2445,11 +2380,12 @@ mod tool_call_storage_tests {
             panic!("Expected chat datapoint");
         }
     }
+    make_db_test!(test_tool_call_storage_function_default_choice);
 
-    #[tokio::test]
-    async fn test_tool_call_storage_dynamic_allowed_tools_choice() {
+    async fn test_tool_call_storage_dynamic_allowed_tools_choice(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
         // Test Case 6: AllowedToolsChoice::AllAllowedTools
-        let clickhouse = get_clickhouse().await;
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
@@ -2486,14 +2422,13 @@ mod tool_call_storage_tests {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.sleep_for_writes_to_be_visible().await;
 
-        let retrieved_datapoint = clickhouse
+        let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
                 dataset_name: dataset_name.clone(),
                 datapoint_id,
@@ -2534,11 +2469,10 @@ mod tool_call_storage_tests {
             panic!("Expected chat datapoint");
         }
     }
+    make_db_test!(test_tool_call_storage_dynamic_allowed_tools_choice);
 
-    #[tokio::test]
-    async fn test_tool_call_storage_empty_none() {
+    async fn test_tool_call_storage_empty_none(conn: impl DatasetQueries + TestDatabaseHelpers) {
         // Test Case 7: Empty/None tool params
-        let clickhouse = get_clickhouse().await;
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
@@ -2566,14 +2500,13 @@ mod tool_call_storage_tests {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.sleep_for_writes_to_be_visible().await;
 
-        let retrieved_datapoint = clickhouse
+        let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
                 dataset_name: dataset_name.clone(),
                 datapoint_id,
@@ -2589,11 +2522,12 @@ mod tool_call_storage_tests {
             panic!("Expected chat datapoint");
         }
     }
+    make_db_test!(test_tool_call_storage_empty_none);
 
-    #[tokio::test]
-    async fn test_tool_call_storage_roundtrip_comprehensive() {
+    async fn test_tool_call_storage_roundtrip_comprehensive(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
         // Test Case 8: Comprehensive roundtrip test
-        let clickhouse = get_clickhouse().await;
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
@@ -2654,14 +2588,13 @@ mod tool_call_storage_tests {
             snapshot_hash: None,
         };
 
-        clickhouse
-            .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
             .await
             .unwrap();
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.sleep_for_writes_to_be_visible().await;
 
-        let retrieved_datapoint = clickhouse
+        let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
                 dataset_name: dataset_name.clone(),
                 datapoint_id,
@@ -2698,4 +2631,5 @@ mod tool_call_storage_tests {
             panic!("Expected chat datapoint");
         }
     }
+    make_db_test!(test_tool_call_storage_roundtrip_comprehensive);
 }
