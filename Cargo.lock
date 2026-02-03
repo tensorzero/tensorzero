@@ -1348,7 +1348,7 @@ dependencies = [
 
 [[package]]
 name = "config-writer"
-version = "2026.1.8"
+version = "2026.2.0"
 dependencies = [
  "pathdiff",
  "schemars 1.2.0",
