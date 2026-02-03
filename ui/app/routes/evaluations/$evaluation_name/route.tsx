@@ -88,6 +88,9 @@ async function fetchEvaluationData(
     .getEvaluationRunInfos(selected_evaluation_run_ids_array, function_name)
     .then((response) => response.run_infos);
 
+  // If there is a freshly inserted feedback, ClickHouse may take some time to
+  // update the evaluation results as it is eventually consistent.
+  // In this case, we poll for the evaluation results until the feedback is found.
   const resultsPromise: Promise<EvaluationResultRow[]> = newFeedbackId
     ? pollForEvaluationResults(
         evaluation_name,
@@ -181,6 +184,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       return false;
     }
     if (runningEvaluation.completed) {
+      // If the evaluation completed more than 5 seconds ago, consider it done
       if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
         return false;
       }
