@@ -22,6 +22,6 @@ node -e 'import("./lib/generate-index.js").then(m => m.generateIndex())'
 
 # Format generated TypeScript files
 echo "Formatting generated files..."
-pnpm format --write "lib/bindings/**/*.ts"
+biome format --write --vcs-enabled=false "lib/bindings"
 
 echo "Build bindings completed successfully!"
