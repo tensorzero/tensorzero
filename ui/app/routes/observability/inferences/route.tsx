@@ -8,6 +8,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { LayoutErrorBoundary } from "~/components/ui/error";
 import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
@@ -147,4 +148,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       </SectionLayout>
     </PageLayout>
   );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <LayoutErrorBoundary error={error} />;
 }
