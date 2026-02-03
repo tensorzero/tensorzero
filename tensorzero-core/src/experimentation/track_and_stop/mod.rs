@@ -43,6 +43,7 @@
 use arc_swap::ArcSwap;
 use check_stopping::{CheckStoppingArgs, StoppingResult, check_stopping};
 use error::TrackAndStopError;
+use schemars::JsonSchema;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
@@ -257,7 +258,7 @@ impl Nursery {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct UninitializedTrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
