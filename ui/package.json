@@ -15,7 +15,7 @@
     "test": "vitest",
     "test-e2e-fast": "playwright test --grep-invert @slow",
     "test-e2e": "playwright test",
-    "test-e2e-autopilot": "playwright test e2e_tests/autopilot",
+    "test-e2e-autopilot": "TENSORZERO_PLAYWRIGHT_INCLUDE_AUTOPILOT=1 playwright test e2e_tests/autopilot",
     "test-e2e-base-path": "playwright test --grep @base-path",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
