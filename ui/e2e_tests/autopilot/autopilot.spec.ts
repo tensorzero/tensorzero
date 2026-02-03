@@ -143,12 +143,20 @@ test.describe("Tool call authorization deduplication", () => {
     const approveButton = page.getByRole("button", { name: "Approve" }).first();
     await expect(approveButton).toBeVisible({ timeout: 60000 });
 
-    // Spam-click the button rapidly using force to bypass stability checks
-    // (button may be removed/disabled after first click)
+    // Get button position before clicking - use mouse.click at fixed coordinates
+    // to avoid flakiness if the button is removed/disabled after first click
+    const boundingBox = await approveButton.boundingBox();
+    if (!boundingBox) {
+      throw new Error("Approve button bounding box not found");
+    }
+    const clickX = boundingBox.x + boundingBox.width / 2;
+    const clickY = boundingBox.y + boundingBox.height / 2;
+
+    // Spam-click at the fixed position rapidly
     await Promise.all([
-      approveButton.click({ force: true, noWaitAfter: true }),
-      approveButton.click({ force: true, noWaitAfter: true }),
-      approveButton.click({ force: true, noWaitAfter: true }),
+      page.mouse.click(clickX, clickY),
+      page.mouse.click(clickX, clickY),
+      page.mouse.click(clickX, clickY),
     ]);
 
     // Wait for request to complete
@@ -211,12 +219,20 @@ test.describe("Tool call authorization deduplication", () => {
       .first();
     await expect(confirmButton).toBeVisible();
 
-    // Spam-click the button rapidly using force to bypass stability checks
-    // (button may be removed/disabled after first click)
+    // Get button position before clicking - use mouse.click at fixed coordinates
+    // to avoid flakiness if the button is removed/disabled after first click
+    const boundingBox = await confirmButton.boundingBox();
+    if (!boundingBox) {
+      throw new Error("Confirm rejection button bounding box not found");
+    }
+    const clickX = boundingBox.x + boundingBox.width / 2;
+    const clickY = boundingBox.y + boundingBox.height / 2;
+
+    // Spam-click at the fixed position rapidly
     await Promise.all([
-      confirmButton.click({ force: true, noWaitAfter: true }),
-      confirmButton.click({ force: true, noWaitAfter: true }),
-      confirmButton.click({ force: true, noWaitAfter: true }),
+      page.mouse.click(clickX, clickY),
+      page.mouse.click(clickX, clickY),
+      page.mouse.click(clickX, clickY),
     ]);
 
     // Wait for request to complete
