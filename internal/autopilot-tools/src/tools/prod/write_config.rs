@@ -5,13 +5,18 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{WriteConfigRequest, WriteConfigResponse};
-use tensorzero_core::config::UninitializedConfig;
+use tensorzero_core::{
+    config::{UninitializedConfig, UninitializedVariantInfo},
+    evaluations::{UninitializedEvaluationConfig, UninitializedEvaluatorConfig},
+    experimentation::UninitializedExperimentationConfig,
+};
 
 use autopilot_client::AutopilotSideInfo;
 
@@ -23,6 +28,44 @@ pub struct WriteConfigToolParams {
     /// Templates that should be stored with the config.
     #[serde(default)]
     pub extra_templates: HashMap<String, String>,
+    /// Only set if the config write is an upsert to a single TOML entry (so that we can add nice edit handling)
+    pub edit: Option<EditPayload>,
+}
+
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
+#[serde(tag = "operation")]
+#[serde(rename_all = "snake_case")]
+pub enum EditPayload {
+    UpsertVariant(Box<UpsertVariantPayload>),
+    UpsertExperimentation(UpsertExperimentationPayload),
+    UpsertEvaluation(UpsertEvaluationPayload),
+    UpsertEvaluator(UpsertEvaluatorPayload),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertVariantPayload {
+    pub function_name: String,
+    pub variant_name: String,
+    pub variant: UninitializedVariantInfo, // Re-exported from tensorzero-core
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertExperimentationPayload {
+    pub function_name: String,
+    pub experimentation: UninitializedExperimentationConfig,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertEvaluationPayload {
+    pub evaluation_name: String,
+    pub evaluation: UninitializedEvaluationConfig,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct UpsertEvaluatorPayload {
+    pub evaluation_name: String,
+    pub evaluator_name: String,
+    pub evaluator: UninitializedEvaluatorConfig,
 }
 
 /// Tool for writing config snapshots.

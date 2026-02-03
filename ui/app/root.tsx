@@ -38,6 +38,10 @@ import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { AppProviders } from "./providers/app-providers";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
+import {
+  loadFeatureFlags,
+  type FeatureFlags,
+} from "./utils/feature_flags.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -63,6 +67,7 @@ interface LoaderData {
   config: UiConfig;
   isReadOnly: boolean;
   autopilotAvailable: boolean;
+  featureFlags: FeatureFlags;
   infraError: ClassifiedError | null;
 }
 
@@ -70,13 +75,20 @@ export async function loader(): Promise<LoaderData> {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
   const isReadOnly = isReadOnlyMode();
+  const featureFlags = loadFeatureFlags();
   try {
     // Fetch config and autopilot availability in parallel
     const [config, autopilotAvailable] = await Promise.all([
       getConfig(),
       checkAutopilotAvailable(),
     ]);
-    return { config, isReadOnly, autopilotAvailable, infraError: null };
+    return {
+      config,
+      isReadOnly,
+      autopilotAvailable,
+      featureFlags,
+      infraError: null,
+    };
   } catch (e) {
     // Graceful degradation for infrastructure errors:
     // Return fallback state so UI renders with dismissible error dialog.
@@ -86,6 +98,7 @@ export async function loader(): Promise<LoaderData> {
         config: EMPTY_CONFIG,
         isReadOnly,
         autopilotAvailable: false,
+        featureFlags,
         infraError: { type: InfraErrorType.GatewayUnavailable },
       };
     }
@@ -94,6 +107,7 @@ export async function loader(): Promise<LoaderData> {
         config: EMPTY_CONFIG,
         isReadOnly,
         autopilotAvailable: false,
+        featureFlags,
         infraError: { type: InfraErrorType.GatewayAuthFailed },
       };
     }
@@ -103,6 +117,7 @@ export async function loader(): Promise<LoaderData> {
         config: EMPTY_CONFIG,
         isReadOnly,
         autopilotAvailable: false,
+        featureFlags,
         infraError: {
           type: InfraErrorType.ClickHouseUnavailable,
           message,
