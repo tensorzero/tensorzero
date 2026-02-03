@@ -11,7 +11,7 @@ use base64::prelude::{BASE64_STANDARD, Engine as Base64Engine};
 use futures::StreamExt;
 use opentelemetry_sdk::trace::SpanData;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::{collections::HashSet, sync::Arc};
@@ -54,7 +54,7 @@ mod openai_compatible_chat_completions;
 pub mod tool_params;
 
 #[tokio::test]
-async fn e2e_test_inference_dryrun() {
+async fn test_inference_dryrun() {
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -96,7 +96,7 @@ async fn e2e_test_inference_dryrun() {
 }
 
 #[tokio::test]
-async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
+async fn test_inference_chat_strip_unknown_block_non_stream() {
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -331,6 +331,7 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -458,7 +459,7 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
 /// then the second provider works fine. We expect this request to work despite the first provider
 /// being broken.
 #[tokio::test]
-async fn e2e_test_inference_model_fallback() {
+async fn test_inference_model_fallback() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -600,7 +601,7 @@ async fn e2e_test_inference_model_fallback() {
 }
 
 #[tokio::test]
-async fn e2e_test_tool_call() {
+async fn test_tool_call() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -799,7 +800,7 @@ async fn e2e_test_tool_call() {
 }
 
 #[tokio::test]
-async fn e2e_test_tool_call_malformed() {
+async fn test_tool_call_malformed() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -997,7 +998,7 @@ async fn e2e_test_tool_call_malformed() {
 /// a response which does not satisfy the schema.
 /// We expect to see a null `parsed_content` field in the response and a null `parsed_content` field in the table.
 #[tokio::test]
-async fn e2e_test_inference_json_fail() {
+async fn test_inference_json_fail() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1130,7 +1131,7 @@ async fn e2e_test_inference_json_fail() {
 /// a response which satisfies the schema.
 /// We expect to see a filled-out `content` field in the response and a filled-out `output` field in the table.
 #[tokio::test]
-async fn e2e_test_inference_json_success() {
+async fn test_inference_json_success() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1282,7 +1283,7 @@ async fn e2e_test_inference_json_success() {
 /// We do this by making several requests and checking that the response is 200 in each, then checking that
 /// the response is correct for the last one.
 #[tokio::test]
-async fn e2e_test_variant_failover() {
+async fn test_variant_failover() {
     let mut last_response = None;
     let mut last_episode_id = None;
     for _ in 0..50 {
@@ -1447,7 +1448,7 @@ async fn e2e_test_variant_failover() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn e2e_test_variant_zero_weight_skip_zero() {
+async fn test_variant_zero_weight_skip_zero() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let error = client
         .inference(ClientInferenceParams {
@@ -1493,7 +1494,7 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn e2e_test_variant_zero_weight_pin_zero() {
+async fn test_variant_zero_weight_pin_zero() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let error = client
         .inference(ClientInferenceParams {
@@ -1536,7 +1537,7 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
 
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
-async fn e2e_test_streaming() {
+async fn test_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1566,6 +1567,7 @@ async fn e2e_test_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
@@ -1720,7 +1722,7 @@ async fn e2e_test_streaming() {
 
 /// This test checks that streaming inference works as expected when dryrun is true.
 #[tokio::test]
-async fn e2e_test_streaming_dryrun() {
+async fn test_streaming_dryrun() {
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -1743,6 +1745,7 @@ async fn e2e_test_streaming_dryrun() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
@@ -1795,7 +1798,7 @@ async fn e2e_test_streaming_dryrun() {
 }
 
 #[tokio::test]
-async fn e2e_test_inference_original_response_non_stream() {
+async fn test_inference_original_response_non_stream() {
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -2226,7 +2229,7 @@ fn check_dummy_model_span(
 }
 
 #[tokio::test]
-async fn e2e_test_tool_call_streaming() {
+async fn test_tool_call_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2246,6 +2249,7 @@ async fn e2e_test_tool_call_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
@@ -2452,7 +2456,7 @@ async fn e2e_test_tool_call_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_tool_call_streaming_split_tool_name() {
+async fn test_tool_call_streaming_split_tool_name() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2473,6 +2477,7 @@ async fn e2e_test_tool_call_streaming_split_tool_name() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
@@ -2773,7 +2778,7 @@ pub async fn test_raw_text(client: tensorzero::Client) {
 }
 
 #[tokio::test]
-pub async fn e2e_test_dynamic_api_key() {
+pub async fn test_dynamic_api_key() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

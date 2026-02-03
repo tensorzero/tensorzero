@@ -37,7 +37,7 @@ export function ComboboxMenuItems({
           <CommandItem
             value={`create-${searchValue.trim()}`}
             onSelect={() => onSelectItem(searchValue.trim(), true)}
-            className="flex items-center gap-2"
+            className="flex cursor-pointer items-center gap-2"
           >
             {getPrefix?.(null, false)}
             <span className="truncate font-mono" title={searchValue.trim()}>
@@ -55,7 +55,7 @@ export function ComboboxMenuItems({
                 key={item.value}
                 value={item.value}
                 onSelect={() => onSelectItem(item.value, false)}
-                className="group flex w-full items-center gap-2"
+                className="group flex w-full cursor-pointer items-center gap-2"
                 {...getItemDataAttributes?.(item.value)}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">

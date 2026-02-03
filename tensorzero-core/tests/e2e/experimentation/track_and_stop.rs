@@ -13,7 +13,7 @@ use tensorzero::{
 };
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
-use tensorzero_core::db::clickhouse::test_helpers::clickhouse_flush_async_insert;
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::inference::types::Text;
 use tokio::time::Duration;
 use url::Url;
@@ -709,7 +709,7 @@ async fn test_min_pulls() {
     let inference_results = run_inference_batch(&client, total_inferences).await;
 
     // Wait for ClickHouse to flush
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(2 * BACKGROUND_UPDATE_DELAY_MS)).await;
 
     // Count how many times each variant was selected
@@ -774,7 +774,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
         let inference_results = run_inference_batch(&client, inferences_per_batch).await;
 
         // Wait for ClickHouse to flush inferences
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
         // Phase 1b: Send feedback for all inferences
@@ -793,7 +793,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
         }
 
         // Wait for ClickHouse and background update
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
     }
 
@@ -861,7 +861,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_min() {
         let inference_results = run_inference_batch(&client, inferences_per_batch).await;
 
         // Wait for ClickHouse to flush inferences
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
         // Phase 1b: Send feedback for all inferences
@@ -880,7 +880,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_min() {
         }
 
         // Wait for ClickHouse and background update
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
     }
 
@@ -940,7 +940,7 @@ async fn test_effect_of_delta_on_stopping() {
 
     // Run one batch to populate data
     let inference_results = run_inference_batch(&setup_client, 120).await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
     send_feedback(
@@ -950,7 +950,7 @@ async fn test_effect_of_delta_on_stopping() {
         "performance_score",
     )
     .await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
 
     // Drop setup client to allow new clients with different configs
@@ -1066,7 +1066,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let bandit = std::sync::Arc::new(bandit);
 
     let inference_results = run_inference_batch(&setup_client, 120).await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
     send_feedback(
@@ -1076,7 +1076,7 @@ async fn test_effect_of_epsilon_on_stopping() {
         "performance_score",
     )
     .await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
 
     drop(setup_client);
@@ -1199,7 +1199,7 @@ async fn test_cold_start_with_stopped_experiment() {
         let inference_results = run_inference_batch(&client, inferences_per_batch).await;
 
         // Wait for ClickHouse to flush inferences
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
         // Send feedback for all inferences
@@ -1227,7 +1227,7 @@ async fn test_cold_start_with_stopped_experiment() {
             break;
         }
 
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
     }
 
@@ -1293,7 +1293,7 @@ async fn test_cold_start_with_stopped_experiment() {
     );
 
     // Clean up
-    clickhouse_flush_async_insert(&new_clickhouse).await;
+    new_clickhouse.flush_pending_writes().await;
 }
 
 /// Test that introducing a new variant after stopping causes the system to
@@ -1343,7 +1343,7 @@ async fn test_new_variant_triggers_reexploration() {
         let inference_results = run_inference_batch(&client, inferences_per_batch).await;
 
         // Wait for ClickHouse to flush inferences
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
         // Send feedback for all inferences
@@ -1368,7 +1368,7 @@ async fn test_new_variant_triggers_reexploration() {
             break;
         }
 
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
     }
 
@@ -1422,7 +1422,7 @@ async fn test_new_variant_triggers_reexploration() {
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
 
     // Wait for ClickHouse to flush inferences
-    clickhouse_flush_async_insert(&new_clickhouse).await;
+    new_clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
     // Send feedback for all inferences
@@ -1468,7 +1468,7 @@ async fn test_new_variant_triggers_reexploration() {
     );
 
     // Clean up
-    clickhouse_flush_async_insert(&new_clickhouse).await;
+    new_clickhouse.flush_pending_writes().await;
 }
 
 // ============================================================================
@@ -1515,7 +1515,7 @@ async fn test_remove_winner_variant_after_stopping() {
     for batch in 0..max_batches {
         let inference_results = run_inference_batch(&client, inferences_per_batch).await;
 
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
         let variant_names = send_feedback(
@@ -1539,7 +1539,7 @@ async fn test_remove_winner_variant_after_stopping() {
             break;
         }
 
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
     }
 
@@ -1584,7 +1584,7 @@ async fn test_remove_winner_variant_after_stopping() {
     // Run a batch and verify the system immediately locks onto the new winner
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
 
-    clickhouse_flush_async_insert(&new_clickhouse).await;
+    new_clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
     let variant_names = send_feedback(
@@ -1617,7 +1617,7 @@ async fn test_remove_winner_variant_after_stopping() {
         "Expected variant_c to receive no more than 20% of pulls after removing variant_a, but variant_c got {variant_c_fraction}% of pulls"
     );
 
-    clickhouse_flush_async_insert(&new_clickhouse).await;
+    new_clickhouse.flush_pending_writes().await;
 }
 
 /// Test that removing a non-winner variant after stopping preserves winner
@@ -1657,7 +1657,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
     for batch in 0..max_batches {
         let inference_results = run_inference_batch(&client, inferences_per_batch).await;
 
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
         let variant_names = send_feedback(
@@ -1681,7 +1681,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
             break;
         }
 
-        clickhouse_flush_async_insert(&clickhouse).await;
+        clickhouse.flush_pending_writes().await;
         tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
     }
 
@@ -1737,5 +1737,5 @@ async fn test_remove_non_winner_variant_after_stopping() {
         variant_a_fraction * 100.0
     );
 
-    clickhouse_flush_async_insert(&new_clickhouse).await;
+    new_clickhouse.flush_pending_writes().await;
 }

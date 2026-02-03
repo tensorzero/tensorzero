@@ -60,7 +60,7 @@ num-bigint = "0.4"
 object_store = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
-reqwest-eventsource = { workspace = true }
+reqwest-sse-stream = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -84,7 +84,6 @@ tensorzero-types = { path = "../internal/tensorzero-types" }
 tensorzero-types-providers = { path = "../internal/tensorzero-types-providers" }
 minijinja-utils = { path = "../internal/minijinja-utils" }
 clap = { workspace = true }
-eventsource-stream = "0.2.3"
 opentelemetry_sdk = "0.31.0"
 opentelemetry = "0.31.0"
 tracing-opentelemetry = "0.32.1"

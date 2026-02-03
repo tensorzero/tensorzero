@@ -214,7 +214,16 @@ impl TensorZeroClient for EmbeddedClient {
 
         Ok(GetConfigResponse {
             hash: snapshot.hash.to_string(),
-            config: snapshot.config.into(),
+            config: snapshot.config.try_into().map_err(|e: &'static str| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(
+                        tensorzero_core::error::ErrorDetails::Config {
+                            message: e.to_string(),
+                        },
+                    )
+                    .into(),
+                })
+            })?,
             extra_templates: snapshot.extra_templates,
             tags: snapshot.tags,
         })

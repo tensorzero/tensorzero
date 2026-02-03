@@ -9,7 +9,7 @@ use durable_tools_spawn::{SpawnClient, SpawnOptions};
 use futures::stream::{Stream, StreamExt};
 use moka::sync::Cache;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
-use reqwest_eventsource::{Event as SseEvent, EventSource};
+use reqwest_sse_stream::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use sqlx::PgPool;
 use url::Url;
@@ -672,22 +672,29 @@ impl AutopilotClient {
                 .append_pair("last_event_id", &last_event_id.to_string());
         }
 
-        let request = self.sse_http_client.get(url).headers(self.auth_headers());
-
-        let mut event_source =
-            EventSource::new(request).map_err(|e| AutopilotError::Sse(e.to_string()))?;
-
         // Wait for connection to be established or fail.
+        let event_source = self
+            .sse_http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .eventsource()
+            .await;
+
+        let mut event_source = match event_source {
+            Ok(event_source) => event_source,
+            Err(e) => return Err(Self::convert_sse_error(e).await),
+        };
+
         // The first event should be Open on success, or an error on failure.
         match event_source.next().await {
-            Some(Ok(SseEvent::Open)) => {
+            Some(Ok(reqwest_sse_stream::Event::Open)) => {
                 // Connection established successfully
             }
             Some(Err(e)) => {
                 // Convert SSE error to appropriate AutopilotError
-                return Err(Self::convert_sse_error(e));
+                return Err(Self::convert_sse_error(e).await);
             }
-            Some(Ok(SseEvent::Message(_))) => {
+            Some(Ok(reqwest_sse_stream::Event::Message(_))) => {
                 return Err(AutopilotError::Sse(
                     "Received message before connection was established".to_string(),
                 ));
@@ -710,10 +717,10 @@ impl AutopilotClient {
             let spawn_client = spawn_client.clone();
             async move {
                 match result {
-                    Ok(SseEvent::Open) => None,
-                    Ok(SseEvent::Message(message)) => {
-                        if message.event == "event" {
-                            match serde_json::from_str::<StreamUpdate>(&message.data) {
+                    Ok(reqwest_sse_stream::Event::Open) => None,
+                    Ok(reqwest_sse_stream::Event::Message(sse)) => {
+                        if sse.event.as_str() == "event" {
+                            match serde_json::from_str::<StreamUpdate>(&sse.data) {
                                 Ok(update) => {
                                     // Cache tool calls for later lookup
                                     if let EventPayload::ToolCall(tool_call) = &update.event.payload
@@ -748,7 +755,7 @@ impl AutopilotClient {
                             None
                         }
                     }
-                    Err(e) => Some(Err(AutopilotError::Sse(e.to_string()))),
+                    Err(e) => Some(Err(Self::convert_sse_error(e).await)),
                 }
             }
         });
@@ -758,16 +765,27 @@ impl AutopilotClient {
 
     /// Converts an SSE error to the appropriate AutopilotError.
     /// HTTP errors are converted to AutopilotError::Http for consistency.
-    fn convert_sse_error(e: reqwest_eventsource::Error) -> AutopilotError {
-        use reqwest_eventsource::Error as SseError;
+    async fn convert_sse_error(e: reqwest_sse_stream::ReqwestSseStreamError) -> AutopilotError {
         match e {
-            SseError::InvalidStatusCode(status, _response) => AutopilotError::Http {
-                status_code: status.as_u16(),
-                message: status
-                    .canonical_reason()
-                    .unwrap_or("Unknown error")
-                    .to_string(),
-            },
+            reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_status() => {
+                AutopilotError::Http {
+                    status_code: e.status().map(|s| s.as_u16()).unwrap_or(0),
+                    message: e
+                        .status()
+                        .and_then(|s| s.canonical_reason())
+                        .unwrap_or("Unknown error")
+                        .to_string(),
+                }
+            }
+            reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(status, response) => {
+                AutopilotError::Http {
+                    status_code: status.as_u16(),
+                    message: response
+                        .text()
+                        .await
+                        .unwrap_or_else(|e| format!("<Could not read response body>: {e}")),
+                }
+            }
             other => AutopilotError::Sse(other.to_string()),
         }
     }

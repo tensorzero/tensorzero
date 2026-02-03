@@ -33,7 +33,9 @@ export function AppProviders({ children, loaderData }: AppProvidersProps) {
           >
             <ConfigProvider value={loaderData?.config ?? EMPTY_CONFIG}>
               <SidebarProvider>
-                <TooltipProvider>{children}</TooltipProvider>
+                <TooltipProvider delayDuration={250}>
+                  {children}
+                </TooltipProvider>
               </SidebarProvider>
             </ConfigProvider>
           </AutopilotAvailableProvider>

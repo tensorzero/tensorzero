@@ -15,7 +15,7 @@ use axum::{
 use futures_util::StreamExt;
 use provider_proxy::{Args, CacheMode, run_server};
 use rand::Rng;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_sse_stream::RequestBuilderExt;
 use serde_json::Value;
 use tokio::{sync::oneshot, task::JoinHandle};
 
@@ -432,14 +432,15 @@ async fn test_dropped_stream_body() {
             .build()
             .unwrap();
 
-        let mut good_stream = good_client
+        let good_stream = good_client
             .post(format!("http://{target_server_addr}/slow"))
             .eventsource()
+            .await
             .unwrap();
+        let mut good_stream = std::pin::pin!(good_stream);
         // Read the entire stream, so that we're sure that provider-proxy will write the file to disk
         while let Some(event) = good_stream.next().await {
             match event {
-                Err(reqwest_eventsource::Error::StreamEnded) => break,
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => continue,
             }
@@ -474,27 +475,34 @@ async fn test_dropped_stream_body() {
         .build()
         .unwrap();
 
-    let mut first_stream = client
+    let first_stream = client
         .post(format!("http://{target_server_addr}/slow"))
         .eventsource()
+        .await
         .unwrap();
+    let mut first_stream = std::pin::pin!(first_stream);
+
+    let open_message = first_stream.next().await.unwrap().unwrap();
+    assert_eq!(open_message, reqwest_sse_stream::Event::Open);
 
     let first_event = first_stream.next().await.unwrap().unwrap();
-    assert_eq!(first_event, reqwest_eventsource::Event::Open);
+    assert_eq!(
+        first_event,
+        reqwest_sse_stream::Event::Message(reqwest_sse_stream::MessageEvent {
+            event: String::new(),
+            data: "Hello".to_string(),
+            id: String::new(),
+        })
+    );
 
-    let second_event = first_stream.next().await.unwrap().unwrap();
-    let reqwest_eventsource::Event::Message(second_event) = second_event else {
-        panic!("Unexpected event: {second_event:?}");
-    };
-    assert_eq!(second_event.data, "Hello");
     // We should get a timeout
     let err = first_stream.next().await.unwrap().unwrap_err();
     assert!(
-        matches!(&err, reqwest_eventsource::Error::Transport(e) if e.is_timeout()),
+        format!("{err:?}").contains("TimedOut"),
         "Unexpected error: {err:?}"
     );
 
-    drop(first_stream);
+    // first_stream gets dropped here (at end of scope)
     // Nothing should be on disk
     // The previous cache file should have been *deleted* at the start of the second request,
     // and no new file should have been written (because the stream was dropped before it was done)
@@ -540,14 +548,16 @@ async fn test_stream_body() {
         .build()
         .unwrap();
 
-    let mut second_stream = client
+    let second_stream = client
         .post(format!("http://{target_server_addr}/slow"))
         .eventsource()
+        .await
         .unwrap();
+    let mut second_stream = std::pin::pin!(second_stream);
 
     while let Some(event) = second_stream.next().await {
         let event = event.unwrap();
-        if let reqwest_eventsource::Event::Message(event) = event
+        if let reqwest_sse_stream::Event::Message(event) = event
             && event.data == "[DONE]"
         {
             break;

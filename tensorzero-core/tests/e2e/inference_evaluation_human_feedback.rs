@@ -14,7 +14,7 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 // or for demonstrations or comments as we don't have inference evaluations that do this yet.
 
 #[tokio::test]
-async fn e2e_test_float_human_feedback() {
+async fn test_float_human_feedback() {
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an episode_id.
@@ -129,7 +129,7 @@ async fn e2e_test_float_human_feedback() {
 }
 
 #[tokio::test]
-async fn e2e_test_boolean_human_feedback() {
+async fn test_boolean_human_feedback() {
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an inference_id.
