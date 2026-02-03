@@ -124,7 +124,6 @@ export async function runEvaluation(
   if (!evaluationConfig) {
     throw new Error(`Evaluation '${evaluationName}' not found in config`);
   }
-  // eslint-disable-next-line no-restricted-syntax
   const functionConfig = config.functions[evaluationConfig.function_name];
   if (!functionConfig) {
     throw new Error(

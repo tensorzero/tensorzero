@@ -8,10 +8,10 @@
     "dev": "react-router dev",
     "start": "NODE_ENV=production PORT=4000 react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\"",
-    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path .prettierignore",
-    "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache",
-    "lint:check": "eslint . --max-warnings=0 --config eslint.config.js --cache",
+    "format": "biome format --write",
+    "format:check": "biome format",
+    "lint": "biome check --write",
+    "lint:check": "biome check",
     "test": "vitest",
     "test-e2e-fast": "playwright test --grep-invert @slow",
     "test-e2e": "playwright test",
@@ -28,7 +28,6 @@
     "@codemirror/legacy-modes": "^6.5.1",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.0",
-    "@eslint/js": "^9.30.1",
     "@hookform/resolvers": "^5.1.1",
     "@react-router/node": "^7.12.0",
     "@react-router/serve": "^7.12.0",
@@ -43,8 +42,6 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "dotenv": "^17.2.1",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^5.2.0",
     "http-status-codes": "^2.3.0",
     "isbot": "^5.1.25",
     "lodash-es": "^4.17.21",
@@ -63,11 +60,11 @@
     "tailwindcss-animate": "^1.0.7",
     "tensorzero-node": "file:../internal/tensorzero-node",
     "type-fest": "^4.41.0",
-    "typescript-eslint": "^8.46.1",
     "uuid": "^11.1.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.14",
     "@chromatic-com/storybook": "^5.0.0",
     "@playwright/test": "^1.56.1",
     "@react-router/dev": "^7.12.0",
@@ -83,11 +80,7 @@
     "@vitest/browser": "^4.0.8",
     "@vitest/coverage-v8": "^4.0.8",
     "buildkite-test-collector": "^1.9.1",
-    "eslint": "^9.37.0",
-    "eslint-plugin-storybook": "^10.2.1",
     "playwright": "^1.56.1",
-    "prettier": "^3.6.2",
-    "prettier-plugin-tailwindcss": "^0.6.13",
     "storybook": "^10.2.1",
     "storybook-addon-remix-react-router": "^6.0.0",
     "tailwindcss": "^4.1.11",
@@ -97,10 +90,5 @@
     "vite-plugin-wasm": "^3.5.0",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^4.0.8"
-  },
-  "eslintConfig": {
-    "extends": [
-      "plugin:storybook/recommended"
-    ]
   }
 }

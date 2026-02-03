@@ -96,7 +96,7 @@ export function TemplateMessage({
   templateName: string;
   templateArguments: unknown;
   isEditing?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: template arguments can be any valid JSON value
   onChange?: (templateName: string, value: any) => void;
   action?: ReactNode;
 }) {

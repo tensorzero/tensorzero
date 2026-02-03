@@ -251,7 +251,8 @@ export const WithHumanFeedback: Story = {
         id: makeOrderedUuid(4),
         target_id: TARGET_ID,
         metric_name: "revenue",
-        value: 12345678901234567890, // eslint-disable-line no-loss-of-precision
+        // biome-ignore lint/correctness/noPrecisionLoss: intentionally large number for story testing
+        value: 12345678901234567890,
         tags: { "tensorzero::human_feedback": "true" },
         timestamp: "2024-03-20T10:03:00Z",
       },

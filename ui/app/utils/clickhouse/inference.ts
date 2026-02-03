@@ -185,8 +185,7 @@ export function parseInferenceOutput(
 }
 
 // TODO(shuyangli): sort out file loading and delete these Zod schemas.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const parsedModelInferenceRowSchema = z.object({
+const _parsedModelInferenceRowSchema = z.object({
   id: z.string().uuid(),
   inference_id: z.string().uuid(),
   raw_request: z.string(),
@@ -205,7 +204,7 @@ const parsedModelInferenceRowSchema = z.object({
 });
 
 export type ParsedModelInferenceRow = z.infer<
-  typeof parsedModelInferenceRowSchema
+  typeof _parsedModelInferenceRowSchema
 >;
 
 /// Hacky helper to determine if the output is JSON

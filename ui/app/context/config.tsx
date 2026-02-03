@@ -40,7 +40,6 @@ export function useFunctionConfig(functionName: string | null) {
   if (!functionName) {
     return null;
   }
-  // eslint-disable-next-line no-restricted-syntax
   return config.functions[functionName] || null;
 }
 
@@ -50,7 +49,6 @@ export function useFunctionConfig(functionName: string | null) {
  */
 export function useAllFunctionConfigs() {
   const config = useConfig();
-  // eslint-disable-next-line no-restricted-syntax
   return config.functions;
 }
 

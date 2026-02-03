@@ -25,12 +25,12 @@ export function useTensorZeroStatusFetcher() {
   const status = statusFetcher.data;
   const isLoading = statusFetcher.state === "loading";
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run only on mount
   useEffect(() => {
     if (statusFetcher.state === "idle" && !statusFetcher.data) {
       statusFetcher.load("/api/tensorzero/status");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array - only run on mount
+  }, []);
 
   return useMemo(() => ({ status, isLoading }), [status, isLoading]);
 }

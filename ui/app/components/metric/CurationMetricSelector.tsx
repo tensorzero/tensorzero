@@ -98,14 +98,13 @@ export default function CurationMetricSelector<
     setInputValue(input);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only refetch when function changes
   useEffect(() => {
     if (functionValue && typeof functionValue === "string") {
       metricsFetcher.load(
         `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
       );
     }
-    // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue]);
 
   const validMetrics = useMemo(() => {
@@ -123,12 +122,13 @@ export default function CurationMetricSelector<
   const metricComboboxId = `${metricLabelId}-combobox`;
 
   // Inform parent when the internal metrics fetcher loading state changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: callback identity doesn't affect loading state notification
   useEffect(() => {
     onMetricsLoadingChange?.(metricsLoading);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metricsLoading]);
 
   // Reset metric value if the selected function does not have the previously selected metric
+  // biome-ignore lint/correctness/useExhaustiveDependencies: name is stable from props
   useEffect(() => {
     const metricValue = getValues(name);
     if (
@@ -140,8 +140,6 @@ export default function CurationMetricSelector<
       // TODO: Figure out how to generalize the generic for this function so that it accepts a null value
       setValue(name, null as PathValue<T, Path<T>>);
     }
-    // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue, validMetrics, getValues, setValue]);
 
   return (

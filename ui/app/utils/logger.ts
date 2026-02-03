@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* biome-ignore-all lint/suspicious/noConsole: logger module wraps console for structured logging */
 import { isErrorLike } from "~/utils/common";
 
 const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;

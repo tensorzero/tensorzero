@@ -138,7 +138,6 @@ export async function getConfig(): Promise<UiConfig> {
 
   // Cache doesn't exist or was invalidated, load it.
   const freshConfig = await loadConfig();
-  // eslint-disable-next-line no-restricted-syntax
   freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
 
   configCache = freshConfig;
@@ -156,7 +155,6 @@ export async function getFunctionConfig(
   config?: UiConfig,
 ) {
   const cfg = config || (await getConfig());
-  // eslint-disable-next-line no-restricted-syntax
   return cfg.functions[functionName] || null;
 }
 

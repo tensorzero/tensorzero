@@ -16,9 +16,9 @@ export const streamTimeout = 30_000;
 // https://github.com/remix-run/remix/issues/9340
 // https://github.com/remix-run/remix/issues/765
 // https://github.com/remix-run/react-router/pull/12764#issuecomment-2598681151
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: handler requires any for unknown rejection types
 process.on("unhandledRejection", (reason: any, p: Promise<any>) => {
-  // eslint-disable-next-line no-console
+  // biome-ignore lint/suspicious/noConsole: error logging for unhandled rejections
   console.error("Unhandled Promise Rejection:", reason, "\n", p);
 });
 
@@ -27,8 +27,7 @@ export default function handleRequest(
   responseStatusCode: number,
   responseHeaders: Headers,
   routerContext: EntryContext,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  loadContext: AppLoadContext,
+  _loadContext: AppLoadContext,
 ) {
   return new Promise((resolve, reject) => {
     let shellRendered = false;
@@ -85,7 +84,7 @@ export default function handleRequest(
           if (shellRendered) {
             // Ok to log error directly since it's not a user-facing error that
             // appears in the server logs.
-            // eslint-disable-next-line no-console
+            // biome-ignore lint/suspicious/noConsole: streaming error logging in server render
             console.error(error);
           }
         },

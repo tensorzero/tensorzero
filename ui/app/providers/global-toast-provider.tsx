@@ -103,7 +103,7 @@ export function GlobalToastProvider({
           : prefix || `Toast emitted`;
       })();
 
-      // eslint-disable-next-line no-console
+      // biome-ignore lint/suspicious/noConsole: toast logger intentionally logs to console
       console[level ?? "log"](message);
     };
 
