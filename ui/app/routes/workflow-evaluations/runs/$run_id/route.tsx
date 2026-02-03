@@ -3,7 +3,6 @@ import { AlertCircle } from "lucide-react";
 import type { Route } from "./+types/route";
 import {
   Await,
-  data,
   isRouteErrorResponse,
   useAsyncError,
   useLocation,
@@ -77,9 +76,7 @@ async function fetchRunData(
 
   const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
   if (workflowEvaluationRuns.length !== 1) {
-    throw data(`Workflow evaluation run "${run_id}" not found`, {
-      status: 404,
-    });
+    throw new Error(`Workflow evaluation run "${run_id}" not found`);
   }
 
   return {

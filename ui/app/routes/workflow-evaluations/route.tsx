@@ -87,9 +87,15 @@ function SectionSkeleton() {
   );
 }
 
-function ProjectsSectionError() {
+function SectionError({
+  title,
+  defaultMessage,
+}: {
+  title: string;
+  defaultMessage: string;
+}) {
   const error = useAsyncError();
-  let message = "Failed to load projects";
+  let message = defaultMessage;
   if (isRouteErrorResponse(error)) {
     message = typeof error.data === "string" ? error.data : message;
   } else if (error instanceof Error) {
@@ -98,24 +104,7 @@ function ProjectsSectionError() {
   return (
     <SectionErrorNotice
       icon={AlertCircle}
-      title="Error loading projects"
-      description={message}
-    />
-  );
-}
-
-function RunsSectionError() {
-  const error = useAsyncError();
-  let message = "Failed to load evaluation runs";
-  if (isRouteErrorResponse(error)) {
-    message = typeof error.data === "string" ? error.data : message;
-  } else if (error instanceof Error) {
-    message = error.message;
-  }
-  return (
-    <SectionErrorNotice
-      icon={AlertCircle}
-      title="Error loading evaluation runs"
+      title={title}
       description={message}
     />
   );
@@ -218,7 +207,15 @@ export default function EvaluationSummaryPage({
           key={`projects-${location.key}`}
           fallback={<SectionSkeleton />}
         >
-          <Await resolve={projectsData} errorElement={<ProjectsSectionError />}>
+          <Await
+            resolve={projectsData}
+            errorElement={
+              <SectionError
+                title="Error loading projects"
+                defaultMessage="Failed to load projects"
+              />
+            }
+          >
             {(data) => (
               <ProjectsContent
                 data={data}
@@ -231,7 +228,15 @@ export default function EvaluationSummaryPage({
       </SectionLayout>
       <SectionLayout>
         <Suspense key={`runs-${location.key}`} fallback={<SectionSkeleton />}>
-          <Await resolve={runsData} errorElement={<RunsSectionError />}>
+          <Await
+            resolve={runsData}
+            errorElement={
+              <SectionError
+                title="Error loading evaluation runs"
+                defaultMessage="Failed to load evaluation runs"
+              />
+            }
+          >
             {(data) => (
               <RunsContent data={data} offset={runOffset} limit={runLimit} />
             )}

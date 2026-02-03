@@ -76,12 +76,11 @@ async function fetchProjectData(
     .getWorkflowEvaluationRuns(runIds, projectName)
     .then((response) => response.runs);
 
-  const client = getTensorZeroClient();
-  const episodeInfoPromise = client
+  const episodeInfoPromise = tensorZeroClient
     .listWorkflowEvaluationRunEpisodesByTaskName(runIds, limit, offset)
     .then((response) => response.episodes);
   const countPromise =
-    client.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
+    tensorZeroClient.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
 
   const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
     Promise.all(statsPromises),
