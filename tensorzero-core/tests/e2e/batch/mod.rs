@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 use tensorzero_core::config::Config;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
@@ -54,6 +55,7 @@ async fn test_get_batch_request() {
         model_provider_name,
         status: BatchStatus::Pending,
         errors: vec![],
+        snapshot_hash: None,
     });
     write_batch_request_row(&clickhouse, &batch_request)
         .await
@@ -136,6 +138,7 @@ async fn test_write_poll_batch_inference() {
     let raw_response = "raw response".to_string();
     let status = BatchStatus::Pending;
     let errors = vec![];
+    let snapshot_hash = SnapshotHash::new_test();
     let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id,
         batch_params: &batch_params,
@@ -147,6 +150,7 @@ async fn test_write_poll_batch_inference() {
         raw_response: &raw_response,
         status,
         errors,
+        snapshot_hash: Some(snapshot_hash.clone()),
     });
     let config = Config::new_empty()
         .await
@@ -190,6 +194,7 @@ async fn test_write_poll_batch_inference() {
         raw_response: &raw_response,
         status,
         errors: vec![],
+        snapshot_hash: Some(snapshot_hash.clone()),
     });
     let poll_inference_response = write_poll_batch_inference(
         &clickhouse,
@@ -345,6 +350,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         raw_response: &raw_response,
         status,
         errors,
+        snapshot_hash: None,
     });
     let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
         variants: HashMap::new(),
@@ -578,6 +584,7 @@ async fn test_write_read_completed_batch_inference_json() {
         model_provider_name,
         status,
         errors: vec![],
+        snapshot_hash: None,
     });
     let output_schema = JSONSchema::from_value(json!({
         "type": "object",
