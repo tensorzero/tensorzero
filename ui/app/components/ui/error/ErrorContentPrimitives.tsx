@@ -7,12 +7,16 @@ import { cn } from "~/utils/common";
 /**
  * Extracts a user-friendly message from an error of any type.
  * Handles React Router's route error responses, standard Errors, and unknown types.
- *
- * @param error - The error to extract a message from (typically from useAsyncError())
- * @param fallback - Default message if error type is unrecognized
- * @returns A string message suitable for display to users
  */
-export function getErrorMessage(error: unknown, fallback: string): string {
+export function getErrorMessage({
+  error,
+  fallback,
+}: {
+  /** The error to extract a message from (typically from useAsyncError()) */
+  error: unknown;
+  /** Default message if error type is unrecognized */
+  fallback: string;
+}): string {
   if (isRouteErrorResponse(error)) {
     return typeof error.data === "string"
       ? error.data
@@ -246,7 +250,7 @@ export function SectionAsyncErrorState({
     <SectionErrorNotice
       icon={AlertCircle}
       title="Error loading data"
-      description={getErrorMessage(error, defaultMessage)}
+      description={getErrorMessage({ error, fallback: defaultMessage })}
     />
   );
 }
