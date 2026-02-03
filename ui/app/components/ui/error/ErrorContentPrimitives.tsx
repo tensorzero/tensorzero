@@ -243,3 +243,27 @@ export function SectionAsyncErrorState({
     />
   );
 }
+
+interface GetErrorMessageParams {
+  error: unknown;
+  defaultMessage: string;
+}
+
+/**
+ * Extract error message from various error types.
+ */
+export function getErrorMessage({
+  error,
+  defaultMessage,
+}: GetErrorMessageParams): string {
+  if (isRouteErrorResponse(error)) {
+    if (typeof error.data === "string") {
+      return error.data;
+    }
+    return `${error.status} ${error.statusText}`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return defaultMessage;
+}
