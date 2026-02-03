@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventStream from "./EventStream";
 import type { GatewayEvent } from "~/types/tensorzero";
 import { GlobalToastProvider } from "~/providers/global-toast-provider";
+import { AutopilotSessionProvider } from "~/contexts/AutopilotSessionContext";
 
 const baseTime = new Date("2026-04-12T10:00:00Z").getTime();
 const sessionId = "d1a0b0c0-0000-0000-0000-000000000001";
@@ -464,9 +465,11 @@ const meta = {
   component: EventStream,
   decorators: [
     (Story) => (
-      <GlobalToastProvider>
-        <Story />
-      </GlobalToastProvider>
+      <AutopilotSessionProvider>
+        <GlobalToastProvider>
+          <Story />
+        </GlobalToastProvider>
+      </AutopilotSessionProvider>
     ),
   ],
   render: (args) => (
@@ -506,6 +509,221 @@ export const Mixed: Story = {
 export const LongForm: Story = {
   args: {
     events: longFormEvents,
+  },
+};
+
+// Events demonstrating visualization rendering with tool results
+const visualizationEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "v1-user-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Run a top-k evaluation on the test variants.",
+          },
+        ],
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "v2-tool-call",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "topk_evaluation",
+        arguments: {
+          evaluation_name: "test_topk_evaluation",
+          dataset_name: "topk_test_dataset",
+          variant_names: ["echo", "empty", "empty2", "test", "test2"],
+          k_min: 1,
+          max_datapoints: 100,
+        },
+        side_info: {
+          tool_call_event_id: "v2-tool-call",
+          session_id: sessionId,
+          config_snapshot_hash: "abc123",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "v3-auth",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call_authorization",
+        source: { type: "ui" },
+        status: { type: "approved" },
+        tool_call_event_id: "v2-tool-call",
+      },
+    },
+    2,
+  ),
+  buildEvent(
+    {
+      id: "v4-result",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_result",
+        tool_call_event_id: "v2-tool-call",
+        outcome: {
+          type: "success",
+          result: JSON.stringify(
+            {
+              winner: "echo",
+              final_k: 3,
+              evaluations_run: 150,
+            },
+            null,
+            2,
+          ),
+        },
+      },
+    },
+    3,
+  ),
+  // Visualization event tied to the tool call
+  buildEvent(
+    {
+      id: "v5-visualization",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "visualization",
+        tool_execution_id: "v2-tool-call",
+        visualization: {
+          type: "top_k_evaluation",
+          variant_summaries: {
+            echo: {
+              mean_est: 0.667,
+              cs_lower: 0.58,
+              cs_upper: 0.75,
+              count: BigInt(50),
+            },
+            empty: {
+              mean_est: 0.333,
+              cs_lower: 0.25,
+              cs_upper: 0.42,
+              count: BigInt(35),
+            },
+            empty2: {
+              mean_est: 0.31,
+              cs_lower: 0.22,
+              cs_upper: 0.4,
+              count: BigInt(30),
+            },
+            test: {
+              mean_est: 0.35,
+              cs_lower: 0.27,
+              cs_upper: 0.43,
+              count: BigInt(25),
+            },
+            test2: {
+              mean_est: 0.29,
+              cs_lower: 0.19,
+              cs_upper: 0.39,
+              count: BigInt(10),
+            },
+          },
+        },
+      },
+    },
+    4,
+  ),
+  buildEvent(
+    {
+      id: "v6-assistant-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: 'The top-k evaluation is complete. The "echo" variant was identified as the winner with a mean performance of 0.667, significantly outperforming the other variants.',
+          },
+        ],
+      },
+    },
+    5,
+  ),
+];
+
+export const WithVisualization: Story = {
+  args: {
+    events: visualizationEvents,
+  },
+};
+
+const unknownVisualizationEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "uv1-user-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Run an analysis on the data.",
+          },
+        ],
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "uv2-visualization",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "visualization",
+        tool_execution_id: "some-task-id",
+        // Unknown visualization type - simulates a future visualization type
+        // that the current UI doesn't know how to render
+        visualization: {
+          type: "future_analysis",
+          data: {
+            metric_a: 0.95,
+            metric_b: 0.87,
+            samples: 1000,
+          },
+          metadata: {
+            version: "2.0",
+            algorithm: "advanced_analysis",
+          },
+        } as GatewayEvent["payload"] extends { visualization: infer V }
+          ? V
+          : never,
+      },
+    },
+    1,
+  ),
+];
+
+export const WithUnknownVisualization: Story = {
+  args: {
+    events: unknownVisualizationEvents,
   },
 };
 

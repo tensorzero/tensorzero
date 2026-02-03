@@ -10,5 +10,6 @@ export type Session = {
   deployment_id: string;
   tensorzero_version: string;
   created_at: string;
+  last_event_at?: string;
   short_summary?: string;
 };

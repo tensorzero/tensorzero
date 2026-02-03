@@ -482,6 +482,9 @@ async fn test_dropped_stream_body() {
         .unwrap();
     let mut first_stream = std::pin::pin!(first_stream);
 
+    let open_message = first_stream.next().await.unwrap().unwrap();
+    assert_eq!(open_message, reqwest_sse_stream::Event::Open);
+
     let first_event = first_stream.next().await.unwrap().unwrap();
     assert_eq!(
         first_event,

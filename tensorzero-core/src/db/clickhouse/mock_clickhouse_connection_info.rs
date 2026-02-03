@@ -24,6 +24,7 @@ use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::{ConfigQueries, MockConfigQueries};
 use crate::error::Error;
 use crate::inference::types::StoredModelInference;
+use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use serde_json::Value;
@@ -124,6 +125,20 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
             .get_inference_output(function_info, inference_id)
             .await
     }
+
+    async fn insert_chat_inferences(
+        &self,
+        rows: &[ChatInferenceDatabaseInsert],
+    ) -> Result<(), Error> {
+        self.inference_queries.insert_chat_inferences(rows).await
+    }
+
+    async fn insert_json_inferences(
+        &self,
+        rows: &[JsonInferenceDatabaseInsert],
+    ) -> Result<(), Error> {
+        self.inference_queries.insert_json_inferences(rows).await
+    }
 }
 
 #[async_trait]
@@ -174,9 +189,10 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         &self,
         target_dataset_name: &str,
         source_datapoint_ids: &[Uuid],
+        id_mappings: &std::collections::HashMap<Uuid, Uuid>,
     ) -> Result<Vec<Option<Uuid>>, Error> {
         self.dataset_queries
-            .clone_datapoints(target_dataset_name, source_datapoint_ids)
+            .clone_datapoints(target_dataset_name, source_datapoint_ids, id_mappings)
             .await
     }
 }

@@ -21,7 +21,8 @@ use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
-    GatewayListEventsResponse, GatewayStreamUpdate, ListEventsParams, ListEventsResponse,
+    GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
+    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
@@ -528,6 +529,42 @@ impl AutopilotClient {
         Ok(event)
     }
 
+    /// Lists config writes (write_config tool calls) for a session.
+    ///
+    /// Returns `GatewayListConfigWritesResponse` which uses `GatewayEvent` - a narrower type
+    /// that excludes `NotAvailable` authorization status.
+    pub async fn list_config_writes(
+        &self,
+        session_id: Uuid,
+        params: ListConfigWritesParams,
+    ) -> Result<GatewayListConfigWritesResponse, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/config-writes"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .query(&params)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body: ListConfigWritesResponse = response.json().await?;
+
+        // Convert events to gateway types
+        let config_writes = body
+            .config_writes
+            .into_iter()
+            .map(|event| {
+                event
+                    .try_into()
+                    .map_err(|e| AutopilotError::Internal(format!("Event conversion failed: {e}")))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(GatewayListConfigWritesResponse { config_writes })
+    }
+
     /// Creates an event in a session.
     ///
     /// Use `Uuid::nil()` as the `session_id` to create a new session.
@@ -678,8 +715,33 @@ impl AutopilotClient {
             .get(url)
             .headers(self.auth_headers())
             .eventsource()
-            .await
-            .map_err(Self::convert_sse_error)?;
+            .await;
+
+        let mut event_source = match event_source {
+            Ok(event_source) => event_source,
+            Err(e) => return Err(Self::convert_sse_error(e).await),
+        };
+
+        // The first event should be Open on success, or an error on failure.
+        match event_source.next().await {
+            Some(Ok(reqwest_sse_stream::Event::Open)) => {
+                // Connection established successfully
+            }
+            Some(Err(e)) => {
+                // Convert SSE error to appropriate AutopilotError
+                return Err(Self::convert_sse_error(e).await);
+            }
+            Some(Ok(reqwest_sse_stream::Event::Message(_))) => {
+                return Err(AutopilotError::Sse(
+                    "Received message before connection was established".to_string(),
+                ));
+            }
+            None => {
+                return Err(AutopilotError::Sse(
+                    "Connection closed unexpectedly".to_string(),
+                ));
+            }
+        }
 
         // Connection is good, return the stream
         let cache = self.tool_call_cache.clone();
@@ -730,7 +792,7 @@ impl AutopilotClient {
                             None
                         }
                     }
-                    Err(e) => Some(Err(AutopilotError::Sse(e.to_string()))),
+                    Err(e) => Some(Err(Self::convert_sse_error(e).await)),
                 }
             }
         });
@@ -740,7 +802,7 @@ impl AutopilotClient {
 
     /// Converts an SSE error to the appropriate AutopilotError.
     /// HTTP errors are converted to AutopilotError::Http for consistency.
-    fn convert_sse_error(e: reqwest_sse_stream::ReqwestSseStreamError) -> AutopilotError {
+    async fn convert_sse_error(e: reqwest_sse_stream::ReqwestSseStreamError) -> AutopilotError {
         match e {
             reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_status() => {
                 AutopilotError::Http {
@@ -750,6 +812,15 @@ impl AutopilotClient {
                         .and_then(|s| s.canonical_reason())
                         .unwrap_or("Unknown error")
                         .to_string(),
+                }
+            }
+            reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(status, response) => {
+                AutopilotError::Http {
+                    status_code: status.as_u16(),
+                    message: response
+                        .text()
+                        .await
+                        .unwrap_or_else(|e| format!("<Could not read response body>: {e}")),
                 }
             }
             other => AutopilotError::Sse(other.to_string()),

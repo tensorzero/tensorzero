@@ -37,6 +37,14 @@ pub enum ToolError {
 #[serde(tag = "kind")]
 #[serde(rename_all = "snake_case")]
 pub enum NonControlToolError {
+    /// Step error.
+    #[error("Step error: {base_name}: {error}")]
+    Step { base_name: String, error: String },
+
+    /// Task panic error.
+    #[error("Task panicked: {message}")]
+    TaskPanicked { message: String },
+
     /// Tool was not found in the registry.
     #[error("Tool not found: {name}")]
     ToolNotFound { name: String },
@@ -148,6 +156,12 @@ impl From<TaskError> for ToolError {
             TaskError::Timeout { step_name } => {
                 ToolError::NonControl(NonControlToolError::Timeout { step_name })
             }
+            TaskError::Step { base_name, error } => {
+                ToolError::NonControl(NonControlToolError::Step {
+                    base_name,
+                    error: error.to_string(),
+                })
+            }
             TaskError::User {
                 message,
                 error_data,
@@ -158,9 +172,9 @@ impl From<TaskError> for ToolError {
             TaskError::Validation { message } => {
                 ToolError::NonControl(NonControlToolError::Validation { message })
             }
-            TaskError::TaskInternal(e) => ToolError::NonControl(NonControlToolError::Internal {
-                message: e.to_string(),
-            }),
+            TaskError::TaskPanicked { message } => {
+                ToolError::NonControl(NonControlToolError::TaskPanicked { message })
+            }
             TaskError::ChildFailed { step_name, message } => {
                 ToolError::NonControl(NonControlToolError::ChildFailed { step_name, message })
             }
@@ -206,9 +220,6 @@ impl From<NonControlToolError> for TaskError {
                 error_data,
             },
             NonControlToolError::Validation { message } => TaskError::Validation { message },
-            NonControlToolError::Internal { message } => {
-                TaskError::TaskInternal(anyhow::anyhow!("{message}"))
-            }
             NonControlToolError::ChildFailed { step_name, message } => {
                 TaskError::ChildFailed { step_name, message }
             }
