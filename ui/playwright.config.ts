@@ -12,6 +12,8 @@ const baseURLOverride = process.env.TENSORZERO_PLAYWRIGHT_BASE_URL;
  */
 export default defineConfig({
   testDir: "./e2e_tests",
+  /* Exclude autopilot tests by default - they require a separate environment */
+  testIgnore: "**/autopilot/**",
   /* Global timeout: 60 seconds max per test */
   timeout: 60000,
   /* Run tests in files in parallel */
