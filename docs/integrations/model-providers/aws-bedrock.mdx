@@ -71,16 +71,9 @@ TensorZero will attempt the following methods in order:
 
 See the [Configuration Reference](/gateway/configuration-reference/) for more details on authentication options.
 
-### Region
+### AWS Region
 
-TensorZero will attempt to automatically determine the AWS region using the AWS SDK.
-Alternatively, you can also configure an explicit region in your provider's configuration (e.g. `region = "us-east-1"`).
-
-<Tip>
-
-If you're not deploying in an AWS environment, we recommend configuring a region explicitly.
-
-</Tip>
+You can configure an explicit AWS region (e.g. `region = "us-east-1"`), delegate region selection to the AWS SDK (`region = "sdk"`), or specify the region dynamically at inference time (`region = "dynamic::xxx"`).
 
 See the [Configuration Reference](/gateway/configuration-reference/) for more details.
 
