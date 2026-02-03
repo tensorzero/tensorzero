@@ -31,13 +31,16 @@ use crate::db::inferences::{
     GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceQueries,
     ListInferenceMetadataParams, ListInferencesParams, VariantThroughput,
 };
+use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
-use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
+use crate::inference::types::{
+    ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
+};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::tool::ToolCallConfigDatabaseInsert;
 
@@ -64,7 +67,7 @@ pub struct DelegatingDatabaseConnection {
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
 pub trait DelegatingDatabaseQueries:
-    FeedbackQueries + InferenceQueries + DatasetQueries + BatchInferenceQueries
+    FeedbackQueries + InferenceQueries + DatasetQueries + BatchInferenceQueries + ModelInferenceQueries
 {
 }
 impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
@@ -589,6 +592,38 @@ impl BatchInferenceQueries for DelegatingDatabaseConnection {
             && let Err(e) = self.postgres.write_batch_model_inferences(rows).await
         {
             tracing::error!("Error writing batch model inferences to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ModelInferenceQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn get_model_inferences_by_inference_id(
+        &self,
+        inference_id: Uuid,
+    ) -> Result<Vec<StoredModelInference>, Error> {
+        self.get_read_database()
+            .get_model_inferences_by_inference_id(inference_id)
+            .await
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+
+        self.clickhouse.insert_model_inferences(rows).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_model_inferences(rows).await
+        {
+            tracing::error!("Error writing model inferences to Postgres: {e}");
         }
 
         Ok(())

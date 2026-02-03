@@ -247,4 +247,10 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
             .get_model_inferences_by_inference_id(inference_id)
             .await
     }
+
+    async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
+        self.model_inference_queries
+            .insert_model_inferences(rows)
+            .await
+    }
 }
