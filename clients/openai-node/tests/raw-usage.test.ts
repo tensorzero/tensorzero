@@ -19,7 +19,7 @@ beforeAll(() => {
 });
 
 describe("Raw Usage", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: legacy test code
   const assertOpenAIChatRawUsageFields = (entry: any) => {
     expect(entry.data).toBeDefined();
     expect(entry.data.total_tokens).toBeDefined();

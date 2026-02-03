@@ -20,206 +20,192 @@ beforeAll(() => {
 });
 
 describe("OpenAI Responses API", () => {
-  it.concurrent(
-    "should perform basic inference using OpenAI Responses API",
-    async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        {
-          role: "user",
-          content: "What is 2+2?",
-        },
-      ];
+  it.concurrent("should perform basic inference using OpenAI Responses API", async () => {
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: "What is 2+2?",
+      },
+    ];
 
-      const episodeId = uuidv7();
-      const result = await client.chat.completions.create({
-        messages,
-        model: "tensorzero::model_name::gpt-5-mini-responses",
-        // @ts-expect-error - custom TensorZero property
-        "tensorzero::episode_id": episodeId,
-      });
-
-      // The response should contain content
-      expect(result.choices[0].message.content).not.toBeNull();
-      expect(result.choices[0].message.content!.length).toBeGreaterThan(0);
-
-      // Extract the text content because the response might include reasoning and more
-      // In OpenAI API, content is a single string, not separate blocks like TensorZero SDK
-      expect(result.choices[0].message.content).toContain("4");
-
-      expect(result.usage).not.toBeNull();
-      expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
-      expect(result.usage?.completion_tokens).toBeGreaterThan(0);
-      // TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
-      // expect(result.choices[0].finish_reason).toBe("stop");
-    }
-  );
-
-  it.concurrent(
-    "should perform basic inference using OpenAI Responses API (streaming)",
-    async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        {
-          role: "user",
-          content: "What is 2+2?",
-        },
-      ];
-
-      const episodeId = uuidv7();
+    const episodeId = uuidv7();
+    const result = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::gpt-5-mini-responses",
       // @ts-expect-error - custom TensorZero property
-      const stream = await client.chat.completions.create({
-        messages,
-        model: "tensorzero::model_name::gpt-5-mini-responses",
-        stream: true,
-        stream_options: { include_usage: true },
-        "tensorzero::episode_id": episodeId,
-      });
+      "tensorzero::episode_id": episodeId,
+    });
 
-      const chunks = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
-      }
+    // The response should contain content
+    expect(result.choices[0].message.content).not.toBeNull();
+    expect(result.choices[0].message.content!.length).toBeGreaterThan(0);
 
-      expect(chunks.length).toBeGreaterThan(0);
+    // Extract the text content because the response might include reasoning and more
+    // In OpenAI API, content is a single string, not separate blocks like TensorZero SDK
+    expect(result.choices[0].message.content).toContain("4");
 
-      // Verify consistency across chunks
-      let previousInferenceId: string | null = null;
-      let previousEpisodeId: string | null = null;
-      const textChunks: string[] = [];
+    expect(result.usage).not.toBeNull();
+    expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
+    expect(result.usage?.completion_tokens).toBeGreaterThan(0);
+    // TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
+    // expect(result.choices[0].finish_reason).toBe("stop");
+  });
 
-      for (const chunk of chunks) {
-        if (previousInferenceId !== null) {
-          expect(chunk.id).toBe(previousInferenceId);
-        }
-        if (previousEpisodeId !== null) {
-          // @ts-expect-error - custom TensorZero property
-          expect(chunk.episode_id).toBe(previousEpisodeId);
-        }
-        previousInferenceId = chunk.id;
-        // @ts-expect-error - custom TensorZero property
-        previousEpisodeId = chunk.episode_id;
+  it.concurrent("should perform basic inference using OpenAI Responses API (streaming)", async () => {
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: "What is 2+2?",
+      },
+    ];
 
-        // Collect text chunks (all chunks except the final usage-only chunk)
-        if (chunk.choices && chunk.choices[0]?.delta?.content) {
-          textChunks.push(chunk.choices[0].delta.content);
-        }
-      }
+    const episodeId = uuidv7();
+    // @ts-expect-error - custom TensorZero property
+    const stream = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::gpt-5-mini-responses",
+      stream: true,
+      stream_options: { include_usage: true },
+      "tensorzero::episode_id": episodeId,
+    });
 
-      // Should have received text content with "4" in it
-      expect(textChunks.length).toBeGreaterThan(0);
-      const fullText = textChunks.join("");
-      expect(fullText).toContain("4");
-
-      // Last chunk should have usage
-      expect(chunks[chunks.length - 1].usage).not.toBeNull();
-      expect(chunks[chunks.length - 1].usage?.prompt_tokens).toBeGreaterThan(0);
-      expect(
-        chunks[chunks.length - 1].usage?.completion_tokens
-      ).toBeGreaterThan(0);
-
-      // TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
+    const chunks = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
     }
-  );
 
-  it.concurrent(
-    "should handle web search",
-    async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        {
-          role: "user",
-          content: "What is the current population of Japan?",
-        },
-      ];
+    expect(chunks.length).toBeGreaterThan(0);
 
-      const episodeId = uuidv7();
-      const result = await client.chat.completions.create({
-        messages,
-        model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
+    // Verify consistency across chunks
+    let previousInferenceId: string | null = null;
+    let previousEpisodeId: string | null = null;
+    const textChunks: string[] = [];
+
+    for (const chunk of chunks) {
+      if (previousInferenceId !== null) {
+        expect(chunk.id).toBe(previousInferenceId);
+      }
+      if (previousEpisodeId !== null) {
         // @ts-expect-error - custom TensorZero property
-        "tensorzero::episode_id": episodeId,
-      });
-
-      // The response should contain content
-      expect(result.choices[0].message.content).not.toBeNull();
-      expect(result.choices[0].message.content!.length).toBeGreaterThan(0);
-
-      // Check that web search actually happened by looking for citations in markdown format
-      expect(result.choices[0].message.content).toContain("](");
-
-      // TODO (#4042): Check for web_search_call content blocks when we expose them in the OpenAI API
-      // The TensorZero SDK returns web_search_call content blocks, but the OpenAI API doesn't expose them yet
-
-      expect(result.usage).not.toBeNull();
-      expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
-      expect(result.usage?.completion_tokens).toBeGreaterThan(0);
-    },
-    120_000
-  );
-
-  it.concurrent(
-    "should handle web search (streaming)",
-    async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        {
-          role: "user",
-          content: "What is the current population of Japan?",
-        },
-      ];
-
-      const episodeId = uuidv7();
+        expect(chunk.episode_id).toBe(previousEpisodeId);
+      }
+      previousInferenceId = chunk.id;
       // @ts-expect-error - custom TensorZero property
-      const stream = await client.chat.completions.create({
-        messages,
-        model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
-        stream: true,
-        stream_options: { include_usage: true },
-        "tensorzero::episode_id": episodeId,
-      });
+      previousEpisodeId = chunk.episode_id;
 
-      const chunks = [];
-      for await (const chunk of stream) {
-        chunks.push(chunk);
+      // Collect text chunks (all chunks except the final usage-only chunk)
+      if (chunk.choices && chunk.choices[0]?.delta?.content) {
+        textChunks.push(chunk.choices[0].delta.content);
       }
+    }
 
-      expect(chunks.length).toBeGreaterThan(0);
+    // Should have received text content with "4" in it
+    expect(textChunks.length).toBeGreaterThan(0);
+    const fullText = textChunks.join("");
+    expect(fullText).toContain("4");
 
-      // Verify consistency across chunks and collect text
-      let previousInferenceId: string | null = null;
-      let previousEpisodeId: string | null = null;
-      const textChunks: string[] = [];
+    // Last chunk should have usage
+    expect(chunks[chunks.length - 1].usage).not.toBeNull();
+    expect(chunks[chunks.length - 1].usage?.prompt_tokens).toBeGreaterThan(0);
+    expect(chunks[chunks.length - 1].usage?.completion_tokens).toBeGreaterThan(
+      0
+    );
 
-      for (const chunk of chunks) {
-        if (previousInferenceId !== null) {
-          expect(chunk.id).toBe(previousInferenceId);
-        }
-        if (previousEpisodeId !== null) {
-          // @ts-expect-error - custom TensorZero property
-          expect(chunk.episode_id).toBe(previousEpisodeId);
-        }
-        previousInferenceId = chunk.id;
+    // TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
+  });
+
+  it.concurrent("should handle web search", async () => {
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: "What is the current population of Japan?",
+      },
+    ];
+
+    const episodeId = uuidv7();
+    const result = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::episode_id": episodeId,
+    });
+
+    // The response should contain content
+    expect(result.choices[0].message.content).not.toBeNull();
+    expect(result.choices[0].message.content!.length).toBeGreaterThan(0);
+
+    // Check that web search actually happened by looking for citations in markdown format
+    expect(result.choices[0].message.content).toContain("](");
+
+    // TODO (#4042): Check for web_search_call content blocks when we expose them in the OpenAI API
+    // The TensorZero SDK returns web_search_call content blocks, but the OpenAI API doesn't expose them yet
+
+    expect(result.usage).not.toBeNull();
+    expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
+    expect(result.usage?.completion_tokens).toBeGreaterThan(0);
+  }, 120_000);
+
+  it.concurrent("should handle web search (streaming)", async () => {
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: "What is the current population of Japan?",
+      },
+    ];
+
+    const episodeId = uuidv7();
+    // @ts-expect-error - custom TensorZero property
+    const stream = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
+      stream: true,
+      stream_options: { include_usage: true },
+      "tensorzero::episode_id": episodeId,
+    });
+
+    const chunks = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.length).toBeGreaterThan(0);
+
+    // Verify consistency across chunks and collect text
+    let previousInferenceId: string | null = null;
+    let previousEpisodeId: string | null = null;
+    const textChunks: string[] = [];
+
+    for (const chunk of chunks) {
+      if (previousInferenceId !== null) {
+        expect(chunk.id).toBe(previousInferenceId);
+      }
+      if (previousEpisodeId !== null) {
         // @ts-expect-error - custom TensorZero property
-        previousEpisodeId = chunk.episode_id;
-
-        // Collect text chunks
-        if (chunk.choices && chunk.choices[0]?.delta?.content) {
-          textChunks.push(chunk.choices[0].delta.content);
-        }
+        expect(chunk.episode_id).toBe(previousEpisodeId);
       }
+      previousInferenceId = chunk.id;
+      // @ts-expect-error - custom TensorZero property
+      previousEpisodeId = chunk.episode_id;
 
-      // Last chunk should have usage
-      expect(chunks[chunks.length - 1].usage).not.toBeNull();
-      expect(chunks[chunks.length - 1].usage?.prompt_tokens).toBeGreaterThan(0);
-      expect(
-        chunks[chunks.length - 1].usage?.completion_tokens
-      ).toBeGreaterThan(0);
+      // Collect text chunks
+      if (chunk.choices && chunk.choices[0]?.delta?.content) {
+        textChunks.push(chunk.choices[0].delta.content);
+      }
+    }
 
-      // Check that web search actually happened by looking for citations in markdown format
-      const fullText = textChunks.join("");
-      expect(fullText).toContain("](");
+    // Last chunk should have usage
+    expect(chunks[chunks.length - 1].usage).not.toBeNull();
+    expect(chunks[chunks.length - 1].usage?.prompt_tokens).toBeGreaterThan(0);
+    expect(chunks[chunks.length - 1].usage?.completion_tokens).toBeGreaterThan(
+      0
+    );
 
-      // TODO (#4044): check for unknown web search events when we start returning them
-    },
-    120_000
-  );
+    // Check that web search actually happened by looking for citations in markdown format
+    const fullText = textChunks.join("");
+    expect(fullText).toContain("](");
+
+    // TODO (#4044): check for unknown web search events when we start returning them
+  }, 120_000);
 
   it.concurrent("should handle tool calls", async () => {
     const messages: ChatCompletionMessageParam[] = [
@@ -369,41 +355,37 @@ describe("OpenAI Responses API", () => {
     expect(toolCallName).toBe("get_temperature");
   });
 
-  it.concurrent(
-    "should handle dynamically configured provider tools (web search)",
-    async () => {
-      const messages: ChatCompletionMessageParam[] = [
-        {
-          role: "user",
-          content: "What is the current population of Japan?",
-        },
-      ];
+  it.concurrent("should handle dynamically configured provider tools (web search)", async () => {
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: "What is the current population of Japan?",
+      },
+    ];
 
-      const episodeId = uuidv7();
-      const result = await client.chat.completions.create({
-        messages,
-        model: "tensorzero::model_name::gpt-5-mini-responses",
-        // @ts-expect-error - custom TensorZero property
-        "tensorzero::episode_id": episodeId,
-        "tensorzero::provider_tools": [{ tool: { type: "web_search" } }],
-      });
+    const episodeId = uuidv7();
+    const result = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::gpt-5-mini-responses",
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::episode_id": episodeId,
+      "tensorzero::provider_tools": [{ tool: { type: "web_search" } }],
+    });
 
-      // The response should contain content
-      expect(result.choices[0].message.content).not.toBeNull();
-      expect(result.choices[0].message.content!.length).toBeGreaterThan(0);
+    // The response should contain content
+    expect(result.choices[0].message.content).not.toBeNull();
+    expect(result.choices[0].message.content!.length).toBeGreaterThan(0);
 
-      // Check that web search actually happened by looking for citations in markdown format
-      expect(result.choices[0].message.content).toContain("](");
+    // Check that web search actually happened by looking for citations in markdown format
+    expect(result.choices[0].message.content).toContain("](");
 
-      // TODO (#4042): Check for web_search_call content blocks when we expose them in the OpenAI API
-      // The TensorZero SDK returns web_search_call content blocks, but the OpenAI API doesn't expose them yet
+    // TODO (#4042): Check for web_search_call content blocks when we expose them in the OpenAI API
+    // The TensorZero SDK returns web_search_call content blocks, but the OpenAI API doesn't expose them yet
 
-      expect(result.usage).not.toBeNull();
-      expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
-      expect(result.usage?.completion_tokens).toBeGreaterThan(0);
-    },
-    120_000
-  );
+    expect(result.usage).not.toBeNull();
+    expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
+    expect(result.usage?.completion_tokens).toBeGreaterThan(0);
+  }, 120_000);
 
   it.concurrent("should handle shorthand model name", async () => {
     const messages: ChatCompletionMessageParam[] = [
