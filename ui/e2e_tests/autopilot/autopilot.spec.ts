@@ -104,7 +104,7 @@ test.describe("Autopilot New Session Button", () => {
   });
 });
 
-test.describe.skip("Scroll blur overlays", () => {
+test.describe("Scroll blur overlays", () => {
   test("top fade is hidden on new session at rest", async ({ page }) => {
     await page.goto("/autopilot/sessions/new");
     await page.waitForLoadState("networkidle");
