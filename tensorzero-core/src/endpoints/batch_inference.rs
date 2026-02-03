@@ -773,6 +773,7 @@ async fn write_start_batch_inference<'a>(
         model_provider_name: &result.model_provider_name,
         status: BatchStatus::Pending,
         errors: result.errors,
+        snapshot_hash: Some(config.hash.clone()),
     });
     write_batch_request_row(clickhouse_connection_info, &batch_request_insert).await?;
 
@@ -888,6 +889,7 @@ async fn write_batch_request_status_update(
         model_provider_name: &batch_request.model_provider_name,
         status,
         errors: vec![], // TODO (#503): add better error handling
+        snapshot_hash: batch_request.snapshot_hash.clone(),
     });
     clickhouse_connection_info
         .write_batched(&[batch_request_insert], TableName::BatchRequest)
