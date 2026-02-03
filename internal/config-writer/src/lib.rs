@@ -24,8 +24,6 @@ use toml_edit::DocumentMut;
 
 /// ConfigWriter handles applying edits to TensorZero config files.
 pub struct ConfigWriter {
-    /// The glob pattern used to find config files
-    glob_pattern: String,
     /// The base directory extracted from the glob pattern
     glob_base: PathBuf,
     /// The loaded config files with their parsed TOML documents
@@ -64,11 +62,7 @@ impl ConfigWriter {
             files.push(LoadedConfigFile::new(path.clone(), document));
         }
 
-        Ok(Self {
-            glob_pattern: glob_pattern.to_string(),
-            glob_base,
-            files,
-        })
+        Ok(Self { glob_base, files })
     }
 
     /// Apply an edit to the config files.
@@ -140,7 +134,7 @@ impl ConfigWriter {
             &payload.function_name,
             &payload.variant_name,
             variant_item,
-        );
+        )?;
 
         // Prepare files to write
         let mut files = template_files;
@@ -168,7 +162,7 @@ impl ConfigWriter {
             &mut location.file.document,
             &payload.function_name,
             experimentation_item,
-        );
+        )?;
 
         // Prepare files to write (just the TOML file, no templates for experimentation)
         let files = vec![FileToWrite {
@@ -240,7 +234,7 @@ impl ConfigWriter {
             &mut location.file.document,
             &payload.evaluation_name,
             evaluation_item,
-        );
+        )?;
 
         // Prepare files to write
         let mut files = template_files;
@@ -303,7 +297,7 @@ impl ConfigWriter {
             &payload.evaluation_name,
             &payload.evaluator_name,
             evaluator_item,
-        );
+        )?;
 
         // Prepare files to write
         let mut files = template_files;
@@ -313,11 +307,6 @@ impl ConfigWriter {
         });
 
         Ok(files)
-    }
-
-    /// Get the glob pattern used to find config files.
-    pub fn glob_pattern(&self) -> &str {
-        &self.glob_pattern
     }
 
     /// Get the base directory extracted from the glob pattern.

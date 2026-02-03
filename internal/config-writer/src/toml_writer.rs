@@ -25,22 +25,26 @@ pub fn serialize_to_item<T: Serialize>(value: &T) -> Result<Item, ConfigWriterEr
 
 /// Ensure a table exists at the given path, creating it if necessary.
 /// Returns a mutable reference to the table.
-#[expect(clippy::expect_used)]
-pub fn ensure_table<'a>(doc: &'a mut DocumentMut, path: &[&str]) -> &'a mut Table {
+/// Returns an error if an existing entry is not a table.
+pub fn ensure_table<'a>(
+    doc: &'a mut DocumentMut,
+    path: &[&str],
+) -> Result<&'a mut Table, ConfigWriterError> {
     let mut current = doc.as_table_mut();
 
     for &key in path {
         if !current.contains_key(key) {
             current.insert(key, Item::Table(Table::new()));
         }
-        // Safe: we just inserted an empty table if the key didn't exist,
-        // so it will always be a table (unless the input is malformed).
-        current = current[key]
-            .as_table_mut()
-            .expect("path component should be a table");
+        current = current[key].as_table_mut().ok_or_else(|| {
+            ConfigWriterError::InvalidConfigStructure {
+                path: path.join("."),
+                key: key.to_string(),
+            }
+        })?;
     }
 
-    current
+    Ok(current)
 }
 
 /// Upsert a variant into a function's variants table.
@@ -49,9 +53,10 @@ pub fn upsert_variant(
     function_name: &str,
     variant_name: &str,
     variant_item: Item,
-) {
-    let variants_table = ensure_table(doc, &["functions", function_name, "variants"]);
+) -> Result<(), ConfigWriterError> {
+    let variants_table = ensure_table(doc, &["functions", function_name, "variants"])?;
     variants_table.insert(variant_name, variant_item);
+    Ok(())
 }
 
 /// Upsert an experimentation config into a function.
@@ -59,15 +64,21 @@ pub fn upsert_experimentation(
     doc: &mut DocumentMut,
     function_name: &str,
     experimentation_item: Item,
-) {
-    let function_table = ensure_table(doc, &["functions", function_name]);
+) -> Result<(), ConfigWriterError> {
+    let function_table = ensure_table(doc, &["functions", function_name])?;
     function_table.insert("experimentation", experimentation_item);
+    Ok(())
 }
 
 /// Upsert an evaluation into the evaluations table.
-pub fn upsert_evaluation(doc: &mut DocumentMut, evaluation_name: &str, evaluation_item: Item) {
-    let evaluations_table = ensure_table(doc, &["evaluations"]);
+pub fn upsert_evaluation(
+    doc: &mut DocumentMut,
+    evaluation_name: &str,
+    evaluation_item: Item,
+) -> Result<(), ConfigWriterError> {
+    let evaluations_table = ensure_table(doc, &["evaluations"])?;
     evaluations_table.insert(evaluation_name, evaluation_item);
+    Ok(())
 }
 
 /// Upsert an evaluator into an evaluation's evaluators table.
@@ -76,9 +87,10 @@ pub fn upsert_evaluator(
     evaluation_name: &str,
     evaluator_name: &str,
     evaluator_item: Item,
-) {
-    let evaluators_table = ensure_table(doc, &["evaluations", evaluation_name, "evaluators"]);
+) -> Result<(), ConfigWriterError> {
+    let evaluators_table = ensure_table(doc, &["evaluations", evaluation_name, "evaluators"])?;
     evaluators_table.insert(evaluator_name, evaluator_item);
+    Ok(())
 }
 
 /// Internal implementation that extracts resolved paths using a PathContext.
