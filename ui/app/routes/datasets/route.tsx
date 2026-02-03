@@ -1,7 +1,6 @@
 import type { Route } from "./+types/route";
 import DatasetTable from "./DatasetTable";
-import { data } from "react-router";
-import { useNavigate } from "react-router";
+import { data, useNavigate } from "react-router";
 import {
   PageHeader,
   PageLayout,
@@ -9,6 +8,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { DatasetsActions } from "./DatasetsActions";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { LayoutErrorBoundary } from "~/components/ui/error";
 
 export async function loader() {
   const dataPromise = getTensorZeroClient()
@@ -52,4 +52,8 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
       </SectionLayout>
     </PageLayout>
   );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <LayoutErrorBoundary error={error} />;
 }
