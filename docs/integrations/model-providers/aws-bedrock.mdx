@@ -83,7 +83,7 @@ Create a minimal Docker Compose configuration:
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
   gateway:
@@ -98,6 +98,8 @@ services:
       # AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:?Environment variable AWS_SESSION_TOKEN must be set.}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 ```
 
 Make sure to configure the relevant environment variables (if any) for your AWS setup.
