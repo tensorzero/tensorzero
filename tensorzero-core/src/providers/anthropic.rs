@@ -592,13 +592,13 @@ pub(super) struct AnthropicFunctionTool<'a> {
 }
 
 impl<'a> AnthropicFunctionTool<'a> {
-    pub fn new(tool: &'a FunctionToolConfig) -> Self {
+    pub fn new(tool: &'a FunctionToolConfig, supports_strict_mode: bool) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
         Self {
             name: tool.name(),
             description: Some(tool.description()),
             input_schema: tool.parameters(),
-            strict: Some(tool.strict()),
+            strict: supports_strict_mode.then_some(tool.strict()),
         }
     }
 }
@@ -619,6 +619,7 @@ pub(super) enum AnthropicTool<'a> {
 pub(super) fn build_anthropic_tools<'a>(
     tool_config: Option<&'a Cow<'a, ToolCallConfig>>,
     provider_tools: &'a [Value],
+    supports_strict_mode: bool,
 ) -> Result<Option<Vec<AnthropicTool<'a>>>, Error> {
     // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
     // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
@@ -630,7 +631,7 @@ pub(super) fn build_anthropic_tools<'a>(
         Some(c) => {
             let mut all_tools: Vec<AnthropicTool<'a>> = c
                 .strict_tools_available()?
-                .map(|tool| AnthropicTool::Function(AnthropicFunctionTool::new(tool)))
+                .map(|tool| AnthropicTool::Function(AnthropicFunctionTool::new(tool, supports_strict_mode)))
                 .collect();
             all_tools.extend(provider_tools.iter().map(AnthropicTool::Provider));
             Ok(Some(all_tools))
@@ -958,7 +959,7 @@ impl<'a> AnthropicRequestBody<'a> {
             messages
         };
 
-        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools)?;
+        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools, true)?;
 
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
@@ -985,19 +986,16 @@ impl<'a> AnthropicRequestBody<'a> {
             service_tier: None, // handled below
             tool_choice,
             tools,
-            output_config: Some(AnthropicOutputConfig {
-                format: match request.json_mode {
-                    ModelInferenceRequestJsonMode::Strict => {
-                        request
-                            .output_schema
-                            .map(|schema| AnthropicOutputFormat::JsonSchema {
-                                schema: schema.clone(),
-                            })
-                    }
-                    ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
-                },
-            }),
-
+            output_config: match request.json_mode {
+                ModelInferenceRequestJsonMode::Strict => {
+                    request.output_schema.map(|schema| AnthropicOutputConfig {
+                        format: Some(AnthropicOutputFormat::JsonSchema {
+                            schema: schema.clone(),
+                        }),
+                    })
+                }
+                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
+            },
             stop_sequences: request.borrow_stop_sequences(),
         };
 
@@ -1851,14 +1849,14 @@ mod tests {
             parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool);
+        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, true);
         assert_eq!(
             anthropic_tool,
             AnthropicFunctionTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
-                strict: None,
+                strict: Some(false),
             }
         );
     }
@@ -3656,7 +3654,7 @@ mod tests {
         let tools: Vec<AnthropicFunctionTool> = tool_config
             .strict_tools_available()
             .unwrap()
-            .map(AnthropicFunctionTool::new)
+            .map(|tool| AnthropicFunctionTool::new(tool, true))
             .collect();
 
         // Verify only the allowed tool is included

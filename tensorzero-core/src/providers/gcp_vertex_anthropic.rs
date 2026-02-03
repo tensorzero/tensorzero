@@ -557,7 +557,8 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             prefill_json_message(&mut messages);
         }
 
-        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools)?;
+        // GCP Vertex Anthropic doesn't support strict mode for tools
+        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools, false)?;
 
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
@@ -896,7 +897,7 @@ mod tests {
             parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool);
+        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, false);
         assert_eq!(
             anthropic_tool,
             AnthropicFunctionTool {
