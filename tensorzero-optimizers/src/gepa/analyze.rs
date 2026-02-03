@@ -3,7 +3,6 @@
 //! Analyzes inference outputs to identify errors, improvements, and optimal patterns.
 //! Builds inputs for the analyze function and handles results with optional inference context.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::future::join_all;
@@ -197,16 +196,22 @@ pub fn build_analyze_input(
     } = function_context;
 
     // Extract templates map from variant config
-    let templates_map: HashMap<String, String> = variant_config
-        .templates
-        .inner
-        .iter()
-        .map(|(name, config)| (name.clone(), config.path.data().to_string()))
-        .collect();
+    // Sort keys for deterministic serialization order (important for caching)
+    let mut template_names: Vec<_> = variant_config.templates.inner.keys().collect();
+    template_names.sort();
+    let mut templates_map = Map::new();
+    for name in template_names {
+        let config = &variant_config.templates.inner[name];
+        templates_map.insert(name.clone(), json!(config.path.data()));
+    }
 
     // Build evaluation_scores map with just the scores
+    // Sort keys for deterministic serialization order (important for caching)
+    let mut evaluator_names: Vec<_> = eval_info.evaluations.keys().collect();
+    evaluator_names.sort();
     let mut evaluation_scores = Map::new();
-    for (evaluator_name, result_opt) in &eval_info.evaluations {
+    for evaluator_name in evaluator_names {
+        let result_opt = &eval_info.evaluations[evaluator_name];
         // Preserve the score type (number, boolean, or null)
         let score = result_opt
             .as_ref()
