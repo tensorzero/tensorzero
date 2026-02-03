@@ -438,6 +438,7 @@ impl AWSBedrockAuth {
         // Validate: cannot specify both api_key and IAM credentials
         let has_iam_creds =
             access_key_id.is_some() || secret_access_key.is_some() || session_token.is_some();
+
         if api_key.is_some() && has_iam_creds {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
@@ -451,8 +452,8 @@ impl AWSBedrockAuth {
             return Self::from_api_key_location(key_loc, provider_type);
         }
 
-        // 2. Explicit IAM credentials
-        if access_key_id.is_some() || secret_access_key.is_some() {
+        // 2. Explicit IAM credentials (or session_token alone, which will error in from_fields)
+        if has_iam_creds {
             return Ok(AWSBedrockAuth::Credentials(AWSCredentials::from_fields(
                 access_key_id,
                 secret_access_key,
@@ -463,14 +464,14 @@ impl AWSBedrockAuth {
 
         // 3. Nothing configured - try AWS_BEARER_TOKEN_BEDROCK env var first, then SDK
         if let Ok(token) = std::env::var("AWS_BEARER_TOKEN_BEDROCK") {
-            tracing::info!("Using AWS_BEARER_TOKEN_BEDROCK for {provider_type} authentication");
+            tracing::debug!(
+                "Using environment variable `AWS_BEARER_TOKEN_BEDROCK` for `{provider_type}` authentication"
+            );
             return Ok(AWSBedrockAuth::ApiKey(SecretString::new(token.into())));
         }
 
         // 4. Fall back to SDK credential chain (SigV4)
-        tracing::debug!(
-            "No api_key or AWS_BEARER_TOKEN_BEDROCK found, using SDK credential chain for {provider_type}"
-        );
+        tracing::debug!("Using AWS SDK credential chain for `{provider_type}` authentication");
         Ok(AWSBedrockAuth::Credentials(AWSCredentials::Sdk))
     }
 
