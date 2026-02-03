@@ -11,7 +11,7 @@ path = "tests/e2e/tests.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-bytes = { version = "1.10.0", features = ["serde"] }
+bytes = { version = "1.11.1", features = ["serde"] }
 clap = { version = "4.5.55", features = ["derive"] }
 hex = "0.4.3"
 http = "1.4.0"
