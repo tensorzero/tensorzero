@@ -102,12 +102,14 @@ fn build_mutate_input(
     } = function_context;
 
     // Extract templates map from variant config
-    let templates_map: HashMap<String, String> = variant_config
-        .templates
-        .inner
-        .iter()
-        .map(|(name, config)| (name.clone(), config.path.data().to_string()))
-        .collect();
+    // Sort keys for deterministic serialization order (important for caching)
+    let mut template_names: Vec<_> = variant_config.templates.inner.keys().collect();
+    template_names.sort();
+    let mut templates_map = Map::new();
+    for name in template_names {
+        let config = &variant_config.templates.inner[name];
+        templates_map.insert(name.clone(), json!(config.path.data()));
+    }
 
     // Serialize analyses to JSON
     // Note: Thought signatures in inference outputs are already conditionally stripped
