@@ -30,13 +30,17 @@ export const handle: RouteHandle = {
   ],
 };
 
-type RunData = {
+type BasicInfoData = {
   workflowEvaluationRun: Awaited<
     ReturnType<
       ReturnType<typeof getTensorZeroClient>["listWorkflowEvaluationRuns"]
     >
   >["runs"][0];
-  workflowEvaluationRunEpisodes: Awaited<
+  count: number;
+};
+
+type EpisodesData = {
+  episodes: Awaited<
     ReturnType<
       ReturnType<
         typeof getTensorZeroClient
@@ -53,39 +57,40 @@ type RunData = {
   count: number;
 };
 
-async function fetchRunData(
-  run_id: string,
-  limit: number,
-  offset: number,
-): Promise<RunData> {
-  const tensorZeroClient = getTensorZeroClient();
-  const [
-    workflowEvaluationRunsResponse,
-    workflowEvaluationRunEpisodesResponse,
-    count,
-    statisticsResponse,
-  ] = await Promise.all([
-    tensorZeroClient.listWorkflowEvaluationRuns(5, 0, run_id),
-    tensorZeroClient.getWorkflowEvaluationRunEpisodesWithFeedback(
-      run_id,
-      limit,
-      offset,
-    ),
-    tensorZeroClient.countWorkflowEvaluationRunEpisodes(run_id),
-    tensorZeroClient.getWorkflowEvaluationRunStatistics(run_id),
+async function fetchBasicInfoData(run_id: string): Promise<BasicInfoData> {
+  const client = getTensorZeroClient();
+  const [runsResponse, count] = await Promise.all([
+    client.listWorkflowEvaluationRuns(5, 0, run_id),
+    client.countWorkflowEvaluationRunEpisodes(run_id),
   ]);
 
-  const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
-  if (workflowEvaluationRuns.length !== 1) {
+  const runs = runsResponse.runs;
+  if (runs.length !== 1) {
     throw data(`Workflow evaluation run "${run_id}" not found`, {
       status: 404,
     });
   }
 
   return {
-    workflowEvaluationRun: workflowEvaluationRuns[0],
-    workflowEvaluationRunEpisodes:
-      workflowEvaluationRunEpisodesResponse.episodes,
+    workflowEvaluationRun: runs[0],
+    count,
+  };
+}
+
+async function fetchEpisodesData(
+  run_id: string,
+  limit: number,
+  offset: number,
+): Promise<EpisodesData> {
+  const client = getTensorZeroClient();
+  const [episodesResponse, statisticsResponse, count] = await Promise.all([
+    client.getWorkflowEvaluationRunEpisodesWithFeedback(run_id, limit, offset),
+    client.getWorkflowEvaluationRunStatistics(run_id),
+    client.countWorkflowEvaluationRunEpisodes(run_id),
+  ]);
+
+  return {
+    episodes: episodesResponse.episodes,
     statistics: statisticsResponse.statistics,
     count,
   };
@@ -100,82 +105,75 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     run_id,
-    runData: fetchRunData(run_id, limit, offset),
+    basicInfoData: fetchBasicInfoData(run_id),
+    episodesData: fetchEpisodesData(run_id, limit, offset),
     offset,
     limit,
   };
 }
 
-function ContentSkeleton({ run_id }: { run_id: string }) {
-  return (
-    <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Workflow Evaluations", href: "/workflow-evaluations" },
-              { label: "Runs" },
-            ]}
-          />
-        }
-        name={run_id}
-      />
-      <SectionLayout>
-        <Skeleton className="h-24 w-full" />
-      </SectionLayout>
-      <SectionLayout>
-        <Skeleton className="h-64 w-full" />
-      </SectionLayout>
-    </>
-  );
+function BasicInfoSkeleton() {
+  return <Skeleton className="h-24 w-full" />;
 }
 
-function ContentError({ run_id }: { run_id: string }) {
+function BasicInfoError() {
   const error = useAsyncError();
-  let message = "Failed to load workflow evaluation run";
+  let message = "Failed to load run info";
   if (isRouteErrorResponse(error)) {
     message = typeof error.data === "string" ? error.data : message;
   } else if (error instanceof Error) {
     message = error.message;
   }
   return (
-    <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Workflow Evaluations", href: "/workflow-evaluations" },
-              { label: "Runs" },
-            ]}
-          />
-        }
-        name={run_id}
-      />
-      <SectionErrorNotice
-        icon={AlertCircle}
-        title="Error loading workflow evaluation run"
-        description={message}
-      />
-    </>
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading run info"
+      description={message}
+    />
   );
 }
 
-function RunContent({
+function EpisodesSkeleton() {
+  return <Skeleton className="h-64 w-full" />;
+}
+
+function EpisodesError() {
+  const error = useAsyncError();
+  let message = "Failed to load episodes";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading episodes"
+      description={message}
+    />
+  );
+}
+
+function BasicInfoContent({ data }: { data: BasicInfoData }) {
+  return (
+    <BasicInfo
+      workflowEvaluationRun={data.workflowEvaluationRun}
+      count={data.count}
+    />
+  );
+}
+
+function EpisodesContent({
   data,
   offset,
   limit,
 }: {
-  data: RunData;
+  data: EpisodesData;
   offset: number;
   limit: number;
 }) {
   const navigate = useNavigate();
-  const {
-    workflowEvaluationRun,
-    workflowEvaluationRunEpisodes,
-    statistics,
-    count,
-  } = data;
+  const { episodes, statistics, count } = data;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -191,6 +189,28 @@ function RunContent({
 
   return (
     <>
+      <WorkflowEvaluationRunEpisodesTable
+        episodes={episodes}
+        statistics={statistics}
+      />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={offset <= 0}
+        disableNext={offset + limit >= count}
+      />
+    </>
+  );
+}
+
+export default function WorkflowEvaluationRunSummaryPage({
+  loaderData,
+}: Route.ComponentProps) {
+  const { run_id, basicInfoData, episodesData, offset, limit } = loaderData;
+  const location = useLocation();
+
+  return (
+    <PageLayout>
       <PageHeader
         eyebrow={
           <Breadcrumbs
@@ -200,44 +220,28 @@ function RunContent({
             ]}
           />
         }
-        name={workflowEvaluationRun.id}
+        name={run_id}
       />
-      <BasicInfo workflowEvaluationRun={workflowEvaluationRun} count={count} />
-      <SectionLayout>
-        <WorkflowEvaluationRunEpisodesTable
-          episodes={workflowEvaluationRunEpisodes}
-          statistics={statistics}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset <= 0}
-          disableNext={offset + limit >= count}
-        />
-      </SectionLayout>
-    </>
-  );
-}
-
-export default function WorkflowEvaluationRunSummaryPage({
-  loaderData,
-}: Route.ComponentProps) {
-  const { run_id, runData, offset, limit } = loaderData;
-  const location = useLocation();
-
-  return (
-    <PageLayout>
       <Suspense
-        key={location.key}
-        fallback={<ContentSkeleton run_id={run_id} />}
+        key={`basic-info-${location.key}`}
+        fallback={<BasicInfoSkeleton />}
       >
-        <Await
-          resolve={runData}
-          errorElement={<ContentError run_id={run_id} />}
-        >
-          {(data) => <RunContent data={data} offset={offset} limit={limit} />}
+        <Await resolve={basicInfoData} errorElement={<BasicInfoError />}>
+          {(data) => <BasicInfoContent data={data} />}
         </Await>
       </Suspense>
+      <SectionLayout>
+        <Suspense
+          key={`episodes-${location.key}`}
+          fallback={<EpisodesSkeleton />}
+        >
+          <Await resolve={episodesData} errorElement={<EpisodesError />}>
+            {(data) => (
+              <EpisodesContent data={data} offset={offset} limit={limit} />
+            )}
+          </Await>
+        </Suspense>
+      </SectionLayout>
     </PageLayout>
   );
 }
