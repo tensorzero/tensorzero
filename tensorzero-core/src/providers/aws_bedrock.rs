@@ -6,14 +6,15 @@ use bytes::BytesMut;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use reqwest::StatusCode;
+use secrecy::ExposeSecret;
 use serde::Serialize;
 use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::aws_common::{
-    AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion, check_eventstream_exception,
-    send_aws_request, sign_request,
+    AWSAuth, AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion,
+    check_eventstream_exception, send_aws_request, send_aws_request_with_api_key, sign_request,
 };
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use crate::cache::ModelProviderRequest;
@@ -61,6 +62,8 @@ pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
     config: AWSProviderConfig,
+    #[serde(skip)]
+    auth: AWSAuth,
 }
 
 impl AWSBedrockProvider {
@@ -69,8 +72,15 @@ impl AWSBedrockProvider {
         static_region: Option<Region>,
         region: Option<AWSRegion>,
         endpoint_url: Option<AWSEndpointUrl>,
-        credentials: AWSCredentials,
+        auth: AWSAuth,
     ) -> Result<Self, Error> {
+        // Extract credentials for AWSProviderConfig if using IAM auth
+        let credentials = match &auth {
+            AWSAuth::Credentials(creds) => creds.clone(),
+            // For bearer auth, we still need a config for region/endpoint, use Sdk as placeholder
+            AWSAuth::ApiKey(_) | AWSAuth::DynamicApiKey(_) => AWSCredentials::Sdk,
+        };
+
         let config = AWSProviderConfig::new(
             static_region,
             region,
@@ -80,7 +90,11 @@ impl AWSBedrockProvider {
         )
         .await?;
 
-        Ok(Self { model_id, config })
+        Ok(Self {
+            model_id,
+            config,
+            auth,
+        })
     }
 
     pub fn model_id(&self) -> &str {
@@ -119,26 +133,61 @@ impl InferenceProvider for AWSBedrockProvider {
             urlencoding::encode(&self.model_id)
         );
 
-        // Get credentials and region
-        let credentials = self
-            .config
-            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
-            .await?;
-        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
-
-        // Send signed request
-        let aws_response = send_aws_request(
-            http_client,
-            &url,
-            http_extra_headers,
-            body_bytes,
-            &credentials,
-            region.as_ref(),
-            "bedrock",
-            PROVIDER_TYPE,
-            &raw_request,
-        )
-        .await?;
+        // Send request with appropriate auth method
+        let aws_response = match &self.auth {
+            AWSAuth::ApiKey(api_key) => {
+                // Use bearer token authentication
+                send_aws_request_with_api_key(
+                    http_client,
+                    &url,
+                    http_extra_headers,
+                    body_bytes,
+                    api_key,
+                    PROVIDER_TYPE,
+                    &raw_request,
+                )
+                .await?
+            }
+            AWSAuth::DynamicApiKey(key_name) => {
+                // Resolve dynamic API key from request credentials
+                let api_key = dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic `api_key` with key `{key_name}` is missing"),
+                    })
+                })?;
+                send_aws_request_with_api_key(
+                    http_client,
+                    &url,
+                    http_extra_headers,
+                    body_bytes,
+                    api_key,
+                    PROVIDER_TYPE,
+                    &raw_request,
+                )
+                .await?
+            }
+            AWSAuth::Credentials(_) => {
+                // Use SigV4 signing with IAM credentials
+                let credentials = self
+                    .config
+                    .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+                    .await?;
+                let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
+                send_aws_request(
+                    http_client,
+                    &url,
+                    http_extra_headers,
+                    body_bytes,
+                    &credentials,
+                    region.as_ref(),
+                    "bedrock",
+                    PROVIDER_TYPE,
+                    &raw_request,
+                )
+                .await?
+            }
+        };
 
         let latency = Latency::NonStreaming {
             response_time: aws_response.response_time,
@@ -202,37 +251,88 @@ impl InferenceProvider for AWSBedrockProvider {
             urlencoding::encode(&self.model_id)
         );
 
-        // Get credentials and region
-        let credentials = self
-            .config
-            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
-            .await?;
-        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
+        // Build headers based on auth type
+        let request_headers = match &self.auth {
+            AWSAuth::ApiKey(api_key) => {
+                // Bearer token authentication
+                let mut headers = http_extra_headers;
+                headers.insert(
+                    http::header::CONTENT_TYPE,
+                    http::header::HeaderValue::from_static("application/json"),
+                );
+                headers.insert(
+                    http::header::AUTHORIZATION,
+                    http::header::HeaderValue::from_str(&format!(
+                        "Bearer {}",
+                        api_key.expose_secret()
+                    ))
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("Invalid API key format: {e}"),
+                        })
+                    })?,
+                );
+                headers
+            }
+            AWSAuth::DynamicApiKey(key_name) => {
+                // Resolve dynamic API key from request credentials
+                let api_key = dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: PROVIDER_NAME.to_string(),
+                        message: format!("Dynamic `api_key` with key `{key_name}` is missing"),
+                    })
+                })?;
+                let mut headers = http_extra_headers;
+                headers.insert(
+                    http::header::CONTENT_TYPE,
+                    http::header::HeaderValue::from_static("application/json"),
+                );
+                headers.insert(
+                    http::header::AUTHORIZATION,
+                    http::header::HeaderValue::from_str(&format!(
+                        "Bearer {}",
+                        api_key.expose_secret()
+                    ))
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("Invalid API key format: {e}"),
+                        })
+                    })?,
+                );
+                headers
+            }
+            AWSAuth::Credentials(_) => {
+                // SigV4 signing with IAM credentials
+                let credentials = self
+                    .config
+                    .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
+                    .await?;
+                let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
 
-        // Build headers
-        let mut headers = http_extra_headers;
-        headers.insert(
-            http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/json"),
-        );
+                let mut headers = http_extra_headers;
+                headers.insert(
+                    http::header::CONTENT_TYPE,
+                    http::header::HeaderValue::from_static("application/json"),
+                );
 
-        // Sign the request
-        let signed_headers = sign_request(
-            "POST",
-            &url,
-            &headers,
-            &body_bytes,
-            &credentials,
-            region.as_ref(),
-            "bedrock",
-            PROVIDER_TYPE,
-        )?;
+                sign_request(
+                    "POST",
+                    &url,
+                    &headers,
+                    &body_bytes,
+                    &credentials,
+                    region.as_ref(),
+                    "bedrock",
+                    PROVIDER_TYPE,
+                )?
+            }
+        };
 
         // Send request
         let start_time = Instant::now();
         let response = http_client
             .post(&url)
-            .headers(signed_headers)
+            .headers(request_headers)
             .body(body_bytes)
             .send()
             .await
@@ -1102,7 +1202,7 @@ mod tests {
             Some(Region::new("uk-hogwarts-1")),
             None,
             None,
-            AWSCredentials::Sdk,
+            AWSAuth::Credentials(AWSCredentials::Sdk),
         )
         .await
         .unwrap();
@@ -1118,7 +1218,7 @@ mod tests {
             Some(Region::new("uk-hogwarts-1")),
             None,
             None,
-            AWSCredentials::Sdk,
+            AWSAuth::Credentials(AWSCredentials::Sdk),
         )
         .await
         .unwrap();
@@ -1133,10 +1233,15 @@ mod tests {
         // We use 'nextest' as our runner, so each test runs in its own process
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
-        let err =
-            AWSBedrockProvider::new("test".to_string(), None, None, None, AWSCredentials::Sdk)
-                .await
-                .expect_err("AWS Bedrock provider should fail when it cannot detect region");
+        let err = AWSBedrockProvider::new(
+            "test".to_string(),
+            None,
+            None,
+            None,
+            AWSAuth::Credentials(AWSCredentials::Sdk),
+        )
+        .await
+        .expect_err("AWS Bedrock provider should fail when it cannot detect region");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),
@@ -1152,7 +1257,7 @@ mod tests {
             Some(Region::new("me-shire-2")),
             None,
             None,
-            AWSCredentials::Sdk,
+            AWSAuth::Credentials(AWSCredentials::Sdk),
         )
         .await
         .unwrap();

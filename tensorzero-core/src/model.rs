@@ -30,7 +30,7 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
-use crate::providers::aws_common::{AWSCredentials, AWSEndpointUrl, AWSRegion};
+use crate::providers::aws_common::{AWSAuth, AWSCredentials, AWSEndpointUrl, AWSRegion};
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
@@ -1108,6 +1108,14 @@ struct AWSProviderConfig {
     credentials: AWSCredentials,
 }
 
+/// Processed AWS Bedrock provider configuration (supports api_key for bearer auth).
+struct AWSBedrockProviderConfig {
+    static_region: Option<Region>,
+    region: AWSRegion,
+    endpoint_url: Option<AWSEndpointUrl>,
+    auth: AWSAuth,
+}
+
 /// Helper to process common AWS provider configuration.
 fn build_aws_provider_config(
     region: Option<CredentialLocationOrHardcoded>,
@@ -1180,6 +1188,81 @@ fn build_aws_provider_config(
     })
 }
 
+/// Helper to process AWS Bedrock provider configuration with api_key support.
+fn build_aws_bedrock_provider_config(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    endpoint_url: Option<CredentialLocationOrHardcoded>,
+    api_key: Option<CredentialLocation>,
+    access_key_id: Option<CredentialLocation>,
+    secret_access_key: Option<CredentialLocation>,
+    session_token: Option<CredentialLocation>,
+) -> Result<AWSBedrockProviderConfig, Error> {
+    const PROVIDER_TYPE: &str = "aws_bedrock";
+
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{PROVIDER_TYPE}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, PROVIDER_TYPE))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    let aws_region = aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {PROVIDER_TYPE} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })?;
+
+    // For static regions, use at construction time.
+    // For SDK regions, pass None to use the default provider chain.
+    // For dynamic regions, use a fallback region for construction (will be overridden at request time).
+    let static_region = match &aws_region {
+        AWSRegion::Static(region) => Some(region.clone()),
+        AWSRegion::Sdk => None,
+        AWSRegion::Dynamic(_) => Some(Region::new("us-east-1")),
+    };
+
+    let endpoint_url = endpoint_url
+        .map(|loc| AWSEndpointUrl::from_credential_location(loc, PROVIDER_TYPE))
+        .transpose()?
+        .flatten();
+
+    // Convert credential fields to AWSAuth (handles api_key for bearer auth)
+    let auth = AWSAuth::from_fields(
+        api_key,
+        access_key_id,
+        secret_access_key,
+        session_token,
+        PROVIDER_TYPE,
+    )?;
+
+    Ok(AWSBedrockProviderConfig {
+        static_region,
+        region: aws_region,
+        endpoint_url,
+        auth,
+    })
+}
+
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -1222,6 +1305,10 @@ pub enum UninitializedProviderConfig {
         allow_auto_detect_region: bool,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         endpoint_url: Option<CredentialLocationOrHardcoded>,
+        /// API key for bearer token authentication (alternative to IAM credentials).
+        /// If set, uses `Authorization: Bearer <token>` instead of SigV4 signing.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        api_key: Option<CredentialLocation>,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         access_key_id: Option<CredentialLocation>,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
@@ -1398,18 +1485,19 @@ impl UninitializedProviderConfig {
                 region,
                 allow_auto_detect_region,
                 endpoint_url,
+                api_key,
                 access_key_id,
                 secret_access_key,
                 session_token,
             } => {
-                let aws_config = build_aws_provider_config(
+                let aws_config = build_aws_bedrock_provider_config(
                     region,
                     allow_auto_detect_region,
                     endpoint_url,
+                    api_key,
                     access_key_id,
                     secret_access_key,
                     session_token,
-                    "aws_bedrock",
                 )?;
 
                 ProviderConfig::AWSBedrock(
@@ -1418,7 +1506,7 @@ impl UninitializedProviderConfig {
                         aws_config.static_region,
                         Some(aws_config.region),
                         aws_config.endpoint_url,
-                        aws_config.credentials,
+                        aws_config.auth,
                     )
                     .await?,
                 )

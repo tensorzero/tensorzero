@@ -407,6 +407,112 @@ fn validate_aws_credential_location(
     }
 }
 
+/// AWS authentication method - either API key (bearer token) or IAM credentials (SigV4).
+/// Used by AWS Bedrock to support both bearer token auth and SigV4 signing.
+#[derive(Clone, Debug)]
+pub enum AWSAuth {
+    /// Bearer token authentication (Authorization: Bearer <token>).
+    /// Used with AWS Bedrock API keys.
+    ApiKey(SecretString),
+    /// Dynamic bearer token resolved at request time.
+    DynamicApiKey(String),
+    /// IAM credentials for SigV4 signing.
+    Credentials(AWSCredentials),
+}
+
+impl AWSAuth {
+    /// Create AWSAuth from config fields.
+    ///
+    /// Priority:
+    /// 1. Explicit api_key → bearer auth
+    /// 2. Explicit IAM credentials → SigV4
+    /// 3. AWS_BEARER_TOKEN_BEDROCK env var → bearer auth
+    /// 4. SDK credential chain → SigV4
+    pub fn from_fields(
+        api_key: Option<CredentialLocation>,
+        access_key_id: Option<CredentialLocation>,
+        secret_access_key: Option<CredentialLocation>,
+        session_token: Option<CredentialLocation>,
+        provider_type: &str,
+    ) -> Result<Self, Error> {
+        // Validate: cannot specify both api_key and IAM credentials
+        let has_iam_creds =
+            access_key_id.is_some() || secret_access_key.is_some() || session_token.is_some();
+        if api_key.is_some() && has_iam_creds {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Cannot specify both `api_key` and IAM credentials (`access_key_id`/`secret_access_key`) for `{provider_type}`. Use one or the other."
+                ),
+            }));
+        }
+
+        // 1. Explicit api_key takes priority
+        if let Some(key_loc) = api_key {
+            return Self::from_api_key_location(key_loc, provider_type);
+        }
+
+        // 2. Explicit IAM credentials
+        if access_key_id.is_some() || secret_access_key.is_some() {
+            return Ok(AWSAuth::Credentials(AWSCredentials::from_fields(
+                access_key_id,
+                secret_access_key,
+                session_token,
+                provider_type,
+            )?));
+        }
+
+        // 3. Nothing configured - try AWS_BEARER_TOKEN_BEDROCK env var first, then SDK
+        if let Ok(token) = std::env::var("AWS_BEARER_TOKEN_BEDROCK") {
+            tracing::info!("Using AWS_BEARER_TOKEN_BEDROCK for {provider_type} authentication");
+            return Ok(AWSAuth::ApiKey(SecretString::new(token.into())));
+        }
+
+        // 4. Fall back to SDK credential chain (SigV4)
+        tracing::debug!(
+            "No api_key or AWS_BEARER_TOKEN_BEDROCK found, using SDK credential chain for {provider_type}"
+        );
+        Ok(AWSAuth::Credentials(AWSCredentials::Sdk))
+    }
+
+    fn from_api_key_location(loc: CredentialLocation, provider_type: &str) -> Result<Self, Error> {
+        match loc {
+            CredentialLocation::Env(var) => {
+                let token = std::env::var(&var).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Environment variable `{var}` not found for `api_key` in `{provider_type}`."
+                        ),
+                    })
+                })?;
+                Ok(AWSAuth::ApiKey(SecretString::new(token.into())))
+            }
+            CredentialLocation::Dynamic(key) => Ok(AWSAuth::DynamicApiKey(key)),
+            CredentialLocation::Sdk => {
+                // sdk for api_key means auto-detect from AWS_BEARER_TOKEN_BEDROCK
+                if let Ok(token) = std::env::var("AWS_BEARER_TOKEN_BEDROCK") {
+                    Ok(AWSAuth::ApiKey(SecretString::new(token.into())))
+                } else {
+                    Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "`api_key = \"sdk\"` requires AWS_BEARER_TOKEN_BEDROCK env var for `{provider_type}`."
+                        ),
+                    }))
+                }
+            }
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Unsupported credential location for `api_key` in `{provider_type}`. Use `env::` or `dynamic::`."
+                ),
+            })),
+        }
+    }
+
+    /// Returns true if this auth method uses bearer token authentication.
+    pub fn is_bearer_auth(&self) -> bool {
+        matches!(self, AWSAuth::ApiKey(_) | AWSAuth::DynamicApiKey(_))
+    }
+}
+
 /// Warn if there's a potential credential exfiltration risk.
 /// This occurs when dynamic endpoint_url is configured with static or SDK credentials.
 pub fn warn_if_credential_exfiltration_risk(
@@ -890,6 +996,82 @@ pub async fn send_aws_request(
     if !status.is_success() {
         return Err(Error::new(ErrorDetails::InferenceServer {
             message: format!("AWS {service} returned error status {status}: {raw_response}"),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: Some(raw_response),
+            provider_type: provider_type.to_string(),
+        }));
+    }
+
+    Ok(AwsRequestResponse {
+        raw_response,
+        response_time,
+    })
+}
+
+/// Send an AWS Bedrock request with API key (bearer token) authentication.
+///
+/// This is used when an API key is configured instead of IAM credentials.
+/// Uses `Authorization: Bearer <token>` header instead of SigV4 signing.
+pub async fn send_aws_request_with_api_key(
+    http_client: &TensorzeroHttpClient,
+    url: &str,
+    extra_headers: http::HeaderMap,
+    body_bytes: Vec<u8>,
+    api_key: &SecretString,
+    provider_type: &str,
+    raw_request: &str,
+) -> Result<AwsRequestResponse, Error> {
+    // Build headers with content-type, accept, and authorization
+    let mut headers = extra_headers;
+    headers.insert(
+        http::header::CONTENT_TYPE,
+        http::header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        http::header::ACCEPT,
+        http::header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        http::header::AUTHORIZATION,
+        http::header::HeaderValue::from_str(&format!("Bearer {}", api_key.expose_secret()))
+            .map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Invalid API key format: {e}"),
+                })
+            })?,
+    );
+
+    // Send request (no signing needed for bearer auth)
+    let start_time = Instant::now();
+    let response = http_client
+        .post(url)
+        .headers(headers)
+        .body(body_bytes)
+        .send()
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error sending request to AWS Bedrock: {e}"),
+                raw_request: Some(raw_request.to_string()),
+                raw_response: None,
+                provider_type: provider_type.to_string(),
+            })
+        })?;
+
+    let response_time = start_time.elapsed();
+    let status = response.status();
+    let raw_response = response.text().await.map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!("Error reading response from AWS Bedrock: {e}"),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: None,
+            provider_type: provider_type.to_string(),
+        })
+    })?;
+
+    if !status.is_success() {
+        return Err(Error::new(ErrorDetails::InferenceServer {
+            message: format!("AWS Bedrock returned error status {status}: {raw_response}"),
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(raw_response),
             provider_type: provider_type.to_string(),
