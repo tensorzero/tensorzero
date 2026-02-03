@@ -35,7 +35,7 @@ routing = ["aws_bedrock"]
 [models.claude_haiku_4_5.providers.aws_bedrock]
 type = "aws_bedrock"
 model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-# optional: region = "us-east-1"
+region = "us-east-1"
 
 [functions.my_function_name]
 type = "chat"
@@ -75,6 +75,12 @@ See the [Configuration Reference](/gateway/configuration-reference/) for more de
 
 TensorZero will attempt to automatically determine the AWS region using the AWS SDK.
 Alternatively, you can also configure an explicit region in your provider's configuration (e.g. `region = "us-east-1"`).
+
+<Tip>
+
+If you're not deploying in an AWS environment, we recommend configuring a region explicitly.
+
+</Tip>
 
 See the [Configuration Reference](/gateway/configuration-reference/) for more details.
 
