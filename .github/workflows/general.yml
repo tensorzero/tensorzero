@@ -871,36 +871,50 @@ jobs:
         if: always() && matrix.replicated == true
         run: |
           echo "Error logs for ClickHouse 01:"
-          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker cp e2e-clickhouse-01-1:/var/log/clickhouse-server/clickhouse-server.err.log -
           echo "Error logs for ClickHouse 02:"
-          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker cp e2e-clickhouse-02-1:/var/log/clickhouse-server/clickhouse-server.err.log -
           echo "Error logs for ClickHouse 03:"
-          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker cp e2e-clickhouse-03-1:/var/log/clickhouse-server/clickhouse-server.err.log -
 
       - name: Print ClickHouse trace logs (replicated)
         if: always() && matrix.replicated == true
         run: |
           echo "Trace logs for ClickHouse 01:"
-          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker cp e2e-clickhouse-01-1:/var/log/clickhouse-server/clickhouse-server.log -
           echo "Trace logs for ClickHouse 02:"
-          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker cp e2e-clickhouse-02-1:/var/log/clickhouse-server/clickhouse-server.log -
           echo "Trace logs for ClickHouse 03:"
-          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker cp e2e-clickhouse-03-1:/var/log/clickhouse-server/clickhouse-server.log -
 
       - name: Print container health checks (replicated)
         if: always() && matrix.replicated == true
         run: |
           echo "Health check for ClickHouse 01:"
-          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-01) | jq
+          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-01-1 | jq
           echo "Health check for ClickHouse 02:"
-          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-02) | jq
+          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-02-1 | jq
           echo "Health check for ClickHouse 03:"
-          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-03) | jq
+          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-03-1 | jq
 
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
         run: |
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+
+      - name: Print ClickHouse error logs (non-replicated)
+        if: always() && matrix.replicated == false
+        run: docker cp e2e-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.err.log -
+
+      - name: Print ClickHouse trace logs (non-replicated)
+        if: always() && matrix.replicated == false
+        run: docker cp e2e-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.log -
+
+      - name: Print container health checks (non-replicated)
+        if: always() && matrix.replicated == false
+        run: |
+          echo "Health check for ClickHouse:"
+          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-1 | jq || echo "Could not read health check"
 
       - name: Print e2e logs
         if: always()
