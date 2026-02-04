@@ -6,6 +6,6 @@ export type OptimizerOutput =
   | { type: "variant"; content: UninitializedVariantConfig }
   | {
       type: "variants";
-      content: { [key in string]?: UninitializedVariantConfig };
+      content: { [key in string]: UninitializedVariantConfig };
     }
   | { type: "model"; content: UninitializedModelConfig };

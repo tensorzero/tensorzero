@@ -3,6 +3,6 @@ import type { EmbeddingProviderInfo } from "./EmbeddingProviderInfo";
 
 export type EmbeddingModelConfig = {
   routing: Array<string>;
-  providers: { [key in string]?: EmbeddingProviderInfo };
+  providers: { [key in string]: EmbeddingProviderInfo };
   timeout_ms: bigint | null;
 };

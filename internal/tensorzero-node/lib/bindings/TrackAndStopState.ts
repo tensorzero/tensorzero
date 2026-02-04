@@ -11,12 +11,12 @@ export type TrackAndStopState =
   | ({ type: "nursery_only" } & Nursery)
   | {
       type: "bandits_only";
-      sampling_probabilities: { [key in string]?: number };
+      sampling_probabilities: { [key in string]: number };
     }
   | {
       type: "nursery_and_bandits";
       nursery: Nursery;
-      sampling_probabilities: { [key in string]?: number };
+      sampling_probabilities: { [key in string]: number };
     }
   | {
       type: "nursery_and_stopped";
