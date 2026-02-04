@@ -1609,7 +1609,6 @@ def _start_http_gateway(
     valkey_url: Optional[str],
     async_setup: bool,
 ) -> Union[Any, Awaitable[Any]]: ...
-
 @final
 class LocalHttpGateway(object):
     base_url: str

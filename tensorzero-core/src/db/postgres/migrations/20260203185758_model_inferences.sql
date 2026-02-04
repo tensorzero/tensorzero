@@ -31,30 +31,5 @@ CREATE INDEX idx_model_inferences_model_provider ON tensorzero.model_inferences(
 -- Create initial partitions for the next 7 days
 SELECT tensorzero.create_partitions('model_inferences');
 
--- Schedule pg_cron jobs for partition management (if pg_cron is available)
-DO $cron_setup$
-BEGIN
-    -- Check if pg_cron extension is available
-    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-        -- Create future partitions daily at 00:05 UTC
-        PERFORM cron.schedule(
-            'tensorzero_create_model_inferences_partitions',
-            '5 0 * * *',
-            $$SELECT tensorzero.create_partitions('model_inferences');$$
-        );
-
-        -- Drop old partitions daily at 00:30 UTC (only acts if retention is configured)
-        PERFORM cron.schedule(
-            'tensorzero_drop_old_model_inferences_partitions',
-            '30 0 * * *',
-            $$SELECT tensorzero.drop_old_partitions('model_inferences', 'inference_retention_days');$$
-        );
-
-        RAISE NOTICE 'pg_cron jobs scheduled for model_inferences partition management';
-    ELSE
-        RAISE NOTICE 'pg_cron extension not available - partition management must be scheduled externally';
-    END IF;
-END $cron_setup$;
-
 -- Default partition for backfilling historical data
 CREATE TABLE tensorzero.model_inferences_default PARTITION OF tensorzero.model_inferences DEFAULT;
