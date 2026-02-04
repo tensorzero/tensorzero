@@ -9,4 +9,10 @@ export type TopKEvaluationVisualization = {
    * Map of variant names to their summary statistics.
    */
   variant_summaries: { [key in string]?: VariantSummary };
+  /**
+   * Sizes k where we can confidently identify a top-k set.
+   * For example, [2, 5] means there's statistical separation after the 2nd
+   * and 5th ranked variants (sorted by lower confidence bound descending).
+   */
+  confident_top_k_sizes: Array<number>;
 };

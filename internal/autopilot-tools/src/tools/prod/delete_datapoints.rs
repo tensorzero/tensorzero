@@ -58,7 +58,8 @@ impl ToolMetadata for DeleteDatapointsTool {
                     "description": "The IDs of the datapoints to delete."
                 }
             },
-            "required": ["dataset_name", "ids"]
+            "required": ["dataset_name", "ids"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
