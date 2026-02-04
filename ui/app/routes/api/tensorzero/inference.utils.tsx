@@ -430,6 +430,21 @@ export type VariantResponseInfo =
     };
 
 /**
+ * Extracts the demonstration value from inference output.
+ * For JSON inferences, returns the parsed output.
+ * For chat inferences, returns the raw output array.
+ */
+export function extractDemonstrationValue(
+  output: ContentBlockChatOutput[] | JsonInferenceOutput,
+) {
+  // JSON output has 'parsed' property, chat output is an array
+  if ("parsed" in output) {
+    return output.parsed;
+  }
+  return output;
+}
+
+/**
  * Prepares demonstration feedback value from variant output.
  * Returns the parsed output for JSON inferences, or the raw output for chat inferences.
  */
@@ -440,12 +455,7 @@ export function prepareDemonstrationFromVariantOutput(
   if (output === undefined) {
     return undefined;
   }
-  // Check if output has 'parsed' property (JSON output)
-  if ("parsed" in output) {
-    return output.parsed;
-  } else {
-    return output;
-  }
+  return extractDemonstrationValue(output);
 }
 
 function convertTemplate(

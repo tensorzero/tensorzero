@@ -18,8 +18,8 @@ interface TryWithVariantActionProps {
   inference: StoredInference;
   options: string[];
   isDefault: boolean;
-  resolvedInput: Input | null;
-  inferenceUsage: InferenceUsage | null;
+  input: Input;
+  inferenceUsage: InferenceUsage;
   onFeedbackAdded: (redirectUrl?: string) => void;
 }
 
@@ -27,7 +27,7 @@ export function TryWithVariantAction({
   inference,
   options,
   isDefault,
-  resolvedInput,
+  input,
   inferenceUsage,
   onFeedbackAdded,
 }: TryWithVariantActionProps) {
@@ -123,25 +123,23 @@ export function TryWithVariantAction({
 
   const handleSelect = useCallback(
     (option: string) => {
-      if (!resolvedInput) return;
-
       const args = isDefault
         ? {
             resource: inference,
-            input: resolvedInput,
+            input,
             source: "inference" as const,
             model_name: option,
           }
         : {
             resource: inference,
-            input: resolvedInput,
+            input,
             source: "inference" as const,
             variant: option,
           };
 
       processRequest(option, args);
     },
-    [inference, resolvedInput, isDefault, processRequest],
+    [inference, input, isDefault, processRequest],
   );
 
   const handleRefresh = useCallback(() => {
@@ -176,7 +174,6 @@ export function TryWithVariantAction({
         onSelect={handleSelect}
         isLoading={isLoading}
         isDefaultFunction={isDefault}
-        disabled={!resolvedInput}
       />
 
       {selectedVariant && (
@@ -188,7 +185,7 @@ export function TryWithVariantAction({
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
           onClose={handleClose}
           item={inference}
-          inferenceUsage={inferenceUsage ?? undefined}
+          inferenceUsage={inferenceUsage}
           selectedVariant={selectedVariant}
           source="inference"
           onRefresh={lastRequestArgs ? handleRefresh : null}

@@ -1,16 +1,19 @@
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { Await } from "react-router";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
-import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import {
+  getTotalInferenceUsage,
+  type InferenceUsage,
+} from "~/utils/clickhouse/helpers";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
+import { TryWithSelect } from "~/components/inference/TryWithSelect";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
-import { useResolvedPromise } from "~/hooks/use-resolved-promise";
 import type {
   ActionBarData,
   ModelInferencesData,
@@ -85,24 +88,55 @@ function InferenceActionBarContent({
   const models = [...modelsSet].sort();
   const options = isDefault ? models : variants;
 
-  // Resolve promises for TryWithVariant (without suspending)
-  const resolvedInput = useResolvedPromise(inputPromise);
-  const resolvedModelInferences = useResolvedPromise(modelInferencesPromise);
-
-  const inferenceUsage = resolvedModelInferences
-    ? getTotalInferenceUsage(resolvedModelInferences)
-    : null;
+  // Combine promises for TryWithVariant - resolves when both input and model inferences are ready
+  const tryWithVariantDataPromise = useMemo(
+    () =>
+      Promise.all([inputPromise, modelInferencesPromise]).then(
+        ([input, modelInferences]) => ({
+          input,
+          inferenceUsage: getTotalInferenceUsage(modelInferences),
+        }),
+      ),
+    [inputPromise, modelInferencesPromise],
+  );
 
   return (
     <ActionBar>
-      <TryWithVariantAction
-        inference={inference}
-        options={options}
-        isDefault={isDefault}
-        resolvedInput={resolvedInput}
-        inferenceUsage={inferenceUsage}
-        onFeedbackAdded={onFeedbackAdded}
-      />
+      <Suspense
+        fallback={
+          <TryWithSelect
+            options={options}
+            onSelect={() => {}}
+            isLoading={false}
+            isDefaultFunction={isDefault}
+            disabled
+          />
+        }
+      >
+        <Await
+          resolve={tryWithVariantDataPromise}
+          errorElement={
+            <TryWithSelect
+              options={options}
+              onSelect={() => {}}
+              isLoading={false}
+              isDefaultFunction={isDefault}
+              disabled
+            />
+          }
+        >
+          {(data: { input: Input; inferenceUsage: InferenceUsage }) => (
+            <TryWithVariantAction
+              inference={inference}
+              options={options}
+              isDefault={isDefault}
+              input={data.input}
+              inferenceUsage={data.inferenceUsage}
+              onFeedbackAdded={onFeedbackAdded}
+            />
+          )}
+        </Await>
+      </Suspense>
       <AddToDatasetButton
         inferenceId={inference.inference_id}
         functionName={inference.function_name}
