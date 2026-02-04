@@ -5,6 +5,7 @@ import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import { Skeleton } from "~/components/ui/skeleton";
+import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
@@ -47,6 +48,7 @@ export function InferenceActionBar({
         actionBarDataPromise={actionBarDataPromise}
       />
       <HumanFeedbackAction
+        key={`human-${locationKey}`}
         inference={inference}
         onFeedbackAdded={onFeedbackAdded}
       />
@@ -90,10 +92,7 @@ function TryWithVariantActionStreaming({
 
   return (
     <Suspense fallback={<Skeleton className="h-8 w-36" />}>
-      <Await
-        resolve={dataPromise}
-        errorElement={<Skeleton className="h-8 w-36" />}
-      >
+      <Await resolve={dataPromise} errorElement={<ActionBarAsyncError />}>
         {(data) => {
           const modelsSet = new Set([
             ...data.usedVariants,
@@ -131,7 +130,7 @@ function AddToDatasetButtonStreaming({
     <Suspense fallback={<Skeleton className="h-8 w-36" />}>
       <Await
         resolve={actionBarDataPromise}
-        errorElement={<Skeleton className="h-8 w-36" />}
+        errorElement={<ActionBarAsyncError />}
       >
         {(actionBarData) => (
           <AddToDatasetButton
