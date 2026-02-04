@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::ClickHouseConnectionInfo;
+use super::table_name::TableName;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::StoredModelInference;
@@ -66,6 +67,27 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(rows)
+    }
+
+    async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+
+        // Serialize each row to JSON for ClickHouse
+        let serialized: Vec<serde_json::Value> = rows
+            .iter()
+            .map(|row| {
+                serde_json::to_value(row).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to serialize StoredModelInference: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        self.write_batched(&serialized, TableName::ModelInference)
+            .await
     }
 }
 

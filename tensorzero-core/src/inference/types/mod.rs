@@ -1219,9 +1219,10 @@ impl ModelInput {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
 pub enum FinishReason {
     Stop,
     StopSequence,
@@ -1811,10 +1812,12 @@ impl InferenceResult {
         }
     }
 
-    pub async fn get_serialized_model_inferences(
+    /// Get the model inferences as `StoredModelInference` structs ready for database insertion.
+    /// Any errors during construction are logged and the result is skipped.
+    pub async fn get_model_inferences(
         &self,
         snapshot_hash: SnapshotHash,
-    ) -> Vec<serde_json::Value> {
+    ) -> Vec<StoredModelInference> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
@@ -1823,31 +1826,22 @@ impl InferenceResult {
         join_all(model_inference_responses.iter().map(|r| {
             let snapshot_hash = snapshot_hash.clone();
             async move {
-                let model_inference =
-                    StoredModelInference::new(r.clone(), inference_id, snapshot_hash).await;
-                let model_inference = match model_inference {
-                    Ok(model_inference) => model_inference,
+                match StoredModelInference::new(r.clone(), inference_id, snapshot_hash).await {
+                    Ok(model_inference) => Some(model_inference),
                     Err(e) => {
                         ErrorDetails::Serialization {
                             message: format!("Failed to construct StoredModelInference: {e:?}"),
                         }
                         .log();
-                        return Default::default();
-                    }
-                };
-                match serde_json::to_value(model_inference) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        ErrorDetails::Serialization {
-                            message: format!("Failed to serialize StoredModelInference: {e:?}"),
-                        }
-                        .log();
-                        Default::default()
+                        None
                     }
                 }
             }
         }))
         .await
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
     /// Aggregates the usage of all model inference results, considering cached results.
