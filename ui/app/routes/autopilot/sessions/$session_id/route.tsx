@@ -449,6 +449,8 @@ function AutopilotSessionEventsPageContent({
 
   // Manual authorization hook - handles deduplication of authorization requests
   const manualAuthorization = useManualAuthorization(sessionId);
+  // Extract reset separately - it's stable (no deps) so won't cause extra effect triggers
+  const resetManualAuthorization = manualAuthorization.reset;
 
   // Reset loading/error state when navigating to a different session
   // Note: key={sessionId} on Suspense remounts EventStreamContent, which will call onLoaded
@@ -461,9 +463,9 @@ function AutopilotSessionEventsPageContent({
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
-    manualAuthorization.reset();
+    resetManualAuthorization();
     // Note: useAutoApproval handles its own cleanup on session change via internal effect
-  }, [sessionId, isNewSession, manualAuthorization]);
+  }, [sessionId, isNewSession, resetManualAuthorization]);
 
   useEffect(() => {
     const currentTopId = oldestPendingToolCall?.id ?? null;
