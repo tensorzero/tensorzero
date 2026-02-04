@@ -113,7 +113,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.postgres
-    image: tensorzero/postgres-pg_cron:14-trixie-slim
+    image: tensorzero/postgres-dev:14-trixie-slim
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
       POSTGRES_USER: postgres
