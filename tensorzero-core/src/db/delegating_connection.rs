@@ -25,8 +25,10 @@ use crate::db::feedback::{
     VariantPerformanceRow,
 };
 use crate::db::inferences::{
-    CountInferencesParams, FunctionInfo, InferenceMetadata, InferenceQueries,
-    ListInferenceMetadataParams, ListInferencesParams,
+    CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
+    CountInferencesWithFeedbackParams, FunctionInferenceCount, FunctionInfo,
+    GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceQueries,
+    ListInferenceMetadataParams, ListInferencesParams, VariantThroughput,
 };
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::stored_datapoint::StoredDatapoint;
@@ -368,6 +370,43 @@ impl InferenceQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+
+    // ===== Inference count methods (merged from InferenceCountQueries trait) =====
+
+    async fn count_inferences_by_variant(
+        &self,
+        params: CountInferencesForFunctionParams<'_>,
+    ) -> Result<Vec<CountByVariant>, Error> {
+        self.get_read_database()
+            .count_inferences_by_variant(params)
+            .await
+    }
+
+    async fn count_inferences_with_feedback(
+        &self,
+        params: CountInferencesWithFeedbackParams<'_>,
+    ) -> Result<u64, Error> {
+        self.get_read_database()
+            .count_inferences_with_feedback(params)
+            .await
+    }
+
+    async fn get_function_throughput_by_variant(
+        &self,
+        params: GetFunctionThroughputByVariantParams<'_>,
+    ) -> Result<Vec<VariantThroughput>, Error> {
+        self.get_read_database()
+            .get_function_throughput_by_variant(params)
+            .await
+    }
+
+    async fn list_functions_with_inference_count(
+        &self,
+    ) -> Result<Vec<FunctionInferenceCount>, Error> {
+        self.get_read_database()
+            .list_functions_with_inference_count()
+            .await
     }
 }
 

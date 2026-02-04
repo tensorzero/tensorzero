@@ -21,7 +21,7 @@ export type UninitializedModelProvider = {
       model_name: string;
       api_base: string | null;
       api_key_location: string | null;
-      beta_structured_outputs: boolean;
+      beta_structured_outputs?: boolean;
       provider_tools: Array<JsonValue>;
     }
   | {

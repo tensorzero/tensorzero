@@ -19,7 +19,6 @@ pub mod datasets;
 pub mod delegating_connection;
 pub mod evaluation_queries;
 pub mod feedback;
-pub mod inference_count;
 pub mod inferences;
 pub mod model_inferences;
 pub mod postgres;

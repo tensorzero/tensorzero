@@ -23,4 +23,3 @@ routing = ["anthropic"]
 [models.claude_structured_outputs.providers.anthropic]
 type = "anthropic"
 model_name = "claude-sonnet-4-5"
-beta_structured_outputs = true

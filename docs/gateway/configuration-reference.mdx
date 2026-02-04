@@ -657,24 +657,6 @@ api_base = "https://example.com/v1/messages"
 # ...
 ```
 
-##### `beta_structured_outputs`
-
-- **Type:** boolean
-- **Required:** no (default: `false`)
-
-Enables strict validation for tool parameters when using tools with `strict = true`.
-
-When enabled:
-
-- Adds the `anthropic-beta: structured-outputs-2025-11-13` header to requests
-- For tools with `strict = true`, forwards the `strict` parameter to enable strict validation
-
-<Note>
-
-For JSON functions with `json_mode = "strict"`, TensorZero automatically uses Anthropic's structured outputs feature without this setting. This setting is only needed for strict tool parameter validation.
-
-</Note>
-
 </Accordion>
 
 <Accordion title='type: "aws_bedrock"'>

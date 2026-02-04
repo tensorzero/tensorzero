@@ -35,6 +35,7 @@ async fn create_batch_request(
         raw_response: "{}",
         status: BatchStatus::Completed,
         errors: vec![],
+        snapshot_hash: None,
     });
     write_batch_request_row(clickhouse, &batch_request)
         .await
