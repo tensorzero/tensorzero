@@ -44,79 +44,73 @@ export const handle: RouteHandle = {
   ],
 };
 
-type MetricsData = {
-  metricsWithFeedback: Awaited<
-    ReturnType<
-      ReturnType<typeof getTensorZeroClient>["getFunctionMetricsWithFeedback"]
-    >
-  >;
-  variant_performances:
-    | Awaited<
-        ReturnType<
-          ReturnType<typeof getTensorZeroClient>["getVariantPerformances"]
-        >
-      >["performances"]
-    | undefined;
-};
+// Type definitions for granular data fetching
+type MetricsWithFeedbackData = Awaited<
+  ReturnType<
+    ReturnType<typeof getTensorZeroClient>["getFunctionMetricsWithFeedback"]
+  >
+>;
 
-type InferencesData = {
+type VariantPerformanceData =
+  | Awaited<
+      ReturnType<
+        ReturnType<typeof getTensorZeroClient>["getVariantPerformances"]
+      >
+    >["performances"]
+  | undefined;
+
+type InferencesTableData = {
   inferences: Awaited<
     ReturnType<ReturnType<typeof getTensorZeroClient>["listInferenceMetadata"]>
   >["inference_metadata"];
-  num_inferences: number;
   hasNextInferencePage: boolean;
   hasPreviousInferencePage: boolean;
 };
 
-async function fetchMetricsData(
+// Granular data fetching functions
+async function fetchMetricsWithFeedback(
+  function_name: string,
+  variant_name: string,
+): Promise<MetricsWithFeedbackData> {
+  const client = getTensorZeroClient();
+  return client.getFunctionMetricsWithFeedback(function_name, variant_name);
+}
+
+async function fetchVariantPerformance(
   function_name: string,
   variant_name: string,
   metric_name: string | undefined,
   time_granularity: string,
   config: Awaited<ReturnType<typeof getConfig>>,
-): Promise<MetricsData> {
+): Promise<VariantPerformanceData> {
+  if (!metric_name || !config.metrics[metric_name]) {
+    return undefined;
+  }
   const client = getTensorZeroClient();
-
-  const [metricsWithFeedback, variant_performances] = await Promise.all([
-    client.getFunctionMetricsWithFeedback(function_name, variant_name),
-    metric_name && config.metrics[metric_name]
-      ? client
-          .getVariantPerformances(
-            function_name,
-            metric_name,
-            time_granularity as TimeWindow,
-            variant_name,
-          )
-          .then((response) =>
-            response.performances.length > 0
-              ? response.performances
-              : undefined,
-          )
-      : Promise.resolve(undefined),
-  ]);
-
-  return { metricsWithFeedback, variant_performances };
+  const response = await client.getVariantPerformances(
+    function_name,
+    metric_name,
+    time_granularity as TimeWindow,
+    variant_name,
+  );
+  return response.performances.length > 0 ? response.performances : undefined;
 }
 
-async function fetchInferencesData(
+async function fetchInferencesTable(
   function_name: string,
   variant_name: string,
   limit: number,
   beforeInference: string | null,
   afterInference: string | null,
-): Promise<InferencesData> {
+): Promise<InferencesTableData> {
   const client = getTensorZeroClient();
-
-  const [inferenceResult, num_inferences] = await Promise.all([
-    client.listInferenceMetadata({
-      function_name,
-      variant_name,
-      limit: limit + 1, // Fetch one extra to determine pagination
-      before: beforeInference || undefined,
-      after: afterInference || undefined,
-    }),
-    countInferencesForVariant(function_name, variant_name),
-  ]);
+  const inferenceResult = await client.listInferenceMetadata({
+    function_name,
+    variant_name,
+    limit: limit + 1, // Fetch one extra to determine pagination
+    before: beforeInference || undefined,
+    after: afterInference || undefined,
+  });
 
   const {
     items: inferences,
@@ -129,10 +123,16 @@ async function fetchInferencesData(
 
   return {
     inferences,
-    num_inferences,
     hasNextInferencePage,
     hasPreviousInferencePage,
   };
+}
+
+async function fetchInferenceCount(
+  function_name: string,
+  variant_name: string,
+): Promise<number> {
+  return countInferencesForVariant(function_name, variant_name);
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -158,36 +158,49 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
 
+  // Return granular promises for independent streaming
   return {
     function_name,
     variant_name,
-    metricsData: fetchMetricsData(
+    // Metrics section - split into selector data and chart data
+    metricsWithFeedbackData: fetchMetricsWithFeedback(
+      function_name,
+      variant_name,
+    ),
+    variantPerformanceData: fetchVariantPerformance(
       function_name,
       variant_name,
       metric_name,
       time_granularity,
       config,
     ),
-    inferencesData: fetchInferencesData(
+    // Inferences section - split into table data and count
+    inferencesTableData: fetchInferencesTable(
       function_name,
       variant_name,
       limit,
       beforeInference,
       afterInference,
     ),
+    inferenceCountData: fetchInferenceCount(function_name, variant_name),
   };
 }
 
-function MetricsSkeleton() {
-  return (
-    <>
-      <Skeleton className="mb-4 h-10 w-64" />
-      <Skeleton className="h-64 w-full" />
-    </>
-  );
+// Skeleton components
+function MetricSelectorSkeleton() {
+  return <Skeleton className="h-10 w-64" />;
 }
 
-function MetricsSectionError() {
+function VariantPerformanceSkeleton() {
+  return <Skeleton className="mt-4 h-64 w-full" />;
+}
+
+function InferencesTableSkeleton() {
+  return <Skeleton className="h-64 w-full" />;
+}
+
+// Error components
+function MetricSelectorError() {
   const error = useAsyncError();
   let message = "Failed to load metrics";
   if (isRouteErrorResponse(error)) {
@@ -198,22 +211,30 @@ function MetricsSectionError() {
   return (
     <SectionErrorNotice
       icon={AlertCircle}
-      title="Error loading metrics"
+      title="Error loading metric selector"
       description={message}
     />
   );
 }
 
-function InferencesSkeleton() {
+function VariantPerformanceError() {
+  const error = useAsyncError();
+  let message = "Failed to load performance data";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
   return (
-    <>
-      <Skeleton className="mb-2 h-6 w-32" />
-      <Skeleton className="h-64 w-full" />
-    </>
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading performance chart"
+      description={message}
+    />
   );
 }
 
-function InferencesSectionError() {
+function InferencesTableError() {
   const error = useAsyncError();
   let message = "Failed to load inferences";
   if (isRouteErrorResponse(error)) {
@@ -230,55 +251,55 @@ function InferencesSectionError() {
   );
 }
 
-function MetricsContent({ data }: { data: MetricsData }) {
-  const { metricsWithFeedback, variant_performances } = data;
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [metric_name, setMetricName] = useState(
-    () => searchParams.get("metric_name") || "",
-  );
-
-  const handleMetricChange = (metric: string) => {
-    setMetricName(metric);
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("metric_name", metric);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
+// Content components
+function MetricSelectorContent({
+  data,
+  onMetricChange,
+  selectedMetric,
+}: {
+  data: MetricsWithFeedbackData;
+  onMetricChange: (metric: string) => void;
+  selectedMetric: string;
+}) {
   const metricsExcludingDemonstrations = useMemo(
     () => ({
-      metrics: metricsWithFeedback.metrics.filter(
+      metrics: data.metrics.filter(
         ({ metric_type }) => metric_type !== "demonstration",
       ),
     }),
-    [metricsWithFeedback],
+    [data],
   );
 
   return (
-    <>
-      <MetricSelector
-        metricsWithFeedback={metricsExcludingDemonstrations}
-        selectedMetric={metric_name || ""}
-        onMetricChange={handleMetricChange}
-      />
-      {variant_performances && (
-        <VariantPerformance
-          variant_performances={variant_performances}
-          metric_name={metric_name}
-          singleVariantMode
-        />
-      )}
-    </>
+    <MetricSelector
+      metricsWithFeedback={metricsExcludingDemonstrations}
+      selectedMetric={selectedMetric}
+      onMetricChange={onMetricChange}
+    />
   );
 }
 
-function InferencesContent({ data }: { data: InferencesData }) {
-  const {
-    inferences,
-    num_inferences,
-    hasNextInferencePage,
-    hasPreviousInferencePage,
-  } = data;
+function VariantPerformanceContent({
+  data,
+  metric_name,
+}: {
+  data: VariantPerformanceData;
+  metric_name: string;
+}) {
+  if (!data) {
+    return null;
+  }
+  return (
+    <VariantPerformance
+      variant_performances={data}
+      metric_name={metric_name}
+      singleVariantMode
+    />
+  );
+}
+
+function InferencesTableContent({ data }: { data: InferencesTableData }) {
+  const { inferences, hasNextInferencePage, hasPreviousInferencePage } = data;
   const navigate = useNavigate();
 
   const topInference = inferences.length > 0 ? inferences[0] : null;
@@ -301,31 +322,123 @@ function InferencesContent({ data }: { data: InferencesData }) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  if (inferences.length === 0) {
+    return (
+      <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+        No inferences found
+      </div>
+    );
+  }
+
   return (
     <>
-      <SectionHeader heading="Inferences" count={num_inferences} />
-      {inferences.length > 0 ? (
-        <>
-          <VariantInferenceTable inferences={inferences} />
-          <PageButtons
-            onPreviousPage={handlePreviousInferencePage}
-            onNextPage={handleNextInferencePage}
-            disablePrevious={!hasPreviousInferencePage}
-            disableNext={!hasNextInferencePage}
-          />
-        </>
-      ) : (
-        <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
-          No inferences found
-        </div>
-      )}
+      <VariantInferenceTable inferences={inferences} />
+      <PageButtons
+        onPreviousPage={handlePreviousInferencePage}
+        onNextPage={handleNextInferencePage}
+        disablePrevious={!hasPreviousInferencePage}
+        disableNext={!hasNextInferencePage}
+      />
     </>
   );
 }
 
+// Section components with Suspense boundaries
+function MetricsSection({
+  metricsWithFeedbackData,
+  variantPerformanceData,
+  locationKey,
+}: {
+  metricsWithFeedbackData: Promise<MetricsWithFeedbackData>;
+  variantPerformanceData: Promise<VariantPerformanceData>;
+  locationKey: string | undefined;
+}) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [metric_name, setMetricName] = useState(
+    () => searchParams.get("metric_name") || "",
+  );
+
+  const handleMetricChange = (metric: string) => {
+    setMetricName(metric);
+    const newSearchParams = new URLSearchParams(window.location.search);
+    newSearchParams.set("metric_name", metric);
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  return (
+    <SectionLayout>
+      <SectionHeader heading="Metrics" />
+      <Suspense
+        key={`metric-selector-${locationKey}`}
+        fallback={<MetricSelectorSkeleton />}
+      >
+        <Await
+          resolve={metricsWithFeedbackData}
+          errorElement={<MetricSelectorError />}
+        >
+          {(data) => (
+            <MetricSelectorContent
+              data={data}
+              onMetricChange={handleMetricChange}
+              selectedMetric={metric_name}
+            />
+          )}
+        </Await>
+      </Suspense>
+      <Suspense
+        key={`variant-performance-${locationKey}`}
+        fallback={<VariantPerformanceSkeleton />}
+      >
+        <Await
+          resolve={variantPerformanceData}
+          errorElement={<VariantPerformanceError />}
+        >
+          {(data) => (
+            <VariantPerformanceContent data={data} metric_name={metric_name} />
+          )}
+        </Await>
+      </Suspense>
+    </SectionLayout>
+  );
+}
+
+function InferencesSection({
+  inferencesTableData,
+  inferenceCountData,
+  locationKey,
+}: {
+  inferencesTableData: Promise<InferencesTableData>;
+  inferenceCountData: Promise<number>;
+  locationKey: string | undefined;
+}) {
+  return (
+    <SectionLayout>
+      <SectionHeader heading="Inferences" count={inferenceCountData} />
+      <Suspense
+        key={`inferences-table-${locationKey}`}
+        fallback={<InferencesTableSkeleton />}
+      >
+        <Await
+          resolve={inferencesTableData}
+          errorElement={<InferencesTableError />}
+        >
+          {(data) => <InferencesTableContent data={data} />}
+        </Await>
+      </Suspense>
+    </SectionLayout>
+  );
+}
+
 export default function VariantDetails({ loaderData }: Route.ComponentProps) {
-  const { function_name, variant_name, metricsData, inferencesData } =
-    loaderData;
+  const {
+    function_name,
+    variant_name,
+    metricsWithFeedbackData,
+    variantPerformanceData,
+    inferencesTableData,
+    inferenceCountData,
+  } = loaderData;
   const location = useLocation();
   const function_config = useFunctionConfig(function_name);
 
@@ -405,36 +518,22 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
           />
         </SectionLayout>
 
-        <SectionLayout>
-          <SectionHeader heading="Metrics" />
-          <Suspense
-            key={`metrics-${location.key}`}
-            fallback={<MetricsSkeleton />}
-          >
-            <Await resolve={metricsData} errorElement={<MetricsSectionError />}>
-              {(data) => <MetricsContent data={data} />}
-            </Await>
-          </Suspense>
-        </SectionLayout>
+        <MetricsSection
+          metricsWithFeedbackData={metricsWithFeedbackData}
+          variantPerformanceData={variantPerformanceData}
+          locationKey={location.key}
+        />
 
         <SectionLayout>
           <SectionHeader heading="Templates" />
           <VariantTemplate variantConfig={variant_info.inner} />
         </SectionLayout>
 
-        <SectionLayout>
-          <Suspense
-            key={`inferences-${location.key}`}
-            fallback={<InferencesSkeleton />}
-          >
-            <Await
-              resolve={inferencesData}
-              errorElement={<InferencesSectionError />}
-            >
-              {(data) => <InferencesContent data={data} />}
-            </Await>
-          </Suspense>
-        </SectionLayout>
+        <InferencesSection
+          inferencesTableData={inferencesTableData}
+          inferenceCountData={inferenceCountData}
+          locationKey={location.key}
+        />
       </SectionsGroup>
     </PageLayout>
   );
