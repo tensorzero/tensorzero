@@ -81,7 +81,8 @@ impl ToolMetadata for ListDatapointsTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "key", "value", "comparison_operator"]
+                            "required": ["type", "key", "value", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -95,7 +96,8 @@ impl ToolMetadata for ListDatapointsTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "time", "comparison_operator"]
+                            "required": ["type", "time", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -104,7 +106,8 @@ impl ToolMetadata for ListDatapointsTool {
                                 "type": { "const": "and" },
                                 "children": { "type": "array", "description": "Array of filters to AND together.", "items": { "type": "object" } }
                             },
-                            "required": ["type", "children"]
+                            "required": ["type", "children"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -113,7 +116,8 @@ impl ToolMetadata for ListDatapointsTool {
                                 "type": { "const": "or" },
                                 "children": { "type": "array", "description": "Array of filters to OR together.", "items": { "type": "object" } }
                             },
-                            "required": ["type", "children"]
+                            "required": ["type", "children"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -122,7 +126,8 @@ impl ToolMetadata for ListDatapointsTool {
                                 "type": { "const": "not" },
                                 "child": { "type": "object", "description": "Filter to negate." }
                             },
-                            "required": ["type", "child"]
+                            "required": ["type", "child"],
+                            "additionalProperties": false
                         }
                     ]
                 },
@@ -144,7 +149,8 @@ impl ToolMetadata for ListDatapointsTool {
                                 "description": "The ordering direction."
                             }
                         },
-                        "required": ["by", "direction"]
+                        "required": ["by", "direction"],
+                        "additionalProperties": false
                     }
                 },
                 "search_query_experimental": {

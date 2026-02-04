@@ -103,11 +103,13 @@ impl ToolMetadata for InferenceTool {
                                         ]
                                     }
                                 },
-                                "required": ["role", "content"]
+                                "required": ["role", "content"],
+                                "additionalProperties": false
                             }
                         }
                     },
-                    "required": ["messages"]
+                    "required": ["messages"],
+                    "additionalProperties": false
                 },
                 "params": {
                     "type": "object",
@@ -119,9 +121,11 @@ impl ToolMetadata for InferenceTool {
                                 "temperature": { "type": "number", "description": "Sampling temperature (0.0-2.0)" },
                                 "max_tokens": { "type": "integer", "description": "Maximum tokens to generate" },
                                 "seed": { "type": "integer", "description": "Random seed for reproducibility" }
-                            }
+                            },
+                            "additionalProperties": false
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 },
                 "variant_name": {
                     "type": "string",

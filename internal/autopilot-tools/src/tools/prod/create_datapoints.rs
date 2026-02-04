@@ -87,7 +87,8 @@ impl ToolMetadata for CreateDatapointsTool {
                                 "description": "Optional tags for the datapoint."
                             }
                         },
-                        "required": ["type", "function_name", "input"]
+                        "required": ["type", "function_name", "input"],
+                        "additionalProperties": false
                     }
                 }
             },

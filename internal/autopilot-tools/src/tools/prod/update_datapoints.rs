@@ -88,7 +88,8 @@ impl ToolMetadata for UpdateDatapointsTool {
                                 "description": "New tags (optional)."
                             }
                         },
-                        "required": ["type", "id"]
+                        "required": ["type", "id"],
+                        "additionalProperties": false
                     }
                 }
             },

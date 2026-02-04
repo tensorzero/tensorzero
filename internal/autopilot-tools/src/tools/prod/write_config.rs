@@ -114,7 +114,8 @@ impl ToolMetadata for WriteConfigTool {
                                         "type": "object",
                                         "description": "Map of variant names to variant configurations."
                                     }
-                                }
+                                },
+                                "additionalProperties": false
                             }
                         },
                         "metrics": {
@@ -138,7 +139,8 @@ impl ToolMetadata for WriteConfigTool {
                                         "enum": ["inference", "episode"],
                                         "description": "Whether metric applies to individual inferences or episodes."
                                     }
-                                }
+                                },
+                                "additionalProperties": false
                             }
                         },
                         "tools": {

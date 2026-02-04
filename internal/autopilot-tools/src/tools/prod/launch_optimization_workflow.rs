@@ -155,7 +155,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Suffix for the fine-tuned model name in OpenAI."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -207,7 +208,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Whether to deploy the model after training."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -243,7 +245,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Display name for the tuned model."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -279,7 +282,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Suffix for the fine-tuned model name."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -327,7 +331,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Whether to append to existing variants. Default: false."
                                 }
                             },
-                            "required": ["type", "embedding_model", "variant_name", "function_name"]
+                            "required": ["type", "embedding_model", "variant_name", "function_name"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -388,7 +393,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Max tokens for analysis/mutation model calls."
                                 }
                             },
-                            "required": ["type", "function_name", "evaluation_name", "analysis_model", "mutation_model"]
+                            "required": ["type", "function_name", "evaluation_name", "analysis_model", "mutation_model"],
+                            "additionalProperties": false
                         }
                     ]
                 }
