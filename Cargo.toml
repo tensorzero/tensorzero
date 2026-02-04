@@ -57,7 +57,7 @@ pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.55", features = ["derive"] }
+clap = { version = "4.5.57", features = ["derive"] }
 futures = "0.3.30"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
@@ -102,19 +102,19 @@ sqlx = { version = "0.9.0-alpha.1", features = [
     "uuid",
     "sqlx-toml",
 ] }
-rlt = "0.4.1"
+rlt = "0.5.0"
 metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
-schemars = "1.1.0"
+schemars = "1.2.1"
 blake3 = "1.8.3"
 moka = { version = "0.12.13", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "5e0e7863a725f656ddd6b1ff3ea5b00594c203db" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
-regex = "1.12.2"
-redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager", "tls-rustls", "tokio-rustls-comp"] }
+regex = "1.12.3"
+redis = { version = "1.0.3", features = ["tokio-comp", "connection-manager", "tls-rustls", "tokio-rustls-comp"] }
 redis-test = { version = "1.0.1", features = ["aio"] }
 
 [workspace.lints.rust]
