@@ -870,6 +870,8 @@ async fn test_search_query_with_other_filters() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_order_by_search_relevance() {
+    // TODO(#5691): Support search relevance ordering in Postgres
+    skip_for_postgres!();
     // Test ordering by term frequency in descending order
     let request = json!({
         "function_name": "answer_question",

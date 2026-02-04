@@ -1,65 +1,60 @@
-//! E2E tests for batch inference ClickHouse queries.
+//! E2E tests for batch inference queries (ClickHouse and Postgres).
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde_json::json;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::batch_inference::BatchInferenceQueries;
-use tensorzero_core::db::clickhouse::TableName;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::endpoints::batch_inference::write_batch_request_row;
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::inference::InferenceParams;
 use tensorzero_core::inference::types::StoredInput;
 use tensorzero_core::inference::types::batch::{
-    BatchModelInferenceRow, BatchRequestRow, BatchStatus, UnparsedBatchRequestRow,
+    BatchModelInferenceRow, BatchRequestRow, BatchStatus,
 };
-use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
-/// Helper function to create and write a batch request row
-async fn create_batch_request(
-    clickhouse: &tensorzero_core::db::clickhouse::ClickHouseConnectionInfo,
+/// Helper function to create a batch request row
+fn create_batch_request_row(
     batch_id: Uuid,
     function_name: &str,
     variant_name: &str,
-) {
-    let batch_params = json!({"test": "params"});
-    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+) -> BatchRequestRow<'static> {
+    let id = Uuid::now_v7();
+    BatchRequestRow {
         batch_id,
-        batch_params: &batch_params,
-        function_name,
-        variant_name,
-        model_name: "test_model",
-        model_provider_name: "test_provider",
-        raw_request: "{}",
-        raw_response: "{}",
+        id,
+        batch_params: Cow::Owned(json!({"test": "params"})),
+        model_name: Arc::from("test_model"),
+        model_provider_name: Cow::Borrowed("test_provider"),
         status: BatchStatus::Completed,
+        function_name: Cow::Owned(function_name.to_string()),
+        variant_name: Cow::Owned(variant_name.to_string()),
+        raw_request: Cow::Borrowed("{}"),
+        raw_response: Cow::Borrowed("{}"),
         errors: vec![],
         snapshot_hash: None,
-    });
-    write_batch_request_row(clickhouse, &batch_request)
-        .await
-        .unwrap();
+    }
 }
 
-/// Helper function to create and write a batch model inference row
-async fn create_batch_model_inference(
-    clickhouse: &tensorzero_core::db::clickhouse::ClickHouseConnectionInfo,
+/// Helper function to create a batch model inference row
+fn create_batch_model_inference_row(
     batch_id: Uuid,
     inference_id: Uuid,
     episode_id: Uuid,
     function_name: &str,
     variant_name: &str,
-) {
+) -> BatchModelInferenceRow<'static> {
     let input = StoredInput {
         system: None,
         messages: vec![],
     };
-    let row = BatchModelInferenceRow {
+    BatchModelInferenceRow {
         batch_id,
         inference_id,
-        function_name: function_name.into(),
-        variant_name: variant_name.into(),
+        function_name: Cow::Owned(function_name.to_string()),
+        variant_name: Cow::Owned(variant_name.to_string()),
         episode_id,
         input,
         input_messages: vec![],
@@ -71,24 +66,22 @@ async fn create_batch_model_inference(
         model_name: Cow::Borrowed("test_model"),
         model_provider_name: Cow::Borrowed("test_provider"),
         tags: HashMap::new(),
-    };
-    clickhouse
-        .write_batched(&[row], TableName::BatchModelInference)
-        .await
-        .unwrap();
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    }
 }
 
-#[tokio::test]
-async fn test_get_batch_request_by_batch_id() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_batch_request_by_batch_id(
+    conn: impl BatchInferenceQueries + TestDatabaseHelpers,
+) {
     let batch_id = Uuid::now_v7();
     let function_name = "test_batch_fn";
     let variant_name = "test_batch_var";
 
-    create_batch_request(&clickhouse, batch_id, function_name, variant_name).await;
-    sleep(Duration::from_millis(200)).await;
+    let row = create_batch_request_row(batch_id, function_name, variant_name);
+    conn.write_batch_request(&row).await.unwrap();
+    conn.sleep_for_writes_to_be_visible().await;
 
-    let result = clickhouse.get_batch_request(batch_id, None).await.unwrap();
+    let result = conn.get_batch_request(batch_id, None).await.unwrap();
 
     assert!(
         result.is_some(),
@@ -112,29 +105,33 @@ async fn test_get_batch_request_by_batch_id() {
         "status should be Completed"
     );
 }
+make_db_test!(test_get_batch_request_by_batch_id);
 
-#[tokio::test]
-async fn test_get_batch_request_by_batch_id_and_inference_id() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_batch_request_by_batch_id_and_inference_id(
+    conn: impl BatchInferenceQueries + TestDatabaseHelpers,
+) {
     let batch_id = Uuid::now_v7();
     let inference_id = Uuid::now_v7();
     let episode_id = Uuid::now_v7();
     let function_name = "test_batch_fn_inf";
     let variant_name = "test_batch_var_inf";
 
-    create_batch_request(&clickhouse, batch_id, function_name, variant_name).await;
-    create_batch_model_inference(
-        &clickhouse,
+    let batch_row = create_batch_request_row(batch_id, function_name, variant_name);
+    conn.write_batch_request(&batch_row).await.unwrap();
+
+    let inference_row = create_batch_model_inference_row(
         batch_id,
         inference_id,
         episode_id,
         function_name,
         variant_name,
-    )
-    .await;
-    sleep(Duration::from_millis(200)).await;
+    );
+    conn.write_batch_model_inferences(&[inference_row])
+        .await
+        .unwrap();
+    conn.sleep_for_writes_to_be_visible().await;
 
-    let result = clickhouse
+    let result = conn
         .get_batch_request(batch_id, Some(inference_id))
         .await
         .unwrap();
@@ -151,13 +148,12 @@ async fn test_get_batch_request_by_batch_id_and_inference_id() {
         "function_name should match"
     );
 }
+make_db_test!(test_get_batch_request_by_batch_id_and_inference_id);
 
-#[tokio::test]
-async fn test_get_batch_request_not_found() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_batch_request_not_found(conn: impl BatchInferenceQueries + TestDatabaseHelpers) {
     let nonexistent_batch_id = Uuid::now_v7();
 
-    let result = clickhouse
+    let result = conn
         .get_batch_request(nonexistent_batch_id, None)
         .await
         .unwrap();
@@ -167,20 +163,22 @@ async fn test_get_batch_request_not_found() {
         "Should return None for nonexistent batch_id"
     );
 }
+make_db_test!(test_get_batch_request_not_found);
 
-#[tokio::test]
-async fn test_get_batch_request_wrong_inference_id() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_batch_request_wrong_inference_id(
+    conn: impl BatchInferenceQueries + TestDatabaseHelpers,
+) {
     let batch_id = Uuid::now_v7();
     let wrong_inference_id = Uuid::now_v7();
     let function_name = "test_batch_fn_wrong";
     let variant_name = "test_batch_var_wrong";
 
-    create_batch_request(&clickhouse, batch_id, function_name, variant_name).await;
-    sleep(Duration::from_millis(200)).await;
+    let row = create_batch_request_row(batch_id, function_name, variant_name);
+    conn.write_batch_request(&row).await.unwrap();
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Query with a non-existent inference_id should return None
-    let result = clickhouse
+    let result = conn
         .get_batch_request(batch_id, Some(wrong_inference_id))
         .await
         .unwrap();
@@ -190,10 +188,9 @@ async fn test_get_batch_request_wrong_inference_id() {
         "Should return None when inference_id doesn't belong to the batch"
     );
 }
+make_db_test!(test_get_batch_request_wrong_inference_id);
 
-#[tokio::test]
-async fn test_get_batch_model_inferences() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_batch_model_inferences(conn: impl BatchInferenceQueries + TestDatabaseHelpers) {
     let batch_id = Uuid::now_v7();
     let inference_id_1 = Uuid::now_v7();
     let inference_id_2 = Uuid::now_v7();
@@ -202,28 +199,29 @@ async fn test_get_batch_model_inferences() {
     let function_name = "test_batch_model_fn";
     let variant_name = "test_batch_model_var";
 
-    create_batch_request(&clickhouse, batch_id, function_name, variant_name).await;
-    create_batch_model_inference(
-        &clickhouse,
+    let batch_row = create_batch_request_row(batch_id, function_name, variant_name);
+    conn.write_batch_request(&batch_row).await.unwrap();
+
+    let inference_row_1 = create_batch_model_inference_row(
         batch_id,
         inference_id_1,
         episode_id_1,
         function_name,
         variant_name,
-    )
-    .await;
-    create_batch_model_inference(
-        &clickhouse,
+    );
+    let inference_row_2 = create_batch_model_inference_row(
         batch_id,
         inference_id_2,
         episode_id_2,
         function_name,
         variant_name,
-    )
-    .await;
-    sleep(Duration::from_millis(200)).await;
+    );
+    conn.write_batch_model_inferences(&[inference_row_1, inference_row_2])
+        .await
+        .unwrap();
+    conn.sleep_for_writes_to_be_visible().await;
 
-    let result = clickhouse
+    let result = conn
         .get_batch_model_inferences(batch_id, &[inference_id_1, inference_id_2])
         .await
         .unwrap();
@@ -240,10 +238,11 @@ async fn test_get_batch_model_inferences() {
         "Should contain inference_id_2"
     );
 }
+make_db_test!(test_get_batch_model_inferences);
 
-#[tokio::test]
-async fn test_get_batch_model_inferences_partial() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_batch_model_inferences_partial(
+    conn: impl BatchInferenceQueries + TestDatabaseHelpers,
+) {
     let batch_id = Uuid::now_v7();
     let inference_id_1 = Uuid::now_v7();
     let inference_id_2 = Uuid::now_v7();
@@ -253,29 +252,30 @@ async fn test_get_batch_model_inferences_partial() {
     let function_name = "test_batch_partial_fn";
     let variant_name = "test_batch_partial_var";
 
-    create_batch_request(&clickhouse, batch_id, function_name, variant_name).await;
-    create_batch_model_inference(
-        &clickhouse,
+    let batch_row = create_batch_request_row(batch_id, function_name, variant_name);
+    conn.write_batch_request(&batch_row).await.unwrap();
+
+    let inference_row_1 = create_batch_model_inference_row(
         batch_id,
         inference_id_1,
         episode_id_1,
         function_name,
         variant_name,
-    )
-    .await;
-    create_batch_model_inference(
-        &clickhouse,
+    );
+    let inference_row_2 = create_batch_model_inference_row(
         batch_id,
         inference_id_2,
         episode_id_2,
         function_name,
         variant_name,
-    )
-    .await;
-    sleep(Duration::from_millis(200)).await;
+    );
+    conn.write_batch_model_inferences(&[inference_row_1, inference_row_2])
+        .await
+        .unwrap();
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Query with one valid and one invalid inference_id
-    let result = clickhouse
+    let result = conn
         .get_batch_model_inferences(batch_id, &[inference_id_1, nonexistent_inference_id])
         .await
         .unwrap();
@@ -286,13 +286,14 @@ async fn test_get_batch_model_inferences_partial() {
         "Should return inference_id_1"
     );
 }
+make_db_test!(test_get_batch_model_inferences_partial);
 
-#[tokio::test]
-async fn test_get_batch_model_inferences_empty_ids() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_batch_model_inferences_empty_ids(
+    conn: impl BatchInferenceQueries + TestDatabaseHelpers,
+) {
     let batch_id = Uuid::now_v7();
 
-    let result = clickhouse
+    let result = conn
         .get_batch_model_inferences(batch_id, &[])
         .await
         .unwrap();
@@ -302,10 +303,11 @@ async fn test_get_batch_model_inferences_empty_ids() {
         "Should return empty vec for empty inference_ids"
     );
 }
+make_db_test!(test_get_batch_model_inferences_empty_ids);
 
-#[tokio::test]
-async fn test_get_batch_model_inferences_wrong_batch() {
-    let clickhouse = get_clickhouse().await;
+async fn test_get_batch_model_inferences_wrong_batch(
+    conn: impl BatchInferenceQueries + TestDatabaseHelpers,
+) {
     let batch_id = Uuid::now_v7();
     let wrong_batch_id = Uuid::now_v7();
     let inference_id = Uuid::now_v7();
@@ -313,20 +315,23 @@ async fn test_get_batch_model_inferences_wrong_batch() {
     let function_name = "test_batch_wrong_fn";
     let variant_name = "test_batch_wrong_var";
 
-    create_batch_request(&clickhouse, batch_id, function_name, variant_name).await;
-    create_batch_model_inference(
-        &clickhouse,
+    let batch_row = create_batch_request_row(batch_id, function_name, variant_name);
+    conn.write_batch_request(&batch_row).await.unwrap();
+
+    let inference_row = create_batch_model_inference_row(
         batch_id,
         inference_id,
         episode_id,
         function_name,
         variant_name,
-    )
-    .await;
-    sleep(Duration::from_millis(200)).await;
+    );
+    conn.write_batch_model_inferences(&[inference_row])
+        .await
+        .unwrap();
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Query with wrong batch_id should return empty
-    let result = clickhouse
+    let result = conn
         .get_batch_model_inferences(wrong_batch_id, &[inference_id])
         .await
         .unwrap();
@@ -336,3 +341,4 @@ async fn test_get_batch_model_inferences_wrong_batch() {
         "Should return empty when batch_id doesn't match"
     );
 }
+make_db_test!(test_get_batch_model_inferences_wrong_batch);

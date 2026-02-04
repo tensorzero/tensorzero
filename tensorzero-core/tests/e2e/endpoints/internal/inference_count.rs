@@ -112,7 +112,6 @@ async fn submit_episode_feedback(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_inference_count_chat_function() {
     // create_inference doesn't write to Postgres yet
-    skip_for_postgres!();
     let client = Client::new();
 
     // First get the current count
@@ -147,7 +146,6 @@ async fn test_get_inference_count_chat_function() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_inference_count_json_function() {
     // create_inference doesn't write to Postgres yet
-    skip_for_postgres!();
 
     let client = Client::new();
 

@@ -104,6 +104,5 @@ pub async fn count_inferences_handler(
         app_state.postgres_connection_info.clone(),
     );
     let response = count_inferences(&database, &app_state.config, &request).await?;
-
     Ok(Json(response))
 }

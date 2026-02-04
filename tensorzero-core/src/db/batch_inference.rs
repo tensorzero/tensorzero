@@ -58,4 +58,15 @@ pub trait BatchInferenceQueries {
         variant_name: &str,
         inference_id: Option<Uuid>,
     ) -> Result<Vec<CompletedBatchInferenceRow>, Error>;
+
+    // ===== Write methods =====
+
+    /// Write a batch request row to the database.
+    async fn write_batch_request(&self, row: &BatchRequestRow<'_>) -> Result<(), Error>;
+
+    /// Write batch model inference rows to the database.
+    async fn write_batch_model_inferences(
+        &self,
+        rows: &[BatchModelInferenceRow<'_>],
+    ) -> Result<(), Error>;
 }
