@@ -1,8 +1,18 @@
+//! Locates entities (functions, evaluations) within a set of loaded TOML config files.
+//!
+//! TensorZero configs can be split across multiple TOML files. When modifying an entity,
+//! we need to find the file containing its canonical definition (identified by having a
+//! `type` key), rather than files that merely extend it (e.g., by adding variants).
+
 use std::path::PathBuf;
 
 use toml_edit::DocumentMut;
 
 use crate::error::ConfigWriterError;
+
+// =============================================================================
+// Public Types
+// =============================================================================
 
 /// Represents a loaded config file with its parsed TOML document.
 #[derive(Debug)]
@@ -29,25 +39,9 @@ pub struct EvaluationLocation<'a> {
     pub file: &'a mut LoadedConfigFile,
 }
 
-/// Find the index of a config file containing an entity definition.
-///
-/// Searches for `[{table_name}.{entity_name}]` with a `type` key, which indicates
-/// the canonical definition (not just extensions like variants).
-fn find_entity_index(
-    files: &[LoadedConfigFile],
-    table_name: &str,
-    entity_name: &str,
-) -> Option<usize> {
-    files.iter().enumerate().find_map(|(index, file)| {
-        file.document
-            .get(table_name)
-            .and_then(|t| t.as_table())
-            .and_then(|t| t.get(entity_name))
-            .and_then(|e| e.as_table())
-            .filter(|t| t.contains_key("type"))
-            .map(|_| index)
-    })
-}
+// =============================================================================
+// Public Functions
+// =============================================================================
 
 /// Find the config file that contains the definition of a specific function.
 ///
@@ -116,6 +110,34 @@ pub fn locate_evaluation_required<'a>(
         }),
     }
 }
+
+// =============================================================================
+// Private Helpers
+// =============================================================================
+
+/// Find the index of a config file containing an entity definition.
+///
+/// Searches for `[{table_name}.{entity_name}]` with a `type` key, which indicates
+/// the canonical definition (not just extensions like variants).
+fn find_entity_index(
+    files: &[LoadedConfigFile],
+    table_name: &str,
+    entity_name: &str,
+) -> Option<usize> {
+    files.iter().enumerate().find_map(|(index, file)| {
+        file.document
+            .get(table_name)
+            .and_then(|t| t.as_table())
+            .and_then(|t| t.get(entity_name))
+            .and_then(|e| e.as_table())
+            .filter(|t| t.contains_key("type"))
+            .map(|_| index)
+    })
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
 
 #[cfg(test)]
 mod tests {
