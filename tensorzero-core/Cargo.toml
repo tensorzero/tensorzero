@@ -50,7 +50,7 @@ futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
-jsonschema = "0.40.0"
+jsonschema = "0.41.0"
 jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
