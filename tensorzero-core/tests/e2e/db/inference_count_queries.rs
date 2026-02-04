@@ -356,6 +356,10 @@ async fn test_count_inferences_with_threshold_float_metric(conn: impl InferenceQ
 
     // Threshold count should be < total feedbacks
     assert!(
+        threshold_count > 0,
+        "Should have at least one inference with feedback > 0.5"
+    );
+    assert!(
         threshold_count < total_feedbacks,
         "Threshold count ({threshold_count}) should be < total feedbacks ({total_feedbacks})"
     );
