@@ -343,7 +343,8 @@ fn canonical_file_path(base_dir: &Path, terminal_key: &str) -> PathBuf {
 /// - `*_schema` or `parameters` → `.json`
 /// - `system_instructions` → `.txt`
 /// - `user`, `system`, `assistant` (input wrappers) → `.minijinja`
-/// - `path` → `None` (handled specially by `canonical_file_path`)
+/// - `*_path` or `path` → `None` (handled specially by `canonical_file_path`)
+/// - Unknown keys → `""` (empty extension)
 fn file_extension_for_key(key: &str) -> Option<&'static str> {
     if key.ends_with("_template") {
         Some(".minijinja")
@@ -353,8 +354,10 @@ fn file_extension_for_key(key: &str) -> Option<&'static str> {
         Some(".txt")
     } else if key == "user" || key == "system" || key == "assistant" {
         Some(".minijinja")
-    } else {
+    } else if key.ends_with("path") {
         None
+    } else {
+        Some("")
     }
 }
 
@@ -442,6 +445,25 @@ mod tests {
             file_extension_for_key("path"),
             None,
             "path should return None (handled specially)"
+        );
+        assert_eq!(
+            file_extension_for_key("some_path"),
+            None,
+            "keys ending in path should return None (handled specially)"
+        );
+    }
+
+    #[test]
+    fn test_file_extension_for_unknown_key() {
+        assert_eq!(
+            file_extension_for_key("unknown_key"),
+            Some(""),
+            "unknown keys should return empty extension"
+        );
+        assert_eq!(
+            file_extension_for_key("some_random_field"),
+            Some(""),
+            "unknown keys should return empty extension"
         );
     }
 
