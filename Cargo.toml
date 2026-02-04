@@ -24,6 +24,7 @@ members = [
     "internal/autopilot-worker",
     "internal/reqwest-sse-stream",
     "internal/config-writer",
+    "internal/tensorzero-config-paths",
 ]
 resolver = "2"
 
