@@ -6,6 +6,6 @@ export type CommentFeedbackRow = {
   target_id: string;
   target_type: CommentTargetType;
   value: string;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   timestamp: string;
 };

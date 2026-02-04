@@ -5,6 +5,7 @@ import type { EventPayloadStatusUpdate } from "./EventPayloadStatusUpdate";
 import type { EventPayloadToolCall } from "./EventPayloadToolCall";
 import type { EventPayloadToolCallAuthorization } from "./EventPayloadToolCallAuthorization";
 import type { EventPayloadToolResult } from "./EventPayloadToolResult";
+import type { EventPayloadVisualization } from "./EventPayloadVisualization";
 
 /**
  * Internal event payload type - consumers should use `GatewayEventPayload` instead.
@@ -18,4 +19,5 @@ export type EventPayload =
   | ({ type: "tool_call" } & EventPayloadToolCall)
   | ({ type: "tool_call_authorization" } & EventPayloadToolCallAuthorization)
   | ({ type: "tool_result" } & EventPayloadToolResult)
+  | ({ type: "visualization" } & EventPayloadVisualization)
   | { type: "unknown" };

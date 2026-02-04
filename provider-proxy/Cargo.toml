@@ -31,7 +31,7 @@ tokio.workspace = true
 tokio-rustls = "0.26.1"
 tracing = "0.1.43"
 tracing-subscriber.workspace = true
-tempfile = "3.21.0"
+tempfile = { workspace = true }
 
 
 [lints]

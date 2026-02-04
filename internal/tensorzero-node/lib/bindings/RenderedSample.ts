@@ -23,5 +23,5 @@ export type RenderedSample = {
   inference_id: string | null;
   tool_params: DynamicToolParams;
   output_schema: JsonValue | null;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
 };

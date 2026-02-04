@@ -34,6 +34,9 @@ pub enum ConfigWriterError {
         value: String,
         reason: String,
     },
+
+    #[error("Invalid config structure at `{path}`: expected `{key}` to be a table")]
+    InvalidConfigStructure { path: String, key: String },
 }
 
 impl ConfigWriterError {

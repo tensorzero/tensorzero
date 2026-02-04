@@ -8,7 +8,9 @@ import {
   CHART_COLORS,
 } from "~/utils/chart";
 import { useState, Suspense } from "react";
-import { Await } from "react-router";
+import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertCircle } from "lucide-react";
 
 import {
   Card,
@@ -63,6 +65,23 @@ const METRIC_TYPE_CONFIG = {
   },
 } as const;
 
+function ModelUsageError() {
+  const error = useAsyncError();
+  let message = "Failed to load model usage data";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading model usage"
+      description={message}
+    />
+  );
+}
+
 function MetricSelector({
   selectedMetric,
   onMetricChange,
@@ -109,7 +128,7 @@ export function ModelUsage({
             {METRIC_TYPE_CONFIG[selectedMetric].description} by model
           </CardDescription>
         </div>
-        <div className="flex flex-col justify-center gap-2">
+        <div className="flex items-center gap-2">
           <TimeWindowSelector
             value={timeGranularity}
             onValueChange={onTimeGranularityChange}
@@ -122,7 +141,10 @@ export function ModelUsage({
       </CardHeader>
       <CardContent>
         <Suspense fallback={<div>Loading model usage data...</div>}>
-          <Await resolve={modelUsageDataPromise}>
+          <Await
+            resolve={modelUsageDataPromise}
+            errorElement={<ModelUsageError />}
+          >
             {(modelUsageData) => {
               const { data, modelNames } = transformModelUsageData(
                 modelUsageData,

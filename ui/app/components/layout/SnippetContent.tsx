@@ -16,6 +16,7 @@ import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { CodeEditor, useFormattedJson } from "../ui/code-editor";
 import { useState, type ReactNode } from "react";
 import { Input } from "../ui/input";
+import type { JsonValue } from "~/types/tensorzero";
 
 export function EmptyMessage({ message = "No content" }: { message?: string }) {
   return (
@@ -100,7 +101,9 @@ export function TemplateMessage({
   onChange?: (templateName: string, value: any) => void;
   action?: ReactNode;
 }) {
-  const formattedJson = useFormattedJson(templateArguments ?? {});
+  const formattedJson = useFormattedJson(
+    (templateArguments as JsonValue) ?? {},
+  );
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   return (
@@ -175,7 +178,7 @@ function ToolDetails({
   const formattedPayload = useFormattedJson(payload);
 
   return (
-    <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,min-content)] place-content-center gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
+    <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_minmax(0,1fr)] grid-rows-[repeat(3,min-content)] gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
       <p className="text-fg-secondary font-medium">{nameLabel}</p>
       {!isEditing ? (
         <p className="self-center truncate font-mono text-[0.6875rem]">

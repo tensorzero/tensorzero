@@ -254,6 +254,13 @@ impl StoredInferenceDatabase {
             StoredInferenceDatabase::Chat(inference) => inference.inference_id,
         }
     }
+
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        match self {
+            StoredInferenceDatabase::Json(inference) => inference.timestamp,
+            StoredInferenceDatabase::Chat(inference) => inference.timestamp,
+        }
+    }
 }
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings

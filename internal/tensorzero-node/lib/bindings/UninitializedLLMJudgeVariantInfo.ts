@@ -6,9 +6,7 @@ import type { UninitializedLLMJudgeChatCompletionVariantConfig } from "./Uniniti
 import type { UninitializedLLMJudgeDiclVariantConfig } from "./UninitializedLLMJudgeDiclVariantConfig";
 import type { UninitializedLLMJudgeMixtureOfNVariantConfig } from "./UninitializedLLMJudgeMixtureOfNVariantConfig";
 
-export type UninitializedLLMJudgeVariantInfo = {
-  timeouts: TimeoutsConfig | null;
-} & (
+export type UninitializedLLMJudgeVariantInfo = { timeouts?: TimeoutsConfig } & (
   | ({
       type: "chat_completion";
     } & UninitializedLLMJudgeChatCompletionVariantConfig)

@@ -65,6 +65,7 @@ export function Combobox({
   const {
     open,
     searchValue,
+    isEditing,
     commandRef,
     getInputValue,
     closeDropdown,
@@ -133,6 +134,7 @@ export function Combobox({
             placeholder={placeholder}
             disabled={disabled}
             open={open}
+            isEditing={isEditing}
             prefix={inputPrefix}
             suffix={inputSuffix}
             ariaLabel={ariaLabel}

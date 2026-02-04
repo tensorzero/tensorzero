@@ -28,7 +28,7 @@ export type CreateChatDatapointRequest = {
   /**
    * Tags associated with this datapoint. Optional.
    */
-  tags?: { [key in string]?: string };
+  tags?: { [key in string]: string };
   /**
    * Human-readable name for the datapoint. Optional.
    */
