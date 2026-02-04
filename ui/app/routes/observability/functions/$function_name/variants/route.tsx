@@ -286,6 +286,7 @@ function VariantPerformanceContent({
 function InferencesTableContent({ data }: { data: InferencesTableData }) {
   const { inferences, hasNextInferencePage, hasPreviousInferencePage } = data;
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const topInference = inferences.length > 0 ? inferences[0] : null;
   const bottomInference =
@@ -293,18 +294,18 @@ function InferencesTableContent({ data }: { data: InferencesTableData }) {
 
   const handleNextInferencePage = () => {
     if (!bottomInference) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.delete("afterInference");
+    newSearchParams.set("beforeInference", bottomInference.id);
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousInferencePage = () => {
     if (!topInference) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.delete("beforeInference");
+    newSearchParams.set("afterInference", topInference.id);
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   if (inferences.length === 0) {
