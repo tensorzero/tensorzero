@@ -300,21 +300,24 @@ fn extract_resolved_path_data(
 }
 
 /// Generate a canonical file path for a given terminal key and base directory.
+///
+/// For most keys, creates `{base_dir}/{key}{ext}` (e.g., `variants/v1/system_template.minijinja`).
+/// For `path` keys, creates `{base_dir.parent()}/{name}{ext}` (e.g., `templates/greeting.minijinja`).
 fn canonical_file_path(base_dir: &Path, terminal_key: &str) -> PathBuf {
-    let filename = if let Some(ext) = file_extension_for_key(terminal_key) {
-        format!("{terminal_key}{ext}")
+    if let Some(ext) = file_extension_for_key(terminal_key) {
+        // Standard keys: {base_dir}/{key}{ext}
+        let filename = format!("{terminal_key}{ext}");
+        base_dir.join(filename)
     } else {
-        // For `path` keys, use the parent directory name as the base filename
-        // with an extension based on the grandparent (templates → .minijinja, schemas → .json)
+        // For `path` keys (e.g., templates.greeting.path or schemas.my_schema.path):
+        // Output to {grandparent}/{parent_name}{ext} (e.g., templates/greeting.minijinja)
         let parent_name = base_dir
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("file");
 
-        let grandparent_name = base_dir
-            .parent()
-            .and_then(|p| p.file_name())
-            .and_then(|s| s.to_str());
+        let grandparent = base_dir.parent().unwrap_or(base_dir);
+        let grandparent_name = grandparent.file_name().and_then(|s| s.to_str());
 
         // Currently the config writer only handles templates (variants, evaluators, fusers),
         // not schemas. The schemas case is included for completeness but not actively used.
@@ -323,10 +326,9 @@ fn canonical_file_path(base_dir: &Path, terminal_key: &str) -> PathBuf {
             _ => ".minijinja",
         };
 
-        format!("{parent_name}{ext}")
-    };
-
-    base_dir.join(filename)
+        let filename = format!("{parent_name}{ext}");
+        grandparent.join(filename)
+    }
 }
 
 /// Returns the file extension for a given terminal key name.
@@ -357,6 +359,322 @@ fn file_extension_for_key(key: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ========================================================================
+    // file_extension_for_key tests
+    // ========================================================================
+
+    #[test]
+    fn test_file_extension_for_template_keys() {
+        assert_eq!(
+            file_extension_for_key("system_template"),
+            Some(".minijinja"),
+            "system_template should get .minijinja extension"
+        );
+        assert_eq!(
+            file_extension_for_key("user_template"),
+            Some(".minijinja"),
+            "user_template should get .minijinja extension"
+        );
+        assert_eq!(
+            file_extension_for_key("assistant_template"),
+            Some(".minijinja"),
+            "assistant_template should get .minijinja extension"
+        );
+    }
+
+    #[test]
+    fn test_file_extension_for_schema_keys() {
+        assert_eq!(
+            file_extension_for_key("system_schema"),
+            Some(".json"),
+            "system_schema should get .json extension"
+        );
+        assert_eq!(
+            file_extension_for_key("output_schema"),
+            Some(".json"),
+            "output_schema should get .json extension"
+        );
+        assert_eq!(
+            file_extension_for_key("parameters"),
+            Some(".json"),
+            "parameters should get .json extension"
+        );
+    }
+
+    #[test]
+    fn test_file_extension_for_system_instructions() {
+        assert_eq!(
+            file_extension_for_key("system_instructions"),
+            Some(".txt"),
+            "system_instructions should get .txt extension"
+        );
+    }
+
+    #[test]
+    fn test_file_extension_for_input_wrapper_keys() {
+        assert_eq!(
+            file_extension_for_key("user"),
+            Some(".minijinja"),
+            "user (input wrapper) should get .minijinja extension"
+        );
+        assert_eq!(
+            file_extension_for_key("system"),
+            Some(".minijinja"),
+            "system (input wrapper) should get .minijinja extension"
+        );
+        assert_eq!(
+            file_extension_for_key("assistant"),
+            Some(".minijinja"),
+            "assistant (input wrapper) should get .minijinja extension"
+        );
+    }
+
+    #[test]
+    fn test_file_extension_for_path_key() {
+        assert_eq!(
+            file_extension_for_key("path"),
+            None,
+            "path should return None (handled specially)"
+        );
+    }
+
+    // ========================================================================
+    // canonical_file_path tests
+    // ========================================================================
+
+    #[test]
+    fn test_canonical_file_path_for_template() {
+        let base_dir = Path::new("/config/functions/my_func/variants/v1");
+        let result = canonical_file_path(base_dir, "system_template");
+        assert_eq!(
+            result,
+            PathBuf::from("/config/functions/my_func/variants/v1/system_template.minijinja"),
+            "should create system_template.minijinja in the base directory"
+        );
+    }
+
+    #[test]
+    fn test_canonical_file_path_for_path_key_in_templates() {
+        // Simulates: functions.my_func.variants.v1.templates.greeting.path
+        // base_dir would be: /config/functions/my_func/variants/v1/templates/greeting
+        let base_dir = Path::new("/config/functions/my_func/variants/v1/templates/greeting");
+        let result = canonical_file_path(base_dir, "path");
+        assert_eq!(
+            result,
+            PathBuf::from("/config/functions/my_func/variants/v1/templates/greeting.minijinja"),
+            "path key under templates should output to templates/<name>.minijinja"
+        );
+    }
+
+    #[test]
+    fn test_canonical_file_path_for_path_key_in_schemas() {
+        // Simulates: functions.my_func.schemas.my_schema.path
+        // base_dir would be: /config/functions/my_func/schemas/my_schema
+        let base_dir = Path::new("/config/functions/my_func/schemas/my_schema");
+        let result = canonical_file_path(base_dir, "path");
+        assert_eq!(
+            result,
+            PathBuf::from("/config/functions/my_func/schemas/my_schema.json"),
+            "path key under schemas should output to schemas/<name>.json"
+        );
+    }
+
+    // ========================================================================
+    // pattern_matches_prefix tests
+    // ========================================================================
+
+    #[test]
+    fn test_pattern_matches_prefix_exact_match() {
+        let pattern = &[
+            PathComponent::Literal("functions"),
+            PathComponent::Wildcard,
+            PathComponent::Literal("variants"),
+            PathComponent::Wildcard,
+            PathComponent::Literal("system_template"),
+        ];
+        let prefix = &["functions", "my_func", "variants", "v1"];
+        assert!(
+            pattern_matches_prefix(pattern, prefix),
+            "pattern should match prefix with wildcard substitution"
+        );
+    }
+
+    #[test]
+    fn test_pattern_matches_prefix_literal_mismatch() {
+        let pattern = &[
+            PathComponent::Literal("functions"),
+            PathComponent::Wildcard,
+            PathComponent::Literal("variants"),
+        ];
+        let prefix = &["evaluations", "my_eval"];
+        assert!(
+            !pattern_matches_prefix(pattern, prefix),
+            "pattern should not match when literal doesn't match"
+        );
+    }
+
+    #[test]
+    fn test_pattern_matches_prefix_too_short() {
+        let pattern = &[PathComponent::Literal("functions"), PathComponent::Wildcard];
+        let prefix = &["functions", "my_func", "variants"];
+        assert!(
+            !pattern_matches_prefix(pattern, prefix),
+            "pattern should not match when it's shorter than prefix"
+        );
+    }
+
+    #[test]
+    fn test_pattern_matches_prefix_empty_prefix() {
+        let pattern = &[PathComponent::Literal("functions"), PathComponent::Wildcard];
+        let prefix: &[&str] = &[];
+        assert!(
+            pattern_matches_prefix(pattern, prefix),
+            "empty prefix should match any pattern"
+        );
+    }
+
+    // ========================================================================
+    // extract_resolved_path_data tests
+    // ========================================================================
+
+    #[test]
+    fn test_extract_resolved_path_data_valid() {
+        let mut table = toml_edit::Table::new();
+        table.insert(
+            "__tensorzero_remapped_path",
+            Item::Value(Value::from("/abs/path/template.minijinja")),
+        );
+        table.insert("__data", Item::Value(Value::from("template content here")));
+        let item = Item::Table(table);
+
+        let result = extract_resolved_path_data(&item, "test.path")
+            .expect("should not error")
+            .expect("should find resolved path data");
+
+        assert_eq!(result.0, "template content here", "should extract __data");
+        assert_eq!(
+            result.1, "/abs/path/template.minijinja",
+            "should extract __tensorzero_remapped_path"
+        );
+    }
+
+    #[test]
+    fn test_extract_resolved_path_data_not_a_table() {
+        let item = Item::Value(Value::from("just a string"));
+        let result = extract_resolved_path_data(&item, "test.path").expect("should not error");
+        assert!(result.is_none(), "non-table item should return None");
+    }
+
+    #[test]
+    fn test_extract_resolved_path_data_missing_marker() {
+        let mut table = toml_edit::Table::new();
+        table.insert("some_key", Item::Value(Value::from("some_value")));
+        let item = Item::Table(table);
+
+        let result = extract_resolved_path_data(&item, "test.path").expect("should not error");
+        assert!(
+            result.is_none(),
+            "table without __tensorzero_remapped_path should return None"
+        );
+    }
+
+    #[test]
+    fn test_extract_resolved_path_data_missing_data() {
+        let mut table = toml_edit::Table::new();
+        table.insert(
+            "__tensorzero_remapped_path",
+            Item::Value(Value::from("/some/path")),
+        );
+        // Missing __data
+        let item = Item::Table(table);
+
+        let result = extract_resolved_path_data(&item, "test.path");
+        assert!(
+            result.is_err(),
+            "table with marker but no __data should error"
+        );
+    }
+
+    // ========================================================================
+    // extract_resolved_paths integration tests
+    // ========================================================================
+
+    #[test]
+    fn test_extract_resolved_paths_with_system_template() {
+        // Build a variant item with a resolved system_template
+        let mut variant_table = toml_edit::Table::new();
+        variant_table.insert("model", Item::Value(Value::from("gpt-4")));
+
+        let mut template_table = toml_edit::Table::new();
+        template_table.insert(
+            "__tensorzero_remapped_path",
+            Item::Value(Value::from("/original/path/template.minijinja")),
+        );
+        template_table.insert(
+            "__data",
+            Item::Value(Value::from("You are a helpful assistant.")),
+        );
+        variant_table.insert("system_template", Item::Table(template_table));
+
+        let mut item = Item::Table(variant_table);
+
+        let glob_base = Path::new("/config");
+        let toml_file_dir = Path::new("/config");
+        let matched_prefix = &["functions", "my_func", "variants", "v1"];
+
+        let files = extract_resolved_paths(&mut item, glob_base, toml_file_dir, matched_prefix)
+            .expect("should extract paths");
+
+        assert_eq!(files.len(), 1, "should extract one file");
+        assert_eq!(
+            files[0].absolute_path,
+            PathBuf::from("/config/functions/my_func/variants/v1/system_template.minijinja")
+        );
+        assert_eq!(files[0].content, "You are a helpful assistant.");
+
+        // Check that the TOML was rewritten
+        let rewritten = item
+            .as_table()
+            .unwrap()
+            .get("system_template")
+            .unwrap()
+            .as_str()
+            .expect("system_template should be rewritten as string");
+        assert_eq!(
+            rewritten, "functions/my_func/variants/v1/system_template.minijinja",
+            "should rewrite as relative path"
+        );
+    }
+
+    #[test]
+    fn test_extract_resolved_paths_no_resolved_data() {
+        // Build a variant item without any resolved paths
+        let mut variant_table = toml_edit::Table::new();
+        variant_table.insert("model", Item::Value(Value::from("gpt-4")));
+        variant_table.insert(
+            "system_template",
+            Item::Value(Value::from("inline template")),
+        );
+
+        let mut item = Item::Table(variant_table);
+
+        let glob_base = Path::new("/config");
+        let toml_file_dir = Path::new("/config");
+        let matched_prefix = &["functions", "my_func", "variants", "v1"];
+
+        let files = extract_resolved_paths(&mut item, glob_base, toml_file_dir, matched_prefix)
+            .expect("should not error");
+
+        assert!(
+            files.is_empty(),
+            "should return empty list when no resolved paths"
+        );
+    }
+
+    // ========================================================================
+    // compute_relative_path tests
+    // ========================================================================
 
     #[test]
     fn test_compute_relative_path() {
