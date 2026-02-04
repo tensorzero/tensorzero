@@ -22,4 +22,4 @@ workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
-trybuild = "1.0.114"
+trybuild = "1.0.115"
