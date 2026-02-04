@@ -599,6 +599,11 @@ const visualizationEvents: GatewayEvent[] = [
     3,
   ),
   // Visualization event tied to the tool call
+  // Data designed to show separation lines at top-1 and top-3:
+  // Non-failed variants sorted by lower bound: echo(0.85) > empty2(0.70) > empty(0.60) > test(0.35)
+  // Top-1: echo's lower (0.85) > max upper of rest (0.80) ✓
+  // Top-3: empty's lower (0.60) > test's upper (0.50) ✓
+  // Failed variants (displayed on right): failed_bad_variant1, failed_bad_variant2
   buildEvent(
     {
       id: "v5-visualization",
@@ -611,42 +616,49 @@ const visualizationEvents: GatewayEvent[] = [
           type: "top_k_evaluation",
           variant_summaries: {
             echo: {
-              mean_est: 0.667,
-              cs_lower: 0.58,
-              cs_upper: 0.75,
+              mean_est: 0.9,
+              cs_lower: 0.85,
+              cs_upper: 0.95,
               count: BigInt(50),
               failed: false,
             },
-            empty: {
-              mean_est: 0.333,
-              cs_lower: 0.25,
-              cs_upper: 0.42,
-              count: BigInt(35),
-              failed: false,
-            },
-            empty2: {
-              mean_est: 0.31,
-              cs_lower: 0.22,
-              cs_upper: 0.4,
-              count: BigInt(30),
-              failed: false,
-            },
             test: {
-              mean_est: 0.35,
-              cs_lower: 0.27,
-              cs_upper: 0.43,
+              mean_est: 0.42,
+              cs_lower: 0.35,
+              cs_upper: 0.5,
               count: BigInt(25),
               failed: false,
             },
-            test2: {
-              mean_est: 0.29,
-              cs_lower: 0.19,
-              cs_upper: 0.39,
-              count: BigInt(10),
+            empty: {
+              mean_est: 0.65,
+              cs_lower: 0.6,
+              cs_upper: 0.7,
+              count: BigInt(45),
               failed: false,
             },
+            empty2: {
+              mean_est: 0.75,
+              cs_lower: 0.7,
+              cs_upper: 0.8,
+              count: BigInt(35),
+              failed: false,
+            },
+            failed_bad_variant1: {
+              mean_est: 0.55,
+              cs_lower: 0.45,
+              cs_upper: 0.65,
+              count: BigInt(20),
+              failed: true,
+            },
+            failed_bad_variant2: {
+              mean_est: 0.32,
+              cs_lower: 0.25,
+              cs_upper: 0.4,
+              count: BigInt(15),
+              failed: true,
+            },
           },
-          confident_top_k_sizes: [],
+          confident_top_k_sizes: [1, 3],
         },
       },
     },
@@ -663,7 +675,7 @@ const visualizationEvents: GatewayEvent[] = [
         content: [
           {
             type: "text",
-            text: 'The top-k evaluation is complete. The "echo" variant was identified as the winner with a mean performance of 0.667, significantly outperforming the other variants.',
+            text: 'The top-k evaluation is complete. We can confidently identify "echo" as the top-1 performer (mean: 0.90) and a top-3 set of "echo", "test", and "empty" that statistically outperforms the remaining variants.',
           },
         ],
       },
