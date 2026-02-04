@@ -122,7 +122,8 @@ impl ToolMetadata for WriteConfigTool {
                     "additionalProperties": { "type": "string" }
                 }
             },
-            "required": ["config"]
+            "required": ["config"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

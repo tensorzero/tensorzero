@@ -133,7 +133,8 @@ impl ToolMetadata for RunEvaluationTool {
                     "description": "Include per-datapoint results in the response (default: false)."
                 }
             },
-            "required": ["evaluation_name", "variant_name"]
+            "required": ["evaluation_name", "variant_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

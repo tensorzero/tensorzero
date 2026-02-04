@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import type { GatewayEvent } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
@@ -77,8 +78,9 @@ export function PendingToolCallCard({
           className="inline-flex cursor-pointer items-center gap-2 text-left"
           onClick={() => setIsExpanded((current) => !current)}
         >
-          <span className="text-sm font-medium">
-            Tool Call &middot;{" "}
+          <span className="inline-flex items-center gap-2 text-sm font-medium">
+            Tool Call
+            <DotSeparator />
             <span className="font-mono font-medium">{name}</span>
           </span>
           <span
@@ -159,7 +161,7 @@ export function PendingToolCallCard({
           )}
           <div className="text-fg-muted flex items-center gap-1.5 text-xs">
             <ToolEventId id={getToolCallEventId(event)} />
-            <span aria-hidden="true">&middot;</span>
+            <DotSeparator />
             <TableItemTime timestamp={event.created_at} />
           </div>
         </div>
