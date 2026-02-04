@@ -80,7 +80,7 @@ export function ComboboxMenuItems({
           <CommandItem
             value={`create-${searchValue.trim()}`}
             onSelect={() => onSelectItem(searchValue.trim(), true)}
-            className="flex cursor-pointer items-center gap-2"
+            className="flex items-center gap-2"
           >
             {getPrefix?.(null, false)}
             <span className="truncate font-mono" title={searchValue.trim()}>

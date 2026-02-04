@@ -4,14 +4,15 @@ use uuid::Uuid;
 
 use tensorzero::ClientExt;
 use tensorzero_core::config::Config;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::query_builder::{
     InferenceFilter, TagComparisonOperator, TagFilter,
 };
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::inferences::{
     InferenceOutputSource, InferenceQueries, ListInferencesParams,
 };
+use tensorzero_core::db::postgres::test_helpers::get_postgres;
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse,
@@ -21,26 +22,27 @@ use tensorzero_core::endpoints::stored_inferences::v1::types::ListInferencesRequ
 use crate::common::get_gateway_endpoint;
 
 lazy_static::lazy_static! {
-    static ref TEST_SETUP: tokio::sync::OnceCell<(ClickHouseConnectionInfo, Arc<Config>)> = tokio::sync::OnceCell::new();
+    static ref TEST_SETUP: tokio::sync::OnceCell<(DelegatingDatabaseConnection, Arc<Config>)> = tokio::sync::OnceCell::new();
 }
 
-async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
+async fn get_test_setup() -> &'static (DelegatingDatabaseConnection, Arc<Config>) {
     TEST_SETUP
         .get_or_init(|| async {
-            let clickhouse: ClickHouseConnectionInfo = get_clickhouse().await;
+            let clickhouse = get_clickhouse().await;
+            let postgres = get_postgres().await;
+            let database = DelegatingDatabaseConnection::new(clickhouse, postgres);
 
             let client = tensorzero::test_helpers::make_embedded_gateway().await;
             let config = client.get_config().unwrap();
-            (clickhouse, config)
+            (database, config)
         })
         .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_ids_success() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, config) = get_test_setup().await;
+    let (database, config) = get_test_setup().await;
 
     // Get some existing inferences from the database
     let params = ListInferencesParams {
@@ -48,7 +50,7 @@ async fn test_create_from_inference_ids_success() {
         limit: 2,
         ..Default::default()
     };
-    let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
+    let inferences = database.list_inferences(config, &params).await.unwrap();
     assert!(inferences.len() >= 2, "Need at least 2 inferences for test");
 
     let inference_id1 = inferences[0].id();
@@ -79,7 +81,6 @@ async fn test_create_from_inference_ids_success() {
 
 #[tokio::test]
 async fn test_create_from_inference_query_success() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Create datapoints using a query (no filters, just function name)
@@ -112,9 +113,8 @@ async fn test_create_from_inference_query_success() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_same_inference_multiple_times_succeeds() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, config) = get_test_setup().await;
+    let (database, config) = get_test_setup().await;
 
     // Get an existing inference from the database
     let params = ListInferencesParams {
@@ -122,7 +122,7 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
         limit: 1,
         ..Default::default()
     };
-    let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
+    let inferences = database.list_inferences(config, &params).await.unwrap();
     assert!(!inferences.is_empty(), "Need at least 1 inference for test");
 
     let inference_id = inferences[0].id();
@@ -166,9 +166,8 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_missing_ids_error() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, config) = get_test_setup().await;
+    let (database, config) = get_test_setup().await;
 
     // Get one real inference
     let params = ListInferencesParams {
@@ -176,7 +175,7 @@ async fn test_create_from_inference_missing_ids_error() {
         limit: 1,
         ..Default::default()
     };
-    let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
+    let inferences = database.list_inferences(config, &params).await.unwrap();
     assert!(!inferences.is_empty(), "Need at least 1 inference for test");
 
     let real_inference_id = inferences[0].id();
@@ -213,7 +212,6 @@ async fn test_create_from_inference_missing_ids_error() {
 
 #[tokio::test]
 async fn test_create_from_inference_with_filters() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Create datapoints using a tag filter that exists in the test data

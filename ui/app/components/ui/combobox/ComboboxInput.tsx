@@ -12,6 +12,7 @@ type ComboboxInputProps = {
   placeholder: string;
   disabled?: boolean;
   open: boolean;
+  isEditing?: boolean;
   prefix?: React.ReactNode;
   suffix?: React.ReactNode;
   ariaLabel?: string;
@@ -28,6 +29,7 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       placeholder,
       disabled = false,
       open,
+      isEditing = false,
       prefix,
       suffix,
       ariaLabel,
@@ -53,7 +55,8 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           aria-expanded={open}
           aria-label={ariaLabel}
           className={clsx(
-            "cursor-text font-mono",
+            "cursor-text",
+            !isEditing && value && "font-mono",
             prefix ? "pl-9" : "pl-3",
             suffix ? "pr-16" : "pr-8",
           )}

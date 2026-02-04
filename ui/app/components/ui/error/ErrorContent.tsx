@@ -140,7 +140,7 @@ function ServerErrorContent({
     <ErrorContentCard>
       <ErrorContentHeader
         icon={AlertTriangle}
-        title={status ? `Error ${status}` : "Something Went Wrong"}
+        title={status ? `Error ${status}` : "Something went wrong"}
         description={message || "An unexpected error occurred."}
       />
       {stack && <StackTraceContent stack={stack} />}
