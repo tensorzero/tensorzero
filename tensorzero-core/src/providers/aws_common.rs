@@ -20,6 +20,52 @@ use crate::{
     model::{CredentialLocation, CredentialLocationOrHardcoded},
 };
 
+/// Parse and validate AWS region configuration.
+///
+/// Handles:
+/// - Deprecation warning for `allow_auto_detect_region`
+/// - Region parsing from `CredentialLocationOrHardcoded` to `AWSRegion`
+/// - Region validation (requiring a region is present)
+///
+/// Returns the resolved `AWSRegion` or an error if region is required but missing.
+pub fn parse_aws_region(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    provider_type: &str,
+) -> Result<AWSRegion, Error> {
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{provider_type}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, provider_type))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {provider_type} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })
+}
+
 /// AWS endpoint configuration supporting static, env, and dynamic resolution.
 #[derive(Clone, Debug)]
 pub enum AWSEndpointUrl {
@@ -228,6 +274,43 @@ impl AWSRegion {
             AWSRegion::Static(r) => Some(r.clone()),
             AWSRegion::Sdk => None,
             AWSRegion::Dynamic(_) => Some(Region::new("us-east-1")),
+        }
+    }
+
+    /// Resolve region at runtime with optional SDK config for Sdk variant.
+    ///
+    /// - `Static(r)`: Returns the configured region directly
+    /// - `Dynamic(key)`: Resolves from request credentials
+    /// - `Sdk`: Extracts region from the provided SDK config
+    ///
+    /// For `Sdk` variant, `sdk_config` must be provided, otherwise an error is returned.
+    pub fn resolve_with_sdk_config(
+        &self,
+        credentials: &InferenceCredentials,
+        sdk_config: Option<&SdkConfig>,
+        provider_type: &str,
+    ) -> Result<Region, Error> {
+        match self {
+            AWSRegion::Static(region) => Ok(region.clone()),
+            AWSRegion::Dynamic(key_name) => {
+                let region_str = credentials.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicRegionNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Ok(Region::new(region_str.expose_secret().to_string()))
+            }
+            AWSRegion::Sdk => sdk_config
+                .and_then(|config| config.region().cloned())
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                        message: "No region configured".to_string(),
+                        provider_type: provider_type.to_string(),
+                    })
+                }),
         }
     }
 }
@@ -446,6 +529,10 @@ impl AWSBedrockCredentials {
     /// 4. SDK credential chain → SigV4
     ///
     /// For IAM auth, loads the AWS SDK config with the given region.
+    ///
+    /// Returns `(credentials, resolved_sdk_region)` where `resolved_sdk_region` is `Some`
+    /// when bearer auth is used with `region = "sdk"`. In this case, the caller should
+    /// replace `AWSRegion::Sdk` with `AWSRegion::Static(resolved_sdk_region)`.
     pub async fn from_fields(
         api_key: Option<CredentialLocation>,
         access_key_id: Option<CredentialLocation>,
@@ -453,7 +540,7 @@ impl AWSBedrockCredentials {
         session_token: Option<CredentialLocation>,
         region: &AWSRegion,
         provider_type: &str,
-    ) -> Result<Self, Error> {
+    ) -> Result<(Self, Option<Region>), Error> {
         // Validate: cannot specify both api_key and IAM credentials
         let has_iam_creds =
             access_key_id.is_some() || secret_access_key.is_some() || session_token.is_some();
@@ -468,7 +555,11 @@ impl AWSBedrockCredentials {
 
         // 1. Explicit api_key takes priority
         if let Some(key_loc) = api_key {
-            return Self::from_api_key_location(key_loc, provider_type);
+            let creds = Self::from_api_key_location(key_loc, provider_type)?;
+            // For bearer auth with region = "sdk", resolve the region now
+            let resolved_region =
+                Self::resolve_sdk_region_for_bearer_auth(region, provider_type).await?;
+            return Ok((creds, resolved_region));
         }
 
         // Compute the static region for SDK config initialization
@@ -483,10 +574,13 @@ impl AWSBedrockCredentials {
                 provider_type,
             )?;
             let sdk_config = config_with_region(provider_type, static_region).await?;
-            return Ok(AWSBedrockCredentials::IAM {
-                credentials,
-                sdk_config: Box::new(sdk_config),
-            });
+            return Ok((
+                AWSBedrockCredentials::IAM {
+                    credentials,
+                    sdk_config: Box::new(sdk_config),
+                },
+                None,
+            ));
         }
 
         // 3. Nothing configured - try AWS_BEARER_TOKEN_BEDROCK env var first, then SDK
@@ -494,18 +588,51 @@ impl AWSBedrockCredentials {
             tracing::debug!(
                 "Using environment variable `AWS_BEARER_TOKEN_BEDROCK` for `{provider_type}` authentication"
             );
-            return Ok(AWSBedrockCredentials::ApiKey(SecretString::new(
-                token.into(),
-            )));
+            // For bearer auth with region = "sdk", resolve the region now
+            let resolved_region =
+                Self::resolve_sdk_region_for_bearer_auth(region, provider_type).await?;
+            return Ok((
+                AWSBedrockCredentials::ApiKey(SecretString::new(token.into())),
+                resolved_region,
+            ));
         }
 
         // 4. Fall back to SDK credential chain (SigV4)
         tracing::debug!("Using AWS SDK credential chain for `{provider_type}` authentication");
         let sdk_config = config_with_region(provider_type, static_region).await?;
-        Ok(AWSBedrockCredentials::IAM {
-            credentials: AWSIAMCredentials::Sdk,
-            sdk_config: Box::new(sdk_config),
-        })
+        Ok((
+            AWSBedrockCredentials::IAM {
+                credentials: AWSIAMCredentials::Sdk,
+                sdk_config: Box::new(sdk_config),
+            },
+            None,
+        ))
+    }
+
+    /// For bearer auth with `region = "sdk"`, load SDK config to resolve the region.
+    /// Returns `Some(region)` if region was `Sdk`, `None` otherwise.
+    async fn resolve_sdk_region_for_bearer_auth(
+        region: &AWSRegion,
+        provider_type: &str,
+    ) -> Result<Option<Region>, Error> {
+        if !matches!(region, AWSRegion::Sdk) {
+            return Ok(None);
+        }
+        // Load SDK config just to resolve the region
+        let sdk_config = config_with_region(provider_type, None).await?;
+        let resolved = sdk_config.region().cloned().ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Failed to auto-detect AWS region for `{provider_type}`. \
+                     Please set `AWS_REGION` environment variable or specify an explicit region."
+                ),
+            })
+        })?;
+        tracing::debug!(
+            "Resolved SDK region `{}` for bearer auth in `{provider_type}`",
+            resolved.as_ref()
+        );
+        Ok(Some(resolved))
     }
 
     fn from_api_key_location(loc: CredentialLocation, provider_type: &str) -> Result<Self, Error> {

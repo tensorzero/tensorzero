@@ -5,15 +5,14 @@ use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
 use aws_types::region::Region;
 use bytes::BytesMut;
 use futures::StreamExt;
-use reqwest::StatusCode;
 use reqwest_sse_stream::SseStream;
-use secrecy::ExposeSecret;
 use serde::Serialize;
 use std::time::Instant;
 
 use super::aws_common::{
     AWSEndpointUrl, AWSIAMCredentials, AWSRegion, check_eventstream_exception, config_with_region,
-    resolve_request_credentials, send_aws_request, sign_request,
+    parse_aws_region, resolve_request_credentials, send_aws_request, sign_request,
+    warn_if_credential_exfiltration_risk,
 };
 use super::helpers::inject_extra_request_data;
 use crate::cache::ModelProviderRequest;
@@ -67,37 +66,7 @@ pub fn build_aws_sagemaker_config(
     secret_access_key: Option<CredentialLocation>,
     session_token: Option<CredentialLocation>,
 ) -> Result<AWSSagemakerConfig, Error> {
-    // Emit deprecation warning if allow_auto_detect_region is used
-    if allow_auto_detect_region {
-        crate::utils::deprecation_warning(&format!(
-            "The `allow_auto_detect_region` field is deprecated for `{PROVIDER_TYPE}`. \
-             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
-        ));
-    }
-
-    // Convert CredentialLocationOrHardcoded to AWSRegion
-    let aws_region = region
-        .map(|loc| AWSRegion::from_credential_location(loc, PROVIDER_TYPE))
-        .transpose()?
-        .flatten();
-
-    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
-    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
-        Some(AWSRegion::Sdk)
-    } else {
-        aws_region
-    };
-
-    // Check if we have a region or need to error
-    let aws_region = aws_region.ok_or_else(|| {
-        Error::new(ErrorDetails::Config {
-            message: format!(
-                "AWS {PROVIDER_TYPE} provider requires a region. \
-                 Use `region = \"sdk\"` to enable auto-detection, \
-                 or specify a region like `region = \"us-east-1\"`."
-            ),
-        })
-    })?;
+    let aws_region = parse_aws_region(region, allow_auto_detect_region, PROVIDER_TYPE)?;
 
     let endpoint_url = endpoint_url
         .map(|loc| AWSEndpointUrl::from_credential_location(loc, PROVIDER_TYPE))
@@ -111,6 +80,9 @@ pub fn build_aws_sagemaker_config(
         session_token,
         PROVIDER_TYPE,
     )?;
+
+    // Warn about credential exfiltration risk for IAM credentials with dynamic endpoint
+    warn_if_credential_exfiltration_risk(&endpoint_url, &aws_credentials, PROVIDER_TYPE);
 
     Ok(AWSSagemakerConfig {
         region: aws_region,
@@ -156,26 +128,8 @@ impl AWSSagemakerProvider {
 
     /// Get the region for this request.
     fn get_region(&self, dynamic_api_keys: &InferenceCredentials) -> Result<Region, Error> {
-        match &self.region {
-            AWSRegion::Static(region) => Ok(region.clone()),
-            AWSRegion::Dynamic(key_name) => {
-                let region_str = dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    Error::new(ErrorDetails::DynamicRegionNotFound {
-                        key_name: key_name.clone(),
-                    })
-                })?;
-                Ok(Region::new(region_str.expose_secret().to_string()))
-            }
-            AWSRegion::Sdk => self.sdk_config.region().cloned().ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: None,
-                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: "No region configured".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            }),
-        }
+        self.region
+            .resolve_with_sdk_config(dynamic_api_keys, Some(&self.sdk_config), PROVIDER_TYPE)
     }
 }
 
