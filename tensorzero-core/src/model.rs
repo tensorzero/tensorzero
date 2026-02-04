@@ -110,6 +110,7 @@ impl UninitializedModelConfig {
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
         relay_mode: bool,
+        is_config_snapshot: bool,
     ) -> Result<ModelConfig, Error> {
         let skip_relay = self.skip_relay.unwrap_or(false);
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
@@ -117,9 +118,11 @@ impl UninitializedModelConfig {
         // build `ModelProvider`s using the name keys from the map.
         let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
             async move {
-                let load_future = provider
-                    .config
-                    .load(provider_types, provider_type_default_credentials);
+                let load_future = provider.config.load(
+                    provider_types,
+                    provider_type_default_credentials,
+                    is_config_snapshot,
+                );
 
                 // In relay mode, don't run credential validation for providers,
                 // since requests to the parent model get redirected to the downstream gateway.
@@ -1207,7 +1210,7 @@ pub enum UninitializedProviderConfig {
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
-        beta_structured_outputs: bool,
+        beta_structured_outputs: Option<bool>,
         #[serde(default)]
         provider_tools: Vec<Value>,
     },
@@ -1373,6 +1376,7 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        is_config_snapshot: bool,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
@@ -1381,18 +1385,26 @@ impl UninitializedProviderConfig {
                 api_key_location,
                 beta_structured_outputs,
                 provider_tools,
-            } => ProviderConfig::Anthropic(AnthropicProvider::new(
-                model_name,
-                api_base,
-                AnthropicKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                beta_structured_outputs,
-                provider_tools,
-            )),
+            } => {
+                // Only log a deprecation warning if this is a fresh config (not a snapshot)
+                // since snapshot configs cannot be updated
+                if !is_config_snapshot && beta_structured_outputs.is_some() {
+                    crate::utils::deprecation_warning(
+                        "The 'beta_structured_outputs' field is no longer necessary for `anthropic` providers",
+                    );
+                }
+                ProviderConfig::Anthropic(AnthropicProvider::new(
+                    model_name,
+                    api_base,
+                    AnthropicKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                    provider_tools,
+                ))
+            }
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
                 region,
@@ -2654,8 +2666,6 @@ impl ShorthandModelConfig for ModelConfig {
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                // We don't support beta structured output for shorthand models
-                false,
                 // No provider tools for shorthand models
                 vec![],
             )),
@@ -3020,8 +3030,9 @@ mod tests {
             tokens_per_second = 10
             always = true
         ";
-        let uninitialized_config: UninitializedRateLimitingConfig =
+        let toml_config: crate::config::rate_limiting::TomlUninitializedRateLimitingConfig =
             toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let clients = InferenceClients {
@@ -3797,7 +3808,6 @@ mod tests {
                 "claude".to_string(),
                 None,
                 AnthropicCredentials::None,
-                false,
                 vec![],
             ))
         })
@@ -4117,7 +4127,6 @@ mod tests {
             "claude".to_string(),
             None,
             AnthropicCredentials::None,
-            false,
             vec![],
         ));
         assert!(

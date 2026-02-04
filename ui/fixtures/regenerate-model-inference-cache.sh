@@ -14,8 +14,9 @@ fi
 
 docker compose $COMPOSE_FILES down
 docker compose $COMPOSE_FILES rm -f
-DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030 TENSORZERO_SKIP_LARGE_FIXTURES=1 VITE_TENSORZERO_FORCE_CACHE_ON=1 docker compose $COMPOSE_FILES up --force-recreate -d
+DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030 TENSORZERO_SKIP_LARGE_FIXTURES=1 TENSORZERO_UI_FORCE_CACHE_ON=1 docker compose $COMPOSE_FILES up --force-recreate -d
 docker compose $COMPOSE_FILES wait fixtures
+
 # Wipe the ModelInferenceCache table to ensure that we regenerate everything
 docker run --add-host=host.docker.internal:host-gateway clickhouse/clickhouse-server clickhouse-client --host host.docker.internal --user chuser --password chpassword --database tensorzero_ui_fixtures 'TRUNCATE TABLE ModelInferenceCache SYNC'
 # Don't use any retries, since this will pollute the model inference cache with duplicate entries.

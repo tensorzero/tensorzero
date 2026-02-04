@@ -21,12 +21,14 @@ members = [
     "internal/durable-tools",
     "internal/tensorzero-types",
     "internal/tensorzero-types-providers",
-    "internal/autopilot-worker", "internal/reqwest-sse-stream",
+    "internal/autopilot-worker",
+    "internal/reqwest-sse-stream",
+    "internal/tensorzero-config-paths",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2026.1.7"
+version = "2026.2.0"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -83,7 +85,7 @@ ts-rs = { version = "11.1.0", features = [
 ] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.43", features = ["serde"] }
-git2 = { version = "0.20.3", default-features = false }
+git2 = { version = "0.20.4", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
     "tracing_level_info",
 ] }
@@ -107,7 +109,7 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 blake3 = "1.8.3"
 moka = { version = "0.12.13", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "3eb32595a92dce26fad069e65d33b60f9f197363" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "5e0e7863a725f656ddd6b1ff3ea5b00594c203db" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }

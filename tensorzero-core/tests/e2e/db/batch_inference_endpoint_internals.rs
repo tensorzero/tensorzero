@@ -1,12 +1,24 @@
+//! E2E tests for batch inference endpoint internal helper functions.
+//!
+//! These tests verify the batch inference endpoint orchestration functions
+//! that coordinate database operations.
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::json;
 use tensorzero_core::config::Config;
-use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-/// End-to-end tests for particular internal functionality in the batch inference endpoint
-/// These are not tests of the public API (those should go in tests/e2e/providers/batch.rs)
+use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::batch_inference::BatchInferenceQueries;
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_core::db::clickhouse::test_helpers::{
+    select_chat_inference_clickhouse, select_json_inference_clickhouse,
+    select_model_inferences_clickhouse,
+};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::batch_inference::{
     PollInferenceResponse, PollPathParams, get_batch_inferences, get_batch_request,
     get_completed_batch_inference_response, write_batch_request_row,
@@ -22,213 +34,19 @@ use tensorzero_core::inference::types::{
     ContentBlockChatOutput, FinishReason, JsonInferenceOutput, StoredInput, Usage,
 };
 use tensorzero_core::jsonschema_util::JSONSchema;
-use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-    select_model_inferences_clickhouse,
-};
+// ===== HELPER FUNCTIONS =====
 
-/// Tests the `get_batch_request` function by first writing a batch inference to ClickHouse and reading with
-#[tokio::test]
-async fn test_get_batch_request() {
-    let clickhouse = get_clickhouse().await;
-    let batch_id = Uuid::now_v7();
-    let batch_params = json!({"foo": "bar"});
-    let function_name = "test_function";
-    let variant_name = "test_variant";
-    let model_name = "test_model";
-    let model_provider_name = "test_model_provider";
-    let raw_request = "raw request";
-    let raw_response = "raw response";
-    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
-        batch_id,
-        batch_params: &batch_params,
-        function_name,
-        variant_name,
-        model_name,
-        raw_request,
-        raw_response,
-        model_provider_name,
-        status: BatchStatus::Pending,
-        errors: vec![],
-    });
-    write_batch_request_row(&clickhouse, &batch_request)
-        .await
-        .unwrap();
-    // Sleep a bit to ensure the write has propagated
-    sleep(Duration::from_millis(200)).await;
-
-    // First, let's query by batch ID
-    let query = PollPathParams {
-        batch_id,
-        inference_id: None,
-    };
-    let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
-    assert_eq!(batch_request.batch_id, batch_id);
-    assert_eq!(batch_request.batch_params.into_owned(), batch_params);
-    assert_eq!(batch_request.function_name, function_name);
-    assert_eq!(batch_request.variant_name, variant_name);
-    assert_eq!(&*batch_request.model_name, model_name);
-    assert_eq!(&*batch_request.model_provider_name, model_provider_name);
-    assert_eq!(batch_request.status, BatchStatus::Pending);
-    assert_eq!(batch_request.raw_request, raw_request);
-    assert_eq!(batch_request.raw_response, raw_response);
-
-    // Next, we'll insert a BatchModelInferenceRow
-    let inference_id = Uuid::now_v7();
-    let episode_id = Uuid::now_v7();
-    let input = StoredInput {
-        system: None,
-        messages: vec![],
-    };
-
-    let row = BatchModelInferenceRow {
-        batch_id,
-        inference_id,
-        function_name: function_name.into(),
-        variant_name: variant_name.into(),
-        episode_id,
-        input,
-        input_messages: vec![],
-        system: None,
-        tool_params: None,
-        inference_params: Cow::Owned(InferenceParams::default()),
-        output_schema: None,
-        raw_request: Cow::Borrowed(""),
-        model_name: Cow::Borrowed(model_name),
-        model_provider_name: Cow::Borrowed(model_provider_name),
-        tags: HashMap::new(),
-    };
-    let rows = vec![row];
-    clickhouse
-        .write_batched(&rows, TableName::BatchModelInference)
-        .await
-        .unwrap();
-    // Sleep a bit to ensure the write has propagated
-    sleep(Duration::from_millis(200)).await;
-
-    // Now, let's query by inference ID
-    let query = PollPathParams {
-        batch_id,
-        inference_id: Some(inference_id),
-    };
-    let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
-    assert_eq!(batch_request.batch_id, batch_id);
-    assert_eq!(batch_request.function_name, function_name);
-    assert_eq!(batch_request.variant_name, variant_name);
-    assert_eq!(&*batch_request.model_name, model_name);
-    assert_eq!(&*batch_request.model_provider_name, model_provider_name);
-}
-
-#[tokio::test]
-async fn test_write_poll_batch_inference() {
-    let clickhouse = get_clickhouse().await;
-    let batch_id = Uuid::now_v7();
-    let batch_params = json!({"baz": "bat"});
-    let function_name = "test_function2";
-    let variant_name = "test_variant2";
-    let model_name = "test_model2";
-    let model_provider_name = "test_model_provider2";
-    let raw_request = "raw request".to_string();
-    let raw_response = "raw response".to_string();
-    let status = BatchStatus::Pending;
-    let errors = vec![];
-    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
-        batch_id,
-        batch_params: &batch_params,
-        function_name,
-        variant_name,
-        model_name,
-        model_provider_name,
-        raw_request: &raw_request,
-        raw_response: &raw_response,
-        status,
-        errors,
-    });
-    let config = Config::new_empty()
-        .await
-        .unwrap()
-        .into_config_without_writing_for_tests();
-
-    // Write a pending batch
-    let poll_inference_response = write_poll_batch_inference(
-        &clickhouse,
-        &batch_request,
-        PollBatchInferenceResponse::Pending {
-            raw_request: raw_request.clone(),
-            raw_response: raw_response.clone(),
-        },
-        &config,
-    )
-    .await
-    .unwrap();
-    assert_eq!(poll_inference_response, PollInferenceResponse::Pending);
-    sleep(Duration::from_millis(1200)).await;
-    let query = PollPathParams {
-        batch_id,
-        inference_id: None,
-    };
-    let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
-    assert_eq!(batch_request.batch_id, batch_id);
-    assert_eq!(batch_request.status, BatchStatus::Pending);
-
-    // Write a failed batch
-    let status = BatchStatus::Failed;
-    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
-        batch_id,
-        batch_params: &batch_params,
-        function_name,
-        variant_name,
-        model_name,
-        model_provider_name,
-        raw_request: &raw_request,
-        raw_response: &raw_response,
-        status,
-        errors: vec![],
-    });
-    let poll_inference_response = write_poll_batch_inference(
-        &clickhouse,
-        &batch_request,
-        PollBatchInferenceResponse::Failed {
-            raw_request: raw_request.clone(),
-            raw_response: raw_response.clone(),
-        },
-        &config,
-    )
-    .await
-    .unwrap();
-    assert_eq!(poll_inference_response, PollInferenceResponse::Failed);
-
-    sleep(Duration::from_millis(200)).await;
-    let query = PollPathParams {
-        batch_id,
-        inference_id: None,
-    };
-    // This should return the failed batch as it is more recent
-    let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
-    assert_eq!(batch_request.batch_id, batch_id);
-    assert_eq!(batch_request.status, BatchStatus::Failed);
-
-    // Assert BatchRequest has snapshot_hash
-    let batch_request_query = format!(
-        "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(batch_request_query)
-        .await
-        .unwrap();
-    let batch_request_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !batch_request_row["snapshot_hash"].is_null(),
-        "BatchRequest should have snapshot_hash"
-    );
+fn create_delegating_connection(
+    clickhouse: ClickHouseConnectionInfo,
+) -> DelegatingDatabaseConnection {
+    DelegatingDatabaseConnection::new(clickhouse, PostgresConnectionInfo::new_disabled())
 }
 
 /// Helper function to write 2 rows to the BatchModelInference table
 async fn write_2_batch_model_inference_rows(
-    clickhouse: &ClickHouseConnectionInfo,
+    database: &impl BatchInferenceQueries,
     batch_id: Uuid,
 ) -> Vec<BatchModelInferenceRow<'static>> {
     let inference_id = Uuid::now_v7();
@@ -257,6 +75,7 @@ async fn write_2_batch_model_inference_rows(
         model_name: Cow::Borrowed(model_name),
         model_provider_name: Cow::Borrowed(model_provider_name),
         tags: HashMap::new(),
+        snapshot_hash: Some(SnapshotHash::new_test()),
     };
     let inference_id2 = Uuid::now_v7();
     let row2 = BatchModelInferenceRow {
@@ -275,24 +94,322 @@ async fn write_2_batch_model_inference_rows(
         model_name: Cow::Borrowed(model_name),
         model_provider_name: Cow::Borrowed(model_provider_name),
         tags: HashMap::new(),
+        snapshot_hash: Some(SnapshotHash::new_test()),
     };
     let rows = vec![row1, row2];
-    clickhouse
-        .write_batched(&rows, TableName::BatchModelInference)
-        .await
-        .unwrap();
+    database.write_batch_model_inferences(&rows).await.unwrap();
     rows
 }
 
-#[tokio::test]
-async fn test_get_batch_inferences() {
-    let clickhouse = get_clickhouse().await;
+// ===== TESTS =====
+
+async fn test_get_batch_request_endpoint(
+    database: impl BatchInferenceQueries + TestDatabaseHelpers,
+) {
     let batch_id = Uuid::now_v7();
-    let mut expected_batch_rows = write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
+    let batch_params = json!({"foo": "bar"});
+    let function_name = "test_function";
+    let variant_name = "test_variant";
+    let model_name = "test_model";
+    let model_provider_name = "test_model_provider";
+    let raw_request = "raw request";
+    let raw_response = "raw response";
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id,
+        batch_params: &batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        raw_request,
+        raw_response,
+        model_provider_name,
+        status: BatchStatus::Pending,
+        errors: vec![],
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    });
+    write_batch_request_row(&database, &batch_request)
+        .await
+        .unwrap();
+    database.sleep_for_writes_to_be_visible().await;
+
+    // First, let's query by batch ID
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
+    let batch_request = get_batch_request(&database, &query).await.unwrap();
+    assert_eq!(batch_request.batch_id, batch_id, "batch_id should match");
+    assert_eq!(
+        batch_request.batch_params.into_owned(),
+        batch_params,
+        "batch_params should match"
+    );
+    assert_eq!(
+        batch_request.function_name, function_name,
+        "function_name should match"
+    );
+    assert_eq!(
+        batch_request.variant_name, variant_name,
+        "variant_name should match"
+    );
+    assert_eq!(
+        &*batch_request.model_name, model_name,
+        "model_name should match"
+    );
+    assert_eq!(
+        &*batch_request.model_provider_name, model_provider_name,
+        "model_provider_name should match"
+    );
+    assert_eq!(
+        batch_request.status,
+        BatchStatus::Pending,
+        "status should be Pending"
+    );
+    assert_eq!(
+        batch_request.raw_request, raw_request,
+        "raw_request should match"
+    );
+    assert_eq!(
+        batch_request.raw_response, raw_response,
+        "raw_response should match"
+    );
+
+    // Next, we'll insert a BatchModelInferenceRow
+    let inference_id = Uuid::now_v7();
+    let episode_id = Uuid::now_v7();
+    let input = StoredInput {
+        system: None,
+        messages: vec![],
+    };
+
+    let row = BatchModelInferenceRow {
+        batch_id,
+        inference_id,
+        function_name: function_name.into(),
+        variant_name: variant_name.into(),
+        episode_id,
+        input,
+        input_messages: vec![],
+        system: None,
+        tool_params: None,
+        inference_params: Cow::Owned(InferenceParams::default()),
+        output_schema: None,
+        raw_request: Cow::Borrowed(""),
+        model_name: Cow::Borrowed(model_name),
+        model_provider_name: Cow::Borrowed(model_provider_name),
+        tags: HashMap::new(),
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    };
+    database.write_batch_model_inferences(&[row]).await.unwrap();
+    database.sleep_for_writes_to_be_visible().await;
+
+    // Now, let's query by inference ID
+    let query = PollPathParams {
+        batch_id,
+        inference_id: Some(inference_id),
+    };
+    let batch_request = get_batch_request(&database, &query).await.unwrap();
+    assert_eq!(batch_request.batch_id, batch_id, "batch_id should match");
+    assert_eq!(
+        batch_request.function_name, function_name,
+        "function_name should match"
+    );
+    assert_eq!(
+        batch_request.variant_name, variant_name,
+        "variant_name should match"
+    );
+    assert_eq!(
+        &*batch_request.model_name, model_name,
+        "model_name should match"
+    );
+    assert_eq!(
+        &*batch_request.model_provider_name, model_provider_name,
+        "model_provider_name should match"
+    );
+}
+make_db_test!(test_get_batch_request_endpoint);
+
+// TODO(#5691): allow running with postgres after implementing batch ModelInference writes
+async fn test_write_poll_batch_inference_endpoint(clickhouse: ClickHouseConnectionInfo) {
+    let database = create_delegating_connection(clickhouse);
+    let batch_id = Uuid::now_v7();
+    let batch_params = json!({"baz": "bat"});
+    let function_name = "test_function2";
+    let variant_name = "test_variant2";
+    let model_name = "test_model2";
+    let model_provider_name = "test_model_provider2";
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
+    let status = BatchStatus::Pending;
+    let errors = vec![];
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id,
+        batch_params: &batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
+        status,
+        errors,
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    });
+    let config = Config::new_empty()
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+    // Write a pending batch
+    let poll_inference_response = write_poll_batch_inference(
+        &database,
+        &batch_request,
+        PollBatchInferenceResponse::Pending {
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+        },
+        &config,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        poll_inference_response,
+        PollInferenceResponse::Pending,
+        "Response should be Pending"
+    );
+    database.clickhouse.sleep_for_writes_to_be_visible().await;
+
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
+    let batch_request_result = get_batch_request(&database, &query).await.unwrap();
+    assert_eq!(
+        batch_request_result.batch_id, batch_id,
+        "batch_id should match"
+    );
+    assert_eq!(
+        batch_request_result.status,
+        BatchStatus::Pending,
+        "status should be Pending"
+    );
+
+    // Write a failed batch
+    let status = BatchStatus::Failed;
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id,
+        batch_params: &batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
+        status,
+        errors: vec![],
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    });
+    let poll_inference_response = write_poll_batch_inference(
+        &database,
+        &batch_request,
+        PollBatchInferenceResponse::Failed {
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+        },
+        &config,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        poll_inference_response,
+        PollInferenceResponse::Failed,
+        "Response should be Failed"
+    );
+
+    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
+    // This should return the failed batch as it is more recent
+    let batch_request = get_batch_request(&database, &query).await.unwrap();
+    assert_eq!(batch_request.batch_id, batch_id, "batch_id should match");
+    assert_eq!(
+        batch_request.status,
+        BatchStatus::Failed,
+        "status should be Failed"
+    );
+}
+make_clickhouse_only_test!(test_write_poll_batch_inference_endpoint);
+
+/// ClickHouse-specific test to verify that BatchRequest has snapshot_hash
+async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionInfo) {
+    let database = create_delegating_connection(clickhouse.clone());
+    let batch_id = Uuid::now_v7();
+    let batch_params = json!({"baz": "bat"});
+    let function_name = "test_function";
+    let variant_name = "test_variant";
+    let model_name = "test_model";
+    let model_provider_name = "test_model_provider";
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id,
+        batch_params: &batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
+        status: BatchStatus::Pending,
+        errors: vec![],
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    });
+    let config = Config::new_empty()
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+    write_poll_batch_inference(
+        &database,
+        &batch_request,
+        PollBatchInferenceResponse::Pending {
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+        },
+        &config,
+    )
+    .await
+    .unwrap();
+    database.clickhouse.sleep_for_writes_to_be_visible().await;
+
+    let batch_request_query = format!(
+        "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(batch_request_query)
+        .await
+        .unwrap();
+    let batch_request_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !batch_request_row["snapshot_hash"].is_null(),
+        "BatchRequest should have snapshot_hash"
+    );
+}
+make_clickhouse_only_test!(test_batch_request_has_snapshot_hash);
+
+async fn test_get_batch_inferences_endpoint(
+    database: impl BatchInferenceQueries + TestDatabaseHelpers,
+) {
+    let batch_id = Uuid::now_v7();
+    let mut expected_batch_rows = write_2_batch_model_inference_rows(&database, batch_id).await;
     let other_batch_id = Uuid::now_v7();
-    let other_batch_rows = write_2_batch_model_inference_rows(&clickhouse, other_batch_id).await;
+    let other_batch_rows = write_2_batch_model_inference_rows(&database, other_batch_id).await;
+    database.sleep_for_writes_to_be_visible().await;
+
     let mut batch_inferences = get_batch_inferences(
-        &clickhouse,
+        &database,
         batch_id,
         &[
             expected_batch_rows[0].inference_id,
@@ -304,21 +421,30 @@ async fn test_get_batch_inferences() {
     .await
     .unwrap();
 
-    assert_eq!(batch_inferences.len(), 2);
+    assert_eq!(
+        batch_inferences.len(),
+        2,
+        "Should return 2 batch inferences for the matching batch_id"
+    );
 
     // Sort both arrays by inference_id to ensure matching order
     batch_inferences.sort_by_key(|row| row.inference_id);
     expected_batch_rows.sort_by_key(|row| row.inference_id);
 
-    assert_eq!(batch_inferences[0], expected_batch_rows[0]);
-    assert_eq!(batch_inferences[1], expected_batch_rows[1]);
+    assert_eq!(
+        batch_inferences[0], expected_batch_rows[0],
+        "First batch inference should match"
+    );
+    assert_eq!(
+        batch_inferences[1], expected_batch_rows[1],
+        "Second batch inference should match"
+    );
 }
+make_db_test!(test_get_batch_inferences_endpoint);
 
-/// Tests writing and reading a completed batch inference for a chat function
-/// Exercises the write path in `write_completed_batch_inference` and the read path in `get_completed_batch_inference_response`
-#[tokio::test]
-async fn test_write_read_completed_batch_inference_chat() {
-    let clickhouse = get_clickhouse().await;
+// TODO(#5691): allow running with postgres after implementing batch ModelInference writes
+async fn test_write_read_completed_batch_inference_chat(clickhouse: ClickHouseConnectionInfo) {
+    let database = create_delegating_connection(clickhouse);
     let batch_id = Uuid::now_v7();
     let batch_params = json!({"baz": "bat"});
     let function_name = "test_function";
@@ -340,6 +466,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         raw_response: &raw_response,
         status,
         errors,
+        snapshot_hash: Some(SnapshotHash::new_test()),
     });
     let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
         variants: HashMap::new(),
@@ -350,8 +477,10 @@ async fn test_write_read_completed_batch_inference_chat() {
         .unwrap()
         .into_config_without_writing_for_tests();
     config.functions = HashMap::from([(function_name.to_string(), function_config)]);
-    let batch_model_inference_rows =
-        write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
+
+    let batch_model_inference_rows = write_2_batch_model_inference_rows(&database, batch_id).await;
+    database.clickhouse.sleep_for_writes_to_be_visible().await;
+
     let inference_id1 = batch_model_inference_rows[0].inference_id;
     let output_1 = ProviderBatchInferenceOutput {
         id: inference_id1,
@@ -380,53 +509,82 @@ async fn test_write_read_completed_batch_inference_chat() {
         raw_response: raw_response.clone(),
     };
     let mut inference_responses =
-        write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
+        write_completed_batch_inference(&database, &batch_request, response, &config)
             .await
             .unwrap();
 
     // Sort inferences by inference_id to ensure consistent ordering
     inference_responses.sort_by_key(tensorzero::InferenceResponse::inference_id);
 
-    assert_eq!(inference_responses.len(), 2);
+    assert_eq!(
+        inference_responses.len(),
+        2,
+        "Should return 2 inference responses"
+    );
     let inference_response_1 = &inference_responses[0];
     let inference_response_2 = &inference_responses[1];
 
     match inference_response_1 {
         InferenceResponse::Chat(chat_inference_response) => {
-            assert_eq!(chat_inference_response.inference_id, inference_id1);
+            assert_eq!(
+                chat_inference_response.inference_id, inference_id1,
+                "inference_id should match"
+            );
             assert_eq!(
                 chat_inference_response.finish_reason,
-                Some(FinishReason::Stop)
+                Some(FinishReason::Stop),
+                "finish_reason should be Stop"
             );
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
-                    assert_eq!(text_block.text, "hello world");
+                    assert_eq!(text_block.text, "hello world", "text should match");
                 }
                 _ => panic!("Unexpected content block type"),
             }
-            assert_eq!(chat_inference_response.usage.input_tokens, Some(10));
-            assert_eq!(chat_inference_response.usage.output_tokens, Some(20));
+            assert_eq!(
+                chat_inference_response.usage.input_tokens,
+                Some(10),
+                "input_tokens should match"
+            );
+            assert_eq!(
+                chat_inference_response.usage.output_tokens,
+                Some(20),
+                "output_tokens should match"
+            );
         }
         InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
 
     match inference_response_2 {
         InferenceResponse::Chat(chat_inference_response) => {
-            assert_eq!(chat_inference_response.inference_id, inference_id2);
+            assert_eq!(
+                chat_inference_response.inference_id, inference_id2,
+                "inference_id should match"
+            );
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
-                    assert_eq!(text_block.text, "goodbye world");
+                    assert_eq!(text_block.text, "goodbye world", "text should match");
                 }
                 _ => panic!("Unexpected content block type"),
             }
-            assert_eq!(chat_inference_response.usage.input_tokens, Some(20));
-            assert_eq!(chat_inference_response.usage.output_tokens, Some(30));
+            assert_eq!(
+                chat_inference_response.usage.input_tokens,
+                Some(20),
+                "input_tokens should match"
+            );
+            assert_eq!(
+                chat_inference_response.usage.output_tokens,
+                Some(30),
+                "output_tokens should match"
+            );
         }
         InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
 
-    sleep(Duration::from_millis(200)).await;
-    let chat_inference_1 = select_chat_inference_clickhouse(&clickhouse, inference_id1)
+    database.clickhouse.sleep_for_writes_to_be_visible().await;
+
+    // Writing batch inferences should also write to the Chat and Model inference tables.
+    let chat_inference_1 = select_chat_inference_clickhouse(&database.clickhouse, inference_id1)
         .await
         .unwrap();
     let retrieved_inference_id1 = chat_inference_1["id"].as_str().unwrap();
@@ -440,7 +598,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         !chat_inference_1["snapshot_hash"].is_null(),
         "ChatInference should have snapshot_hash"
     );
-    let chat_inference_2 = select_chat_inference_clickhouse(&clickhouse, inference_id2)
+    let chat_inference_2 = select_chat_inference_clickhouse(&database.clickhouse, inference_id2)
         .await
         .unwrap();
     let retrieved_inference_id2 = chat_inference_2["id"].as_str().unwrap();
@@ -450,7 +608,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         !chat_inference_2["snapshot_hash"].is_null(),
         "ChatInference should have snapshot_hash"
     );
-    let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id1)
+    let model_inferences = select_model_inferences_clickhouse(&database.clickhouse, inference_id1)
         .await
         .unwrap();
     assert_eq!(model_inferences.len(), 1);
@@ -463,8 +621,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         !model_inference["snapshot_hash"].is_null(),
         "ModelInference should have snapshot_hash"
     );
-
-    let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id2)
+    let model_inferences = select_model_inferences_clickhouse(&database.clickhouse, inference_id2)
         .await
         .unwrap();
     assert_eq!(model_inferences.len(), 1);
@@ -477,12 +634,12 @@ async fn test_write_read_completed_batch_inference_chat() {
         !model_inference["snapshot_hash"].is_null(),
         "ModelInference should have snapshot_hash"
     );
-
     // Assert BatchModelInference has snapshot_hash
     let batch_model_inference_query = format!(
         "SELECT snapshot_hash FROM BatchModelInference WHERE batch_id = '{batch_id}' AND inference_id = '{inference_id1}' FORMAT JSONEachRow"
     );
-    let response = clickhouse
+    let response = database
+        .clickhouse
         .run_query_synchronous_no_params(batch_model_inference_query)
         .await
         .unwrap();
@@ -499,15 +656,22 @@ async fn test_write_read_completed_batch_inference_chat() {
         inference_id: None,
     };
     let completed_inference_response = get_completed_batch_inference_response(
-        &clickhouse,
+        &database,
         &batch_request,
         &query,
         &config.functions[function_name],
     )
     .await
     .unwrap();
-    assert_eq!(completed_inference_response.batch_id, batch_id);
-    assert_eq!(completed_inference_response.inferences.len(), 2);
+    assert_eq!(
+        completed_inference_response.batch_id, batch_id,
+        "batch_id should match"
+    );
+    assert_eq!(
+        completed_inference_response.inferences.len(),
+        2,
+        "Should return 2 inferences"
+    );
 
     // Create HashMaps keyed by inference_id for both sets of inferences
     let completed_inferences: HashMap<_, _> = completed_inference_response
@@ -521,15 +685,18 @@ async fn test_write_read_completed_batch_inference_chat() {
         .collect();
 
     // Compare the HashMaps
-    assert_eq!(completed_inferences, original_inferences);
+    assert_eq!(
+        completed_inferences, original_inferences,
+        "Completed inferences should match original inferences"
+    );
 
-    // Now let's read using `get_completed_batch_inference_response` with a `PollInferenceQuery::Inference`
+    // Now let's read using `get_completed_batch_inference_response` with a specific inference_id
     let query = PollPathParams {
         batch_id,
         inference_id: Some(inference_id1),
     };
     let completed_inference_response = get_completed_batch_inference_response(
-        &clickhouse,
+        &database,
         &batch_request,
         &query,
         &config.functions[function_name],
@@ -537,16 +704,15 @@ async fn test_write_read_completed_batch_inference_chat() {
     .await
     .unwrap();
     assert_eq!(
-        &completed_inference_response.inferences[0],
-        original_inferences[&inference_id1]
+        &completed_inference_response.inferences[0], original_inferences[&inference_id1],
+        "Single inference query should return matching inference"
     );
 }
+make_clickhouse_only_test!(test_write_read_completed_batch_inference_chat);
 
-#[tokio::test]
-/// Tests writing and reading a completed batch inference for a JSON function
-/// Exercises the write path in `write_completed_batch_inference` and the read path in `get_completed_batch_inference_response`
-async fn test_write_read_completed_batch_inference_json() {
-    let clickhouse = get_clickhouse().await;
+// TODO(#5691): allow running with postgres after implementing batch ModelInference writes
+async fn test_write_read_completed_batch_inference_json(clickhouse: ClickHouseConnectionInfo) {
+    let database = create_delegating_connection(clickhouse);
     let batch_id = Uuid::now_v7();
     let batch_params = json!({"baz": "bat"});
     let function_name = "test_function";
@@ -567,6 +733,7 @@ async fn test_write_read_completed_batch_inference_json() {
         model_provider_name,
         status,
         errors: vec![],
+        snapshot_hash: Some(SnapshotHash::new_test()),
     });
     let output_schema = JSONSchema::from_value(json!({
         "type": "object",
@@ -588,8 +755,10 @@ async fn test_write_read_completed_batch_inference_json() {
         .unwrap()
         .into_config_without_writing_for_tests();
     config.functions = HashMap::from([(function_name.to_string(), function_config)]);
-    let batch_model_inference_rows =
-        write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
+
+    let batch_model_inference_rows = write_2_batch_model_inference_rows(&database, batch_id).await;
+    database.clickhouse.sleep_for_writes_to_be_visible().await;
+
     let inference_id1 = batch_model_inference_rows[0].inference_id;
     let output_1 = ProviderBatchInferenceOutput {
         id: inference_id1,
@@ -620,11 +789,15 @@ async fn test_write_read_completed_batch_inference_json() {
         raw_response,
     };
     let inference_responses =
-        write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
+        write_completed_batch_inference(&database, &batch_request, response, &config)
             .await
             .unwrap();
 
-    assert_eq!(inference_responses.len(), 2);
+    assert_eq!(
+        inference_responses.len(),
+        2,
+        "Should return 2 inference responses"
+    );
 
     // Create a map of inferences by inference_id for easier lookup
     let inferences_by_id: HashMap<_, _> = inference_responses
@@ -642,19 +815,29 @@ async fn test_write_read_completed_batch_inference_json() {
 
     match response_1 {
         InferenceResponse::Json(json_inference_response) => {
-            assert_eq!(json_inference_response.inference_id, inference_id1);
+            assert_eq!(
+                json_inference_response.inference_id, inference_id1,
+                "inference_id should match"
+            );
             assert_eq!(
                 json_inference_response.output.raw,
-                Some("{\"answer\": \"hello world\"}".to_string())
+                Some("{\"answer\": \"hello world\"}".to_string()),
+                "raw output should match"
             );
             assert_eq!(
                 json_inference_response.output.parsed.as_ref().unwrap()["answer"],
-                "hello world"
+                "hello world",
+                "parsed output should match"
             );
-            assert_eq!(json_inference_response.usage.input_tokens, Some(10));
+            assert_eq!(
+                json_inference_response.usage.input_tokens,
+                Some(10),
+                "input_tokens should match"
+            );
             assert_eq!(
                 json_inference_response.finish_reason,
-                Some(FinishReason::Stop)
+                Some(FinishReason::Stop),
+                "finish_reason should be Stop"
             );
         }
         InferenceResponse::Chat(_) => panic!("Unexpected inference response type"),
@@ -662,22 +845,32 @@ async fn test_write_read_completed_batch_inference_json() {
 
     match response_2 {
         InferenceResponse::Json(json_inference_response) => {
-            assert_eq!(json_inference_response.inference_id, inference_id2);
+            assert_eq!(
+                json_inference_response.inference_id, inference_id2,
+                "inference_id should match"
+            );
             assert_eq!(
                 json_inference_response.output.raw,
-                Some("{\"response\": \"goodbye world\"}".to_string())
+                Some("{\"response\": \"goodbye world\"}".to_string()),
+                "raw output should match"
             );
-            assert!(json_inference_response.output.parsed.is_none());
+            assert!(
+                json_inference_response.output.parsed.is_none(),
+                "parsed output should be None for invalid schema"
+            );
             assert_eq!(
                 json_inference_response.finish_reason,
-                Some(FinishReason::ToolCall)
+                Some(FinishReason::ToolCall),
+                "finish_reason should be ToolCall"
             );
         }
         InferenceResponse::Chat(_) => panic!("Unexpected inference response type"),
     }
 
-    sleep(Duration::from_millis(200)).await;
-    let json_inference_1 = select_json_inference_clickhouse(&clickhouse, inference_id1)
+    database.clickhouse.sleep_for_writes_to_be_visible().await;
+
+    // Writing batch inferences should also write to the Json and Model inference tables.
+    let json_inference_1 = select_json_inference_clickhouse(&database.clickhouse, inference_id1)
         .await
         .unwrap();
     let retrieved_inference_id1 = json_inference_1["id"].as_str().unwrap();
@@ -702,7 +895,7 @@ async fn test_write_read_completed_batch_inference_json() {
         !json_inference_1["snapshot_hash"].is_null(),
         "JsonInference should have snapshot_hash"
     );
-    let json_inference_2 = select_json_inference_clickhouse(&clickhouse, inference_id2)
+    let json_inference_2 = select_json_inference_clickhouse(&database.clickhouse, inference_id2)
         .await
         .unwrap();
     let retrieved_inference_id2 = json_inference_2["id"].as_str().unwrap();
@@ -720,7 +913,7 @@ async fn test_write_read_completed_batch_inference_json() {
         !json_inference_2["snapshot_hash"].is_null(),
         "JsonInference should have snapshot_hash"
     );
-    let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id1)
+    let model_inferences = select_model_inferences_clickhouse(&database.clickhouse, inference_id1)
         .await
         .unwrap();
     assert_eq!(model_inferences.len(), 1);
@@ -737,8 +930,7 @@ async fn test_write_read_completed_batch_inference_json() {
         !model_inference["snapshot_hash"].is_null(),
         "ModelInference should have snapshot_hash"
     );
-
-    let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id2)
+    let model_inferences = select_model_inferences_clickhouse(&database.clickhouse, inference_id2)
         .await
         .unwrap();
     assert_eq!(model_inferences.len(), 1);
@@ -762,15 +954,22 @@ async fn test_write_read_completed_batch_inference_json() {
         inference_id: None,
     };
     let completed_inference_response = get_completed_batch_inference_response(
-        &clickhouse,
+        &database,
         &batch_request,
         &query,
         &config.functions[function_name],
     )
     .await
     .unwrap();
-    assert_eq!(completed_inference_response.batch_id, batch_id);
-    assert_eq!(completed_inference_response.inferences.len(), 2);
+    assert_eq!(
+        completed_inference_response.batch_id, batch_id,
+        "batch_id should match"
+    );
+    assert_eq!(
+        completed_inference_response.inferences.len(),
+        2,
+        "Should return 2 inferences"
+    );
 
     // Create HashMaps keyed by inference_id for both sets of inferences
     let completed_inferences: HashMap<_, _> = completed_inference_response
@@ -784,15 +983,18 @@ async fn test_write_read_completed_batch_inference_json() {
         .collect();
 
     // Compare the HashMaps
-    assert_eq!(completed_inferences, original_inferences);
+    assert_eq!(
+        completed_inferences, original_inferences,
+        "Completed inferences should match original inferences"
+    );
 
-    // Now let's read using `get_completed_batch_inference_response` with a `PollInferenceQuery::Inference`
+    // Now let's read using `get_completed_batch_inference_response` with a specific inference_id
     let query = PollPathParams {
         batch_id,
         inference_id: Some(inference_id1),
     };
     let completed_inference_response = get_completed_batch_inference_response(
-        &clickhouse,
+        &database,
         &batch_request,
         &query,
         &config.functions[function_name],
@@ -800,7 +1002,8 @@ async fn test_write_read_completed_batch_inference_json() {
     .await
     .unwrap();
     assert_eq!(
-        &completed_inference_response.inferences[0],
-        original_inferences[&inference_id1]
+        &completed_inference_response.inferences[0], original_inferences[&inference_id1],
+        "Single inference query should return matching inference"
     );
 }
+make_clickhouse_only_test!(test_write_read_completed_batch_inference_json);

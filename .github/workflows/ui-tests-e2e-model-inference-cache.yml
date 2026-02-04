@@ -124,7 +124,7 @@ jobs:
           echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "VITE_TENSORZERO_FORCE_CACHE_ON=1" >> fixtures/.env
+          echo "TENSORZERO_UI_FORCE_CACHE_ON=1" >> fixtures/.env
 
       - name: Enable authentication in config
         if: matrix.auth_enabled == true

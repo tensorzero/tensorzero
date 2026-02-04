@@ -70,6 +70,14 @@ export function ChatInput({
     previousUserMessageEventIdRef.current = undefined;
   }, [sessionId]);
 
+  // Auto-focus textarea when navigating to new session page
+  // Wait for disabled state to clear before focusing
+  useEffect(() => {
+    if (isNewSession && !disabled && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isNewSession, disabled]);
+
   // Sample a random placeholder for new sessions, default for existing sessions
   const placeholder = useMemo(
     () =>
@@ -211,10 +219,11 @@ export function ChatInput({
           disabled={!canSend}
           className={cn(
             "absolute right-2 bottom-1",
-            "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md",
-            "text-fg-primary hover:text-fg-secondary",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-            "transition-colors",
+            "flex h-9 w-9 items-center justify-center rounded-md",
+            "text-fg-primary transition-colors",
+            canSend
+              ? "hover:text-fg-secondary cursor-pointer"
+              : "cursor-not-allowed opacity-50",
           )}
           aria-label="Send message"
         >
