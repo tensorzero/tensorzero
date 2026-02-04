@@ -3,12 +3,14 @@ use serde::{Deserialize, Serialize};
 use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::evaluations::{UninitializedEvaluationConfig, UninitializedEvaluatorConfig};
 use tensorzero_core::experimentation::UninitializedExperimentationConfig;
+use tensorzero_derive::TensorZeroDeserialize;
 
 /// Represents a targeted edit operation to apply to a TensorZero config.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(tag = "operation", rename_all = "snake_case")]
+#[serde(tag = "operation")]
+#[serde(rename_all = "snake_case")]
 pub enum EditPayload {
     UpsertVariant(Box<UpsertVariantPayload>),
     UpsertExperimentation(UpsertExperimentationPayload),
