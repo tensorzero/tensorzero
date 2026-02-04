@@ -32,6 +32,25 @@ export const handle: RouteHandle = {
   ],
 };
 
+function ProjectPageHeader({ projectName }: { projectName: string }) {
+  return (
+    <PageHeader
+      eyebrow={
+        <Breadcrumbs
+          segments={[
+            {
+              label: "Workflow Evaluations",
+              href: "/workflow-evaluations",
+            },
+            { label: "Projects" },
+          ]}
+        />
+      }
+      name={projectName}
+    />
+  );
+}
+
 type ProjectData = {
   runInfos: Awaited<
     ReturnType<
@@ -124,20 +143,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 function ContentSkeleton({ projectName }: { projectName: string }) {
   return (
     <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              {
-                label: "Workflow Evaluations",
-                href: "/workflow-evaluations",
-              },
-              { label: "Projects" },
-            ]}
-          />
-        }
-        name={projectName}
-      />
+      <ProjectPageHeader projectName={projectName} />
       <SectionLayout>
         <Skeleton className="mb-4 h-10 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -156,20 +162,7 @@ function ContentError({ projectName }: { projectName: string }) {
   }
   return (
     <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              {
-                label: "Workflow Evaluations",
-                href: "/workflow-evaluations",
-              },
-              { label: "Projects" },
-            ]}
-          />
-        }
-        name={projectName}
-      />
+      <ProjectPageHeader projectName={projectName} />
       <SectionErrorNotice
         icon={AlertCircle}
         title="Error loading workflow evaluation project"
@@ -209,20 +202,7 @@ function ProjectContent({
 
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              {
-                label: "Workflow Evaluations",
-                href: "/workflow-evaluations",
-              },
-              { label: "Projects" },
-            ]}
-          />
-        }
-        name={projectName}
-      />
+      <ProjectPageHeader projectName={projectName} />
       <SectionLayout>
         <WorkflowEvalRunSelector
           projectName={projectName}

@@ -7,6 +7,7 @@ import {
   useAsyncError,
   useLocation,
   useNavigate,
+  useSearchParams,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
@@ -120,18 +121,19 @@ function ProjectsContent({
   limit: number;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { projects, count } = data;
 
   const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("projectOffset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("projectOffset", String(offset + limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("projectOffset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("projectOffset", String(offset - limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   return (
@@ -158,18 +160,19 @@ function RunsContent({
   limit: number;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { runs, count } = data;
 
   const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("runOffset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("runOffset", String(offset + limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("runOffset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("runOffset", String(offset - limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   return (

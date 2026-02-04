@@ -30,6 +30,22 @@ export const handle: RouteHandle = {
   ],
 };
 
+function RunPageHeader({ runId }: { runId: string }) {
+  return (
+    <PageHeader
+      eyebrow={
+        <Breadcrumbs
+          segments={[
+            { label: "Workflow Evaluations", href: "/workflow-evaluations" },
+            { label: "Runs" },
+          ]}
+        />
+      }
+      name={runId}
+    />
+  );
+}
+
 type RunData = {
   workflowEvaluationRun: Awaited<
     ReturnType<
@@ -104,20 +120,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-function ContentSkeleton({ run_id }: { run_id: string }) {
+function ContentSkeleton({ runId }: { runId: string }) {
   return (
     <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Workflow Evaluations", href: "/workflow-evaluations" },
-              { label: "Runs" },
-            ]}
-          />
-        }
-        name={run_id}
-      />
+      <RunPageHeader runId={runId} />
       <SectionLayout>
         <Skeleton className="h-24 w-full" />
       </SectionLayout>
@@ -128,7 +134,7 @@ function ContentSkeleton({ run_id }: { run_id: string }) {
   );
 }
 
-function ContentError({ run_id }: { run_id: string }) {
+function ContentError({ runId }: { runId: string }) {
   const error = useAsyncError();
   let message = "Failed to load workflow evaluation run";
   if (isRouteErrorResponse(error)) {
@@ -138,17 +144,7 @@ function ContentError({ run_id }: { run_id: string }) {
   }
   return (
     <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Workflow Evaluations", href: "/workflow-evaluations" },
-              { label: "Runs" },
-            ]}
-          />
-        }
-        name={run_id}
-      />
+      <RunPageHeader runId={runId} />
       <SectionErrorNotice
         icon={AlertCircle}
         title="Error loading workflow evaluation run"
@@ -190,17 +186,7 @@ function RunContent({
 
   return (
     <>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Workflow Evaluations", href: "/workflow-evaluations" },
-              { label: "Runs" },
-            ]}
-          />
-        }
-        name={workflowEvaluationRun.id}
-      />
+      <RunPageHeader runId={workflowEvaluationRun.id} />
       <BasicInfo workflowEvaluationRun={workflowEvaluationRun} count={count} />
       <SectionLayout>
         <WorkflowEvaluationRunEpisodesTable
@@ -228,12 +214,9 @@ export default function WorkflowEvaluationRunSummaryPage({
     <PageLayout>
       <Suspense
         key={location.key}
-        fallback={<ContentSkeleton run_id={run_id} />}
+        fallback={<ContentSkeleton runId={run_id} />}
       >
-        <Await
-          resolve={runData}
-          errorElement={<ContentError run_id={run_id} />}
-        >
+        <Await resolve={runData} errorElement={<ContentError runId={run_id} />}>
           {(data) => <RunContent data={data} offset={offset} limit={limit} />}
         </Await>
       </Suspense>
