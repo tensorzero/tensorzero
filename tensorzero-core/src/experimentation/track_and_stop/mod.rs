@@ -259,6 +259,8 @@ impl Nursery {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedTrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
@@ -272,7 +274,8 @@ pub struct UninitializedTrackAndStopConfig {
     epsilon: f64,
     #[serde(default = "default_update_period_s")]
     update_period_s: u64,
-    #[serde(default = "default_min_prob")]
+    #[serde(default = "default_min_prob", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     min_prob: Option<f64>,
 }
 
