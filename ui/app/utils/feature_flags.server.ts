@@ -17,8 +17,6 @@ export type { FeatureFlags } from "~/context/feature-flags";
 export function loadFeatureFlags(): FeatureFlags {
   return {
     FORCE_CACHE_ON: process.env.TENSORZERO_UI_FORCE_CACHE_ON === "1",
-    FF_INTERRUPT_SESSION:
-      process.env.TENSORZERO_UI_FF_INTERRUPT_SESSION === "1",
   };
 }
 

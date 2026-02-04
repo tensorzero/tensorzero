@@ -15,13 +15,10 @@ import { createContext, use } from "react";
 export interface FeatureFlags {
   /** When TENSORZERO_UI_FORCE_CACHE_ON=1, sets `cache_options.enabled = "on"` on all inference calls */
   FORCE_CACHE_ON: boolean;
-  /** When TENSORZERO_UI_FF_INTERRUPT_SESSION=1, enables the interrupt session button in autopilot sessions */
-  FF_INTERRUPT_SESSION: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   FORCE_CACHE_ON: false,
-  FF_INTERRUPT_SESSION: false,
 };
 
 const FeatureFlagsContext = createContext<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
