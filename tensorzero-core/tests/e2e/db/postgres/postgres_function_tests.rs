@@ -5,6 +5,75 @@ use chrono::{Days, TimeZone, Utc};
 use sqlx::QueryBuilder;
 use uuid::{NoContext, Timestamp, Uuid};
 
+/// Tests that the Postgres `uint128_to_uuid` function correctly converts a UInt128 decimal
+/// representation (as exported by ClickHouse) back to a UUID.
+///
+/// ClickHouse stores UUIDs as UInt128 internally, and when exporting to JSON/CSV, it
+/// represents them as decimal strings. This function reverses that conversion.
+#[tokio::test]
+async fn test_uint128_to_uuid_known_value() {
+    let conn = get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    // Known UUID from fixture data: 01968d04-142c-7e53-8ea7-3a3255b518dc
+    let expected_uuid = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    // Convert UUID to UInt128 decimal representation (big-endian interpretation)
+    let uint128_value = expected_uuid.as_u128();
+    let uint128_decimal = uint128_value.to_string();
+
+    // Call the Postgres function
+    let (result_uuid,): (Uuid,) = sqlx::query_as("SELECT tensorzero.uint128_to_uuid($1::NUMERIC)")
+        .bind(&uint128_decimal)
+        .fetch_one(pool)
+        .await
+        .expect("uint128_to_uuid query should succeed");
+
+    assert_eq!(
+        result_uuid, expected_uuid,
+        "uint128_to_uuid should correctly convert UInt128 decimal back to UUID"
+    );
+}
+
+/// Tests that uint128_to_uuid works with zero.
+#[tokio::test]
+async fn test_uint128_to_uuid_zero() {
+    let conn = get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    let (result_uuid,): (Uuid,) = sqlx::query_as("SELECT tensorzero.uint128_to_uuid(0::NUMERIC)")
+        .fetch_one(pool)
+        .await
+        .expect("uint128_to_uuid query should succeed");
+
+    assert_eq!(
+        result_uuid,
+        Uuid::nil(),
+        "uint128_to_uuid(0) should return the nil UUID"
+    );
+}
+
+/// Tests that uint128_to_uuid works with max value (all bits set).
+#[tokio::test]
+async fn test_uint128_to_uuid_max() {
+    let conn = get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    let max_uint128 = u128::MAX.to_string();
+
+    let (result_uuid,): (Uuid,) = sqlx::query_as("SELECT tensorzero.uint128_to_uuid($1::NUMERIC)")
+        .bind(&max_uint128)
+        .fetch_one(pool)
+        .await
+        .expect("uint128_to_uuid query should succeed");
+
+    assert_eq!(
+        result_uuid,
+        Uuid::max(),
+        "uint128_to_uuid(MAX) should return the max UUID (all 1s)"
+    );
+}
+
 /// Tests that the Postgres `uuid_v7_to_timestamp` function extracts the same timestamp
 /// that Rust's `uuid` crate encodes into a UUIDv7.
 #[tokio::test]

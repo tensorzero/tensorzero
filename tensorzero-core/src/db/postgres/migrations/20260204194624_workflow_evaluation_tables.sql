@@ -4,33 +4,30 @@
 -- Helper function to convert UInt128 (as NUMERIC) to UUID
 -- ClickHouse stores UUIDs as UInt128, and fixtures export them as decimal strings.
 -- This function converts the decimal representation back to UUID format.
+--
+-- Only used in fixture loading.
 CREATE OR REPLACE FUNCTION tensorzero.uint128_to_uuid(p_uint128 NUMERIC)
 RETURNS UUID AS $$
 DECLARE
-    hex_str TEXT := '';
-    remainder NUMERIC;
+    bytes BYTEA;
+    i INT;
+    byte_val INT;
     temp NUMERIC;
-    hex_digit TEXT;
-    hex_chars TEXT := '0123456789abcdef';
 BEGIN
-    temp := p_uint128;
-    -- Convert numeric to hex string
-    WHILE temp > 0 LOOP
-        remainder := temp % 16;
-        hex_digit := substring(hex_chars FROM (remainder::INT + 1) FOR 1);
-        hex_str := hex_digit || hex_str;
-        temp := floor(temp / 16);
+    -- Initialize 16-byte array with zeros
+    bytes := '\x00000000000000000000000000000000'::BYTEA;
+    temp := trunc(p_uint128);  -- Ensure we have an integer value
+
+    -- Build 16 bytes from least significant to most significant (big-endian output)
+    -- Use mod() and div() for precise integer arithmetic on large NUMERIC values
+    FOR i IN REVERSE 15..0 LOOP
+        byte_val := mod(temp, 256)::INT;
+        bytes := set_byte(bytes, i, byte_val);
+        temp := div(temp, 256);
     END LOOP;
-    -- Pad to 32 characters
-    hex_str := lpad(hex_str, 32, '0');
-    -- Format as UUID (8-4-4-4-12)
-    RETURN (
-        substring(hex_str FROM 1 FOR 8) || '-' ||
-        substring(hex_str FROM 9 FOR 4) || '-' ||
-        substring(hex_str FROM 13 FOR 4) || '-' ||
-        substring(hex_str FROM 17 FOR 4) || '-' ||
-        substring(hex_str FROM 21 FOR 12)
-    )::UUID;
+
+    -- Convert bytea to hex string and format as UUID
+    RETURN encode(bytes, 'hex')::UUID;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 
@@ -51,17 +48,13 @@ CREATE TABLE tensorzero.workflow_evaluation_runs (
 -- Indexes for workflow_evaluation_runs
 CREATE INDEX idx_workflow_eval_runs_project
     ON tensorzero.workflow_evaluation_runs(project_name, run_id) WHERE staled_at IS NULL;
-CREATE INDEX idx_workflow_eval_runs_created_at
-    ON tensorzero.workflow_evaluation_runs(created_at DESC);
-CREATE INDEX idx_workflow_eval_runs_updated_at
-    ON tensorzero.workflow_evaluation_runs(updated_at DESC);
 
 -- workflow_evaluation_run_episodes: stores workflow evaluation run episodes
 CREATE TABLE tensorzero.workflow_evaluation_run_episodes (
     episode_id UUID PRIMARY KEY,
     run_id UUID NOT NULL,
     variant_pins JSONB NOT NULL DEFAULT '{}',
-    datapoint_name TEXT,  -- externally called "task_name"
+    task_name TEXT,
     tags JSONB NOT NULL DEFAULT '{}',
     snapshot_hash BYTEA,
     staled_at TIMESTAMPTZ,
@@ -73,7 +66,12 @@ CREATE TABLE tensorzero.workflow_evaluation_run_episodes (
 -- Indexes for workflow_evaluation_run_episodes
 CREATE INDEX idx_workflow_eval_episodes_run
     ON tensorzero.workflow_evaluation_run_episodes(run_id, episode_id) WHERE staled_at IS NULL;
-CREATE INDEX idx_workflow_eval_episodes_created_at
-    ON tensorzero.workflow_evaluation_run_episodes(created_at DESC);
-CREATE INDEX idx_workflow_eval_episodes_updated_at
-    ON tensorzero.workflow_evaluation_run_episodes(updated_at DESC);
+
+-- Add indexes to support DISTINCT ON (target_id, metric_name) ORDER BY target_id, metric_name, created_at DESC
+-- These indexes optimize queries that fetch the most recent feedback per (target_id, metric_name) pair.
+
+CREATE INDEX idx_float_feedback_target_metric_created
+    ON tensorzero.float_metric_feedback(target_id, metric_name, created_at DESC);
+
+CREATE INDEX idx_boolean_feedback_target_metric_created
+    ON tensorzero.boolean_metric_feedback(target_id, metric_name, created_at DESC);
