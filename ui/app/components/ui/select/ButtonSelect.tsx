@@ -146,6 +146,10 @@ export function ButtonSelect({
         handleSelectItem(item, false);
       }
     },
+    hasCreateOption: showCreateOption,
+    onSelectCreate: () => {
+      handleSelectItem(searchValue.trim(), true);
+    },
   });
 
   // Reset highlight when dropdown opens or search changes

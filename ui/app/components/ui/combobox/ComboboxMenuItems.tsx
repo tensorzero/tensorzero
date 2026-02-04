@@ -80,7 +80,12 @@ export function ComboboxMenuItems({
           <CommandItem
             value={`create-${searchValue.trim()}`}
             onSelect={() => onSelectItem(searchValue.trim(), true)}
-            className="flex items-center gap-2"
+            className="flex cursor-pointer items-center gap-2"
+            // In virtualized mode, index -1 represents the create option
+            data-selected={
+              virtualize && highlightedIndex === -1 ? true : undefined
+            }
+            aria-selected={virtualize && highlightedIndex === -1}
           >
             {getPrefix?.(null, false)}
             <span className="truncate font-mono" title={searchValue.trim()}>

@@ -12,6 +12,10 @@ interface UseVirtualizedNavigationOptions {
   onSelect: (index: number) => void;
   /** Called when Escape is pressed (optional) */
   onClose?: () => void;
+  /** Whether a create option is shown above the list */
+  hasCreateOption?: boolean;
+  /** Called when create option is selected via Enter key (index -1) */
+  onSelectCreate?: () => void;
 }
 
 interface UseVirtualizedNavigationResult {
@@ -38,20 +42,24 @@ export function useVirtualizedNavigation({
   enabled,
   onSelect,
   onClose,
+  hasCreateOption = false,
+  onSelectCreate,
 }: UseVirtualizedNavigationOptions): UseVirtualizedNavigationResult {
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  // Index -1 represents the create option when hasCreateOption is true
+  const minIndex = hasCreateOption ? -1 : 0;
+  const [highlightedIndex, setHighlightedIndex] = useState(minIndex);
 
-  // Clamp highlighted index when item count changes
+  // Clamp highlighted index when item count or create option changes
   useEffect(() => {
     setHighlightedIndex((prev) => {
-      if (itemCount === 0) return 0;
-      return Math.min(prev, itemCount - 1);
+      if (itemCount === 0) return minIndex;
+      return Math.max(minIndex, Math.min(prev, itemCount - 1));
     });
-  }, [itemCount]);
+  }, [itemCount, minIndex]);
 
   const resetHighlight = useCallback(() => {
-    setHighlightedIndex(0);
-  }, []);
+    setHighlightedIndex(minIndex);
+  }, [minIndex]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -73,12 +81,14 @@ export function useVirtualizedNavigation({
 
         case "ArrowUp":
           e.preventDefault();
-          setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+          setHighlightedIndex((prev) =>
+            prev > minIndex ? prev - 1 : minIndex,
+          );
           break;
 
         case "Home":
           e.preventDefault();
-          setHighlightedIndex(0);
+          setHighlightedIndex(minIndex);
           break;
 
         case "End":
@@ -95,18 +105,31 @@ export function useVirtualizedNavigation({
 
         case "PageUp":
           e.preventDefault();
-          setHighlightedIndex((prev) => Math.max(prev - PAGE_JUMP_SIZE, 0));
+          setHighlightedIndex((prev) =>
+            Math.max(prev - PAGE_JUMP_SIZE, minIndex),
+          );
           break;
 
         case "Enter":
-          if (itemCount > 0) {
-            e.preventDefault();
+          e.preventDefault();
+          if (highlightedIndex === -1 && hasCreateOption && onSelectCreate) {
+            onSelectCreate();
+          } else if (highlightedIndex >= 0 && itemCount > 0) {
             onSelect(highlightedIndex);
           }
           break;
       }
     },
-    [enabled, itemCount, highlightedIndex, onSelect, onClose],
+    [
+      enabled,
+      itemCount,
+      highlightedIndex,
+      onSelect,
+      onClose,
+      minIndex,
+      hasCreateOption,
+      onSelectCreate,
+    ],
   );
 
   return {

@@ -107,6 +107,13 @@ export function Combobox({
 
   const shouldVirtualize = filteredItems.length >= virtualizeThreshold;
 
+  const showCreateOption =
+    allowCreation &&
+    Boolean(searchValue.trim()) &&
+    !normalizedItems.some(
+      (item) => item.label.toLowerCase() === searchValue.trim().toLowerCase(),
+    );
+
   const handleSelectItem = useCallback(
     (value: string, isNew: boolean) => {
       onSelect(value, isNew);
@@ -130,6 +137,10 @@ export function Combobox({
       }
     },
     onClose: closeDropdown,
+    hasCreateOption: showCreateOption,
+    onSelectCreate: () => {
+      handleSelectItem(searchValue.trim(), true);
+    },
   });
 
   // Reset highlight when dropdown opens or search changes
@@ -154,13 +165,6 @@ export function Combobox({
     },
     [shouldVirtualize, virtualizedHandleKeyDown, baseHandleKeyDown, open],
   );
-
-  const showCreateOption =
-    allowCreation &&
-    Boolean(searchValue.trim()) &&
-    !normalizedItems.some(
-      (item) => item.label.toLowerCase() === searchValue.trim().toLowerCase(),
-    );
 
   const inputPrefix = useMemo(() => {
     const value = selected && !searchValue ? selected : null;
