@@ -8,5 +8,5 @@ export type TopKEvaluationVisualization = {
   /**
    * Map of variant names to their summary statistics.
    */
-  variant_summaries: { [key in string]?: VariantSummary };
+  variant_summaries: { [key in string]: VariantSummary };
 };

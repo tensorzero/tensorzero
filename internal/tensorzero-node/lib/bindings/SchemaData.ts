@@ -6,5 +6,5 @@ import type { JSONSchema } from "./JSONSchema";
  * These are used by variants to construct a `TemplateWithSchema`
  */
 export type SchemaData = {
-  [key in string]?: { schema: JSONSchema; legacy_definition: boolean };
+  [key in string]: { schema: JSONSchema; legacy_definition: boolean };
 };

@@ -16,6 +16,7 @@ import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { CodeEditor, useFormattedJson } from "../ui/code-editor";
 import { useState, type ReactNode } from "react";
 import { Input } from "../ui/input";
+import type { JsonValue } from "~/types/tensorzero";
 
 export function EmptyMessage({ message = "No content" }: { message?: string }) {
   return (
@@ -100,7 +101,9 @@ export function TemplateMessage({
   onChange?: (templateName: string, value: any) => void;
   action?: ReactNode;
 }) {
-  const formattedJson = useFormattedJson(templateArguments ?? {});
+  const formattedJson = useFormattedJson(
+    (templateArguments as JsonValue) ?? {},
+  );
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   return (

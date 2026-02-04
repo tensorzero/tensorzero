@@ -15,7 +15,7 @@ export type StoredJsonInference = {
   episode_id: string;
   inference_id: string;
   output_schema: JsonValue;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   extra_body: Array<ExtraBody>;
   inference_params: InferenceParams;
   processing_time_ms?: bigint;
