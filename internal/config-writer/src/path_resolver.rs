@@ -298,7 +298,9 @@ fn extract_resolved_path_data(
     let original_path = table
         .get("__tensorzero_remapped_path")
         .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
+        .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
+            message: format!("`{key_path}` must contain string `__tensorzero_remapped_path`"),
+        })?;
 
     Ok(Some((data.to_string(), original_path.to_string())))
 }
@@ -597,6 +599,23 @@ mod tests {
         assert!(
             result.is_err(),
             "table with marker but no __data should error"
+        );
+    }
+
+    #[test]
+    fn test_extract_resolved_path_data_non_string_remapped_path() {
+        let mut table = toml_edit::Table::new();
+        table.insert(
+            "__tensorzero_remapped_path",
+            Item::Value(Value::from(123)), // Not a string
+        );
+        table.insert("__data", Item::Value(Value::from("content")));
+        let item = Item::Table(table);
+
+        let result = extract_resolved_path_data(&item, "test.path");
+        assert!(
+            result.is_err(),
+            "table with non-string __tensorzero_remapped_path should error"
         );
     }
 
