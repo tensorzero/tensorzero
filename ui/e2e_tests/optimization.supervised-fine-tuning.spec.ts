@@ -200,6 +200,31 @@ model_name = "mock-finetune-1234"
     ).toBeVisible();
   });
 
+  test("should reset variant when function changes", async ({ page }) => {
+    await page.goto("/optimization/supervised-fine-tuning");
+
+    // Select first function
+    await page.getByPlaceholder("Select function").click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
+
+    // Select a variant for this function
+    await page.getByPlaceholder("Select variant").click();
+    await page
+      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
+      .click();
+
+    // Verify variant is selected
+    const variantCombobox = page.getByRole("combobox", { name: "Prompt" });
+    await expect(variantCombobox).toHaveValue("gpt4o_mini_initial_prompt");
+
+    // Switch to a different function
+    await page.getByPlaceholder("Select function").click();
+    await page.getByRole("option", { name: "image_judger" }).click();
+
+    // Verify variant was reset - the combobox value should be empty
+    await expect(variantCombobox).toHaveValue("");
+  });
+
   test("@mock @slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
     page,
   }) => {
