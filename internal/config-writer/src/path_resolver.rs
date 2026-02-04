@@ -21,6 +21,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use crate::error::ConfigWriterError;
+use tensorzero_config_paths::{PathComponent, TARGET_PATH_COMPONENTS};
 
 // ============================================================================
 // Public Types
@@ -35,36 +36,90 @@ pub struct FileToWrite {
     pub content: String,
 }
 
-/// Trait for path contexts that can resolve keys to file paths.
+// ============================================================================
+// Pattern-based Path Utilities
+// ============================================================================
+
+/// The prefix pattern for function variant paths in TARGET_PATH_COMPONENTS.
+/// Matches: `["functions", *, "variants", *]`
+const VARIANT_PREFIX_LEN: usize = 4;
+
+/// The prefix pattern for evaluator variant paths in TARGET_PATH_COMPONENTS.
+/// Matches: `["evaluations", *, "evaluators", *, "variants", *]`
+const EVALUATOR_PREFIX_LEN: usize = 6;
+
+/// Returns the suffix portions of all variant-related path patterns.
+/// These are the path components after `["functions", *, "variants", *]`.
 ///
-/// This allows generic handling of path resolution for both variants and evaluators.
-pub trait PathContext {
-    /// Resolve a key to an absolute and relative path.
-    ///
-    /// Returns `Some(Ok(...))` if the key is recognized.
-    /// Returns `Some(Err(...))` if the key is recognized but path computation fails.
-    /// Returns `None` if the key is not recognized (will use fallback).
-    fn resolve_key(&self, key: &str) -> Option<Result<(PathBuf, String), ConfigWriterError>>;
-
-    /// Generate a fallback path for an unknown key using the original filename.
-    fn fallback_path(&self, filename: &str) -> Result<(PathBuf, String), ConfigWriterError>;
+/// For example, `["functions", *, "variants", *, "system_template"]` returns `&["system_template"]`.
+/// And `["functions", *, "variants", *, "evaluator", "system_template"]` returns `&["evaluator", "system_template"]`.
+pub fn variant_path_suffixes() -> impl Iterator<Item = &'static [PathComponent]> {
+    TARGET_PATH_COMPONENTS.iter().filter_map(|pattern| {
+        if pattern.len() > VARIANT_PREFIX_LEN
+            && matches!(pattern[0], PathComponent::Literal("functions"))
+            && matches!(pattern[1], PathComponent::Wildcard)
+            && matches!(pattern[2], PathComponent::Literal("variants"))
+            && matches!(pattern[3], PathComponent::Wildcard)
+        {
+            Some(&pattern[VARIANT_PREFIX_LEN..])
+        } else {
+            None
+        }
+    })
 }
 
-/// Context for generating standardized paths for a variant.
-pub struct VariantPathContext<'a> {
-    pub glob_base: &'a Path,
-    pub toml_file_dir: &'a Path,
-    pub function_name: &'a str,
-    pub variant_name: &'a str,
+/// Returns the suffix portions of all evaluator variant-related path patterns.
+/// These are the path components after `["evaluations", *, "evaluators", *, "variants", *]`.
+pub fn evaluator_path_suffixes() -> impl Iterator<Item = &'static [PathComponent]> {
+    TARGET_PATH_COMPONENTS.iter().filter_map(|pattern| {
+        if pattern.len() > EVALUATOR_PREFIX_LEN
+            && matches!(pattern[0], PathComponent::Literal("evaluations"))
+            && matches!(pattern[1], PathComponent::Wildcard)
+            && matches!(pattern[2], PathComponent::Literal("evaluators"))
+            && matches!(pattern[3], PathComponent::Wildcard)
+            && matches!(pattern[4], PathComponent::Literal("variants"))
+            && matches!(pattern[5], PathComponent::Wildcard)
+        {
+            Some(&pattern[EVALUATOR_PREFIX_LEN..])
+        } else {
+            None
+        }
+    })
 }
 
-/// Context for generating standardized paths for an evaluator variant.
-pub struct EvaluatorPathContext<'a> {
-    pub glob_base: &'a Path,
-    pub toml_file_dir: &'a Path,
-    pub evaluation_name: &'a str,
-    pub evaluator_name: &'a str,
-    pub variant_name: &'a str,
+/// Returns the file extension for a given terminal key name.
+///
+/// - `*_template` → `.minijinja`
+/// - `*_schema` or `parameters` → `.json`
+/// - `system_instructions` → `.txt`
+/// - `user`, `system`, `assistant` (input wrappers) → `.minijinja`
+/// - `path` → `None` (preserve original extension)
+pub fn file_extension_for_key(key: &str) -> Option<&'static str> {
+    if key.ends_with("_template") {
+        Some(".minijinja")
+    } else if key.ends_with("_schema") || key == "parameters" {
+        Some(".json")
+    } else if key == "system_instructions" {
+        Some(".txt")
+    } else if key == "user" || key == "system" || key == "assistant" {
+        // input_wrappers keys are minijinja templates
+        Some(".minijinja")
+    } else {
+        // `path` and other keys preserve original extension
+        None
+    }
+}
+
+/// Converts a path suffix (sequence of PathComponents) to a list of literal key names.
+/// Returns None if any component is a Wildcard (which shouldn't happen for our suffixes).
+pub fn suffix_to_keys(suffix: &[PathComponent]) -> Option<Vec<&'static str>> {
+    suffix
+        .iter()
+        .map(|c| match c {
+            PathComponent::Literal(s) => Some(*s),
+            PathComponent::Wildcard => None,
+        })
+        .collect()
 }
 
 // ============================================================================
@@ -107,162 +162,12 @@ pub fn validate_path_component(name: &str, field_name: &str) -> Result<(), Confi
     }
 }
 
-impl<'a> VariantPathContext<'a> {
-    /// Generate a standardized path for a variant template file.
-    /// Returns (absolute_path, relative_path_from_toml).
-    pub fn template_path(
-        &self,
-        template_kind: &str,
-    ) -> Result<(PathBuf, String), ConfigWriterError> {
-        let absolute = self
-            .glob_base
-            .join("functions")
-            .join(self.function_name)
-            .join("variants")
-            .join(self.variant_name)
-            .join(format!("{template_kind}.minijinja"));
-
-        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
-        Ok((absolute, relative))
-    }
-
-    /// Generate a standardized path for a variant schema file.
-    /// Returns (absolute_path, relative_path_from_toml).
-    pub fn schema_path(&self, schema_kind: &str) -> Result<(PathBuf, String), ConfigWriterError> {
-        let absolute = self
-            .glob_base
-            .join("functions")
-            .join(self.function_name)
-            .join("variants")
-            .join(self.variant_name)
-            .join(format!("{schema_kind}.json"));
-
-        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
-        Ok((absolute, relative))
-    }
-
-    /// Generate a standardized path for system_instructions.
-    /// Returns (absolute_path, relative_path_from_toml).
-    pub fn system_instructions_path(&self) -> Result<(PathBuf, String), ConfigWriterError> {
-        let absolute = self
-            .glob_base
-            .join("functions")
-            .join(self.function_name)
-            .join("variants")
-            .join(self.variant_name)
-            .join("system_instructions.txt");
-
-        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
-        Ok((absolute, relative))
-    }
-
-    fn variant_base_path(&self) -> PathBuf {
-        self.glob_base
-            .join("functions")
-            .join(self.function_name)
-            .join("variants")
-            .join(self.variant_name)
-    }
-}
-
-impl PathContext for VariantPathContext<'_> {
-    fn resolve_key(&self, key: &str) -> Option<Result<(PathBuf, String), ConfigWriterError>> {
-        match key {
-            "system_template" | "user_template" | "assistant_template" => {
-                Some(self.template_path(key))
-            }
-            "system_instructions" => Some(self.system_instructions_path()),
-            "system_schema" | "user_schema" | "assistant_schema" | "output_schema" => {
-                Some(self.schema_path(key))
-            }
-            _ => None,
-        }
-    }
-
-    fn fallback_path(&self, filename: &str) -> Result<(PathBuf, String), ConfigWriterError> {
-        let absolute = self.variant_base_path().join(filename);
-        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
-        Ok((absolute, relative))
-    }
-}
-
-// ============================================================================
-// EvaluatorPathContext Implementation
-// ============================================================================
-
-impl<'a> EvaluatorPathContext<'a> {
-    /// Generate a standardized path for an evaluator variant's system_instructions.
-    /// Returns (absolute_path, relative_path_from_toml).
-    pub fn system_instructions_path(&self) -> Result<(PathBuf, String), ConfigWriterError> {
-        let absolute = self
-            .glob_base
-            .join("evaluations")
-            .join(self.evaluation_name)
-            .join("evaluators")
-            .join(self.evaluator_name)
-            .join("variants")
-            .join(self.variant_name)
-            .join("system_instructions.txt");
-
-        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
-        Ok((absolute, relative))
-    }
-
-    /// Generate a standardized path for an evaluator variant template.
-    /// Returns (absolute_path, relative_path_from_toml).
-    pub fn template_path(
-        &self,
-        template_kind: &str,
-    ) -> Result<(PathBuf, String), ConfigWriterError> {
-        let absolute = self
-            .glob_base
-            .join("evaluations")
-            .join(self.evaluation_name)
-            .join("evaluators")
-            .join(self.evaluator_name)
-            .join("variants")
-            .join(self.variant_name)
-            .join(format!("{template_kind}.minijinja"));
-
-        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
-        Ok((absolute, relative))
-    }
-
-    fn evaluator_variant_base_path(&self) -> PathBuf {
-        self.glob_base
-            .join("evaluations")
-            .join(self.evaluation_name)
-            .join("evaluators")
-            .join(self.evaluator_name)
-            .join("variants")
-            .join(self.variant_name)
-    }
-}
-
-impl PathContext for EvaluatorPathContext<'_> {
-    fn resolve_key(&self, key: &str) -> Option<Result<(PathBuf, String), ConfigWriterError>> {
-        match key {
-            "system_template" | "user_template" | "assistant_template" => {
-                Some(self.template_path(key))
-            }
-            "system_instructions" => Some(self.system_instructions_path()),
-            _ => None,
-        }
-    }
-
-    fn fallback_path(&self, filename: &str) -> Result<(PathBuf, String), ConfigWriterError> {
-        let absolute = self.evaluator_variant_base_path().join(filename);
-        let relative = compute_relative_path(self.toml_file_dir, &absolute)?;
-        Ok((absolute, relative))
-    }
-}
-
 // ============================================================================
 // Private Helpers
 // ============================================================================
 
 /// Compute a relative path from a base directory to a target file.
-fn compute_relative_path(from_dir: &Path, to_file: &Path) -> Result<String, ConfigWriterError> {
+pub fn compute_relative_path(from_dir: &Path, to_file: &Path) -> Result<String, ConfigWriterError> {
     pathdiff::diff_paths(to_file, from_dir)
         .ok_or_else(|| ConfigWriterError::Path {
             message: format!(

@@ -125,7 +125,6 @@ impl ConfigWriter {
             &toml_file_dir,
             &payload.function_name,
             &payload.variant_name,
-            None,
         )?;
 
         // Apply the edit to the document
@@ -220,7 +219,6 @@ impl ConfigWriter {
                                 &payload.evaluation_name,
                                 &evaluator_name,
                                 &variant_name,
-                                None,
                             )?;
                             template_files.extend(variant_files);
                         }
@@ -284,7 +282,6 @@ impl ConfigWriter {
                         &payload.evaluation_name,
                         &payload.evaluator_name,
                         &variant_name,
-                        None,
                     )?;
                     template_files.extend(variant_files);
                 }
