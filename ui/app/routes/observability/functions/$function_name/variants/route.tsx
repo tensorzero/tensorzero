@@ -67,15 +67,6 @@ type InferencesTableData = {
   hasPreviousInferencePage: boolean;
 };
 
-// Granular data fetching functions
-async function fetchMetricsWithFeedback(
-  function_name: string,
-  variant_name: string,
-): Promise<MetricsWithFeedbackData> {
-  const client = getTensorZeroClient();
-  return client.getFunctionMetricsWithFeedback(function_name, variant_name);
-}
-
 async function fetchVariantPerformance(
   function_name: string,
   variant_name: string,
@@ -156,10 +147,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     function_name,
     variant_name,
     // Metrics section - split into selector data and chart data
-    metricsWithFeedbackData: fetchMetricsWithFeedback(
-      function_name,
-      variant_name,
-    ),
+    metricsWithFeedbackData:
+      getTensorZeroClient().getFunctionMetricsWithFeedback(
+        function_name,
+        variant_name,
+      ),
     variantPerformanceData: fetchVariantPerformance(
       function_name,
       variant_name,
