@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
-use crate::config::{Config, MetricConfigLevel};
+use crate::config::{
+    Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
+};
 use crate::db::TimeWindow;
 use crate::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
 use crate::db::inferences::{
@@ -538,12 +540,18 @@ impl InferenceQueries for PostgresConnectionInfo {
 
     async fn count_inferences_with_feedback(
         &self,
-        _params: CountInferencesWithFeedbackParams<'_>,
+        params: CountInferencesWithFeedbackParams<'_>,
     ) -> Result<u64, Error> {
-        // TODO(#5691): Implement when feedback tables are added in step-2
-        Err(Error::new(ErrorDetails::NotImplemented {
-            message: "count_inferences_with_feedback not yet implemented for Postgres".to_string(),
-        }))
+        let pool = self.get_pool_result()?;
+        count_inferences_with_metric_feedback(
+            pool,
+            params.function_name,
+            params.function_type,
+            params.metric_name,
+            params.metric_config,
+            params.metric_threshold,
+        )
+        .await
     }
 
     async fn get_function_throughput_by_variant(
@@ -1584,6 +1592,89 @@ async fn count_inferences_union(
 
     let query = query_builder.build_query_scalar::<i64>();
     let count: i64 = query.fetch_one(pool).await?;
+
+    Ok(count as u64)
+}
+
+/// Build a query to count inferences with metric feedback.
+/// If `metric_threshold` is Some, filters to only count feedbacks meeting the threshold criteria
+/// based on metric type and optimize direction.
+fn build_count_inferences_with_metric_feedback_query(
+    function_name: &str,
+    function_type: FunctionConfigType,
+    metric_name: &str,
+    metric_config: &MetricConfig,
+    metric_threshold: Option<f64>,
+) -> QueryBuilder<sqlx::Postgres> {
+    let inference_table = function_type.postgres_table_name();
+    let feedback_table = match metric_config.r#type {
+        MetricConfigType::Float => "tensorzero.float_metric_feedback",
+        MetricConfigType::Boolean => "tensorzero.boolean_metric_feedback",
+    };
+    let join_column = metric_config.level.inference_column_name();
+
+    // Build the query using DISTINCT ON to get the latest feedback per target
+    let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM ");
+    qb.push(inference_table);
+    qb.push(" i JOIN (SELECT DISTINCT ON (target_id) target_id, value FROM ");
+    qb.push(feedback_table);
+    qb.push(" WHERE metric_name = ");
+    qb.push_bind(metric_name);
+    qb.push(" ORDER BY target_id, created_at DESC) f ON i.");
+    qb.push(join_column);
+    qb.push(" = f.target_id WHERE i.function_name = ");
+    qb.push_bind(function_name);
+
+    // Add value condition based on threshold and metric type
+    if let Some(threshold) = metric_threshold {
+        match metric_config.r#type {
+            MetricConfigType::Boolean => {
+                // For boolean metrics, optimize direction determines which value to filter for
+                match metric_config.optimize {
+                    MetricConfigOptimize::Max => qb.push(" AND f.value = TRUE"),
+                    MetricConfigOptimize::Min => qb.push(" AND f.value = FALSE"),
+                };
+            }
+            MetricConfigType::Float => {
+                // For float metrics, use the threshold with appropriate operator
+                match metric_config.optimize {
+                    MetricConfigOptimize::Max => qb.push(" AND f.value > "),
+                    MetricConfigOptimize::Min => qb.push(" AND f.value < "),
+                };
+                qb.push_bind(threshold);
+            }
+        }
+    }
+
+    qb
+}
+
+/// Count inferences with metric feedback.
+async fn count_inferences_with_metric_feedback(
+    pool: &PgPool,
+    function_name: &str,
+    function_type: FunctionConfigType,
+    metric_name: &str,
+    metric_config: &MetricConfig,
+    metric_threshold: Option<f64>,
+) -> Result<u64, Error> {
+    let mut qb = build_count_inferences_with_metric_feedback_query(
+        function_name,
+        function_type,
+        metric_name,
+        metric_config,
+        metric_threshold,
+    );
+
+    let count: i64 = qb
+        .build_query_scalar::<i64>()
+        .fetch_one(pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresQuery {
+                message: format!("Failed to count inferences with metric feedback: {e}"),
+            })
+        })?;
 
     Ok(count as u64)
 }
@@ -2693,5 +2784,242 @@ mod tests {
             ORDER BY id DESC LIMIT $11
             ",
         );
+    }
+
+    // Tests for count_inferences_with_metric_feedback query building
+
+    #[test]
+    fn test_build_count_metric_feedback_query_float_inference_level_no_threshold() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Chat,
+            "test_metric",
+            &metric_config,
+            None,
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.chat_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.float_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_float_inference_level_with_threshold_max() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Json,
+            "test_metric",
+            &metric_config,
+            Some(0.5),
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.json_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.float_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+            AND f.value > $3
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_float_inference_level_with_threshold_min() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Min,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Chat,
+            "test_metric",
+            &metric_config,
+            Some(0.5),
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.chat_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.float_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+            AND f.value < $3
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_float_episode_level_no_threshold() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Episode,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Chat,
+            "episode_metric",
+            &metric_config,
+            None,
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.chat_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.float_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.episode_id = f.target_id
+            WHERE i.function_name = $2
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_boolean_inference_level_no_threshold() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Boolean,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Json,
+            "exact_match",
+            &metric_config,
+            None,
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.json_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.boolean_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_boolean_inference_level_with_threshold_max() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Boolean,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Json,
+            "exact_match",
+            &metric_config,
+            Some(0.5), // threshold value is ignored for boolean, only presence matters
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.json_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.boolean_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+            AND f.value = TRUE
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_boolean_inference_level_with_threshold_min() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Boolean,
+            optimize: MetricConfigOptimize::Min,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Json,
+            "exact_match",
+            &metric_config,
+            Some(0.5),
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.json_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.boolean_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+            AND f.value = FALSE
+        ";
+
+        assert_query_equals(sql, expected);
     }
 }
