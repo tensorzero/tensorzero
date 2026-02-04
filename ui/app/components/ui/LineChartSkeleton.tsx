@@ -18,8 +18,8 @@ export function LineChartSkeleton({ className }: { className?: string }) {
 
   return (
     <div className={className}>
-      {/* Chart container - h-72 matches ChartContainer in production */}
-      <div className="flex h-72 w-full flex-col">
+      {/* Chart container - h-80 matches ChartContainer in production */}
+      <div className="flex h-80 w-full flex-col">
         {/* Chart area with Y-axis and line */}
         <div className="flex flex-1">
           {/* Y-axis labels - w-[60px] matches Recharts default YAxis width */}
