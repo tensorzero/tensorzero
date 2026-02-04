@@ -114,7 +114,7 @@ durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
-redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager", "tls-rustls", "tokio-rustls-comp"] }
 redis-test = { version = "1.0.1", features = ["aio"] }
 
 [workspace.lints.rust]
