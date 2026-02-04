@@ -17,6 +17,7 @@ import {
   useAsyncError,
   useLocation,
   useNavigate,
+  useSearchParams,
   type RouteHandle,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
@@ -190,19 +191,20 @@ function ProjectContent({
   offset: number;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { runInfos, runStats, episodeInfo, count } = data;
   const selectedRunIds = runInfos.map((run) => run.id);
 
   const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("offset", String(offset + limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("offset", String(offset - limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   return (

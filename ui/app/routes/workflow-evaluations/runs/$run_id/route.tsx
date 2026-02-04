@@ -7,6 +7,7 @@ import {
   useAsyncError,
   useLocation,
   useNavigate,
+  useSearchParams,
   type RouteHandle,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
@@ -167,6 +168,7 @@ function RunContent({
   limit: number;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     workflowEvaluationRun,
     workflowEvaluationRunEpisodes,
@@ -175,15 +177,15 @@ function RunContent({
   } = data;
 
   const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("offset", String(offset + limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("offset", String(offset - limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   return (
