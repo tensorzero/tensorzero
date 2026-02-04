@@ -93,6 +93,11 @@ export function SFTForm({
     }
   }, [counts.curatedInferenceCount, counts.inferenceCount, form]);
 
+  // Reset variant when function changes since variants are function-specific
+  useEffect(() => {
+    form.setValue("variant", "");
+  }, [functionName, form]);
+
   // Form submission using formFetcher
   const onSubmit = async (data: SFTFormValues) => {
     try {

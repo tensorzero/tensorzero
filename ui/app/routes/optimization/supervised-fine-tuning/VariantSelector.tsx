@@ -30,7 +30,7 @@ export function VariantSelector({
           <FormLabel>Prompt</FormLabel>
           <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
             <Combobox
-              selected={field.value ?? null}
+              selected={field.value || null}
               onSelect={(value) => field.onChange(value)}
               items={variantNames}
               placeholder={

@@ -62,7 +62,9 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
         await page.getByRole("combobox", { name: "Metric" }).click();
         await page.getByText("exact_match", { exact: true }).click();
         await page.getByPlaceholder("Select variant").click();
-        await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
+        await page
+          .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
+          .click();
         await page.getByPlaceholder("Select model").click();
         await page.getByRole("option", { name: model }).click();
         await page
@@ -98,7 +100,9 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("demonstration", { exact: true }).click();
     await page.getByPlaceholder("Select variant").click();
-    await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
+    await page
+      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
+      .click();
     await page.getByPlaceholder("Select model").click();
     await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
@@ -211,7 +215,9 @@ model_name = "mock-finetune-1234"
 
     // Select variant
     await page.getByPlaceholder("Select variant").click();
-    await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
+    await page
+      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
+      .click();
 
     // Select a GCP model from the default list
     const modelInput = page.getByPlaceholder("Select model");
@@ -253,7 +259,9 @@ test.describe("Error handling", () => {
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("exact_match", { exact: true }).click();
     await page.getByPlaceholder("Select variant").click();
-    await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
+    await page
+      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
+      .click();
     const modelInput = page.getByPlaceholder("Select model");
     await modelInput.click();
     await modelInput.fill("error");
