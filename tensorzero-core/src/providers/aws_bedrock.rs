@@ -1266,6 +1266,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
+        // Clear bearer token env var so we test the SDK credential chain path
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+
         let logs_contain = crate::utils::testing::capture_logs();
 
         // Every call should trigger client creation since each provider has its own AWS Bedrock client
@@ -1304,11 +1307,10 @@ mod tests {
 
         reset_capture_logs();
 
-        // We want auto-detection to fail, so we clear this environment variable.
+        // We want auto-detection to fail, so we clear these environment variables.
         // We use 'nextest' as our runner, so each test runs in its own process
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
-        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
 
         let region = AWSRegion::Sdk;
         let err =
