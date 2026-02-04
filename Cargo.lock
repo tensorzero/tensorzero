@@ -1355,6 +1355,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tensorzero-config-paths",
  "tensorzero-core",
  "thiserror 2.0.18",
  "tokio",
