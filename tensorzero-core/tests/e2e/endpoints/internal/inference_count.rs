@@ -263,7 +263,6 @@ async fn test_get_inference_count_unknown_variant() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_float_metric() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference
@@ -301,7 +300,6 @@ async fn test_get_feedback_stats_float_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_boolean_metric() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference
@@ -339,7 +337,6 @@ async fn test_get_feedback_stats_boolean_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_with_threshold() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference and submit feedback with a specific value
@@ -411,7 +408,6 @@ async fn test_get_feedback_stats_with_threshold() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_demonstration() {
-    skip_for_postgres!();
     let client = Client::new();
     // Use json_success which should be able to have demonstrations
     let url =
@@ -459,7 +455,6 @@ async fn test_get_feedback_stats_unknown_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_episode_level_boolean_metric() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference to get an episode_id
@@ -498,7 +493,6 @@ async fn test_get_feedback_stats_episode_level_boolean_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_stats_episode_level_float_metric() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Create an inference to get an episode_id
