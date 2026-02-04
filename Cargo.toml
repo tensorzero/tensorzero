@@ -21,12 +21,14 @@ members = [
     "internal/durable-tools",
     "internal/tensorzero-types",
     "internal/tensorzero-types-providers",
-    "internal/autopilot-worker", "internal/reqwest-sse-stream",
+    "internal/autopilot-worker",
+    "internal/reqwest-sse-stream",
+    "internal/tensorzero-config-paths",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2026.1.8"
+version = "2026.2.0"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -73,7 +75,7 @@ url = { version = "2.5.8", features = ["serde"] }
 google-cloud-auth = "1.4.0"
 object_store = { version = "0.13.1", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
-ts-rs = { version = "11.1.0", features = [
+ts-rs = { version = "12.0.1", features = [
     "serde-compat",
     "serde-json-impl",
     "uuid-impl",
@@ -83,7 +85,7 @@ ts-rs = { version = "11.1.0", features = [
 ] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.43", features = ["serde"] }
-git2 = { version = "0.20.3", default-features = false }
+git2 = { version = "0.20.4", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
     "tracing_level_info",
 ] }
@@ -112,7 +114,7 @@ durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
-redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager", "tls-rustls", "tokio-rustls-comp"] }
 redis-test = { version = "1.0.1", features = ["aio"] }
 
 [workspace.lints.rust]

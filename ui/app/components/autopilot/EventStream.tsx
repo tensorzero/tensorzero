@@ -14,12 +14,14 @@ import {
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
+import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
   AutopilotStatus,
   EventPayloadMessageContent,
@@ -279,17 +281,30 @@ function renderEventTitle(event: GatewayEvent) {
       return "Status Update";
     case "tool_call":
       return (
-        <>
-          Tool Call &middot;{" "}
+        <span className="inline-flex items-center gap-2">
+          Tool Call
+          <DotSeparator />
           <span className="font-mono font-medium">{payload.name}</span>
-        </>
+        </span>
       );
     case "tool_call_authorization":
       switch (payload.status.type) {
         case "approved":
-          return <>Tool Call Authorization &middot; Approved</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Call Authorization
+              <DotSeparator />
+              Approved
+            </span>
+          );
         case "rejected":
-          return <>Tool Call Authorization &middot; Rejected</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Call Authorization
+              <DotSeparator />
+              Rejected
+            </span>
+          );
         default:
           // This branch should never be reached but we need it to keep ESLint happy...
           {
@@ -303,15 +318,29 @@ function renderEventTitle(event: GatewayEvent) {
       switch (payload.outcome.type) {
         case "success":
           // TODO: need tool name
-          return <>Tool Result &middot; Success</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Success
+            </span>
+          );
         case "failure":
           // TODO: need tool name
-          return <>Tool Result &middot; Failure</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Failure
+            </span>
+          );
         case "rejected":
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Rejected</span>
+              Tool Result
+              <DotSeparator />
+              Rejected
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -331,7 +360,9 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Missing Tool</span>
+              Tool Result
+              <DotSeparator />
+              Missing Tool
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -351,7 +382,9 @@ function renderEventTitle(event: GatewayEvent) {
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Unknown</span>
+              Tool Result
+              <DotSeparator />
+              Unknown
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -471,6 +504,7 @@ function EventItem({
   event: GatewayEvent;
   isPending?: boolean;
 }) {
+  const { yoloMode } = useAutopilotSession();
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
@@ -509,7 +543,7 @@ function EventItem({
             >
               <ChevronRight className="h-4 w-4" />
             </span>
-            {isPending && (
+            {isPending && !yoloMode && (
               <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                 Action Required
               </span>
@@ -522,7 +556,7 @@ function EventItem({
           {eventIsToolEvent && (
             <>
               <ToolEventId id={getToolCallEventId(event)} />
-              <span aria-hidden="true">&middot;</span>
+              <DotSeparator />
             </>
           )}
           <TableItemTime timestamp={event.created_at} />

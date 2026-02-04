@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventStream from "./EventStream";
 import type { GatewayEvent } from "~/types/tensorzero";
 import { GlobalToastProvider } from "~/providers/global-toast-provider";
+import { AutopilotSessionProvider } from "~/contexts/AutopilotSessionContext";
 
 const baseTime = new Date("2026-04-12T10:00:00Z").getTime();
 const sessionId = "d1a0b0c0-0000-0000-0000-000000000001";
@@ -464,9 +465,11 @@ const meta = {
   component: EventStream,
   decorators: [
     (Story) => (
-      <GlobalToastProvider>
-        <Story />
-      </GlobalToastProvider>
+      <AutopilotSessionProvider>
+        <GlobalToastProvider>
+          <Story />
+        </GlobalToastProvider>
+      </AutopilotSessionProvider>
     ),
   ],
   render: (args) => (
@@ -612,32 +615,38 @@ const visualizationEvents: GatewayEvent[] = [
               cs_lower: 0.58,
               cs_upper: 0.75,
               count: BigInt(50),
+              failed: false,
             },
             empty: {
               mean_est: 0.333,
               cs_lower: 0.25,
               cs_upper: 0.42,
               count: BigInt(35),
+              failed: false,
             },
             empty2: {
               mean_est: 0.31,
               cs_lower: 0.22,
               cs_upper: 0.4,
               count: BigInt(30),
+              failed: false,
             },
             test: {
               mean_est: 0.35,
               cs_lower: 0.27,
               cs_upper: 0.43,
               count: BigInt(25),
+              failed: false,
             },
             test2: {
               mean_est: 0.29,
               cs_lower: 0.19,
               cs_upper: 0.39,
               count: BigInt(10),
+              failed: false,
             },
           },
+          confident_top_k_sizes: [],
         },
       },
     },

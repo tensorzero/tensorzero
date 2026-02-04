@@ -2,7 +2,21 @@
 set -euo pipefail
 
 # Load small fixtures into Postgres tables.
-# Loads inference tables (Step 1) and feedback tables (Step 2).
+# 
+# Table loading status:
+# - "chat_inference_examples.jsonl" (Done)
+# - "json_inference_examples.jsonl" (Done)
+# - "boolean_metric_feedback_examples.jsonl" (Done)
+# - "float_metric_feedback_examples.jsonl" (Done)
+# - "demonstration_feedback_examples.jsonl" (Done)
+# - "json_inference_datapoint_examples.jsonl" (Done)
+# - "chat_inference_datapoint_examples.jsonl" (Done)
+# - "comment_feedback_examples.jsonl" (Done)
+# - "model_inference_examples.jsonl"
+# - "model_inference_cache_e2e.jsonl"
+# - "jaro_winkler_similarity_feedback.jsonl"
+# - "dynamic_evaluation_run_examples.jsonl"
+# - "dynamic_evaluation_run_episode_examples.jsonl"
 #
 # Usage:
 #   ./ui/fixtures/load_fixtures_postgres.sh
@@ -62,6 +76,9 @@ TRUNCATE TABLE tensorzero.boolean_metric_feedback CASCADE;
 TRUNCATE TABLE tensorzero.float_metric_feedback CASCADE;
 TRUNCATE TABLE tensorzero.comment_feedback CASCADE;
 TRUNCATE TABLE tensorzero.demonstration_feedback CASCADE;
+-- Datapoint tables
+TRUNCATE TABLE tensorzero.chat_datapoints CASCADE;
+TRUNCATE TABLE tensorzero.json_datapoints CASCADE;
 EOF
     echo "  Done"
 fi
@@ -69,7 +86,8 @@ fi
 # Download JSONL fixtures from R2 if not present
 if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_examples.jsonl" ] || \
    [ ! -f "small-fixtures/boolean_metric_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/float_metric_feedback_examples.jsonl" ] || \
-   [ ! -f "small-fixtures/comment_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/demonstration_feedback_examples.jsonl" ]; then
+   [ ! -f "small-fixtures/comment_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/demonstration_feedback_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/chat_inference_datapoint_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_datapoint_examples.jsonl" ]; then
     echo "Downloading small fixtures..."
     if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
         uv run ./download-small-fixtures-http.py
@@ -234,6 +252,77 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id) DO NOTHING;
 "
 
+# =====================================================================
+# Datapoint Tables
+# =====================================================================
+
+# Chat Datapoints
+# Note: input, output are stored as JSON-encoded strings in ClickHouse
+# We use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
+# regexp_replace re-escapes newlines that were unescaped during JSON string extraction
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
+# updated_at is parsed from the fixture's updated_at field
+load_jsonl "small-fixtures/chat_inference_datapoint_examples.jsonl" "tensorzero.chat_datapoints" "
+INSERT INTO tensorzero.chat_datapoints (
+    id, dataset_name, function_name, episode_id,
+    input, output,
+    dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice, parallel_tool_calls,
+    tags, is_custom, source_inference_id, staled_at, created_at, updated_at
+)
+SELECT
+    (j->>'id')::uuid,
+    j->>'dataset_name',
+    j->>'function_name',
+    (j->>'episode_id')::uuid,
+    COALESCE(NULLIF(j->>'input', '')::jsonb, '{}'),
+    NULLIF(j->>'output', '')::jsonb,
+    COALESCE(NULLIF(j->>'dynamic_tools', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'dynamic_provider_tools', '')::jsonb, '[]'),
+    NULLIF(j->>'allowed_tools', '')::jsonb,
+    j->'tool_choice',
+    (j->>'parallel_tool_calls')::boolean,
+    COALESCE(j->'tags', '{}')::jsonb,
+    COALESCE((j->>'is_custom')::boolean, false),
+    (j->>'source_inference_id')::uuid,
+    NULLIF(j->>'staled_at', '')::timestamptz,
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid),
+    COALESCE(NULLIF(j->>'updated_at', '')::timestamptz, NOW())
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id) DO NOTHING;
+"
+
+# JSON Datapoints
+# Note: input, output, output_schema are stored as JSON-encoded strings in ClickHouse
+# We use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
+# regexp_replace re-escapes newlines that were unescaped during JSON string extraction
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
+# updated_at is parsed from the fixture's updated_at field
+load_jsonl "small-fixtures/json_inference_datapoint_examples.jsonl" "tensorzero.json_datapoints" "
+INSERT INTO tensorzero.json_datapoints (
+    id, dataset_name, function_name, episode_id,
+    input, output, output_schema, tags,
+    is_custom, source_inference_id, staled_at, created_at, updated_at
+)
+SELECT
+    (j->>'id')::uuid,
+    j->>'dataset_name',
+    j->>'function_name',
+    (j->>'episode_id')::uuid,
+    COALESCE(NULLIF(regexp_replace(j->>'input', E'\\n', E'\\\\n', 'g'), '')::jsonb, '{}'),
+    NULLIF(regexp_replace(j->>'output', E'\\n', E'\\\\n', 'g'), '')::jsonb,
+    COALESCE(NULLIF(regexp_replace(j->>'output_schema', E'\\n', E'\\\\n', 'g'), '')::jsonb, '{}'),
+    COALESCE(j->'tags', '{}')::jsonb,
+    COALESCE((j->>'is_custom')::boolean, false),
+    (j->>'source_inference_id')::uuid,
+    NULLIF(j->>'staled_at', '')::timestamptz,
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid),
+    COALESCE(NULLIF(j->>'updated_at', '')::timestamptz, NOW())
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id) DO NOTHING;
+"
+
 echo ""
 echo "All fixtures loaded successfully!"
 
@@ -252,5 +341,9 @@ UNION ALL
 SELECT 'comment_feedback', count(*) FROM tensorzero.comment_feedback
 UNION ALL
 SELECT 'demonstration_feedback', count(*) FROM tensorzero.demonstration_feedback
+UNION ALL
+SELECT 'chat_datapoints', count(*) FROM tensorzero.chat_datapoints
+UNION ALL
+SELECT 'json_datapoints', count(*) FROM tensorzero.json_datapoints
 ORDER BY table_name;
 EOF

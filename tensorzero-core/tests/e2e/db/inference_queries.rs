@@ -1132,7 +1132,212 @@ async fn test_list_inferences_order_by_multiple_criteria(conn: impl InferenceQue
 }
 make_db_test!(test_list_inferences_order_by_multiple_criteria);
 
-// ===== COUNT INFERENCES WITH SEARCH QUERY TESTS =====
+// ===== COUNT INFERENCES TESTS =====
+
+async fn test_count_inferences_chat_function(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+
+    let count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                function_name: Some("write_haiku"),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // The fixture data should have inferences for write_haiku
+    assert!(count > 0, "Should count chat inferences for write_haiku");
+}
+make_db_test!(test_count_inferences_chat_function);
+
+async fn test_count_inferences_json_function(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+
+    let count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                function_name: Some("extract_entities"),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // The fixture data should have inferences for extract_entities
+    assert!(
+        count > 0,
+        "Should count json inferences for extract_entities"
+    );
+}
+make_db_test!(test_count_inferences_json_function);
+
+async fn test_count_inferences_with_demonstration_filter(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+        has_demonstration: true,
+    });
+
+    let count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                function_name: Some("extract_entities"),
+                filters: Some(&filter),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Should count inferences with demonstration feedback
+    assert!(
+        count > 0,
+        "Should count inferences with demonstration feedback"
+    );
+}
+make_db_test!(test_count_inferences_with_demonstration_filter);
+
+async fn test_count_inferences_with_boolean_metric_filter(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: true,
+    });
+
+    let count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                function_name: Some("extract_entities"),
+                filters: Some(&filter),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Should count inferences with exact_match = true
+    assert!(count > 0, "Should count inferences with exact_match = true");
+}
+make_db_test!(test_count_inferences_with_boolean_metric_filter);
+
+async fn test_count_inferences_with_float_metric_filter(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::FloatMetric(FloatMetricFilter {
+        metric_name: "jaccard_similarity".to_string(),
+        value: 0.5,
+        comparison_operator: FloatComparisonOperator::GreaterThan,
+    });
+
+    let count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                function_name: Some("extract_entities"),
+                filters: Some(&filter),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Should count inferences with jaccard_similarity > 0.5
+    assert!(
+        count > 0,
+        "Should count inferences with jaccard_similarity > 0.5"
+    );
+}
+make_db_test!(test_count_inferences_with_float_metric_filter);
+
+async fn test_count_inferences_with_tag_filter(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::Tag(TagFilter {
+        key: "foo".to_string(),
+        value: "bar".to_string(),
+        comparison_operator: TagComparisonOperator::Equal,
+    });
+
+    let count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                filters: Some(&filter),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Should count inferences with tag foo = bar
+    assert!(count > 0, "Should count inferences with tag foo = bar");
+}
+make_db_test!(test_count_inferences_with_tag_filter);
+
+async fn test_count_inferences_with_time_filter(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::Time(TimeFilter {
+        time: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+        comparison_operator: TimeComparisonOperator::GreaterThan,
+    });
+
+    let count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                function_name: Some("write_haiku"),
+                filters: Some(&filter),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Should count inferences created after 2024-01-01
+    assert!(
+        count > 0,
+        "Should count inferences created after 2024-01-01"
+    );
+}
+make_db_test!(test_count_inferences_with_time_filter);
+
+async fn test_count_inferences_with_and_filter(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::And {
+        children: vec![
+            InferenceFilter::Tag(TagFilter {
+                key: "foo".to_string(),
+                value: "bar".to_string(),
+                comparison_operator: TagComparisonOperator::Equal,
+            }),
+            InferenceFilter::Time(TimeFilter {
+                time: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+                comparison_operator: TimeComparisonOperator::GreaterThan,
+            }),
+        ],
+    };
+
+    let count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                filters: Some(&filter),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Should count inferences matching both conditions
+    assert!(
+        count > 0,
+        "Should count inferences matching both AND conditions"
+    );
+}
+make_db_test!(test_count_inferences_with_and_filter);
 
 async fn test_count_inferences_with_search_query(conn: impl InferenceQueries) {
     let config = get_e2e_config().await;
@@ -1202,6 +1407,47 @@ async fn test_count_inferences_with_search_query_json_escaped(conn: impl Inferen
     );
 }
 make_db_test!(test_count_inferences_with_search_query_json_escaped);
+
+async fn test_count_inferences_filter_reduces_count(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+
+    // First get total count for extract_entities
+    let total_count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                function_name: Some("extract_entities"),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Then get count with a filter that should reduce the count
+    let filter = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: true,
+    });
+
+    let filtered_count = conn
+        .count_inferences(
+            &config,
+            &CountInferencesParams {
+                function_name: Some("extract_entities"),
+                filters: Some(&filter),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Filtered count should be less than or equal to total count
+    assert!(
+        filtered_count <= total_count,
+        "Filtered count ({filtered_count}) should be <= total count ({total_count})"
+    );
+}
+make_db_test!(test_count_inferences_filter_reduces_count);
 
 // ===== DISPREFERRED_OUTPUTS TESTS =====
 

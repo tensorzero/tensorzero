@@ -5,5 +5,5 @@ export type JsonValue =
   | string
   | boolean
   | Array<JsonValue>
-  | { [key in string]?: JsonValue }
+  | { [key in string]: JsonValue }
   | null;

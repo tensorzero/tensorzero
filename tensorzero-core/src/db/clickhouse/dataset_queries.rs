@@ -11,11 +11,10 @@ use crate::db::clickhouse::{
 };
 use crate::db::query_helpers::json_escape_string_without_quotes;
 use crate::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTerm};
-use crate::endpoints::shared_types::OrderDirection;
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
-    DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams,
+    DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT, DatasetMetadata, DatasetQueries, GetDatapointParams,
+    GetDatapointsParams, GetDatasetMetadataParams,
 };
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
@@ -155,7 +154,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
     }
 
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
-        const DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT: bool = false;
         let allow_stale = params
             .allow_stale
             .unwrap_or(DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT);
@@ -508,15 +506,16 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         &self,
         target_dataset_name: &str,
         source_datapoint_ids: &[Uuid],
+        id_mappings: &std::collections::HashMap<Uuid, Uuid>,
     ) -> Result<Vec<Option<Uuid>>, Error> {
         if source_datapoint_ids.is_empty() {
             return Ok(vec![]);
         }
 
-        // Generate all mappings from source to target IDs
+        // Convert to ordered Vec using source_datapoint_ids for consistent ordering
         let mappings: Vec<(Uuid, Uuid)> = source_datapoint_ids
             .iter()
-            .map(|id| (*id, Uuid::now_v7()))
+            .filter_map(|src| id_mappings.get(src).map(|dst| (*src, *dst)))
             .collect();
 
         // Build the mappings array string for ClickHouse
@@ -671,10 +670,7 @@ fn get_order_by_clause(
                 DatapointOrderByTerm::Timestamp => "updated_at".to_string(),
                 DatapointOrderByTerm::SearchRelevance => "total_term_frequency".to_string(),
             };
-            let direction = match order_spec.direction {
-                OrderDirection::Asc => "ASC",
-                OrderDirection::Desc => "DESC",
-            };
+            let direction = order_spec.direction.to_sql_direction();
             format!("{column} {direction}")
         })
         .collect();
@@ -845,6 +841,7 @@ mod tests {
     };
     use crate::db::clickhouse::query_builder::{DatapointFilter, TagComparisonOperator, TagFilter};
     use crate::endpoints::datasets::v1::types::DatapointOrderBy;
+    use crate::endpoints::shared_types::OrderDirection;
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput, Text};
     use crate::tool::{
         AllowedTools, AllowedToolsChoice, FunctionTool, Tool, ToolCallConfigDatabaseInsert,

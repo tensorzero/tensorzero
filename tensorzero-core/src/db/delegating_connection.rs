@@ -4,13 +4,20 @@
 //! to both ClickHouse (primary) and Postgres (secondary) databases based on
 //! feature flags.
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::config::{Config, MetricConfigLevel};
 use crate::db::TimeWindow;
+use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::datasets::{
+    DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
+    GetDatasetMetadataParams,
+};
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
     DemonstrationFeedbackInsert, DemonstrationFeedbackRow, FeedbackBounds, FeedbackByVariant,
@@ -19,13 +26,17 @@ use crate::db::feedback::{
     VariantPerformanceRow,
 };
 use crate::db::inferences::{
-    CountInferencesParams, FunctionInfo, InferenceMetadata, InferenceQueries,
-    ListInferenceMetadataParams, ListInferencesParams,
+    CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
+    CountInferencesWithFeedbackParams, FunctionInferenceCount, FunctionInfo,
+    GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceQueries,
+    ListInferenceMetadataParams, ListInferencesParams, VariantThroughput,
 };
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::stored_datapoint::StoredDatapoint;
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
+use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::tool::ToolCallConfigDatabaseInsert;
@@ -52,7 +63,10 @@ pub struct DelegatingDatabaseConnection {
 }
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
-pub trait DelegatingDatabaseQueries: FeedbackQueries + InferenceQueries {}
+pub trait DelegatingDatabaseQueries:
+    FeedbackQueries + InferenceQueries + DatasetQueries + BatchInferenceQueries
+{
+}
 impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
 impl DelegatingDatabaseQueries for PostgresConnectionInfo {}
 
@@ -358,6 +372,223 @@ impl InferenceQueries for DelegatingDatabaseConnection {
             && let Err(e) = self.postgres.insert_json_inferences(rows).await
         {
             tracing::error!("Error writing json inferences to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    // ===== Inference count methods (merged from InferenceCountQueries trait) =====
+
+    async fn count_inferences_by_variant(
+        &self,
+        params: CountInferencesForFunctionParams<'_>,
+    ) -> Result<Vec<CountByVariant>, Error> {
+        self.get_read_database()
+            .count_inferences_by_variant(params)
+            .await
+    }
+
+    async fn count_inferences_with_feedback(
+        &self,
+        params: CountInferencesWithFeedbackParams<'_>,
+    ) -> Result<u64, Error> {
+        self.get_read_database()
+            .count_inferences_with_feedback(params)
+            .await
+    }
+
+    async fn get_function_throughput_by_variant(
+        &self,
+        params: GetFunctionThroughputByVariantParams<'_>,
+    ) -> Result<Vec<VariantThroughput>, Error> {
+        self.get_read_database()
+            .get_function_throughput_by_variant(params)
+            .await
+    }
+
+    async fn list_functions_with_inference_count(
+        &self,
+    ) -> Result<Vec<FunctionInferenceCount>, Error> {
+        self.get_read_database()
+            .list_functions_with_inference_count()
+            .await
+    }
+}
+
+#[async_trait]
+impl DatasetQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn get_dataset_metadata(
+        &self,
+        params: &GetDatasetMetadataParams,
+    ) -> Result<Vec<DatasetMetadata>, Error> {
+        self.get_read_database().get_dataset_metadata(params).await
+    }
+
+    async fn count_datapoints_for_dataset(
+        &self,
+        dataset_name: &str,
+        function_name: Option<&str>,
+    ) -> Result<u64, Error> {
+        self.get_read_database()
+            .count_datapoints_for_dataset(dataset_name, function_name)
+            .await
+    }
+
+    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
+        self.get_read_database().get_datapoint(params).await
+    }
+
+    async fn get_datapoints(
+        &self,
+        params: &GetDatapointsParams,
+    ) -> Result<Vec<StoredDatapoint>, Error> {
+        self.get_read_database().get_datapoints(params).await
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {
+        let count = self.clickhouse.insert_datapoints(datapoints).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_datapoints(datapoints).await
+        {
+            tracing::error!("Error writing datapoints to Postgres: {e}");
+        }
+
+        Ok(count)
+    }
+
+    async fn delete_datapoints(
+        &self,
+        dataset_name: &str,
+        datapoint_ids: Option<&[Uuid]>,
+    ) -> Result<u64, Error> {
+        let count = self
+            .clickhouse
+            .delete_datapoints(dataset_name, datapoint_ids)
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .delete_datapoints(dataset_name, datapoint_ids)
+                .await
+        {
+            tracing::error!("Error deleting datapoints from Postgres: {e}");
+        }
+
+        Ok(count)
+    }
+
+    async fn clone_datapoints(
+        &self,
+        target_dataset_name: &str,
+        source_datapoint_ids: &[Uuid],
+        id_mappings: &HashMap<Uuid, Uuid>,
+    ) -> Result<Vec<Option<Uuid>>, Error> {
+        let results = self
+            .clickhouse
+            .clone_datapoints(target_dataset_name, source_datapoint_ids, id_mappings)
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .clone_datapoints(target_dataset_name, source_datapoint_ids, id_mappings)
+                .await
+        {
+            tracing::error!("Error cloning datapoints in Postgres: {e}");
+        }
+
+        Ok(results)
+    }
+}
+
+#[async_trait]
+impl BatchInferenceQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn get_batch_request(
+        &self,
+        batch_id: Uuid,
+        inference_id: Option<Uuid>,
+    ) -> Result<Option<BatchRequestRow<'static>>, Error> {
+        self.get_read_database()
+            .get_batch_request(batch_id, inference_id)
+            .await
+    }
+
+    async fn get_batch_model_inferences(
+        &self,
+        batch_id: Uuid,
+        inference_ids: &[Uuid],
+    ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error> {
+        self.get_read_database()
+            .get_batch_model_inferences(batch_id, inference_ids)
+            .await
+    }
+
+    async fn get_completed_chat_batch_inferences(
+        &self,
+        batch_id: Uuid,
+        function_name: &str,
+        variant_name: &str,
+        inference_id: Option<Uuid>,
+    ) -> Result<Vec<CompletedBatchInferenceRow>, Error> {
+        self.get_read_database()
+            .get_completed_chat_batch_inferences(
+                batch_id,
+                function_name,
+                variant_name,
+                inference_id,
+            )
+            .await
+    }
+
+    async fn get_completed_json_batch_inferences(
+        &self,
+        batch_id: Uuid,
+        function_name: &str,
+        variant_name: &str,
+        inference_id: Option<Uuid>,
+    ) -> Result<Vec<CompletedBatchInferenceRow>, Error> {
+        self.get_read_database()
+            .get_completed_json_batch_inferences(
+                batch_id,
+                function_name,
+                variant_name,
+                inference_id,
+            )
+            .await
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn write_batch_request(&self, row: &BatchRequestRow<'_>) -> Result<(), Error> {
+        self.clickhouse.write_batch_request(row).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.write_batch_request(row).await
+        {
+            tracing::error!("Error writing batch request to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    async fn write_batch_model_inferences(
+        &self,
+        rows: &[BatchModelInferenceRow<'_>],
+    ) -> Result<(), Error> {
+        self.clickhouse.write_batch_model_inferences(rows).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.write_batch_model_inferences(rows).await
+        {
+            tracing::error!("Error writing batch model inferences to Postgres: {e}");
         }
 
         Ok(())

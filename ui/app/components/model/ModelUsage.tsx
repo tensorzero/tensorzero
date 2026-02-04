@@ -8,7 +8,9 @@ import {
   CHART_COLORS,
 } from "~/utils/chart";
 import { useState, Suspense } from "react";
-import { Await } from "react-router";
+import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertCircle } from "lucide-react";
 
 import {
   Card,
@@ -62,6 +64,23 @@ const METRIC_TYPE_CONFIG = {
     formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
   },
 } as const;
+
+function ModelUsageError() {
+  const error = useAsyncError();
+  let message = "Failed to load model usage data";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading model usage"
+      description={message}
+    />
+  );
+}
 
 function MetricSelector({
   selectedMetric,
@@ -122,7 +141,10 @@ export function ModelUsage({
       </CardHeader>
       <CardContent>
         <Suspense fallback={<div>Loading model usage data...</div>}>
-          <Await resolve={modelUsageDataPromise}>
+          <Await
+            resolve={modelUsageDataPromise}
+            errorElement={<ModelUsageError />}
+          >
             {(modelUsageData) => {
               const { data, modelNames } = transformModelUsageData(
                 modelUsageData,

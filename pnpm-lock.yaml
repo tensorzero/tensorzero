@@ -140,7 +140,7 @@ importers:
         specifier: ^9.37.0
         version: 9.37.0
       '@napi-rs/cli':
-        specifier: ^3.0.0-alpha.72
+        specifier: ^3.5.1
         version: 3.5.1(@emnapi/runtime@1.8.1)(@types/node@20.19.4)
       '@types/node':
         specifier: ^20.19.4
@@ -190,6 +190,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.1.1
         version: 5.1.1(react-hook-form@7.60.0(react@19.2.1))
+      '@radix-ui/react-switch':
+        specifier: ^1.2.6
+        version: 1.2.6(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
       '@react-router/node':
         specifier: ^7.12.0
         version: 7.12.0(react-router@7.12.0(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(typescript@5.9.2)

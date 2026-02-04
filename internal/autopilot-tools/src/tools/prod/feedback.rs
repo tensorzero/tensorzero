@@ -89,7 +89,8 @@ impl ToolMetadata for FeedbackTool {
                     "description": "If true, feedback will not be stored (useful for testing)."
                 }
             },
-            "required": ["metric_name", "value"]
+            "required": ["metric_name", "value"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

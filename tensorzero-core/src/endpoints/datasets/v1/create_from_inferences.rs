@@ -6,6 +6,7 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::datasets::DatasetQueries;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
@@ -26,13 +27,12 @@ pub async fn create_from_inferences_handler(
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<CreateDatapointsFromInferenceRequest>,
 ) -> Result<Json<CreateDatapointsResponse>, Error> {
-    let response = create_from_inferences(
-        &app_state.config,
-        &app_state.clickhouse_connection_info,
-        dataset_name,
-        request,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response =
+        create_from_inferences(&app_state.config, &database, dataset_name, request).await?;
 
     Ok(Json(response))
 }
@@ -43,7 +43,7 @@ pub async fn create_from_inferences_handler(
 /// 2. We convert the inferences into datapoint_inserts, and inserts them together in up to 2 queries (one for Chat, one for Json).
 pub async fn create_from_inferences(
     config: &Config,
-    clickhouse: &(impl InferenceQueries + DatasetQueries),
+    database: &(impl InferenceQueries + DatasetQueries),
     dataset_name: String,
     request: CreateDatapointsFromInferenceRequest,
 ) -> Result<CreateDatapointsResponse, Error> {
@@ -83,7 +83,7 @@ pub async fn create_from_inferences(
     };
 
     // Step 1: Query inferences
-    let inferences: Vec<StoredInference> = clickhouse
+    let inferences: Vec<StoredInference> = database
         .list_inferences(config, &list_inferences_params)
         .await?
         .into_iter()
@@ -122,7 +122,7 @@ pub async fn create_from_inferences(
 
     // Batch insert all datapoints
     if !datapoints_to_insert.is_empty() {
-        clickhouse.insert_datapoints(&datapoints_to_insert).await?;
+        database.insert_datapoints(&datapoints_to_insert).await?;
     }
 
     Ok(CreateDatapointsResponse { ids })
