@@ -53,7 +53,8 @@ impl ToolMetadata for AutoRejectToolCallTool {
             "type": "object",
             "description": "Internal tool for auto-rejecting unknown tool calls.",
             "properties": {},
-            "required": []
+            "required": [],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

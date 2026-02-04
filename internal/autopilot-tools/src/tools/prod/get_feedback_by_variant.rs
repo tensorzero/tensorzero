@@ -74,7 +74,8 @@ impl ToolMetadata for GetFeedbackByVariantTool {
                     "description": "Optional filter for specific variants. If not provided, all variants are included."
                 }
             },
-            "required": ["metric_name", "function_name"]
+            "required": ["metric_name", "function_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

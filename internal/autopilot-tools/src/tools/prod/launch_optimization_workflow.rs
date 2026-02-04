@@ -393,7 +393,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                     ]
                 }
             },
-            "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"]
+            "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
