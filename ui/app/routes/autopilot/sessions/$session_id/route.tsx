@@ -46,7 +46,6 @@ import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
-import { useFeatureFlags } from "~/context/feature-flags";
 
 // Nil UUID for creating new sessions
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -607,12 +606,9 @@ function AutopilotSessionEventsPageContent({
     }
   }, [interruptFetcher.state, interruptFetcher.data, toast, sessionId]);
 
-  // Interruptible when actively processing (not idle or failed) and feature flag is enabled
-  const { FF_INTERRUPT_SESSION } = useFeatureFlags();
+  // Interruptible when actively processing (not idle or failed)
   const isInterruptible =
-    FF_INTERRUPT_SESSION &&
-    autopilotStatus.status !== "idle" &&
-    autopilotStatus.status !== "failed";
+    autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
 
   // Disable submit unless status is idle or failed
   const submitDisabled =

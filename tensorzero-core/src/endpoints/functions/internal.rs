@@ -7,6 +7,7 @@ use tracing::instrument;
 
 use crate::config::{Config, MetricConfigType};
 use crate::db::TimeWindow;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{
     FeedbackQueries, GetVariantPerformanceParams, MetricType, MetricWithFeedback,
     VariantPerformanceRow,
@@ -45,9 +46,13 @@ pub async fn get_function_metrics_handler(
     Path(function_name): Path<String>,
     Query(params): Query<MetricsQueryParams>,
 ) -> Result<Json<MetricsWithFeedbackResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_function_metrics(
         &app_state.config,
-        &app_state.clickhouse_connection_info,
+        &database,
         &function_name,
         params.variant_name.as_deref(),
     )
@@ -126,9 +131,13 @@ pub async fn get_variant_performances_handler(
     Path(function_name): Path<String>,
     Query(params): Query<VariantPerformancesQueryParams>,
 ) -> Result<Json<VariantPerformancesResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_variant_performances(
         &app_state.config,
-        &app_state.clickhouse_connection_info,
+        &database,
         &function_name,
         &params.metric_name,
         params.time_window,

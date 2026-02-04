@@ -214,7 +214,8 @@ impl ToolMetadata for ListInferencesTool {
                     "type": "string",
                     "description": "EXPERIMENTAL: Text query for case-insensitive substring search over input and output. Requires exact substring match. May be slow without other filters."
                 }
-            }
+            },
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

@@ -132,7 +132,8 @@ impl ToolMetadata for InferenceTool {
                     "description": "Output schema override for JSON functions (optional)"
                 }
             },
-            "required": ["input"]
+            "required": ["input"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
