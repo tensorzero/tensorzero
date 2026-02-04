@@ -70,6 +70,14 @@ export function ChatInput({
     previousUserMessageEventIdRef.current = undefined;
   }, [sessionId]);
 
+  // Auto-focus textarea when navigating to new session page
+  // Wait for disabled state to clear before focusing
+  useEffect(() => {
+    if (isNewSession && !disabled && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isNewSession, disabled]);
+
   // Sample a random placeholder for new sessions, default for existing sessions
   const placeholder = useMemo(
     () =>

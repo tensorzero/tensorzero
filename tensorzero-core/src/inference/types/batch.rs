@@ -8,6 +8,7 @@ use super::{
     chat_completion_inference_params::ServiceTier,
 };
 
+use crate::config::snapshot::SnapshotHash;
 use crate::inference::types::StoredRequestMessage;
 use crate::serde_util::deserialize_json_string;
 use crate::{
@@ -21,8 +22,9 @@ use crate::{
     utils::uuid::validate_tensorzero_uuid,
 };
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
 pub enum BatchStatus {
     Pending,
     Completed,
@@ -160,6 +162,8 @@ pub struct BatchRequestRow<'a> {
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
     pub errors: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug)]
@@ -215,6 +219,8 @@ pub struct BatchModelInferenceRow<'a> {
     pub model_name: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
     pub tags: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 pub struct UnparsedBatchRequestRow<'a> {
@@ -228,6 +234,7 @@ pub struct UnparsedBatchRequestRow<'a> {
     pub model_provider_name: &'a str,
     pub status: BatchStatus,
     pub errors: Vec<Value>,
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 impl<'a> BatchRequestRow<'a> {
@@ -243,6 +250,7 @@ impl<'a> BatchRequestRow<'a> {
             model_provider_name,
             status,
             errors,
+            snapshot_hash,
         } = unparsed;
         let id = Uuid::now_v7();
         Self {
@@ -257,6 +265,7 @@ impl<'a> BatchRequestRow<'a> {
             model_provider_name: Cow::Borrowed(model_provider_name),
             status,
             errors,
+            snapshot_hash,
         }
     }
 }
