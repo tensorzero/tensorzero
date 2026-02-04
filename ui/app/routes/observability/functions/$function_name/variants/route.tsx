@@ -128,13 +128,6 @@ async function fetchInferencesTable(
   };
 }
 
-async function fetchInferenceCount(
-  function_name: string,
-  variant_name: string,
-): Promise<number> {
-  return countInferencesForVariant(function_name, variant_name);
-}
-
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { function_name, variant_name } = params;
   if (!function_name || !variant_name) {
@@ -182,7 +175,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       beforeInference,
       afterInference,
     ),
-    inferenceCountData: fetchInferenceCount(function_name, variant_name),
+    inferenceCountData: countInferencesForVariant(function_name, variant_name),
   };
 }
 
