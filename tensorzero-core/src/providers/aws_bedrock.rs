@@ -13,8 +13,8 @@ use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::aws_common::{
-    AWSBedrockAuth, AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion,
-    check_eventstream_exception, send_aws_request, send_aws_request_with_api_key, sign_request,
+    AWSBedrockCredentials, AWSEndpointUrl, AWSRegion, check_eventstream_exception,
+    resolve_request_credentials, send_aws_request, send_aws_request_with_api_key, sign_request,
 };
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use crate::cache::ModelProviderRequest;
@@ -38,6 +38,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
+use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 use crate::tool::{
     FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice,
 };
@@ -61,53 +62,150 @@ pub const PROVIDER_TYPE: &str = "aws_bedrock";
 pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
-    config: AWSProviderConfig,
+    region: AWSRegion,
     #[serde(skip)]
-    auth: AWSBedrockAuth,
+    endpoint_url: Option<AWSEndpointUrl>,
+    #[serde(skip)]
+    credentials: AWSBedrockCredentials,
+}
+
+/// Build AWS Bedrock provider configuration from config fields.
+///
+/// Handles region resolution (including deprecated `allow_auto_detect_region`),
+/// endpoint URL parsing, and authentication (api_key or IAM credentials).
+///
+/// Returns `(region, endpoint_url, auth)`.
+pub async fn build_aws_bedrock_provider_config(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    endpoint_url: Option<CredentialLocationOrHardcoded>,
+    api_key: Option<CredentialLocation>,
+    access_key_id: Option<CredentialLocation>,
+    secret_access_key: Option<CredentialLocation>,
+    session_token: Option<CredentialLocation>,
+) -> Result<(AWSRegion, Option<AWSEndpointUrl>, AWSBedrockCredentials), Error> {
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{PROVIDER_TYPE}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, PROVIDER_TYPE))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    let aws_region = aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {PROVIDER_TYPE} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })?;
+
+    let endpoint_url = endpoint_url
+        .map(|loc| AWSEndpointUrl::from_credential_location(loc, PROVIDER_TYPE))
+        .transpose()?
+        .flatten();
+
+    // Convert credential fields to AWSBedrockCredentials (handles api_key for bearer auth)
+    let auth = AWSBedrockCredentials::from_fields(
+        api_key,
+        access_key_id,
+        secret_access_key,
+        session_token,
+        &aws_region,
+        PROVIDER_TYPE,
+    )
+    .await?;
+
+    Ok((aws_region, endpoint_url, auth))
 }
 
 impl AWSBedrockProvider {
-    pub async fn new(
+    pub fn new(
         model_id: String,
         region: AWSRegion,
         endpoint_url: Option<AWSEndpointUrl>,
-        auth: AWSBedrockAuth,
-    ) -> Result<Self, Error> {
-        // Compute static_region from the AWSRegion enum:
-        // - Static: use the configured region
-        // - Sdk: None (let SDK auto-detect)
-        // - Dynamic: use a fallback region for SDK config (overridden per-request)
-        let static_region = match &region {
-            AWSRegion::Static(r) => Some(r.clone()),
-            AWSRegion::Sdk => None,
-            AWSRegion::Dynamic(_) => Some(Region::new("us-east-1")),
-        };
-
-        // Extract credentials for AWSProviderConfig if using IAM auth
-        let credentials = match &auth {
-            AWSBedrockAuth::Credentials(creds) => creds.clone(),
-            // For bearer auth, we still need a config for region/endpoint, use Sdk as placeholder
-            AWSBedrockAuth::ApiKey(_) | AWSBedrockAuth::DynamicApiKey(_) => AWSCredentials::Sdk,
-        };
-
-        let config = AWSProviderConfig::new(
-            static_region,
-            Some(region),
+        credentials: AWSBedrockCredentials,
+    ) -> Self {
+        Self {
+            model_id,
+            region,
             endpoint_url,
             credentials,
-            PROVIDER_TYPE,
-        )
-        .await?;
-
-        Ok(Self {
-            model_id,
-            config,
-            auth,
-        })
+        }
     }
 
     pub fn model_id(&self) -> &str {
         &self.model_id
+    }
+
+    /// Get the base URL for AWS Bedrock requests.
+    fn get_base_url(&self, dynamic_api_keys: &InferenceCredentials) -> Result<String, Error> {
+        if let Some(endpoint_url) = &self.endpoint_url {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
+            Ok(url.to_string().trim_end_matches('/').to_string())
+        } else {
+            let region = self.get_region(dynamic_api_keys)?;
+            Ok(format!(
+                "https://bedrock-runtime.{}.amazonaws.com",
+                region.as_ref()
+            ))
+        }
+    }
+
+    /// Get the region for this request.
+    fn get_region(&self, dynamic_api_keys: &InferenceCredentials) -> Result<Region, Error> {
+        match &self.region {
+            AWSRegion::Static(region) => Ok(region.clone()),
+            AWSRegion::Dynamic(key_name) => {
+                let region_str = dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicRegionNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Ok(Region::new(region_str.expose_secret().to_string()))
+            }
+            AWSRegion::Sdk => {
+                // For SDK region, it was resolved at construction time and stored in sdk_config
+                match &self.credentials {
+                    AWSBedrockCredentials::IAM { sdk_config, .. } => {
+                        sdk_config.region().cloned().ok_or_else(|| {
+                            Error::new(ErrorDetails::InferenceClient {
+                                raw_request: None,
+                                raw_response: None,
+                                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                                message: "No region configured".to_string(),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            })
+                        })
+                    }
+                    // Bearer auth with SDK region shouldn't happen (would need sdk_config),
+                    // but if it does, error
+                    _ => Err(Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                        message: "SDK region requires IAM authentication".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })),
+                }
+            }
+        }
     }
 }
 
@@ -133,9 +231,7 @@ impl InferenceProvider for AWSBedrockProvider {
         } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL
-        let base_url =
-            self.config
-                .get_base_url(dynamic_api_keys, "bedrock-runtime", PROVIDER_TYPE)?;
+        let base_url = self.get_base_url(dynamic_api_keys)?;
         let url = format!(
             "{}/model/{}/converse",
             base_url,
@@ -143,8 +239,8 @@ impl InferenceProvider for AWSBedrockProvider {
         );
 
         // Send request with appropriate auth method
-        let aws_response = match &self.auth {
-            AWSBedrockAuth::ApiKey(api_key) => {
+        let aws_response = match &self.credentials {
+            AWSBedrockCredentials::ApiKey(api_key) => {
                 // Use bearer token authentication
                 send_aws_request_with_api_key(
                     http_client,
@@ -157,7 +253,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 )
                 .await?
             }
-            AWSBedrockAuth::DynamicApiKey(key_name) => {
+            AWSBedrockCredentials::DynamicApiKey(key_name) => {
                 // Resolve dynamic API key from request credentials
                 let api_key = dynamic_api_keys.get(key_name).ok_or_else(|| {
                     Error::new(ErrorDetails::ApiKeyMissing {
@@ -176,19 +272,25 @@ impl InferenceProvider for AWSBedrockProvider {
                 )
                 .await?
             }
-            AWSBedrockAuth::Credentials(_) => {
+            AWSBedrockCredentials::IAM {
+                credentials,
+                sdk_config,
+            } => {
                 // Use SigV4 signing with IAM credentials
-                let credentials = self
-                    .config
-                    .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
-                    .await?;
-                let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
+                let resolved_credentials = resolve_request_credentials(
+                    credentials,
+                    sdk_config,
+                    dynamic_api_keys,
+                    PROVIDER_TYPE,
+                )
+                .await?;
+                let region = self.get_region(dynamic_api_keys)?;
                 send_aws_request(
                     http_client,
                     &url,
                     http_extra_headers,
                     body_bytes,
-                    &credentials,
+                    &resolved_credentials,
                     region.as_ref(),
                     "bedrock",
                     PROVIDER_TYPE,
@@ -251,9 +353,7 @@ impl InferenceProvider for AWSBedrockProvider {
         } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL for streaming endpoint
-        let base_url =
-            self.config
-                .get_base_url(dynamic_api_keys, "bedrock-runtime", PROVIDER_TYPE)?;
+        let base_url = self.get_base_url(dynamic_api_keys)?;
         let url = format!(
             "{}/model/{}/converse-stream",
             base_url,
@@ -261,8 +361,8 @@ impl InferenceProvider for AWSBedrockProvider {
         );
 
         // Build headers based on auth type
-        let request_headers = match &self.auth {
-            AWSBedrockAuth::ApiKey(api_key) => {
+        let request_headers = match &self.credentials {
+            AWSBedrockCredentials::ApiKey(api_key) => {
                 // Bearer token authentication
                 let mut headers = http_extra_headers;
                 headers.insert(
@@ -283,7 +383,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 );
                 headers
             }
-            AWSBedrockAuth::DynamicApiKey(key_name) => {
+            AWSBedrockCredentials::DynamicApiKey(key_name) => {
                 // Resolve dynamic API key from request credentials
                 let api_key = dynamic_api_keys.get(key_name).ok_or_else(|| {
                     Error::new(ErrorDetails::ApiKeyMissing {
@@ -310,13 +410,19 @@ impl InferenceProvider for AWSBedrockProvider {
                 );
                 headers
             }
-            AWSBedrockAuth::Credentials(_) => {
+            AWSBedrockCredentials::IAM {
+                credentials,
+                sdk_config,
+            } => {
                 // SigV4 signing with IAM credentials
-                let credentials = self
-                    .config
-                    .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
-                    .await?;
-                let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
+                let resolved_credentials = resolve_request_credentials(
+                    credentials,
+                    sdk_config,
+                    dynamic_api_keys,
+                    PROVIDER_TYPE,
+                )
+                .await?;
+                let region = self.get_region(dynamic_api_keys)?;
 
                 let mut headers = http_extra_headers;
                 headers.insert(
@@ -329,7 +435,7 @@ impl InferenceProvider for AWSBedrockProvider {
                     &url,
                     &headers,
                     &body_bytes,
-                    &credentials,
+                    &resolved_credentials,
                     region.as_ref(),
                     "bedrock",
                     PROVIDER_TYPE,
@@ -1205,15 +1311,22 @@ mod tests {
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
         let logs_contain = crate::utils::testing::capture_logs();
+
         // Every call should trigger client creation since each provider has its own AWS Bedrock client
-        AWSBedrockProvider::new(
-            "test".to_string(),
-            AWSRegion::Static(Region::new("uk-hogwarts-1")),
-            None,
-            AWSBedrockAuth::Credentials(AWSCredentials::Sdk),
+        // SDK config is now loaded in AWSBedrockCredentials::from_fields()
+        let region = AWSRegion::Static(Region::new("uk-hogwarts-1"));
+        let auth = AWSBedrockCredentials::from_fields(
+            None, // api_key
+            None, // access_key_id
+            None, // secret_access_key
+            None, // session_token
+            &region,
+            PROVIDER_TYPE,
         )
         .await
         .unwrap();
+
+        let _provider = AWSBedrockProvider::new("test".to_string(), region.clone(), None, auth);
 
         assert!(logs_contain(
             "Creating new AWS config for region: uk-hogwarts-1"
@@ -1221,14 +1334,13 @@ mod tests {
 
         reset_capture_logs();
 
-        AWSBedrockProvider::new(
-            "test".to_string(),
-            AWSRegion::Static(Region::new("uk-hogwarts-1")),
-            None,
-            AWSBedrockAuth::Credentials(AWSCredentials::Sdk),
-        )
-        .await
-        .unwrap();
+        let region = AWSRegion::Static(Region::new("uk-hogwarts-1"));
+        let auth =
+            AWSBedrockCredentials::from_fields(None, None, None, None, &region, PROVIDER_TYPE)
+                .await
+                .unwrap();
+
+        let _provider = AWSBedrockProvider::new("test".to_string(), region, None, auth);
 
         assert!(logs_contain(
             "Creating new AWS config for region: uk-hogwarts-1"
@@ -1240,14 +1352,13 @@ mod tests {
         // We use 'nextest' as our runner, so each test runs in its own process
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_REGION");
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_DEFAULT_REGION");
-        let err = AWSBedrockProvider::new(
-            "test".to_string(),
-            AWSRegion::Sdk,
-            None,
-            AWSBedrockAuth::Credentials(AWSCredentials::Sdk),
-        )
-        .await
-        .expect_err("AWS Bedrock provider should fail when it cannot detect region");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+
+        let region = AWSRegion::Sdk;
+        let err =
+            AWSBedrockCredentials::from_fields(None, None, None, None, &region, PROVIDER_TYPE)
+                .await
+                .expect_err("AWS Bedrock credentials should fail when it cannot detect region");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),
@@ -1258,14 +1369,13 @@ mod tests {
 
         reset_capture_logs();
 
-        AWSBedrockProvider::new(
-            "test".to_string(),
-            AWSRegion::Static(Region::new("me-shire-2")),
-            None,
-            AWSBedrockAuth::Credentials(AWSCredentials::Sdk),
-        )
-        .await
-        .unwrap();
+        let region = AWSRegion::Static(Region::new("me-shire-2"));
+        let auth =
+            AWSBedrockCredentials::from_fields(None, None, None, None, &region, PROVIDER_TYPE)
+                .await
+                .unwrap();
+
+        let _provider = AWSBedrockProvider::new("test".to_string(), region, None, auth);
 
         assert!(logs_contain(
             "Creating new AWS config for region: me-shire-2"

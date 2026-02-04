@@ -1,16 +1,19 @@
 //! AWS SageMaker model provider using direct HTTP calls.
 
+use aws_config::SdkConfig;
 use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
 use aws_types::region::Region;
 use bytes::BytesMut;
 use futures::StreamExt;
+use reqwest::StatusCode;
 use reqwest_sse_stream::SseStream;
+use secrecy::ExposeSecret;
 use serde::Serialize;
 use std::time::Instant;
 
 use super::aws_common::{
-    AWSCredentials, AWSEndpointUrl, AWSProviderConfig, AWSRegion, check_eventstream_exception,
-    send_aws_request, sign_request,
+    AWSEndpointUrl, AWSIAMCredentials, AWSRegion, check_eventstream_exception, config_with_region,
+    resolve_request_credentials, send_aws_request, sign_request,
 };
 use super::helpers::inject_extra_request_data;
 use crate::cache::ModelProviderRequest;
@@ -24,6 +27,7 @@ use crate::inference::types::{
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError, WrappedProvider};
 use crate::model::ModelProvider;
+use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Sagemaker";
@@ -36,34 +40,142 @@ const PROVIDER_TYPE: &str = "aws_sagemaker";
 pub struct AWSSagemakerProvider {
     endpoint_name: String,
     #[serde(skip)]
-    config: AWSProviderConfig,
+    region: AWSRegion,
+    #[serde(skip)]
+    endpoint_url: Option<AWSEndpointUrl>,
+    #[serde(skip)]
+    credentials: AWSIAMCredentials,
+    #[serde(skip)]
+    sdk_config: Box<SdkConfig>,
     #[serde(skip)] // TODO: add a way to Serialize the WrappedProvider
     pub hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
+}
+
+/// Processed AWS SageMaker provider configuration.
+pub struct AWSSagemakerConfig {
+    pub region: AWSRegion,
+    pub endpoint_url: Option<AWSEndpointUrl>,
+    pub credentials: AWSIAMCredentials,
+}
+
+/// Helper to process AWS SageMaker provider configuration.
+pub fn build_aws_sagemaker_config(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    endpoint_url: Option<CredentialLocationOrHardcoded>,
+    access_key_id: Option<CredentialLocation>,
+    secret_access_key: Option<CredentialLocation>,
+    session_token: Option<CredentialLocation>,
+) -> Result<AWSSagemakerConfig, Error> {
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{PROVIDER_TYPE}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, PROVIDER_TYPE))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    let aws_region = aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {PROVIDER_TYPE} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })?;
+
+    let endpoint_url = endpoint_url
+        .map(|loc| AWSEndpointUrl::from_credential_location(loc, PROVIDER_TYPE))
+        .transpose()?
+        .flatten();
+
+    // Convert credential fields to AWSCredentials
+    let aws_credentials = AWSIAMCredentials::from_fields(
+        access_key_id,
+        secret_access_key,
+        session_token,
+        PROVIDER_TYPE,
+    )?;
+
+    Ok(AWSSagemakerConfig {
+        region: aws_region,
+        endpoint_url,
+        credentials: aws_credentials,
+    })
 }
 
 impl AWSSagemakerProvider {
     pub async fn new(
         endpoint_name: String,
         hosted_provider: Box<dyn WrappedProvider + Send + Sync>,
-        static_region: Option<Region>,
-        region: Option<AWSRegion>,
+        region: AWSRegion,
         endpoint_url: Option<AWSEndpointUrl>,
-        credentials: AWSCredentials,
+        credentials: AWSIAMCredentials,
     ) -> Result<Self, Error> {
-        let config = AWSProviderConfig::new(
-            static_region,
-            region,
-            endpoint_url,
-            credentials,
-            PROVIDER_TYPE,
-        )
-        .await?;
+        let static_region = region.static_region_for_sdk_config();
+        let sdk_config = config_with_region(PROVIDER_TYPE, static_region).await?;
 
         Ok(Self {
             endpoint_name,
-            config,
+            region,
+            endpoint_url,
+            credentials,
+            sdk_config: Box::new(sdk_config),
             hosted_provider,
         })
+    }
+
+    /// Get the base URL for AWS SageMaker requests.
+    fn get_base_url(&self, dynamic_api_keys: &InferenceCredentials) -> Result<String, Error> {
+        if let Some(endpoint_url) = &self.endpoint_url {
+            let url = endpoint_url.resolve(dynamic_api_keys)?;
+            Ok(url.to_string().trim_end_matches('/').to_string())
+        } else {
+            let region = self.get_region(dynamic_api_keys)?;
+            Ok(format!(
+                "https://runtime.sagemaker.{}.amazonaws.com",
+                region.as_ref()
+            ))
+        }
+    }
+
+    /// Get the region for this request.
+    fn get_region(&self, dynamic_api_keys: &InferenceCredentials) -> Result<Region, Error> {
+        match &self.region {
+            AWSRegion::Static(region) => Ok(region.clone()),
+            AWSRegion::Dynamic(key_name) => {
+                let region_str = dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicRegionNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Ok(Region::new(region_str.expose_secret().to_string()))
+            }
+            AWSRegion::Sdk => self.sdk_config.region().cloned().ok_or_else(|| {
+                Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: None,
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                    message: "No region configured".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            }),
+        }
     }
 }
 
@@ -134,9 +246,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         } = prepare_sagemaker_request(request, model_provider, &*self.hosted_provider).await?;
 
         // Build URL
-        let base_url =
-            self.config
-                .get_base_url(dynamic_api_keys, "runtime.sagemaker", PROVIDER_TYPE)?;
+        let base_url = self.get_base_url(dynamic_api_keys)?;
         let url = format!(
             "{}/endpoints/{}/invocations",
             base_url,
@@ -144,11 +254,14 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
 
         // Get credentials and region
-        let credentials = self
-            .config
-            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
-            .await?;
-        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
+        let credentials = resolve_request_credentials(
+            &self.credentials,
+            &self.sdk_config,
+            dynamic_api_keys,
+            PROVIDER_TYPE,
+        )
+        .await?;
+        let region = self.get_region(dynamic_api_keys)?;
 
         // Send signed request
         let aws_response = send_aws_request(
@@ -199,9 +312,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         } = prepare_sagemaker_request(request, model_provider, &*self.hosted_provider).await?;
 
         // Build URL for streaming endpoint
-        let base_url =
-            self.config
-                .get_base_url(dynamic_api_keys, "runtime.sagemaker", PROVIDER_TYPE)?;
+        let base_url = self.get_base_url(dynamic_api_keys)?;
         let url = format!(
             "{}/endpoints/{}/invocations-response-stream",
             base_url,
@@ -209,11 +320,14 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
 
         // Get credentials and region
-        let credentials = self
-            .config
-            .get_request_credentials(dynamic_api_keys, PROVIDER_TYPE)
-            .await?;
-        let region = self.config.get_region(dynamic_api_keys, PROVIDER_TYPE)?;
+        let credentials = resolve_request_credentials(
+            &self.credentials,
+            &self.sdk_config,
+            dynamic_api_keys,
+            PROVIDER_TYPE,
+        )
+        .await?;
+        let region = self.get_region(dynamic_api_keys)?;
 
         // Build headers
         let mut headers = http_extra_headers;
