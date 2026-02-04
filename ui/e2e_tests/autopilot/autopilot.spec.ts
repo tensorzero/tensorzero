@@ -103,3 +103,62 @@ test.describe("Autopilot New Session Button", () => {
     expect(page.url()).toMatch(/\/autopilot\/sessions\/new$/);
   });
 });
+
+test.describe("YOLO mode", () => {
+  test("toggle is visible and defaults to off", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+
+    const yoloToggle = page
+      .locator("label")
+      .filter({ hasText: "YOLO Mode" })
+      .getByRole("switch");
+    await expect(yoloToggle).toBeVisible();
+    await expect(yoloToggle).toHaveAttribute("data-state", "unchecked");
+  });
+
+  test("reads persisted state from localStorage on page load", async ({
+    page,
+  }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.evaluate(() =>
+      localStorage.setItem("tensorzero-yolo-mode", "true"),
+    );
+    await page.reload();
+
+    const yoloToggle = page
+      .locator("label")
+      .filter({ hasText: "YOLO Mode" })
+      .getByRole("switch");
+    await expect(yoloToggle).toBeVisible();
+    await expect(yoloToggle).toHaveAttribute("data-state", "checked");
+  });
+
+  test("clicking toggle enables auto-approval of tool calls", async ({
+    page,
+  }) => {
+    test.setTimeout(120000);
+
+    await page.goto("/autopilot/sessions/new");
+
+    const yoloLabel = page.locator("label").filter({ hasText: "YOLO Mode" });
+    const yoloToggle = yoloLabel.getByRole("switch");
+    await expect(yoloToggle).toBeVisible();
+    await yoloLabel.click();
+    await expect(yoloToggle).toHaveAttribute("data-state", "checked");
+
+    const messageInput = page.getByRole("textbox");
+    await messageInput.fill(
+      "What functions are available in my TensorZero config?",
+    );
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+      timeout: 30000,
+    });
+
+    // "Tool Result" appearing confirms tool was auto-approved and executed
+    await expect(page.getByText("Tool Result").first()).toBeVisible({
+      timeout: 60000,
+    });
+  });
+});
