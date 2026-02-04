@@ -145,6 +145,10 @@ impl<T: SimpleTool> ErasedTool for T {
         ToolMetadata::timeout(self)
     }
 
+    fn strict(&self) -> bool {
+        ToolMetadata::strict(self)
+    }
+
     fn is_durable(&self) -> bool {
         false
     }
