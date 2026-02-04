@@ -249,6 +249,10 @@ fn process_pattern_suffix(
 
             let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
             for key in keys {
+                // Validate the key to prevent path traversal attacks.
+                // TOML table keys are user-controlled and could contain sequences like "../".
+                validate_path_component(&key, &path_so_far.join(&key).display().to_string())?;
+
                 if let Some(nested_item) = table.get_mut(&key) {
                     let new_path = path_so_far.join(&key);
                     files.extend(process_pattern_suffix(
@@ -763,6 +767,89 @@ mod tests {
         assert!(
             validate_path_component("..hidden", "function_name").is_ok(),
             "should allow double dot prefix (valid filename, not parent dir)"
+        );
+    }
+
+    // ========================================================================
+    // Path traversal prevention tests
+    // ========================================================================
+
+    #[test]
+    fn test_extract_resolved_paths_rejects_path_traversal_in_keys() {
+        // Build a malicious TOML with a path traversal key
+        let mut variants_table = toml_edit::Table::new();
+
+        // Create a malicious variant name attempting path traversal
+        let mut malicious_variant = toml_edit::Table::new();
+        malicious_variant.insert("model", Item::Value(Value::from("gpt-4")));
+
+        let mut template_table = toml_edit::Table::new();
+        template_table.insert(
+            "__tensorzero_remapped_path",
+            Item::Value(Value::from("/original/path/template.minijinja")),
+        );
+        template_table.insert("__data", Item::Value(Value::from("malicious content")));
+        malicious_variant.insert("system_template", Item::Table(template_table));
+
+        // Use a path traversal sequence as the variant name
+        variants_table.insert("../../../etc/passwd", Item::Table(malicious_variant));
+
+        let mut func_table = toml_edit::Table::new();
+        func_table.insert("variants", Item::Table(variants_table));
+
+        let mut item = Item::Table(func_table);
+
+        let glob_base = Path::new("/config");
+        let toml_file_dir = Path::new("/config");
+        // Prefix stops at "variants", so the malicious key will be processed as a wildcard match
+        let matched_prefix = &["functions", "my_func"];
+
+        let result = extract_resolved_paths(&mut item, glob_base, toml_file_dir, matched_prefix);
+
+        assert!(
+            result.is_err(),
+            "should reject path traversal sequences in TOML keys"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("path component"),
+            "error message should mention invalid path component: {err}"
+        );
+    }
+
+    #[test]
+    fn test_extract_resolved_paths_rejects_slash_in_keys() {
+        // Build a TOML with a key containing a slash
+        let mut variants_table = toml_edit::Table::new();
+
+        let mut variant_with_slash = toml_edit::Table::new();
+        variant_with_slash.insert("model", Item::Value(Value::from("gpt-4")));
+
+        let mut template_table = toml_edit::Table::new();
+        template_table.insert(
+            "__tensorzero_remapped_path",
+            Item::Value(Value::from("/original/path/template.minijinja")),
+        );
+        template_table.insert("__data", Item::Value(Value::from("content")));
+        variant_with_slash.insert("system_template", Item::Table(template_table));
+
+        // Key with forward slash
+        variants_table.insert("foo/bar", Item::Table(variant_with_slash));
+
+        let mut func_table = toml_edit::Table::new();
+        func_table.insert("variants", Item::Table(variants_table));
+
+        let mut item = Item::Table(func_table);
+
+        let glob_base = Path::new("/config");
+        let toml_file_dir = Path::new("/config");
+        let matched_prefix = &["functions", "my_func"];
+
+        let result = extract_resolved_paths(&mut item, glob_base, toml_file_dir, matched_prefix);
+
+        assert!(
+            result.is_err(),
+            "should reject keys containing forward slashes"
         );
     }
 }
