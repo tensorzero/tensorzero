@@ -1,9 +1,29 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::error::ConfigWriterError;
 
 /// Validates that a name is safe to use as a path component.
-/// Rejects names containing path separators, parent directory references, or null bytes.
+///
+/// This function prevents path traversal attacks by ensuring the input resolves to
+/// exactly one "normal" path component.
+///
+/// - `..` → `[ParentDir]` — rejected (not a Normal component)
+/// - `../foo` → `[ParentDir, Normal("foo")]` — rejected (multiple components)
+/// - `foo/../bar` → `[Normal("foo"), ParentDir, Normal("bar")]` — rejected (multiple components)
+/// - `./foo` → `[CurDir, Normal("foo")]` — rejected (multiple components)
+/// - `foo/bar` → `[Normal("foo"), Normal("bar")]` — rejected (multiple components)
+/// - `/foo` → `[RootDir, Normal("foo")]` — rejected (multiple components)
+/// - `my_function` → `[Normal("my_function")]` — accepted
+///
+/// The check `(Some(Component::Normal(os_str)), None) if os_str == name` ensures:
+/// 1. There is exactly one component
+/// 2. That component is `Normal` (not `ParentDir`, `CurDir`, `RootDir`, or `Prefix`)
+/// 3. The component equals the original input (guards against normalization surprises)
+///
+/// Additional checks:
+/// - Null bytes are explicitly rejected as they can cause issues in C FFI and aren't
+///   reliably caught by `Path::components()`
+/// - Names starting with `.` are rejected as a business rule to avoid hidden files
 pub fn validate_path_component(name: &str, field_name: &str) -> Result<(), ConfigWriterError> {
     if name.is_empty() {
         return Err(ConfigWriterError::InvalidPathComponent {
@@ -13,6 +33,16 @@ pub fn validate_path_component(name: &str, field_name: &str) -> Result<(), Confi
         });
     }
 
+    // Null bytes can cause issues in C FFI and aren't reliably caught by Path::components()
+    if name.contains('\0') {
+        return Err(ConfigWriterError::InvalidPathComponent {
+            field_name: field_name.to_string(),
+            value: name.to_string(),
+            reason: "name cannot contain null bytes".to_string(),
+        });
+    }
+
+    // Business rule: don't allow hidden files
     if name.starts_with('.') {
         return Err(ConfigWriterError::InvalidPathComponent {
             field_name: field_name.to_string(),
@@ -21,15 +51,18 @@ pub fn validate_path_component(name: &str, field_name: &str) -> Result<(), Confi
         });
     }
 
-    if name.contains('/') || name.contains('\\') || name.contains('\0') {
-        return Err(ConfigWriterError::InvalidPathComponent {
+    // Use the stdlib to verify this is a single, normal path component
+    let path = Path::new(name);
+    let mut components = path.components();
+
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(os_str)), None) if os_str == name => Ok(()),
+        _ => Err(ConfigWriterError::InvalidPathComponent {
             field_name: field_name.to_string(),
             value: name.to_string(),
-            reason: "name cannot contain path separators (`/`, `\\`) or null bytes".to_string(),
-        });
+            reason: "name must be a valid single path component".to_string(),
+        }),
     }
-
-    Ok(())
 }
 
 /// Information about a template or schema file that needs to be written.
