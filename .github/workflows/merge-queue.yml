@@ -19,6 +19,7 @@ concurrency:
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
   AWS_REGION: "us-east-1"
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AZURE_AI_FOUNDRY_API_KEY: ${{ secrets.AZURE_AI_FOUNDRY_API_KEY }}
@@ -394,6 +395,7 @@ jobs:
           # Provider API keys
           echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> gateway.env
           echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> gateway.env
+          echo "AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK}" >> gateway.env
           echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> gateway.env
           echo "AWS_REGION=${AWS_REGION}" >> gateway.env
           echo "AZURE_API_KEY=${AZURE_API_KEY}" >> gateway.env
