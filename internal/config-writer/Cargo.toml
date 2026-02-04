@@ -23,7 +23,7 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [features]
 default = []
-ts-bindings = ["dep:ts-rs"]
+ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings"]
 
 [dependencies.ts-rs]
 workspace = true
