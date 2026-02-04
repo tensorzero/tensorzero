@@ -6356,6 +6356,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "tensorzero-config-paths"
+version = "2026.2.0"
+
+[[package]]
 name = "tensorzero-core"
 version = "2026.2.0"
 dependencies = [
@@ -6440,6 +6444,7 @@ dependencies = [
  "tempfile",
  "tensorzero",
  "tensorzero-auth",
+ "tensorzero-config-paths",
  "tensorzero-derive",
  "tensorzero-types",
  "tensorzero-types-providers",
