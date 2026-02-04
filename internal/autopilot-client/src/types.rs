@@ -519,6 +519,9 @@ pub struct VariantSummary {
     pub cs_upper: f64,
     /// Number of observations.
     pub count: u64,
+    /// Whether this variant failed during evaluation.
+    #[serde(default)]
+    pub failed: bool,
 }
 
 /// Visualization data for a top-k evaluation.
@@ -528,6 +531,11 @@ pub struct VariantSummary {
 pub struct TopKEvaluationVisualization {
     /// Map of variant names to their summary statistics.
     pub variant_summaries: std::collections::HashMap<String, VariantSummary>,
+    /// Sizes k where we can confidently identify a top-k set.
+    /// For example, [2, 5] means there's statistical separation after the 2nd
+    /// and 5th ranked variants (sorted by lower confidence bound descending).
+    #[serde(default)]
+    pub confident_top_k_sizes: Vec<usize>,
 }
 
 /// Types of visualizations that can be displayed.
