@@ -20,4 +20,8 @@ export type VariantSummary = {
    * Number of observations.
    */
   count: bigint;
+  /**
+   * Whether this variant failed during evaluation.
+   */
+  failed: boolean;
 };
