@@ -23,12 +23,6 @@ interface InferenceActionBarProps {
   locationKey: string;
 }
 
-/**
- * Action bar with independent loading states for each button.
- * - TryWithVariant: waits for actionBarData + input + modelInferences
- * - AddToDataset: waits for actionBarData (hasDemonstration)
- * - HumanFeedback: renders immediately (no async deps)
- */
 export function InferenceActionBar({
   inference,
   actionBarDataPromise,
@@ -60,10 +54,6 @@ export function InferenceActionBar({
   );
 }
 
-// -----------------------------------------------------------------------------
-// TryWithVariantAction with Suspense
-// -----------------------------------------------------------------------------
-
 interface TryWithVariantActionStreamingProps {
   inference: StoredInference;
   actionBarDataPromise: Promise<ActionBarData>;
@@ -84,7 +74,6 @@ function TryWithVariantActionStreaming({
   const variants = Object.keys(functionConfig?.variants || {});
   const isDefault = inference.function_name === DEFAULT_FUNCTION;
 
-  // Combine all async data this component needs
   const dataPromise = useMemo(
     () =>
       Promise.all([
@@ -106,7 +95,6 @@ function TryWithVariantActionStreaming({
         errorElement={<Skeleton className="h-8 w-36" />}
       >
         {(data) => {
-          // Calculate options with resolved usedVariants
           const modelsSet = new Set([
             ...data.usedVariants,
             ...config.model_names,
@@ -129,10 +117,6 @@ function TryWithVariantActionStreaming({
     </Suspense>
   );
 }
-
-// -----------------------------------------------------------------------------
-// AddToDatasetButton with Suspense
-// -----------------------------------------------------------------------------
 
 interface AddToDatasetButtonStreamingProps {
   inference: StoredInference;
