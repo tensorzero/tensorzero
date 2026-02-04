@@ -41,6 +41,9 @@ pub trait ErasedTool: Send + Sync {
     /// Get the JSON Schema for the tool's parameters.
     fn parameters_schema(&self) -> ToolResult<Schema>;
 
+    /// Whether or not to use 'strict mode' when providing our tool schema to LLMs
+    fn strict(&self) -> bool;
+
     /// Get the tool's execution timeout.
     fn timeout(&self) -> Duration;
 
@@ -100,6 +103,10 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
 
     fn timeout(&self) -> Duration {
         self.0.timeout()
+    }
+
+    fn strict(&self) -> bool {
+        self.0.strict()
     }
 
     fn is_durable(&self) -> bool {
