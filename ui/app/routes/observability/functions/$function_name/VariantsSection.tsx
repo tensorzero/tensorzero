@@ -106,7 +106,7 @@ function VariantsError() {
   const error = useAsyncError();
   const message = getErrorMessage({
     error,
-    defaultMessage: "Failed to load variants",
+    fallback: "Failed to load variants",
   });
 
   return (

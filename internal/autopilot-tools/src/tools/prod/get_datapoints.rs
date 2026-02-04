@@ -60,7 +60,8 @@ impl ToolMetadata for GetDatapointsTool {
                     "description": "The IDs of the datapoints to retrieve."
                 }
             },
-            "required": ["ids"]
+            "required": ["ids"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

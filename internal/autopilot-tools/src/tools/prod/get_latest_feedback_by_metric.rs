@@ -53,7 +53,8 @@ impl ToolMetadata for GetLatestFeedbackByMetricTool {
                     "description": "The target ID (inference ID) to get feedback for."
                 }
             },
-            "required": ["target_id"]
+            "required": ["target_id"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

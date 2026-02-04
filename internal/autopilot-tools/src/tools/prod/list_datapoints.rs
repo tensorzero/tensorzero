@@ -152,7 +152,8 @@ impl ToolMetadata for ListDatapointsTool {
                     "description": "EXPERIMENTAL: Text query for case-insensitive substring search over input and output. Requires exact substring match. May be slow without other filters."
                 }
             },
-            "required": ["dataset_name"]
+            "required": ["dataset_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

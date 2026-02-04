@@ -123,7 +123,7 @@ function InferencesError() {
   const error = useAsyncError();
   const message = getErrorMessage({
     error,
-    defaultMessage: "Failed to load inferences",
+    fallback: "Failed to load inferences",
   });
 
   return (

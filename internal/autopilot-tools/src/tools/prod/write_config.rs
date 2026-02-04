@@ -28,8 +28,9 @@ pub struct WriteConfigToolParams {
     /// Templates that should be stored with the config.
     #[serde(default)]
     pub extra_templates: HashMap<String, String>,
-    /// Only set if the config write is an upsert to a single TOML entry (so that we can add nice edit handling)
-    pub edit: Option<EditPayload>,
+    /// We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
+    /// Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
+    pub edit: Option<Vec<EditPayload>>,
 }
 
 #[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
@@ -156,7 +157,8 @@ impl ToolMetadata for WriteConfigTool {
                     "additionalProperties": { "type": "string" }
                 }
             },
-            "required": ["config"]
+            "required": ["config"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

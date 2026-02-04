@@ -66,7 +66,6 @@ async fn submit_inference_feedback(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_function_metrics_with_feedback() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create inferences with different types of feedback
@@ -111,7 +110,6 @@ async fn test_get_function_metrics_with_feedback() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_function_metrics_with_variant_filter() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create inference (which will use a specific variant based on the config)
@@ -144,7 +142,6 @@ async fn test_get_function_metrics_with_variant_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_function_metrics_nonexistent_function() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Try to query metrics for a function that doesn't exist
@@ -164,7 +161,6 @@ async fn test_get_function_metrics_nonexistent_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_variant_performances_cumulative() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference and submit feedback
@@ -190,7 +186,6 @@ async fn test_get_variant_performances_cumulative() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_variant_performances_with_time_window() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference and submit feedback
@@ -225,7 +220,6 @@ async fn test_get_variant_performances_with_time_window() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_variant_performances_with_variant_filter() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference and submit feedback
@@ -257,7 +251,6 @@ async fn test_get_variant_performances_with_variant_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_variant_performances_nonexistent_function() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint(
@@ -274,7 +267,6 @@ async fn test_get_variant_performances_nonexistent_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_variant_performances_nonexistent_metric() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint(
@@ -291,7 +283,6 @@ async fn test_get_variant_performances_nonexistent_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_variant_performances_nonexistent_variant() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint(
@@ -308,7 +299,6 @@ async fn test_get_variant_performances_nonexistent_variant() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_variant_performances_missing_required_params() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Missing metric_name
