@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
-use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 
@@ -29,7 +29,8 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
                         variant_name,
                         raw_request,
                         raw_response,
-                        errors
+                        errors,
+                        snapshot_hash
                     FROM BatchRequest
                     WHERE batch_id = {batch_id:UUID}
                     ORDER BY timestamp DESC
@@ -53,7 +54,8 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
                         br.variant_name as variant_name,
                         br.raw_request as raw_request,
                         br.raw_response as raw_response,
-                        br.errors as errors
+                        br.errors as errors,
+                        br.snapshot_hash as snapshot_hash
                     FROM BatchIdByInferenceId bi
                     JOIN BatchRequest br ON bi.batch_id = br.batch_id
                     WHERE bi.inference_id = {inference_id:UUID} AND bi.batch_id = {batch_id:UUID}
@@ -325,6 +327,20 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
             })
             .collect()
     }
+
+    // ===== Write methods =====
+
+    async fn write_batch_request(&self, row: &BatchRequestRow<'_>) -> Result<(), Error> {
+        self.write_batched(&[row], TableName::BatchRequest).await
+    }
+
+    async fn write_batch_model_inferences(
+        &self,
+        rows: &[BatchModelInferenceRow<'_>],
+    ) -> Result<(), Error> {
+        self.write_batched(rows, TableName::BatchModelInference)
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -359,7 +375,8 @@ mod tests {
                         variant_name,
                         raw_request,
                         raw_response,
-                        errors
+                        errors,
+                        snapshot_hash
                     FROM BatchRequest
                     WHERE batch_id = {batch_id:UUID}
                     ORDER BY timestamp DESC
@@ -407,6 +424,7 @@ mod tests {
             .withf(move |query, parameters| {
                 assert_query_contains(query, "FROM BatchIdByInferenceId bi");
                 assert_query_contains(query, "JOIN BatchRequest br ON bi.batch_id = br.batch_id");
+                assert_query_contains(query, "br.snapshot_hash as snapshot_hash");
                 assert_query_contains(
                     query,
                     "WHERE bi.inference_id = {inference_id:UUID} AND bi.batch_id = {batch_id:UUID}",

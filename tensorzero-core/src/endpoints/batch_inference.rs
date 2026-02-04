@@ -23,10 +23,9 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
-use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::clickhouse::TableName;
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::InferenceQueries;
-use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
@@ -142,6 +141,12 @@ pub async fn start_batch_inference(
             message: "start_batch_inference is not supported in relay mode".to_string(),
         }));
     }
+
+    let database = DelegatingDatabaseConnection::new(
+        clickhouse_connection_info.clone(),
+        postgres_connection_info.clone(),
+    );
+
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
     let num_inferences = params.inputs.len();
@@ -229,8 +234,8 @@ pub async fn start_batch_inference(
 
     let inference_clients = InferenceClients {
         http_client: http_client.clone(),
-        clickhouse_connection_info: clickhouse_connection_info.clone(),
-        postgres_connection_info: postgres_connection_info.clone(),
+        clickhouse_connection_info: database.clickhouse.clone(),
+        postgres_connection_info: database.postgres.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: cache_options.clone(),
         rate_limiting_manager,
@@ -286,7 +291,7 @@ pub async fn start_batch_inference(
             tool_configs: &tool_configs,
             batch_dynamic_output_schemas: &batch_dynamic_output_schemas,
             config: &config,
-            clickhouse_connection_info: &clickhouse_connection_info,
+            database: &database,
             tags: params.tags.clone(),
         })
         .await
@@ -313,7 +318,7 @@ pub async fn start_batch_inference(
                 &params.function_name,
                 *first_episode_id,
                 &mut candidate_variants,
-                &postgres_connection_info,
+                &database.postgres,
             )
             .await;
         let (variant_name, variant) = match result {
@@ -343,7 +348,7 @@ pub async fn start_batch_inference(
             tool_configs: &tool_configs,
             batch_dynamic_output_schemas: &batch_dynamic_output_schemas,
             config: &config,
-            clickhouse_connection_info: &clickhouse_connection_info,
+            database: &database,
             tags: params.tags.clone(),
         })
         .await;
@@ -389,7 +394,7 @@ struct StartVariantBatchInferenceArgs<'a> {
     tool_configs: &'a Vec<Option<ToolCallConfig>>,
     batch_dynamic_output_schemas: &'a Vec<Option<JSONSchema>>,
     config: &'a Arc<Config>,
-    clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+    database: &'a DelegatingDatabaseConnection,
     tags: Option<BatchTags>,
 }
 
@@ -410,7 +415,7 @@ async fn start_variant_batch_inference(
         tool_configs,
         batch_dynamic_output_schemas,
         config,
-        clickhouse_connection_info,
+        database,
         tags,
     } = args;
 
@@ -446,7 +451,7 @@ async fn start_variant_batch_inference(
         )
         .await?;
 
-    // Write to ClickHouse (don't spawn a thread for this because it's required and we should fail loudly)
+    // Write to database (don't spawn a thread for this because it's required and we should fail loudly)
     let write_metadata = BatchInferenceDatabaseInsertMetadata {
         function_name,
         variant_name: variant_name.as_str(),
@@ -455,7 +460,7 @@ async fn start_variant_batch_inference(
     };
 
     write_start_batch_inference(
-        clickhouse_connection_info,
+        database,
         config,
         resolved_inputs,
         result,
@@ -483,7 +488,7 @@ pub struct PollPathParams {
 /// Polls a batch inference request that was made using the `/start_batch_inference` endpoint
 /// Semantics: if the batch is pending, it will actually poll the model provider
 /// If the batch is failed, it will return a failed response immediately
-/// If the batch is completed, it will return the appropriate response immediately from ClickHouse
+/// If the batch is completed, it will return the appropriate response immediately from the database
 #[instrument(name = "poll_batch_inference", skip_all, fields(query))]
 #[debug_handler(state = AppStateData)]
 pub async fn poll_batch_inference_handler(
@@ -501,7 +506,11 @@ pub async fn poll_batch_inference_handler(
             message: "poll_batch_inference is not supported in relay mode".to_string(),
         }));
     }
-    let batch_request = get_batch_request(&clickhouse_connection_info, &path_params).await?;
+
+    let database =
+        DelegatingDatabaseConnection::new(clickhouse_connection_info, postgres_connection_info);
+
+    let batch_request = get_batch_request(&database, &path_params).await?;
     match batch_request.status {
         BatchStatus::Pending => {
             // For now, we don't support dynamic API keys for batch inference
@@ -514,20 +523,14 @@ pub async fn poll_batch_inference_handler(
                 config.gateway.relay.as_ref(),
             )
             .await?;
-            let response = write_poll_batch_inference(
-                &clickhouse_connection_info,
-                &postgres_connection_info,
-                &batch_request,
-                response,
-                &config,
-            )
-            .await?;
+            let response =
+                write_poll_batch_inference(&database, &batch_request, response, &config).await?;
             Ok(Json(response.filter_by_query(path_params)).into_response())
         }
         BatchStatus::Completed => {
             let function = config.get_function(&batch_request.function_name)?;
             let response = get_completed_batch_inference_response(
-                &clickhouse_connection_info,
+                &database,
                 &batch_request,
                 &path_params,
                 &function,
@@ -596,10 +599,10 @@ impl CompletedBatchInferenceResponse {
 }
 
 pub async fn get_batch_request(
-    clickhouse: &ClickHouseConnectionInfo,
+    database: &(dyn BatchInferenceQueries + Sync),
     path_params: &PollPathParams,
 ) -> Result<BatchRequestRow<'static>, Error> {
-    let batch_request = clickhouse
+    let batch_request = database
         .get_batch_request(path_params.batch_id, path_params.inference_id)
         .await?;
 
@@ -664,7 +667,7 @@ struct BatchInferenceRowHelper<'a> {
 }
 
 async fn write_start_batch_inference<'a>(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    database: &DelegatingDatabaseConnection,
     config: &Config,
     inputs: Vec<LazyResolvedInput>,
     result: StartBatchModelInferenceWithMetadata<'a>,
@@ -743,6 +746,7 @@ async fn write_start_batch_inference<'a>(
             model_name: Cow::Borrowed(model_name),
             model_provider_name: Cow::Borrowed(model_provider_name),
             tags: row.tags.unwrap_or_default(),
+            snapshot_hash: Some(config.hash.clone()),
         })
     }))
     .await;
@@ -758,8 +762,8 @@ async fn write_start_batch_inference<'a>(
         })
         .collect::<Vec<_>>();
 
-    clickhouse_connection_info
-        .write_batched(success_rows.as_slice(), TableName::BatchModelInference)
+    database
+        .write_batch_model_inferences(success_rows.as_slice())
         .await?;
 
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
@@ -775,7 +779,7 @@ async fn write_start_batch_inference<'a>(
         errors: result.errors,
         snapshot_hash: Some(config.hash.clone()),
     });
-    write_batch_request_row(clickhouse_connection_info, &batch_request_insert).await?;
+    write_batch_request_row(database, &batch_request_insert).await?;
 
     Ok((
         result.batch_id,
@@ -787,12 +791,10 @@ async fn write_start_batch_inference<'a>(
 }
 
 pub async fn write_batch_request_row(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    database: &(dyn BatchInferenceQueries + Sync),
     batch_request: &BatchRequestRow<'_>,
 ) -> Result<(), Error> {
-    clickhouse_connection_info
-        .write_batched(&[batch_request], TableName::BatchRequest)
-        .await
+    database.write_batch_request(batch_request).await
 }
 
 /// Writes the status of a batch inference request to the database
@@ -802,9 +804,9 @@ pub async fn write_batch_request_row(
 ///
 /// Note: only call this function if the batch was Pending prior to being polled.
 /// We don't need to poll if the batch is failed or completed because the status will not change.
+// TODO(#5691): take trait bounds instead of concrete type after implementing batch ModelInference writes for Postgres
 pub async fn write_poll_batch_inference(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    postgres_connection_info: &PostgresConnectionInfo,
+    database: &DelegatingDatabaseConnection,
     batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
     config: &Config,
@@ -815,7 +817,7 @@ pub async fn write_poll_batch_inference(
             raw_response,
         } => {
             write_batch_request_status_update(
-                clickhouse_connection_info,
+                database,
                 batch_request,
                 BatchStatus::Pending,
                 raw_request,
@@ -827,18 +829,12 @@ pub async fn write_poll_batch_inference(
         PollBatchInferenceResponse::Completed(response) => {
             let raw_request = response.raw_request.clone();
             let raw_response = response.raw_response.clone();
-            let inferences = write_completed_batch_inference(
-                clickhouse_connection_info,
-                postgres_connection_info,
-                batch_request,
-                response,
-                config,
-            )
-            .await?;
+            let inferences =
+                write_completed_batch_inference(database, batch_request, response, config).await?;
             // NOTE - in older versions of TensorZero, we were missing this call.
             // As a result, some customers may have databases with duplicate inferences.
             write_batch_request_status_update(
-                clickhouse_connection_info,
+                database,
                 batch_request,
                 BatchStatus::Completed,
                 raw_request,
@@ -857,7 +853,7 @@ pub async fn write_poll_batch_inference(
             raw_response,
         } => {
             write_batch_request_status_update(
-                clickhouse_connection_info,
+                database,
                 batch_request,
                 BatchStatus::Failed,
                 raw_request,
@@ -872,7 +868,7 @@ pub async fn write_poll_batch_inference(
 /// This function updates the status of a batch request in the database
 /// It only updates the status of the batch request and does not write any other data to the database
 async fn write_batch_request_status_update(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    database: &(dyn BatchInferenceQueries + Sync),
     batch_request: &BatchRequestRow<'_>,
     status: BatchStatus,
     raw_request: String,
@@ -891,9 +887,7 @@ async fn write_batch_request_status_update(
         errors: vec![], // TODO (#503): add better error handling
         snapshot_hash: batch_request.snapshot_hash.clone(),
     });
-    clickhouse_connection_info
-        .write_batched(&[batch_request_insert], TableName::BatchRequest)
-        .await?;
+    database.write_batch_request(&batch_request_insert).await?;
     Ok(())
 }
 
@@ -908,20 +902,16 @@ async fn write_batch_request_status_update(
 /// TODO: this function has a large number of Clones that are not necessary.
 /// To avoid these, the types that are calling for clones must be changed to Cows and then the code in the non-batch inference
 /// handler must be adjusted to deal with it and also the lifetimes associated there.
+// TODO(#5691): take trait bounds instead of concrete type after implementing batch ModelInference writes for Postgres
 pub async fn write_completed_batch_inference<'a>(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    postgres_connection_info: &PostgresConnectionInfo,
+    database: &DelegatingDatabaseConnection,
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
     config: &Config,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
-    let batch_model_inferences = get_batch_inferences(
-        clickhouse_connection_info,
-        batch_request.batch_id,
-        &inference_ids,
-    )
-    .await?;
+    let batch_model_inferences =
+        get_batch_inferences(database, batch_request.batch_id, &inference_ids).await?;
     let function_name = &batch_model_inferences
         .first()
         .ok_or_else(|| {
@@ -950,6 +940,7 @@ pub async fn write_completed_batch_inference<'a>(
             model_name: _,
             model_provider_name: _,
             tags,
+            snapshot_hash: _,
         } = batch_model_inference;
         let ProviderBatchInferenceOutput {
             id: _,
@@ -1089,18 +1080,14 @@ pub async fn write_completed_batch_inference<'a>(
         })
         .collect();
 
-    let inference_database = DelegatingDatabaseConnection::new(
-        clickhouse_connection_info.clone(),
-        postgres_connection_info.clone(),
-    );
-
     let _ = try_join!(
-        inference_database.insert_chat_inferences(&chat_inferences),
-        inference_database.insert_json_inferences(&json_inferences)
+        database.insert_chat_inferences(&chat_inferences),
+        database.insert_json_inferences(&json_inferences)
     )?;
     // Write all the ModelInference rows to the database
     // Note: model_inferences dual-write deferred to step 1-1
-    clickhouse_connection_info
+    database
+        .clickhouse
         .write_batched(&model_inference_rows_to_write, TableName::ModelInference)
         .await?;
 
@@ -1109,11 +1096,11 @@ pub async fn write_completed_batch_inference<'a>(
 
 /// This function gets the batch inferences from the database for a given batch id and inference ids
 pub async fn get_batch_inferences(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    database: &(dyn BatchInferenceQueries + Sync),
     batch_id: Uuid,
     inference_ids: &[Uuid],
 ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error> {
-    clickhouse_connection_info
+    database
         .get_batch_model_inferences(batch_id, inference_ids)
         .await
 }
@@ -1123,14 +1110,14 @@ pub async fn get_batch_inferences(
 /// The `PollPathParams` is used to determine which inference to get (a single inference or all inferences in the batch)
 /// The `FunctionConfig` is helpful in determining which table to query for the inference
 pub async fn get_completed_batch_inference_response(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    database: &(dyn BatchInferenceQueries + Sync),
     batch_request: &BatchRequestRow<'_>,
     path_params: &PollPathParams,
     function: &FunctionConfig,
 ) -> Result<CompletedBatchInferenceResponse, Error> {
     let rows = match function {
         FunctionConfig::Chat(_) => {
-            clickhouse_connection_info
+            database
                 .get_completed_chat_batch_inferences(
                     path_params.batch_id,
                     &batch_request.function_name,
@@ -1140,7 +1127,7 @@ pub async fn get_completed_batch_inference_response(
                 .await?
         }
         FunctionConfig::Json(_) => {
-            clickhouse_connection_info
+            database
                 .get_completed_json_batch_inferences(
                     path_params.batch_id,
                     &batch_request.function_name,
