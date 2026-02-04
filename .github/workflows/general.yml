@@ -992,7 +992,7 @@ jobs:
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build postgres gateway-postgres-migrations fixtures-postgres -d --wait
 
       - name: Test (Rust)
-        run: cargo test-e2e --filterset 'test(db::) & test(postgres)'
+        run: cargo nextest run --filterset 'test(db::) & test(postgres)'
 
       - name: Print docker compose logs
         if: always()

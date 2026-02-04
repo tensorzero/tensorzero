@@ -4,6 +4,30 @@ import { AlertCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
+/**
+ * Extracts a user-friendly message from an error of any type.
+ * Handles React Router's route error responses, standard Errors, and unknown types.
+ */
+export function getErrorMessage({
+  error,
+  fallback,
+}: {
+  /** The error to extract a message from (typically from useAsyncError()) */
+  error: unknown;
+  /** Default message if error type is unrecognized */
+  fallback: string;
+}): string {
+  if (isRouteErrorResponse(error)) {
+    return typeof error.data === "string"
+      ? error.data
+      : `${error.status} ${error.statusText}`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+}
+
 interface ErrorContentCardProps {
   children: React.ReactNode;
   className?: string;
@@ -222,24 +246,11 @@ export function SectionAsyncErrorState({
     );
   }
 
-  let message: string;
-  if (isRouteErrorResponse(error)) {
-    if (typeof error.data === "string") {
-      message = error.data;
-    } else {
-      message = `${error.status} ${error.statusText}`;
-    }
-  } else if (error instanceof Error) {
-    message = error.message;
-  } else {
-    message = defaultMessage;
-  }
-
   return (
     <SectionErrorNotice
       icon={AlertCircle}
       title="Error loading data"
-      description={message}
+      description={getErrorMessage({ error, fallback: defaultMessage })}
     />
   );
 }

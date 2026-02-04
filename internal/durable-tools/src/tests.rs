@@ -327,7 +327,7 @@ mod registry_tests {
                 assert_eq!(func.name, "echo_simple");
                 assert_eq!(func.description, "Echoes the input message");
                 assert!(func.parameters.is_object());
-                assert!(!func.strict);
+                assert!(func.strict);
             }
             Tool::OpenAICustom(_) => panic!("Expected Function tool"),
         }
