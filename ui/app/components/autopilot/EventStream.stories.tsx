@@ -623,9 +623,9 @@ const visualizationEvents: GatewayEvent[] = [
               failed: false,
             },
             test: {
-              mean_est: 0.42,
-              cs_lower: 0.35,
-              cs_upper: 0.5,
+              mean_est: 0.52,
+              cs_lower: 0.45,
+              cs_upper: 0.62, // UCB overlaps with empty's LCB (0.6) to test epsilon-based separation
               count: BigInt(25),
               failed: false,
             },
