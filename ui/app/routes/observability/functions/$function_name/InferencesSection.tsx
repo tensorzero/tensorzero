@@ -85,6 +85,7 @@ function InferencesTableHeaders() {
     <TableHeader>
       <TableRow>
         <TableHead>ID</TableHead>
+        <TableHead>Episode ID</TableHead>
         <TableHead>Variant</TableHead>
         <TableHead>Time</TableHead>
       </TableRow>
@@ -101,6 +102,9 @@ function InferencesSkeleton() {
         <TableBody>
           {Array.from({ length: 5 }).map((_, i) => (
             <TableRow key={i}>
+              <TableCell>
+                <Skeleton className="h-4 w-48" />
+              </TableCell>
               <TableCell>
                 <Skeleton className="h-4 w-48" />
               </TableCell>
@@ -133,7 +137,7 @@ function InferencesError() {
         <InferencesTableHeaders />
         <TableBody>
           <TableRow>
-            <TableCell colSpan={3}>
+            <TableCell colSpan={4}>
               <TableErrorNotice
                 icon={AlertCircle}
                 title="Error loading data"
