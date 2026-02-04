@@ -584,7 +584,10 @@ impl AWSBedrockCredentials {
         }
 
         // 3. Nothing configured - try AWS_BEARER_TOKEN_BEDROCK env var first, then SDK
-        if let Ok(token) = std::env::var("AWS_BEARER_TOKEN_BEDROCK") {
+        if let Some(token) = std::env::var("AWS_BEARER_TOKEN_BEDROCK")
+            .ok()
+            .filter(|t| !t.is_empty())
+        {
             tracing::debug!(
                 "Using environment variable `AWS_BEARER_TOKEN_BEDROCK` for `{provider_type}` authentication"
             );
