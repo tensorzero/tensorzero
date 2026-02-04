@@ -30,6 +30,25 @@ import type {
 import { toFunctionUrl } from "~/utils/urls";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 
+/**
+ * Safely extracts error description from a failed job status.
+ * Handles string errors, object errors (with safe stringify), and fallback messages.
+ */
+function getErrorDescription(status: Extract<OptimizationJobInfo, { status: "failed" }>): string {
+  if (status.error) {
+    if (typeof status.error === "string") {
+      return status.error;
+    }
+    // Safely stringify non-string errors, catching bigint/circular reference issues
+    try {
+      return JSON.stringify(status.error, null, 2);
+    } catch {
+      return "Error details could not be displayed";
+    }
+  }
+  return status.message ?? "An unknown error occurred";
+}
+
 export default function LLMFineTuningStatus({
   status,
   formData,
@@ -98,13 +117,7 @@ export default function LLMFineTuningStatus({
           <SectionErrorNotice
             icon={AlertCircle}
             title="Fine-tuning job failed"
-            description={
-              status.error
-                ? typeof status.error === "string"
-                  ? status.error
-                  : JSON.stringify(status.error, null, 2)
-                : (status.message ?? "An unknown error occurred")
-            }
+            description={getErrorDescription(status)}
           />
         </SectionLayout>
       )}
