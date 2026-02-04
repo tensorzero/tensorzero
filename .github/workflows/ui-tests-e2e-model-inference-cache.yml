@@ -175,8 +175,8 @@ jobs:
           for i in {1..3}; do
             if ./fixtures/regenerate-model-inference-cache.sh; then
               break
-            elif [ $i -eq 3 ]; then
-              echo "Failed after 3 attempts"
+            elif [ $i -eq 1 ]; then
+              echo "Failed after 1 attempts"
               exit 1
             else
               echo "Attempt $i failed, retrying..."
