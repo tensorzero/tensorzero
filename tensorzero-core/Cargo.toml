@@ -81,6 +81,7 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../internal/tensorzero-derive" }
 tensorzero-types = { path = "../internal/tensorzero-types" }
+tensorzero-config-paths = { path = "../internal/tensorzero-config-paths" }
 tensorzero-types-providers = { path = "../internal/tensorzero-types-providers" }
 minijinja-utils = { path = "../internal/minijinja-utils" }
 clap = { workspace = true }
