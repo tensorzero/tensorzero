@@ -23,7 +23,7 @@ impl TryFrom<&dyn ErasedTool> for Tool {
             name: tool.name().to_string(),
             description: tool.description().to_string(),
             parameters: serde_json::to_value(tool.parameters_schema()?)?,
-            strict: true,
+            strict: tool.strict(),
         }))
     }
 }
