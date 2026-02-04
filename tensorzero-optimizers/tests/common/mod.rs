@@ -159,6 +159,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     &ProviderTypesConfig::default(),
                     &ProviderTypeDefaultCredentials::default(),
                     false,
+                    false,
                 )
                 .await
                 .unwrap();

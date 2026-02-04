@@ -74,6 +74,47 @@ test("should create a session, send a message, approve tool calls, and get a res
   ).toBeVisible({ timeout: 60000 });
 });
 
+test.describe("Chat input validation", () => {
+  test("send button disabled when empty, enabled with text", async ({
+    page,
+  }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const textarea = page.getByRole("textbox");
+    const sendButton = page.getByRole("button", { name: "Send message" });
+
+    // Empty → disabled
+    await expect(sendButton).toBeDisabled();
+
+    // Whitespace only → still disabled
+    await textarea.fill("   ");
+    await expect(sendButton).toBeDisabled();
+
+    // Real text → enabled
+    await textarea.fill("Hello");
+    await expect(sendButton).toBeEnabled();
+
+    // Clear → disabled again
+    await textarea.fill("");
+    await expect(sendButton).toBeDisabled();
+  });
+
+  test("Shift+Enter inserts newline without sending", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const textarea = page.getByRole("textbox");
+    await textarea.fill("Line 1");
+    await textarea.press("Shift+Enter");
+    await textarea.type("Line 2");
+
+    // Should still be on new session page (not submitted)
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/new/);
+    await expect(textarea).toHaveValue("Line 1\nLine 2");
+  });
+});
+
 test.describe("Autopilot New Session Button", () => {
   test("should navigate to new session from existing session page", async ({
     page,
@@ -101,6 +142,65 @@ test.describe("Autopilot New Session Button", () => {
     await page.waitForURL("**/autopilot/sessions/new", { timeout: 10000 });
     await page.waitForLoadState("networkidle");
     expect(page.url()).toMatch(/\/autopilot\/sessions\/new$/);
+  });
+});
+
+test.describe("YOLO mode", () => {
+  test("toggle is visible and defaults to off", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+
+    const yoloToggle = page
+      .locator("label")
+      .filter({ hasText: "YOLO Mode" })
+      .getByRole("switch");
+    await expect(yoloToggle).toBeVisible();
+    await expect(yoloToggle).toHaveAttribute("data-state", "unchecked");
+  });
+
+  test("reads persisted state from localStorage on page load", async ({
+    page,
+  }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.evaluate(() =>
+      localStorage.setItem("tensorzero-yolo-mode", "true"),
+    );
+    await page.reload();
+
+    const yoloToggle = page
+      .locator("label")
+      .filter({ hasText: "YOLO Mode" })
+      .getByRole("switch");
+    await expect(yoloToggle).toBeVisible();
+    await expect(yoloToggle).toHaveAttribute("data-state", "checked");
+  });
+
+  test("clicking toggle enables auto-approval of tool calls", async ({
+    page,
+  }) => {
+    test.setTimeout(120000);
+
+    await page.goto("/autopilot/sessions/new");
+
+    const yoloLabel = page.locator("label").filter({ hasText: "YOLO Mode" });
+    const yoloToggle = yoloLabel.getByRole("switch");
+    await expect(yoloToggle).toBeVisible();
+    await yoloLabel.click();
+    await expect(yoloToggle).toHaveAttribute("data-state", "checked");
+
+    const messageInput = page.getByRole("textbox");
+    await messageInput.fill(
+      "What functions are available in my TensorZero config?",
+    );
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+      timeout: 30000,
+    });
+
+    // "Tool Result" appearing confirms tool was auto-approved and executed
+    await expect(page.getByText("Tool Result").first()).toBeVisible({
+      timeout: 60000,
+    });
   });
 });
 
