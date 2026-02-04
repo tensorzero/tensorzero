@@ -151,7 +151,7 @@ impl ToolMetadata for WriteConfigTool {
                             "type": "object",
                             "description": "Gateway configuration settings."
                         }
-                    }
+                    },
                     "additionalProperties": false
                 },
                 "extra_templates": {
