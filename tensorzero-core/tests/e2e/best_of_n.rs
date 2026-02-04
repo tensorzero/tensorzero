@@ -1042,8 +1042,9 @@ async fn test_best_of_n_json_real_judge_implicit_tool() {
                                 "answer_choice": {"type": "integer"}
                             },
                             "required": ["thinking", "answer_choice"],
-                            "additionalProperties": false
-                        }
+                            "additionalProperties": false,
+                        },
+                        "strict": false
                     }
                 ]
             });

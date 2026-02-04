@@ -6,21 +6,107 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
-import { useMemo, useState } from "react";
+import { PageErrorContent } from "~/components/ui/error";
+import { Suspense, useMemo, useState } from "react";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { Await, useAsyncError, useLocation } from "react-router";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
+import type { FunctionInferenceCount } from "~/types/tensorzero";
 
-export async function loader() {
+export type FunctionsData = {
+  countsInfo: FunctionInferenceCount[];
+};
+
+function FunctionsPageHeader({ count }: { count?: number }) {
+  return <PageHeader heading="Functions" count={count} />;
+}
+
+function FunctionsContentSkeleton() {
+  return (
+    <>
+      <FunctionsPageHeader />
+      <SectionLayout>
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-5 w-44" />
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Variants</TableHead>
+              <TableHead>Inferences</TableHead>
+              <TableHead>Last Used</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <Skeleton className="h-4 w-32" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-8" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </SectionLayout>
+    </>
+  );
+}
+
+function FunctionsErrorState() {
+  const error = useAsyncError();
+  return (
+    <>
+      <FunctionsPageHeader />
+      <SectionLayout>
+        <PageErrorContent error={error} />
+      </SectionLayout>
+    </>
+  );
+}
+
+async function fetchFunctionsData(): Promise<FunctionsData> {
   const httpClient = getTensorZeroClient();
   const countsInfo = await httpClient.listFunctionsWithInferenceCount();
   return { countsInfo };
 }
 
-export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
-  const { countsInfo } = loaderData;
-  const functions = useConfig().functions;
+export async function loader() {
+  return {
+    functionsData: fetchFunctionsData(),
+  };
+}
 
-  const [showInternalFunctions, setShowInternalFunctions] = useState(false);
+function FunctionsContent({
+  data,
+  showInternalFunctions,
+  onToggleShowInternalFunctions,
+}: {
+  data: FunctionsData;
+  showInternalFunctions: boolean;
+  onToggleShowInternalFunctions: (value: boolean) => void;
+}) {
+  const { countsInfo } = data;
+  const functions = useConfig().functions;
 
   const filteredFunctions = useMemo(() => {
     if (showInternalFunctions) return functions;
@@ -50,20 +136,38 @@ export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
   }, [filteredCountsInfo, filteredFunctions]);
 
   return (
-    <PageLayout>
-      <PageHeader heading="Functions" count={displayedFunctionCount} />
+    <>
+      <FunctionsPageHeader count={displayedFunctionCount} />
       <SectionLayout>
         <FunctionsTable
           functions={filteredFunctions}
           countsInfo={filteredCountsInfo}
           showInternalFunctions={showInternalFunctions}
-          onToggleShowInternalFunctions={setShowInternalFunctions}
+          onToggleShowInternalFunctions={onToggleShowInternalFunctions}
         />
       </SectionLayout>
-    </PageLayout>
+    </>
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  return <LayoutErrorBoundary error={error} />;
+export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
+  const { functionsData } = loaderData;
+  const location = useLocation();
+  const [showInternalFunctions, setShowInternalFunctions] = useState(false);
+
+  return (
+    <PageLayout>
+      <Suspense key={location.key} fallback={<FunctionsContentSkeleton />}>
+        <Await resolve={functionsData} errorElement={<FunctionsErrorState />}>
+          {(data) => (
+            <FunctionsContent
+              data={data}
+              showInternalFunctions={showInternalFunctions}
+              onToggleShowInternalFunctions={setShowInternalFunctions}
+            />
+          )}
+        </Await>
+      </Suspense>
+    </PageLayout>
+  );
 }

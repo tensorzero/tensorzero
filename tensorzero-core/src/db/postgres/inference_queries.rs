@@ -8,15 +8,22 @@ use serde_json::Value;
 use sqlx::QueryBuilder;
 use sqlx::Row;
 use sqlx::types::Json;
+use sqlx::{PgPool, postgres::PgRow};
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
-use crate::config::{Config, MetricConfigLevel};
+use crate::config::{
+    Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
+};
+use crate::db::TimeWindow;
 use crate::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
 use crate::db::inferences::{
-    CountInferencesParams, FunctionInfo, InferenceMetadata, InferenceOutputSource,
+    CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
+    CountInferencesWithFeedbackParams, FunctionInferenceCount, FunctionInfo,
+    GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceOutputSource,
     InferenceQueries, ListInferenceMetadataParams, ListInferencesParams, PaginationParams,
+    VariantThroughput,
 };
 use crate::db::postgres::inference_filter_helpers::{MetricJoinRegistry, apply_inference_filter};
 use crate::db::query_helpers::json_double_escape_string_without_quotes;
@@ -140,70 +147,13 @@ impl InferenceQueries for PostgresConnectionInfo {
     ) -> Result<Vec<InferenceMetadata>, Error> {
         let pool = self.get_pool_result()?;
 
-        // Use UNION ALL to query both tables in a single query
         // Determine ORDER BY direction based on pagination
         let order_direction = match &params.pagination {
             Some(PaginationParams::After { .. }) => "ASC",
             Some(PaginationParams::Before { .. }) | None => "DESC",
         };
 
-        let order_by_clause = format!("ORDER BY id {order_direction}");
-
-        // Build the entire query using a single QueryBuilder
-        let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
-            r"
-        SELECT * FROM (
-            (SELECT
-                'chat'::text as function_type,
-                id,
-                function_name,
-                variant_name,
-                episode_id,
-                snapshot_hash
-            FROM tensorzero.chat_inferences
-            WHERE 1=1",
-        );
-
-        // Add chat filters
-        apply_metadata_filters(&mut query_builder, params);
-
-        query_builder.push(" ");
-        query_builder.push(&order_by_clause);
-        query_builder.push(" LIMIT ");
-        query_builder.push_bind(params.limit as i64);
-
-        // UNION ALL with json subquery
-        query_builder.push(
-            r")
-            UNION ALL
-            (SELECT
-                'json'::text as function_type,
-                id,
-                function_name,
-                variant_name,
-                episode_id,
-                snapshot_hash
-            FROM tensorzero.json_inferences
-            WHERE 1=1",
-        );
-
-        // Add json filters
-        apply_metadata_filters(&mut query_builder, params);
-
-        query_builder.push(" ");
-        query_builder.push(&order_by_clause);
-        query_builder.push(" LIMIT ");
-        query_builder.push_bind(params.limit as i64);
-
-        // Close subqueries and add outer ORDER BY + LIMIT
-        query_builder.push(
-            ")
-        ) AS combined
-        ",
-        );
-        query_builder.push(&order_by_clause);
-        query_builder.push(" LIMIT ");
-        query_builder.push_bind(params.limit as i64);
+        let mut query_builder = build_inference_metadata_query(params, order_direction);
 
         let mut results: Vec<InferenceMetadata> =
             query_builder.build_query_as().fetch_all(pool).await?;
@@ -224,8 +174,9 @@ impl InferenceQueries for PostgresConnectionInfo {
         let pool = self.get_pool_result()?;
 
         // Determine which table(s) to query based on function_name
+        // If the function doesn't exist in config, query both tables since we don't know
         let function_config_type = match params.function_name {
-            Some(fn_name) => Some(config.get_function(fn_name)?.config_type()),
+            Some(fn_name) => config.get_function(fn_name).ok().map(|f| f.config_type()),
             None => None,
         };
 
@@ -329,7 +280,7 @@ impl InferenceQueries for PostgresConnectionInfo {
         let pool = self.get_pool_result()?;
 
         let result = sqlx::query!(
-            r#"
+            r"
             SELECT
                 dynamic_tools,
                 dynamic_provider_tools,
@@ -339,7 +290,7 @@ impl InferenceQueries for PostgresConnectionInfo {
             FROM tensorzero.chat_inferences
             WHERE function_name = $1 AND id = $2
             LIMIT 1
-            "#,
+            ",
             function_name,
             inference_id
         )
@@ -378,12 +329,12 @@ impl InferenceQueries for PostgresConnectionInfo {
         let pool = self.get_pool_result()?;
 
         let result = sqlx::query!(
-            r#"
+            r"
             SELECT output_schema
             FROM tensorzero.json_inferences
             WHERE function_name = $1 AND id = $2
             LIMIT 1
-            "#,
+            ",
             function_name,
             inference_id
         )
@@ -404,7 +355,7 @@ impl InferenceQueries for PostgresConnectionInfo {
         match function_info.function_type {
             FunctionType::Chat => {
                 let result = sqlx::query!(
-                    r#"
+                    r"
                     SELECT output
                     FROM tensorzero.chat_inferences
                     WHERE id = $1
@@ -412,7 +363,7 @@ impl InferenceQueries for PostgresConnectionInfo {
                       AND function_name = $3
                       AND variant_name = $4
                     LIMIT 1
-                    "#,
+                    ",
                     inference_id,
                     function_info.episode_id,
                     function_info.function_name,
@@ -426,7 +377,7 @@ impl InferenceQueries for PostgresConnectionInfo {
             }
             FunctionType::Json => {
                 let result = sqlx::query!(
-                    r#"
+                    r"
                     SELECT output
                     FROM tensorzero.json_inferences
                     WHERE id = $1
@@ -434,7 +385,7 @@ impl InferenceQueries for PostgresConnectionInfo {
                       AND function_name = $3
                       AND variant_name = $4
                     LIMIT 1
-                    "#,
+                    ",
                     inference_id,
                     function_info.episode_id,
                     function_info.function_name,
@@ -569,6 +520,94 @@ impl InferenceQueries for PostgresConnectionInfo {
 
         Ok(())
     }
+
+    // ===== Inference count methods (merged from InferenceCountQueries trait) =====
+
+    async fn count_inferences_by_variant(
+        &self,
+        params: CountInferencesForFunctionParams<'_>,
+    ) -> Result<Vec<CountByVariant>, Error> {
+        let pool = self.get_pool_result()?;
+        count_by_variant_impl(
+            pool,
+            params.function_type,
+            params.function_name,
+            params.variant_name,
+        )
+        .await
+        .map_err(Error::from)
+    }
+
+    async fn count_inferences_with_feedback(
+        &self,
+        params: CountInferencesWithFeedbackParams<'_>,
+    ) -> Result<u64, Error> {
+        let pool = self.get_pool_result()?;
+        count_inferences_with_metric_feedback(
+            pool,
+            params.function_name,
+            params.function_type,
+            params.metric_name,
+            params.metric_config,
+            params.metric_threshold,
+        )
+        .await
+    }
+
+    async fn get_function_throughput_by_variant(
+        &self,
+        params: GetFunctionThroughputByVariantParams<'_>,
+    ) -> Result<Vec<VariantThroughput>, Error> {
+        let pool = self.get_pool_result()?;
+        throughput_by_variant_impl(
+            pool,
+            params.function_name,
+            params.time_window,
+            params.max_periods,
+        )
+        .await
+    }
+
+    async fn list_functions_with_inference_count(
+        &self,
+    ) -> Result<Vec<FunctionInferenceCount>, Error> {
+        let pool = self.get_pool_result()?;
+
+        let rows = sqlx::query(
+            r"
+            SELECT
+                function_name,
+                MAX(created_at) AS last_inference_timestamp,
+                COUNT(*)::INT AS inference_count
+            FROM (
+                SELECT function_name, created_at FROM tensorzero.chat_inferences
+                UNION ALL
+                SELECT function_name, created_at FROM tensorzero.json_inferences
+            ) AS combined
+            GROUP BY function_name
+            ORDER BY last_inference_timestamp DESC
+            ",
+        )
+        .fetch_all(pool)
+        .await
+        .map_err(Error::from)?;
+
+        let results = rows
+            .into_iter()
+            .map(|row| {
+                let function_name: String = row.get("function_name");
+                let last_inference_timestamp: DateTime<Utc> = row.get("last_inference_timestamp");
+                let inference_count: i32 = row.get("inference_count");
+                FunctionInferenceCount {
+                    function_name,
+                    last_inference_timestamp,
+                    inference_count: inference_count as u32,
+                }
+            })
+            .collect();
+
+        Ok(results)
+    }
 }
 
 // ===== Helper types =====
@@ -665,15 +704,84 @@ fn build_order_by_clause(
     })
 }
 
+// ===== Query builder functions for list_inference_metadata =====
+
+/// Builds the query for listing inference metadata (UNION ALL of chat and json tables).
+/// The `order_direction` parameter should be "ASC" for After pagination, "DESC" otherwise.
+fn build_inference_metadata_query(
+    params: &ListInferenceMetadataParams,
+    order_direction: &str,
+) -> QueryBuilder<sqlx::Postgres> {
+    let order_by_clause = format!("ORDER BY id {order_direction}");
+
+    let mut qb = QueryBuilder::new(
+        r"
+        SELECT * FROM (
+            (SELECT
+                'chat'::text as function_type,
+                id,
+                function_name,
+                variant_name,
+                episode_id,
+                snapshot_hash
+            FROM tensorzero.chat_inferences
+            WHERE 1=1",
+    );
+
+    // Add chat filters
+    apply_metadata_filters(&mut qb, params);
+
+    qb.push(" ");
+    qb.push(&order_by_clause);
+    qb.push(" LIMIT ");
+    qb.push_bind(params.limit as i64);
+
+    // UNION ALL with json subquery
+    qb.push(
+        r")
+            UNION ALL
+            (SELECT
+                'json'::text as function_type,
+                id,
+                function_name,
+                variant_name,
+                episode_id,
+                snapshot_hash
+            FROM tensorzero.json_inferences
+            WHERE 1=1",
+    );
+
+    // Add json filters
+    apply_metadata_filters(&mut qb, params);
+
+    qb.push(" ");
+    qb.push(&order_by_clause);
+    qb.push(" LIMIT ");
+    qb.push_bind(params.limit as i64);
+
+    // Close subqueries and add outer ORDER BY + LIMIT
+    qb.push(
+        ")
+        ) AS combined
+        ",
+    );
+    qb.push(&order_by_clause);
+    qb.push(" LIMIT ");
+    qb.push_bind(params.limit as i64);
+
+    qb
+}
+
 // ===== Helper functions for chat inference queries =====
 
-async fn query_chat_inferences(
-    pool: &sqlx::PgPool,
+/// Builds the query for listing chat inferences.
+/// This is separated from execution to allow unit testing of the generated SQL.
+fn build_chat_inferences_query(
     config: &Config,
     params: &ListInferencesParams<'_>,
     limit: u32,
     offset: u32,
-) -> Result<Vec<StoredChatInferenceDatabase>, Error> {
+) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
     // Build ORDER BY clause first to get any required metric JOINs
     let order_by_result = build_order_by_clause(params, config)?;
 
@@ -792,19 +900,32 @@ async fn query_chat_inferences(
     query_builder.push(" OFFSET ");
     query_builder.push_bind(offset as i64);
 
+    Ok(query_builder)
+}
+
+async fn query_chat_inferences(
+    pool: &sqlx::PgPool,
+    config: &Config,
+    params: &ListInferencesParams<'_>,
+    limit: u32,
+    offset: u32,
+) -> Result<Vec<StoredChatInferenceDatabase>, Error> {
+    let mut query_builder = build_chat_inferences_query(config, params, limit, offset)?;
+
     let results: Vec<StoredChatInferenceDatabase> =
         query_builder.build_query_as().fetch_all(pool).await?;
 
     Ok(results)
 }
 
-async fn query_json_inferences(
-    pool: &sqlx::PgPool,
+/// Builds the query for listing JSON inferences.
+/// This is separated from execution to allow unit testing of the generated SQL.
+fn build_json_inferences_query(
     config: &Config,
     params: &ListInferencesParams<'_>,
     limit: u32,
     offset: u32,
-) -> Result<Vec<StoredJsonInference>, Error> {
+) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
     // Build ORDER BY clause first to get any required metric JOINs
     let order_by_result = build_order_by_clause(params, config)?;
 
@@ -918,6 +1039,18 @@ async fn query_json_inferences(
     // Add OFFSET
     query_builder.push(" OFFSET ");
     query_builder.push_bind(offset as i64);
+
+    Ok(query_builder)
+}
+
+async fn query_json_inferences(
+    pool: &sqlx::PgPool,
+    config: &Config,
+    params: &ListInferencesParams<'_>,
+    limit: u32,
+    offset: u32,
+) -> Result<Vec<StoredJsonInference>, Error> {
+    let mut query_builder = build_json_inferences_query(config, params, limit, offset)?;
 
     let results: Vec<StoredJsonInference> = query_builder.build_query_as().fetch_all(pool).await?;
 
@@ -1463,14 +1596,99 @@ async fn count_inferences_union(
     Ok(count as u64)
 }
 
+/// Build a query to count inferences with metric feedback.
+/// If `metric_threshold` is Some, filters to only count feedbacks meeting the threshold criteria
+/// based on metric type and optimize direction.
+fn build_count_inferences_with_metric_feedback_query(
+    function_name: &str,
+    function_type: FunctionConfigType,
+    metric_name: &str,
+    metric_config: &MetricConfig,
+    metric_threshold: Option<f64>,
+) -> QueryBuilder<sqlx::Postgres> {
+    let inference_table = function_type.postgres_table_name();
+    let feedback_table = match metric_config.r#type {
+        MetricConfigType::Float => "tensorzero.float_metric_feedback",
+        MetricConfigType::Boolean => "tensorzero.boolean_metric_feedback",
+    };
+    let join_column = metric_config.level.inference_column_name();
+
+    // Build the query using DISTINCT ON to get the latest feedback per target
+    let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM ");
+    qb.push(inference_table);
+    qb.push(" i JOIN (SELECT DISTINCT ON (target_id) target_id, value FROM ");
+    qb.push(feedback_table);
+    qb.push(" WHERE metric_name = ");
+    qb.push_bind(metric_name);
+    qb.push(" ORDER BY target_id, created_at DESC) f ON i.");
+    qb.push(join_column);
+    qb.push(" = f.target_id WHERE i.function_name = ");
+    qb.push_bind(function_name);
+
+    // Add value condition based on threshold and metric type
+    if let Some(threshold) = metric_threshold {
+        match metric_config.r#type {
+            MetricConfigType::Boolean => {
+                // For boolean metrics, optimize direction determines which value to filter for
+                match metric_config.optimize {
+                    MetricConfigOptimize::Max => qb.push(" AND f.value = TRUE"),
+                    MetricConfigOptimize::Min => qb.push(" AND f.value = FALSE"),
+                };
+            }
+            MetricConfigType::Float => {
+                // For float metrics, use the threshold with appropriate operator
+                match metric_config.optimize {
+                    MetricConfigOptimize::Max => qb.push(" AND f.value > "),
+                    MetricConfigOptimize::Min => qb.push(" AND f.value < "),
+                };
+                qb.push_bind(threshold);
+            }
+        }
+    }
+
+    qb
+}
+
+/// Count inferences with metric feedback.
+async fn count_inferences_with_metric_feedback(
+    pool: &PgPool,
+    function_name: &str,
+    function_type: FunctionConfigType,
+    metric_name: &str,
+    metric_config: &MetricConfig,
+    metric_threshold: Option<f64>,
+) -> Result<u64, Error> {
+    let mut qb = build_count_inferences_with_metric_feedback_query(
+        function_name,
+        function_type,
+        metric_name,
+        metric_config,
+        metric_threshold,
+    );
+
+    let count: i64 = qb
+        .build_query_scalar::<i64>()
+        .fetch_one(pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresQuery {
+                message: format!("Failed to count inferences with metric feedback: {e}"),
+            })
+        })?;
+
+    Ok(count as u64)
+}
+
 /// Apply filters for count queries.
 fn apply_count_filters(
     query_builder: &mut QueryBuilder<sqlx::Postgres>,
     config: &Config,
     params: &CountInferencesParams<'_>,
 ) -> Result<(), Error> {
-    // Note: function_name filter is not applied here for UNION ALL queries
-    // since that's used to determine which tables to query
+    if let Some(function_name) = params.function_name {
+        query_builder.push(" AND i.function_name = ");
+        query_builder.push_bind(function_name);
+    }
 
     if let Some(variant_name) = params.variant_name {
         query_builder.push(" AND i.variant_name = ");
@@ -1499,15 +1717,154 @@ fn apply_count_filters(
     Ok(())
 }
 
+// ===== Inference count helper functions (merged from inference_count module) =====
+
+/// Builds and executes a count-by-variant query for inferences.
+async fn count_by_variant_impl(
+    pool: &PgPool,
+    function_type: FunctionConfigType,
+    function_name: &str,
+    variant_name: Option<&str>,
+) -> Result<Vec<CountByVariant>, sqlx::Error> {
+    let table = function_type.postgres_table_name();
+
+    let mut qb = QueryBuilder::new(
+        r#"SELECT
+            variant_name,
+            COUNT(*) AS inference_count,
+            to_char(MAX(created_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last_used_at
+        FROM "#,
+    );
+    qb.push(table);
+    qb.push(" WHERE function_name = ");
+    qb.push_bind(function_name);
+
+    if let Some(variant) = variant_name {
+        qb.push(" AND variant_name = ");
+        qb.push_bind(variant);
+    }
+
+    qb.push(" GROUP BY variant_name ORDER BY inference_count DESC");
+
+    let rows = qb.build().fetch_all(pool).await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row: PgRow| {
+            let variant_name: String = row.get("variant_name");
+            let inference_count: i64 = row.get("inference_count");
+            let last_used_at: String = row.get("last_used_at");
+            CountByVariant {
+                variant_name,
+                inference_count: inference_count as u64,
+                last_used_at,
+            }
+        })
+        .collect())
+}
+
+/// Builds and executes a throughput-by-variant query.
+async fn throughput_by_variant_impl(
+    pool: &PgPool,
+    function_name: &str,
+    time_window: TimeWindow,
+    max_periods: u32,
+) -> Result<Vec<VariantThroughput>, Error> {
+    let rows = if time_window == TimeWindow::Cumulative {
+        // For cumulative, return all-time data grouped by variant with fixed epoch start
+        let mut qb = QueryBuilder::new(
+            r"SELECT
+                '1970-01-01T00:00:00.000Z'::text AS period_start,
+                variant_name,
+                COUNT(*)::INT AS count
+            FROM (
+                SELECT variant_name FROM tensorzero.chat_inferences WHERE function_name = ",
+        );
+        qb.push_bind(function_name);
+        qb.push(
+            " UNION ALL SELECT variant_name FROM tensorzero.json_inferences WHERE function_name = ",
+        );
+        qb.push_bind(function_name);
+        qb.push(") AS combined GROUP BY variant_name ORDER BY variant_name DESC");
+
+        qb.build().fetch_all(pool).await?
+    } else {
+        let unit = time_window.to_postgres_time_unit();
+
+        let mut qb = QueryBuilder::new(
+            "WITH combined AS (
+                SELECT variant_name, created_at FROM tensorzero.chat_inferences WHERE function_name = ",
+        );
+        qb.push_bind(function_name);
+        qb.push(" UNION ALL SELECT variant_name, created_at FROM tensorzero.json_inferences WHERE function_name = ");
+        qb.push_bind(function_name);
+        qb.push(
+            "),
+            max_time AS (
+                SELECT MAX(created_at) AS max_ts FROM combined
+            )
+            SELECT
+                to_char(date_trunc('",
+        );
+        qb.push(unit);
+        qb.push(
+            r#"', c.created_at), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS period_start,
+                c.variant_name,
+                COUNT(*)::INT AS count
+            FROM combined c, max_time m
+            WHERE c.created_at >= m.max_ts - INTERVAL '1 "#,
+        );
+        qb.push(unit);
+        qb.push("' * (");
+        qb.push_bind(max_periods as i32);
+        qb.push(" + 1) GROUP BY date_trunc('");
+        qb.push(unit);
+        qb.push("', c.created_at), c.variant_name ORDER BY period_start DESC, variant_name DESC");
+
+        qb.build().fetch_all(pool).await?
+    };
+
+    let variant_throughputs = rows
+        .into_iter()
+        .map(|row: PgRow| {
+            let period_start_str: String = row.get("period_start");
+            let period_start = DateTime::parse_from_rfc3339(&period_start_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .map_err(|err| {
+                    Error::new(ErrorDetails::PostgresResult {
+                        result_type: "variant_throughput",
+                        message: format!(
+                            "Failed to parse `period_start` value `{period_start_str}`: {err}"
+                        ),
+                    })
+                })?;
+            let variant_name: String = row.get("variant_name");
+            let count: i32 = row.get("count");
+            Ok(VariantThroughput {
+                period_start,
+                variant_name,
+                count: count as u32,
+            })
+        })
+        .collect::<Result<Vec<VariantThroughput>, Error>>()?;
+    Ok(variant_throughputs)
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
 
     use super::*;
     use crate::config::ConfigFileGlob;
-    use crate::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
+    use crate::db::clickhouse::query_builder::{
+        InferenceFilter, OrderBy, OrderByTerm, OrderDirection,
+    };
     use crate::db::inferences::ListInferencesParams;
     use crate::db::test_helpers::{assert_query_contains, assert_query_equals};
+
+    fn make_test_config() -> Config {
+        Config::default()
+    }
 
     async fn get_test_config() -> Config {
         Config::load_from_path_optional_verify_credentials(
@@ -1520,134 +1877,329 @@ mod tests {
         .into_config_without_writing_for_tests()
     }
 
-    #[tokio::test]
-    async fn test_build_inferences_union_query_allows_timestamp_order_by() {
-        let config = get_test_config().await;
-        let order_by = vec![OrderBy {
-            term: OrderByTerm::Timestamp,
-            direction: OrderDirection::Desc,
-        }];
+    #[test]
+    fn test_build_chat_inferences_query_basic() {
+        let config = make_test_config();
         let params = ListInferencesParams {
-            order_by: Some(&order_by),
-            ..Default::default()
+            function_name: Some("test_function"),
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: None,
+            limit: 10,
+            offset: 0,
+            pagination: None,
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: None,
         };
 
-        let result = build_inferences_union_query(&config, &params);
-        assert!(
-            result.is_ok(),
-            "ORDER BY timestamp should be allowed: {:?}",
-            result.err()
+        let query_builder = build_chat_inferences_query(&config, &params, 10, 0)
+            .expect("Query building should succeed");
+        let sql = query_builder.sql();
+        assert_query_equals(
+            sql.as_str(),
+            r"
+            SELECT
+                i.id,
+                i.function_name,
+                i.variant_name,
+                i.episode_id,
+                i.created_at as timestamp,
+                i.input,
+                i.output, NULL::jsonb as dispreferred_output,
+                i.dynamic_tools,
+                i.dynamic_provider_tools,
+                i.allowed_tools,
+                i.tool_choice,
+                i.parallel_tool_calls,
+                i.tags,
+                i.extra_body,
+                i.inference_params,
+                i.processing_time_ms,
+                i.ttft_ms
+            FROM tensorzero.chat_inferences i
+            WHERE 1=1 AND i.function_name = $1
+            ORDER BY i.id DESC
+            LIMIT $2 OFFSET $3
+            ",
         );
-
-        let query_builder = result.unwrap();
-        let sql_str = query_builder.sql();
-        let sql = sql_str.as_str();
-        assert_query_contains(sql, "ORDER BY timestamp DESC");
     }
 
-    #[tokio::test]
-    async fn test_build_inferences_union_query_allows_no_order_by() {
-        let config = get_test_config().await;
-        let params = ListInferencesParams::default();
-
-        let result = build_inferences_union_query(&config, &params);
-        assert!(
-            result.is_ok(),
-            "No ORDER BY should be allowed: {:?}",
-            result.err()
-        );
-    }
-
-    #[tokio::test]
-    async fn test_build_inferences_union_query_rejects_metric_order_by() {
-        let config = get_test_config().await;
-        let order_by = vec![OrderBy {
-            term: OrderByTerm::Metric {
-                name: "test_metric".to_string(),
-            },
-            direction: OrderDirection::Desc,
-        }];
+    #[test]
+    fn test_build_chat_inferences_query_with_demonstration_output_source() {
+        let config = make_test_config();
         let params = ListInferencesParams {
-            order_by: Some(&order_by),
-            ..Default::default()
+            function_name: Some("test_function"),
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: None,
+            limit: 10,
+            offset: 0,
+            pagination: None,
+            output_source: InferenceOutputSource::Demonstration,
+            search_query_experimental: None,
         };
 
-        let result = build_inferences_union_query(&config, &params);
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => panic!("ORDER BY metric should be rejected"),
-        };
-        assert!(
-            err.to_string()
-                .contains("ORDER BY metric is not supported when querying without function_name"),
-            "Error message should mention metric not supported: {err}"
+        let query_builder = build_chat_inferences_query(&config, &params, 10, 0)
+            .expect("Query building should succeed");
+        let sql = query_builder.sql();
+        assert_query_equals(
+            sql.as_str(),
+            r"
+            SELECT
+                i.id,
+                i.function_name,
+                i.variant_name,
+                i.episode_id,
+                i.created_at as timestamp,
+                i.input,
+                demo_f.value AS output, i.output as dispreferred_output,
+                i.dynamic_tools,
+                i.dynamic_provider_tools,
+                i.allowed_tools,
+                i.tool_choice,
+                i.parallel_tool_calls,
+                i.tags,
+                i.extra_body,
+                i.inference_params,
+                i.processing_time_ms,
+                i.ttft_ms
+            FROM tensorzero.chat_inferences i
+            JOIN (
+                SELECT DISTINCT ON (inference_id)
+                    inference_id,
+                    value
+                FROM tensorzero.demonstration_feedback
+                ORDER BY inference_id, created_at DESC
+            ) AS demo_f ON i.id = demo_f.inference_id
+            WHERE 1=1 AND i.function_name = $1
+            ORDER BY i.id DESC
+            LIMIT $2 OFFSET $3
+            ",
         );
     }
 
-    #[tokio::test]
-    async fn test_build_inferences_union_query_rejects_search_relevance_order_by() {
-        let config = get_test_config().await;
-        let order_by = vec![OrderBy {
-            term: OrderByTerm::SearchRelevance,
-            direction: OrderDirection::Desc,
-        }];
+    #[test]
+    fn test_build_chat_inferences_query_with_pagination_before() {
+        let config = make_test_config();
+        let cursor_id = Uuid::now_v7();
         let params = ListInferencesParams {
-            order_by: Some(&order_by),
-            ..Default::default()
+            function_name: Some("test_function"),
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: None,
+            limit: 10,
+            offset: 0,
+            pagination: Some(PaginationParams::Before { id: cursor_id }),
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: None,
         };
 
-        let result = build_inferences_union_query(&config, &params);
-        let err = match result {
-            Err(e) => e,
-            Ok(_) => panic!("ORDER BY search_relevance should be rejected"),
-        };
-        assert!(
-            err.to_string()
-                .contains("ORDER BY search_relevance is not yet supported"),
-            "Error message should mention search_relevance not supported: {err}"
+        let query_builder = build_chat_inferences_query(&config, &params, 10, 0)
+            .expect("Query building should succeed");
+        let sql = query_builder.sql();
+        assert_query_equals(
+            sql.as_str(),
+            r"
+            SELECT
+                i.id,
+                i.function_name,
+                i.variant_name,
+                i.episode_id,
+                i.created_at as timestamp,
+                i.input,
+                i.output, NULL::jsonb as dispreferred_output,
+                i.dynamic_tools,
+                i.dynamic_provider_tools,
+                i.allowed_tools,
+                i.tool_choice,
+                i.parallel_tool_calls,
+                i.tags,
+                i.extra_body,
+                i.inference_params,
+                i.processing_time_ms,
+                i.ttft_ms
+            FROM tensorzero.chat_inferences i
+            WHERE 1=1 AND i.function_name = $1 AND i.id < $2
+            ORDER BY i.id DESC
+            LIMIT $3 OFFSET $4
+            ",
         );
     }
 
-    #[tokio::test]
-    async fn test_build_inferences_union_query_rejects_metric_in_multiple_order_by_terms() {
-        let config = get_test_config().await;
-        let order_by = vec![
-            OrderBy {
-                term: OrderByTerm::Timestamp,
-                direction: OrderDirection::Desc,
-            },
-            OrderBy {
-                term: OrderByTerm::Metric {
-                    name: "test_metric".to_string(),
-                },
-                direction: OrderDirection::Asc,
-            },
-        ];
+    #[test]
+    fn test_build_chat_inferences_query_with_pagination_after() {
+        let config = make_test_config();
+        let cursor_id = Uuid::now_v7();
         let params = ListInferencesParams {
-            order_by: Some(&order_by),
-            ..Default::default()
+            function_name: Some("test_function"),
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: None,
+            limit: 10,
+            offset: 0,
+            pagination: Some(PaginationParams::After { id: cursor_id }),
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: None,
         };
 
-        let result = build_inferences_union_query(&config, &params);
-        assert!(
-            result.is_err(),
-            "ORDER BY with metric in multiple terms should be rejected"
+        let query_builder = build_chat_inferences_query(&config, &params, 10, 0)
+            .expect("Query building should succeed");
+        let sql = query_builder.sql();
+        assert_query_equals(
+            sql.as_str(),
+            r"
+            SELECT
+                i.id,
+                i.function_name,
+                i.variant_name,
+                i.episode_id,
+                i.created_at as timestamp,
+                i.input,
+                i.output, NULL::jsonb as dispreferred_output,
+                i.dynamic_tools,
+                i.dynamic_provider_tools,
+                i.allowed_tools,
+                i.tool_choice,
+                i.parallel_tool_calls,
+                i.tags,
+                i.extra_body,
+                i.inference_params,
+                i.processing_time_ms,
+                i.ttft_ms
+            FROM tensorzero.chat_inferences i
+            WHERE 1=1 AND i.function_name = $1 AND i.id > $2
+            ORDER BY i.id ASC
+            LIMIT $3 OFFSET $4
+            ",
         );
     }
 
-    #[tokio::test]
-    async fn test_build_inferences_union_query_generates_union_all() {
-        let config = get_test_config().await;
-        let params = ListInferencesParams::default();
+    #[test]
+    fn test_build_chat_inferences_query_with_search() {
+        let config = make_test_config();
+        let params = ListInferencesParams {
+            function_name: Some("test_function"),
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: None,
+            limit: 10,
+            offset: 0,
+            pagination: None,
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: Some("test query"),
+        };
 
-        let result = build_inferences_union_query(&config, &params);
-        assert!(result.is_ok(), "Query building should succeed");
+        let query_builder = build_chat_inferences_query(&config, &params, 10, 0)
+            .expect("Query building should succeed");
+        let sql = query_builder.sql();
+        assert_query_equals(
+            sql.as_str(),
+            r"
+            SELECT
+                i.id,
+                i.function_name,
+                i.variant_name,
+                i.episode_id,
+                i.created_at as timestamp,
+                i.input,
+                i.output, NULL::jsonb as dispreferred_output,
+                i.dynamic_tools,
+                i.dynamic_provider_tools,
+                i.allowed_tools,
+                i.tool_choice,
+                i.parallel_tool_calls,
+                i.tags,
+                i.extra_body,
+                i.inference_params,
+                i.processing_time_ms,
+                i.ttft_ms
+            FROM tensorzero.chat_inferences i
+            WHERE 1=1 AND i.function_name = $1
+            AND (i.input::text ILIKE $2 OR i.output::text ILIKE $3)
+            ORDER BY i.id DESC
+            LIMIT $4 OFFSET $5
+            ",
+        );
+    }
 
-        let query_builder = result.unwrap();
-        let sql_str = query_builder.sql();
-        let sql = sql_str.as_str();
+    #[test]
+    fn test_build_json_inferences_query_basic() {
+        let config = make_test_config();
+        let params = ListInferencesParams {
+            function_name: Some("test_function"),
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: None,
+            limit: 10,
+            offset: 0,
+            pagination: None,
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: None,
+        };
 
-        let expected = r"
+        let query_builder = build_json_inferences_query(&config, &params, 10, 0)
+            .expect("Query building should succeed");
+        let sql = query_builder.sql();
+        assert_query_equals(
+            sql.as_str(),
+            r"
+            SELECT
+                i.id,
+                i.function_name,
+                i.variant_name,
+                i.episode_id,
+                i.created_at as timestamp,
+                i.input,
+                i.output, NULL::jsonb as dispreferred_output,
+                i.output_schema,
+                i.tags,
+                i.extra_body,
+                i.inference_params,
+                i.processing_time_ms,
+                i.ttft_ms
+            FROM tensorzero.json_inferences i
+            WHERE 1=1 AND i.function_name = $1
+            ORDER BY i.id DESC
+            LIMIT $2 OFFSET $3
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_inferences_union_query_basic() {
+        let config = make_test_config();
+        let params = ListInferencesParams {
+            function_name: None, // UNION query is used when function_name is None
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: None,
+            limit: 10,
+            offset: 0,
+            pagination: None,
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: None,
+        };
+
+        let query_builder =
+            build_inferences_union_query(&config, &params).expect("Query building should succeed");
+        let sql = query_builder.sql();
+        assert_query_equals(
+            sql.as_str(),
+            r"
             SELECT * FROM (
                 (SELECT
                     'chat'::text as inference_type,
@@ -1696,6 +2248,776 @@ mod tests {
                 WHERE 1=1 ORDER BY id DESC LIMIT $2)
             ) AS combined
             ORDER BY id DESC LIMIT $3 OFFSET $4
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_inferences_union_query_rejects_metric_order() {
+        let config = make_test_config();
+        let order_by = [OrderBy {
+            term: OrderByTerm::Metric {
+                name: "some_metric".to_string(),
+            },
+            direction: OrderDirection::Desc,
+        }];
+        let params = ListInferencesParams {
+            function_name: None,
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: Some(&order_by),
+            limit: 10,
+            offset: 0,
+            pagination: None,
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: None,
+        };
+
+        let result = build_inferences_union_query(&config, &params);
+        let err = match result {
+            Ok(_) => panic!("UNION query should reject metric ordering"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().contains("ORDER BY metric is not supported"),
+            "Error message should indicate metric ordering is not supported: {err}"
+        );
+    }
+
+    #[test]
+    fn test_build_inferences_union_query_rejects_search_relevance_order() {
+        let config = make_test_config();
+        let order_by = [OrderBy {
+            term: OrderByTerm::SearchRelevance,
+            direction: OrderDirection::Desc,
+        }];
+        let params = ListInferencesParams {
+            function_name: None,
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: Some(&order_by),
+            limit: 10,
+            offset: 0,
+            pagination: None,
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: None,
+        };
+
+        let result = build_inferences_union_query(&config, &params);
+        let err = match result {
+            Ok(_) => panic!("UNION query should reject search_relevance ordering"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string()
+                .contains("ORDER BY search_relevance is not yet supported"),
+            "Error message should indicate search_relevance ordering is not supported: {err}"
+        );
+    }
+
+    #[test]
+    fn test_build_inferences_union_query_with_timestamp_order() {
+        let config = make_test_config();
+        let order_by = [OrderBy {
+            term: OrderByTerm::Timestamp,
+            direction: OrderDirection::Asc,
+        }];
+        let params = ListInferencesParams {
+            function_name: None,
+            variant_name: None,
+            episode_id: None,
+            ids: None,
+            filters: None,
+            order_by: Some(&order_by),
+            limit: 10,
+            offset: 0,
+            pagination: None,
+            output_source: InferenceOutputSource::Inference,
+            search_query_experimental: None,
+        };
+
+        let query_builder =
+            build_inferences_union_query(&config, &params).expect("Query building should succeed");
+        let sql = query_builder.sql();
+
+        // Should have ORDER BY with timestamp ASC
+        assert_query_contains(sql.as_str(), "ORDER BY timestamp ASC");
+    }
+
+    #[tokio::test]
+    async fn test_build_inferences_union_query_with_float_metric_filter() {
+        use crate::db::clickhouse::query_builder::{FloatComparisonOperator, FloatMetricFilter};
+
+        let config = get_test_config().await;
+        let filter = InferenceFilter::FloatMetric(FloatMetricFilter {
+            metric_name: "brevity_score".to_string(),
+            comparison_operator: FloatComparisonOperator::GreaterThan,
+            value: 0.5,
+        });
+        let params = ListInferencesParams {
+            function_name: None,
+            filters: Some(&filter),
+            ..Default::default()
+        };
+
+        let query_builder =
+            build_inferences_union_query(&config, &params).expect("Query building should succeed");
+        let sql = query_builder.sql();
+
+        // Both subqueries should have the metric filter via EXISTS subquery
+        assert_query_contains(
+            sql.as_str(),
+            "EXISTS (SELECT 1 FROM tensorzero.float_metric_feedback f WHERE f.target_id = i.id AND f.metric_name =",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_inferences_union_query_with_boolean_metric_filter() {
+        use crate::db::clickhouse::query_builder::BooleanMetricFilter;
+
+        let config = get_test_config().await;
+        let filter = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+            metric_name: "task_success".to_string(),
+            value: true,
+        });
+        let params = ListInferencesParams {
+            function_name: None,
+            filters: Some(&filter),
+            ..Default::default()
+        };
+
+        let query_builder =
+            build_inferences_union_query(&config, &params).expect("Query building should succeed");
+        let sql = query_builder.sql();
+
+        // Both subqueries should have the metric filter via EXISTS subquery
+        assert_query_contains(
+            sql.as_str(),
+            "EXISTS (SELECT 1 FROM tensorzero.boolean_metric_feedback f WHERE f.target_id = i.id AND f.metric_name =",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_inferences_union_query_with_demonstration_filter() {
+        use crate::db::clickhouse::query_builder::DemonstrationFeedbackFilter;
+
+        let config = get_test_config().await;
+        let filter = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration: true,
+        });
+        let params = ListInferencesParams {
+            function_name: None,
+            filters: Some(&filter),
+            ..Default::default()
+        };
+
+        let query_builder =
+            build_inferences_union_query(&config, &params).expect("Query building should succeed");
+        let sql = query_builder.sql();
+
+        // Both subqueries should have the demonstration filter via EXISTS subquery
+        assert_query_contains(
+            sql.as_str(),
+            "EXISTS (SELECT 1 FROM tensorzero.demonstration_feedback WHERE inference_id = i.id)",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_inferences_union_query_rejects_invalid_metric_name() {
+        use crate::db::clickhouse::query_builder::{FloatComparisonOperator, FloatMetricFilter};
+
+        let config = get_test_config().await;
+        let filter = InferenceFilter::FloatMetric(FloatMetricFilter {
+            metric_name: "nonexistent_metric".to_string(),
+            comparison_operator: FloatComparisonOperator::GreaterThan,
+            value: 0.5,
+        });
+        let params = ListInferencesParams {
+            function_name: None,
+            filters: Some(&filter),
+            ..Default::default()
+        };
+
+        let result = build_inferences_union_query(&config, &params);
+        let err = match result {
+            Err(e) => e,
+            Ok(_) => panic!("Should reject invalid metric name"),
+        };
+        assert!(
+            err.to_string().contains("nonexistent_metric"),
+            "Error should mention the invalid metric name: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_inferences_union_query_with_episode_level_metric_filter() {
+        use crate::db::clickhouse::query_builder::{FloatComparisonOperator, FloatMetricFilter};
+
+        let config = get_test_config().await;
+        // user_rating is an episode-level metric
+        let filter = InferenceFilter::FloatMetric(FloatMetricFilter {
+            metric_name: "user_rating".to_string(),
+            comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
+            value: 4.0,
+        });
+        let params = ListInferencesParams {
+            function_name: None,
+            filters: Some(&filter),
+            ..Default::default()
+        };
+
+        let query_builder =
+            build_inferences_union_query(&config, &params).expect("Query building should succeed");
+        let sql = query_builder.sql();
+
+        // Episode-level metrics should join on episode_id
+        assert_query_contains(sql.as_str(), "f.target_id = i.episode_id");
+    }
+
+    // ===== build_inference_metadata_query tests =====
+
+    #[test]
+    fn test_build_inference_metadata_query_no_filters() {
+        let params = ListInferenceMetadataParams {
+            function_name: None,
+            variant_name: None,
+            episode_id: None,
+            pagination: None,
+            limit: 100,
+        };
+
+        let qb = build_inference_metadata_query(&params, "DESC");
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            SELECT * FROM (
+                (SELECT
+                    'chat'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.chat_inferences
+                WHERE 1=1 ORDER BY id DESC LIMIT $1)
+                UNION ALL
+                (SELECT
+                    'json'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.json_inferences
+                WHERE 1=1 ORDER BY id DESC LIMIT $2)
+            ) AS combined
+            ORDER BY id DESC LIMIT $3
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_inference_metadata_query_with_function_name() {
+        let params = ListInferenceMetadataParams {
+            function_name: Some("test_function".to_string()),
+            variant_name: None,
+            episode_id: None,
+            pagination: None,
+            limit: 50,
+        };
+
+        let qb = build_inference_metadata_query(&params, "DESC");
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            SELECT * FROM (
+                (SELECT
+                    'chat'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.chat_inferences
+                WHERE 1=1 AND function_name = $1 ORDER BY id DESC LIMIT $2)
+                UNION ALL
+                (SELECT
+                    'json'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.json_inferences
+                WHERE 1=1 AND function_name = $3 ORDER BY id DESC LIMIT $4)
+            ) AS combined
+            ORDER BY id DESC LIMIT $5
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_inference_metadata_query_with_variant_name() {
+        let params = ListInferenceMetadataParams {
+            function_name: None,
+            variant_name: Some("test_variant".to_string()),
+            episode_id: None,
+            pagination: None,
+            limit: 50,
+        };
+
+        let qb = build_inference_metadata_query(&params, "DESC");
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            SELECT * FROM (
+                (SELECT
+                    'chat'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.chat_inferences
+                WHERE 1=1 AND variant_name = $1 ORDER BY id DESC LIMIT $2)
+                UNION ALL
+                (SELECT
+                    'json'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.json_inferences
+                WHERE 1=1 AND variant_name = $3 ORDER BY id DESC LIMIT $4)
+            ) AS combined
+            ORDER BY id DESC LIMIT $5
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_inference_metadata_query_with_episode_id() {
+        let episode_id = Uuid::now_v7();
+        let params = ListInferenceMetadataParams {
+            function_name: None,
+            variant_name: None,
+            episode_id: Some(episode_id),
+            pagination: None,
+            limit: 50,
+        };
+
+        let qb = build_inference_metadata_query(&params, "DESC");
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            SELECT * FROM (
+                (SELECT
+                    'chat'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.chat_inferences
+                WHERE 1=1 AND episode_id = $1 ORDER BY id DESC LIMIT $2)
+                UNION ALL
+                (SELECT
+                    'json'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.json_inferences
+                WHERE 1=1 AND episode_id = $3 ORDER BY id DESC LIMIT $4)
+            ) AS combined
+            ORDER BY id DESC LIMIT $5
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_inference_metadata_query_pagination_before() {
+        let before_id = Uuid::now_v7();
+        let params = ListInferenceMetadataParams {
+            function_name: None,
+            variant_name: None,
+            episode_id: None,
+            pagination: Some(PaginationParams::Before { id: before_id }),
+            limit: 50,
+        };
+
+        let qb = build_inference_metadata_query(&params, "DESC");
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            SELECT * FROM (
+                (SELECT
+                    'chat'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.chat_inferences
+                WHERE 1=1 AND id < $1 ORDER BY id DESC LIMIT $2)
+                UNION ALL
+                (SELECT
+                    'json'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.json_inferences
+                WHERE 1=1 AND id < $3 ORDER BY id DESC LIMIT $4)
+            ) AS combined
+            ORDER BY id DESC LIMIT $5
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_inference_metadata_query_pagination_after() {
+        let after_id = Uuid::now_v7();
+        let params = ListInferenceMetadataParams {
+            function_name: None,
+            variant_name: None,
+            episode_id: None,
+            pagination: Some(PaginationParams::After { id: after_id }),
+            limit: 50,
+        };
+
+        let qb = build_inference_metadata_query(&params, "ASC");
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            SELECT * FROM (
+                (SELECT
+                    'chat'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.chat_inferences
+                WHERE 1=1 AND id > $1 ORDER BY id ASC LIMIT $2)
+                UNION ALL
+                (SELECT
+                    'json'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.json_inferences
+                WHERE 1=1 AND id > $3 ORDER BY id ASC LIMIT $4)
+            ) AS combined
+            ORDER BY id ASC LIMIT $5
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_inference_metadata_query_all_filters() {
+        let episode_id = Uuid::now_v7();
+        let before_id = Uuid::now_v7();
+        let params = ListInferenceMetadataParams {
+            function_name: Some("my_function".to_string()),
+            variant_name: Some("my_variant".to_string()),
+            episode_id: Some(episode_id),
+            pagination: Some(PaginationParams::Before { id: before_id }),
+            limit: 25,
+        };
+
+        let qb = build_inference_metadata_query(&params, "DESC");
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            SELECT * FROM (
+                (SELECT
+                    'chat'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.chat_inferences
+                WHERE 1=1 AND function_name = $1 AND variant_name = $2 AND episode_id = $3 AND id < $4 ORDER BY id DESC LIMIT $5)
+                UNION ALL
+                (SELECT
+                    'json'::text as function_type,
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    snapshot_hash
+                FROM tensorzero.json_inferences
+                WHERE 1=1 AND function_name = $6 AND variant_name = $7 AND episode_id = $8 AND id < $9 ORDER BY id DESC LIMIT $10)
+            ) AS combined
+            ORDER BY id DESC LIMIT $11
+            ",
+        );
+    }
+
+    // Tests for count_inferences_with_metric_feedback query building
+
+    #[test]
+    fn test_build_count_metric_feedback_query_float_inference_level_no_threshold() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Chat,
+            "test_metric",
+            &metric_config,
+            None,
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.chat_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.float_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_float_inference_level_with_threshold_max() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Json,
+            "test_metric",
+            &metric_config,
+            Some(0.5),
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.json_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.float_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+            AND f.value > $3
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_float_inference_level_with_threshold_min() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Min,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Chat,
+            "test_metric",
+            &metric_config,
+            Some(0.5),
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.chat_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.float_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+            AND f.value < $3
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_float_episode_level_no_threshold() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Episode,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Chat,
+            "episode_metric",
+            &metric_config,
+            None,
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.chat_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.float_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.episode_id = f.target_id
+            WHERE i.function_name = $2
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_boolean_inference_level_no_threshold() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Boolean,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Json,
+            "exact_match",
+            &metric_config,
+            None,
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.json_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.boolean_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_boolean_inference_level_with_threshold_max() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Boolean,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Json,
+            "exact_match",
+            &metric_config,
+            Some(0.5), // threshold value is ignored for boolean, only presence matters
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.json_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.boolean_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+            AND f.value = TRUE
+        ";
+
+        assert_query_equals(sql, expected);
+    }
+
+    #[test]
+    fn test_build_count_metric_feedback_query_boolean_inference_level_with_threshold_min() {
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Boolean,
+            optimize: MetricConfigOptimize::Min,
+            level: MetricConfigLevel::Inference,
+            description: None,
+        };
+
+        let qb = build_count_inferences_with_metric_feedback_query(
+            "test_function",
+            FunctionConfigType::Json,
+            "exact_match",
+            &metric_config,
+            Some(0.5),
+        );
+
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        let expected = r"
+            SELECT COUNT(*)::BIGINT FROM tensorzero.json_inferences i
+            JOIN (SELECT DISTINCT ON (target_id) target_id, value
+                  FROM tensorzero.boolean_metric_feedback
+                  WHERE metric_name = $1
+                  ORDER BY target_id, created_at DESC) f
+            ON i.id = f.target_id
+            WHERE i.function_name = $2
+            AND f.value = FALSE
         ";
 
         assert_query_equals(sql, expected);

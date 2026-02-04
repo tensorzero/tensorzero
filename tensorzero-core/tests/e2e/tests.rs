@@ -5,7 +5,6 @@
     clippy::print_stdout,
     clippy::unwrap_used
 )]
-mod batch;
 mod best_of_n;
 mod built_in;
 mod cache;
