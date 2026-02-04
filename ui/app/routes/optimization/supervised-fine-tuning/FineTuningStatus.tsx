@@ -103,7 +103,7 @@ export default function LLMFineTuningStatus({
                 ? typeof status.error === "string"
                   ? status.error
                   : JSON.stringify(status.error, null, 2)
-                : status.message
+                : (status.message ?? "An unknown error occurred")
             }
           />
         </SectionLayout>

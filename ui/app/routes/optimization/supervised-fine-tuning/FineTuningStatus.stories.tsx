@@ -131,9 +131,51 @@ export const Error: Story = {
   args: {
     status: {
       status: "failed",
-      message: "Training data validation failed: Invalid format in line 42",
+      // OpenAI returns generic "failed" status in message, actual error details in error field
+      message: "failed",
       error: "Training data validation failed: Invalid format in line 42",
     } as OptimizationJobInfo,
+    formData: baseFormData,
+    result: null,
+    jobHandle: {
+      type: "openai_sft",
+      job_id: "ftjob-abc123xyz789",
+      job_url: "https://platform.openai.com/finetune/ftjob-abc123xyz789",
+      job_api_url:
+        "https://api.openai.com/v1/fine_tuning/jobs/ftjob-abc123xyz789",
+      credential_location: null,
+    } as OptimizationJobHandle,
+  },
+};
+
+export const ErrorWithOnlyMessage: Story = {
+  name: "Error with only message (no error field)",
+  args: {
+    status: {
+      status: "failed",
+      message: "JobStateFailed",
+      error: null,
+    } as OptimizationJobInfo,
+    formData: baseFormData,
+    result: null,
+    jobHandle: {
+      type: "fireworks_sft",
+      job_id: "fw-job-abc123",
+      job_url: "https://fireworks.ai/jobs/fw-job-abc123",
+      job_api_url: "https://api.fireworks.ai/v1/fine-tuning/jobs/fw-job-abc123",
+      credential_location: null,
+    } as OptimizationJobHandle,
+  },
+};
+
+export const ErrorWithNoDetails: Story = {
+  name: "Error with no details (fallback)",
+  args: {
+    status: {
+      status: "failed",
+      message: null,
+      error: null,
+    } as unknown as OptimizationJobInfo,
     formData: baseFormData,
     result: null,
     jobHandle: {
