@@ -1,5 +1,5 @@
 import { Suspense, useMemo } from "react";
-import { Await, useSearchParams } from "react-router";
+import { Await, useNavigate, useSearchParams } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
@@ -33,6 +33,7 @@ export function MetricsSection({ promise, locationKey }: MetricsSectionProps) {
 function MetricsContent({ data }: { data: MetricsSectionData }) {
   const { metricsWithFeedback, variant_performances } = data;
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const metric_name = searchParams.get("metric_name") || "";
 
   const metricsExcludingDemonstrations = useMemo(
@@ -47,7 +48,7 @@ function MetricsContent({ data }: { data: MetricsSectionData }) {
   const handleMetricChange = (metric: string) => {
     const newSearchParams = new URLSearchParams(window.location.search);
     newSearchParams.set("metric_name", metric);
-    window.location.search = newSearchParams.toString();
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   return (
