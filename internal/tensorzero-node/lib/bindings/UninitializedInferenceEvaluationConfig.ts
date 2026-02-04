@@ -2,7 +2,7 @@
 import type { UninitializedEvaluatorConfig } from "./UninitializedEvaluatorConfig";
 
 export type UninitializedInferenceEvaluationConfig = {
-  evaluators: { [key in string]?: UninitializedEvaluatorConfig };
+  evaluators: { [key in string]: UninitializedEvaluatorConfig };
   function_name: string;
   description: string | null;
 };

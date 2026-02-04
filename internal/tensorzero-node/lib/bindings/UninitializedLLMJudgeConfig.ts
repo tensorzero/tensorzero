@@ -7,7 +7,7 @@ import type { UninitializedLLMJudgeVariantInfo } from "./UninitializedLLMJudgeVa
 
 export type UninitializedLLMJudgeConfig = {
   input_format: LLMJudgeInputFormat;
-  variants: { [key in string]?: UninitializedLLMJudgeVariantInfo };
+  variants: { [key in string]: UninitializedLLMJudgeVariantInfo };
   output_type: LLMJudgeOutputType;
   optimize: LLMJudgeOptimize;
   include: LLMJudgeIncludeConfig;
