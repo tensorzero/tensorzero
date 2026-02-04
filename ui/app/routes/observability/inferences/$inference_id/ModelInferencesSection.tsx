@@ -136,7 +136,7 @@ function ModelInferencesError() {
   const error = useAsyncError();
   const message = getErrorMessage({
     error,
-    defaultMessage: "Failed to load model inferences",
+    fallback: "Failed to load model inferences",
   });
 
   return (

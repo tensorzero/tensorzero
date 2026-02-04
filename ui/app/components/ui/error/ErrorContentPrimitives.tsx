@@ -4,6 +4,30 @@ import { AlertCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
+/**
+ * Extracts a user-friendly message from an error of any type.
+ * Handles React Router's route error responses, standard Errors, and unknown types.
+ */
+export function getErrorMessage({
+  error,
+  fallback,
+}: {
+  /** The error to extract a message from (typically from useAsyncError()) */
+  error: unknown;
+  /** Default message if error type is unrecognized */
+  fallback: string;
+}): string {
+  if (isRouteErrorResponse(error)) {
+    return typeof error.data === "string"
+      ? error.data
+      : `${error.status} ${error.statusText}`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+}
+
 interface ErrorContentCardProps {
   children: React.ReactNode;
   className?: string;
@@ -222,39 +246,13 @@ export function SectionAsyncErrorState({
     );
   }
 
-  const message = getErrorMessage({ error, defaultMessage });
-
   return (
     <SectionErrorNotice
       icon={AlertCircle}
       title="Error loading data"
-      description={message}
+      description={getErrorMessage({ error, fallback: defaultMessage })}
     />
   );
-}
-
-interface GetErrorMessageParams {
-  error: unknown;
-  defaultMessage: string;
-}
-
-/**
- * Extract error message from various error types.
- */
-export function getErrorMessage({
-  error,
-  defaultMessage,
-}: GetErrorMessageParams): string {
-  if (isRouteErrorResponse(error)) {
-    if (typeof error.data === "string") {
-      return error.data;
-    }
-    return `${error.status} ${error.statusText}`;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return defaultMessage;
 }
 
 interface InlineAsyncErrorProps {
@@ -279,7 +277,7 @@ export function InlineAsyncError({
     );
   }
 
-  const message = getErrorMessage({ error, defaultMessage });
+  const message = getErrorMessage({ error, fallback: defaultMessage });
 
   return (
     <div className="inline-flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
@@ -311,7 +309,7 @@ export function ActionBarAsyncError({
     );
   }
 
-  const message = getErrorMessage({ error, defaultMessage });
+  const message = getErrorMessage({ error, fallback: defaultMessage });
 
   return (
     <div className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

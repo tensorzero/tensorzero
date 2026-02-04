@@ -73,6 +73,32 @@ type = "boolean"
 optimize = "max"
 level = "inference"
 
+[metrics.exact_match_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.jaccard_similarity_episode]
+type = "float"
+level = "episode"
+optimize = "max"
+
+[metrics.haiku_score]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.haiku_score_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.haiku_rating]
+type = "float"
+level = "inference"
+optimize = "max"
+
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  TOOLS                                     │
 # └────────────────────────────────────────────────────────────────────────────┘

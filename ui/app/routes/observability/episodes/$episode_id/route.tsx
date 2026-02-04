@@ -205,7 +205,7 @@ function FeedbackSectionError() {
   const error = useAsyncError();
   const message = getErrorMessage({
     error,
-    defaultMessage: "Failed to load feedback",
+    fallback: "Failed to load feedback",
   });
 
   return (

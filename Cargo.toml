@@ -21,12 +21,14 @@ members = [
     "internal/durable-tools",
     "internal/tensorzero-types",
     "internal/tensorzero-types-providers",
-    "internal/autopilot-worker", "internal/reqwest-sse-stream",
+    "internal/autopilot-worker",
+    "internal/reqwest-sse-stream",
+    "internal/tensorzero-config-paths",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2026.1.8"
+version = "2026.2.0"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -83,7 +85,7 @@ ts-rs = { version = "11.1.0", features = [
 ] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.43", features = ["serde"] }
-git2 = { version = "0.20.3", default-features = false }
+git2 = { version = "0.20.4", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
     "tracing_level_info",
 ] }
