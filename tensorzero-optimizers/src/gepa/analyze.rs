@@ -42,10 +42,12 @@ const DATAPOINT_FIELDS_TO_KEEP: &[&str] = &[
     "output",
     "output_schema", // JSON datapoints only
     "tags",
-    // Flattened tool_params fields (Chat datapoints only)
+    // Flattened DynamicToolParams fields (Chat datapoints only)
+    "allowed_tools",
+    "additional_tools",
     "tool_choice",
     "parallel_tool_calls",
-    "tools",
+    "provider_tools",
 ];
 
 /// Serialize a datapoint for GEPA functions, including only whitelisted fields.
