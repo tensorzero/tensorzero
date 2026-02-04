@@ -87,4 +87,14 @@ pub trait ToolMetadata: Send + Sync + 'static {
     fn timeout(&self) -> Duration {
         Duration::from_secs(60)
     }
+
+    /// Whether or not to use 'strict mode' when providing our tool schema to LLMs
+    ///
+    /// Defaults to `true`. Override this for tools with schemas that are incompatible with strict mode
+    /// for providers that we wan too use (e.g. an 'object' parameter with arbitrary keys,
+    /// which is incompatible with the `'additionalProperties': false` requirement for providers
+    /// like Anthropic)
+    fn strict(&self) -> bool {
+        true
+    }
 }

@@ -26,7 +26,7 @@ export type UpdateChatDatapointRequest = {
    * Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
    * it will be overwrite the existing tags.
    */
-  tags?: { [key in string]?: string };
+  tags?: { [key in string]: string };
   /**
    * A subset of static tools configured for the function that the inference is explicitly allowed to use.
    * If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
