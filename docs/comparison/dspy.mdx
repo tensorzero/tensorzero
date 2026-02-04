@@ -19,8 +19,9 @@ TensorZero is a full-stack LLM engineering platform focused on production applic
   [→ Prompt Templates & Schemas with TensorZero](/gateway/create-a-prompt-template)
 
 - **Automated Prompt Engineering.**
-  TensorZero implements MIPROv2, the automated prompt engineering algorithm recommended by DSPy.
-  MIPROv2 jointly optimizes instructions and in-context examples in prompts.<br />
+  TensorZero implements GEPA and MIPROv2, the leading automated prompt engineering algorithms recommended by DSPy.
+  GEPA iteratively refines your prompt templates based on an inference evaluation, and MIPROv2 jointly optimizes instructions and in-context examples in prompts.<br />
+  [→ Guide: Optimize your prompts with GEPA](/optimization/gepa) <br />
   [→ Recipe: Automated Prompt Engineering with MIPRO](https://github.com/tensorzero/tensorzero/tree/main/recipes/mipro)
 
 ## Key Differences
@@ -46,7 +47,6 @@ TensorZero is a full-stack LLM engineering platform focused on production applic
 - **Advanced Automated Prompt Engineering.**
   DSPy provides sophisticated automated prompt engineering tools for LLMs like teleprompters, recursive reasoning, and self-improvement loops.
   TensorZero has some built-in prompt optimization features (more on the way) and integrates with DSPy for additional capabilities.<br />
-  [→ Improving Math Reasoning &mdash; Combining TensorZero and DSPy](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)
 
 - **Lightweight Design.**
   DSPy is a lightweight framework focused solely on LLM programming patterns, particularly during the R&D stage.
@@ -63,7 +63,4 @@ Is TensorZero missing any features that are really important to you? Let us know
 You can get the best of both worlds by using DSPy and TensorZero together!
 
 TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows like supervised fine-tuning and RLHF.
-But you can also easily create your own recipes and workflows.
-This example shows how to optimize a TensorZero function using a tool like DSPy.
-
-[→ Improving Math Reasoning &mdash; Combining TensorZero and DSPy](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)
+But you can also easily export observability data for your own recipes and workflows.

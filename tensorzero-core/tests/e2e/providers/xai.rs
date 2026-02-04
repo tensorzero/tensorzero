@@ -1,6 +1,11 @@
 use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
+use tensorzero::{
+    ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
+    InputMessageContent,
+};
+use tensorzero_core::inference::types::{Role, Text, Thought};
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -151,4 +156,66 @@ async fn get_providers() -> E2ETestProviders {
         shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }
+}
+
+/// Tests that thought blocks with a mismatched `provider_type` are filtered out at the model layer
+/// before reaching the xAI provider. This exercises the debug_assert invariant in the provider
+/// that it only receives thought blocks with `provider_type` matching "xai" or `None`.
+#[tokio::test]
+async fn test_mismatched_provider_type_thought_block_filtered() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    // Send a request with a thought block that has a mismatched provider_type.
+    // This should be filtered out at the model layer before reaching the xAI provider.
+    let res = client
+        .inference(ClientInferenceParams {
+            model_name: Some("xai::grok-4-1-fast-non-reasoning".to_string()),
+            input: Input {
+                system: None,
+                messages: vec![
+                    InputMessage {
+                        role: Role::Assistant,
+                        content: vec![
+                            InputMessageContent::Text(Text {
+                                text: "Hello!".to_string(),
+                            }),
+                            InputMessageContent::Thought(Thought {
+                                text: Some(
+                                    "This thought has a mismatched provider_type".to_string(),
+                                ),
+                                signature: None,
+                                summary: None,
+                                // Use a provider_type that doesn't match "xai"
+                                provider_type: Some("openai".to_string()),
+                                extra_data: None,
+                            }),
+                        ],
+                    },
+                    InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: "What is the capital of Japan?".to_string(),
+                        })],
+                    },
+                ],
+            },
+            ..Default::default()
+        })
+        .await;
+
+    // The request should succeed because the mismatched thought block is filtered out
+    // at the model layer before reaching the xAI provider.
+    // If the debug_assert in the provider were to fire (in debug builds), this test would panic.
+    let response = res.expect(
+        "Request should succeed - mismatched provider_type thought blocks should be filtered at model layer",
+    );
+
+    // Verify we got a valid response with content
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(chat_response)) = response else {
+        panic!("Expected non-streaming chat inference response");
+    };
+    assert!(
+        !chat_response.content.is_empty(),
+        "Response should have content after filtering mismatched thought block"
+    );
 }

@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::{
     inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text, Unknown},
@@ -15,22 +15,22 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 
 #[tokio::test]
-async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_non_stream() {
+async fn test_best_of_n_dummy_candidates_dummy_judge_non_stream() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
+    test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
+    test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
 }
 
 #[tokio::test]
-async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_streaming() {
+async fn test_best_of_n_dummy_candidates_dummy_judge_streaming() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
+    test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
+    test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
 }
 
-async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
+async fn test_best_of_n_dummy_candidates_dummy_judge_inner(
     random_input: Uuid,
     should_be_cached: bool,
     stream: bool,
@@ -60,7 +60,7 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
         .json(&payload);
 
     let inference_id = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         while let Some(chunk) = chunks.next().await {
             println!("chunk: {chunk:?}");
@@ -191,7 +191,7 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]
-async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
+async fn test_best_of_n_dummy_candidates_real_judge() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -511,7 +511,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]
-async fn e2e_test_best_of_n_json_real_judge() {
+async fn test_best_of_n_json_real_judge() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -785,7 +785,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
 /// but they get stored to the ModelInference table.
 /// This test uses `json_mode="tool"` in the evaluator, so we also check that there was actually a tool call made under the hood.
 #[tokio::test]
-async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
+async fn test_best_of_n_json_real_judge_implicit_tool() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1042,8 +1042,9 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                                 "answer_choice": {"type": "integer"}
                             },
                             "required": ["thinking", "answer_choice"],
-                            "additionalProperties": false
-                        }
+                            "additionalProperties": false,
+                        },
+                        "strict": false
                     }
                 ]
             });
@@ -1061,7 +1062,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
 }
 
 #[tokio::test]
-async fn e2e_test_best_of_n_judge_extra_body() {
+async fn test_best_of_n_judge_extra_body() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

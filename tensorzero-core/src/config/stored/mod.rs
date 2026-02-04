@@ -28,6 +28,10 @@ use crate::model::UninitializedProviderConfig;
 use crate::optimization::UninitializedOptimizerInfo;
 use crate::rate_limiting::UninitializedRateLimitingConfig;
 
+// ============================================================================
+// Embedding Model Stored Types
+// ============================================================================
+
 /// Stored version of `UninitializedEmbeddingModelConfig`.
 ///
 /// Accepts the deprecated `timeouts` field for backward compatibility with
@@ -155,8 +159,6 @@ pub struct StoredConfig {
     pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
     pub postgres: PostgresConfig,
-    #[serde(default)]
-    pub rate_limiting: UninitializedRateLimitingConfig,
     pub object_storage: Option<StorageKind>,
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>,
@@ -173,13 +175,15 @@ pub struct StoredConfig {
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>,
 
-    // Fields WITH deprecations - use Stored* types
+    // Fields WITH deprecations or custom serde - use Stored* types
+    #[serde(default)]
+    pub rate_limiting: UninitializedRateLimitingConfig,
     #[serde(default)]
     pub embedding_models: HashMap<Arc<str>, StoredEmbeddingModelConfig>,
 }
 
 impl From<UninitializedConfig> for StoredConfig {
-    fn from(stored: UninitializedConfig) -> Self {
+    fn from(config: UninitializedConfig) -> Self {
         // Explicit destructuring ensures compile error if fields are added/removed
         let UninitializedConfig {
             gateway,
@@ -194,14 +198,11 @@ impl From<UninitializedConfig> for StoredConfig {
             provider_types,
             optimizers,
             embedding_models,
-        } = stored;
+        } = config;
 
-        // Note: as we migrate the config and deprecate stuff in the future,
-        // we'll need to build out this transformation
         Self {
             gateway,
             postgres,
-            rate_limiting,
             object_storage,
             models,
             functions,
@@ -210,7 +211,7 @@ impl From<UninitializedConfig> for StoredConfig {
             evaluations,
             provider_types,
             optimizers,
-            // Only embedding_models needs conversion
+            rate_limiting,
             embedding_models: embedding_models
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
@@ -219,8 +220,10 @@ impl From<UninitializedConfig> for StoredConfig {
     }
 }
 
-impl From<StoredConfig> for UninitializedConfig {
-    fn from(stored: StoredConfig) -> Self {
+impl TryFrom<StoredConfig> for UninitializedConfig {
+    type Error = &'static str;
+
+    fn try_from(stored: StoredConfig) -> Result<Self, Self::Error> {
         // Explicit destructuring ensures compile error if fields are added/removed
         let StoredConfig {
             gateway,
@@ -237,10 +240,9 @@ impl From<StoredConfig> for UninitializedConfig {
             embedding_models,
         } = stored;
 
-        Self {
+        Ok(Self {
             gateway,
             postgres,
-            rate_limiting,
             object_storage,
             models,
             functions,
@@ -249,11 +251,11 @@ impl From<StoredConfig> for UninitializedConfig {
             evaluations,
             provider_types,
             optimizers,
-            // Only embedding_models needs conversion
+            rate_limiting,
             embedding_models: embedding_models
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
-        }
+        })
     }
 }

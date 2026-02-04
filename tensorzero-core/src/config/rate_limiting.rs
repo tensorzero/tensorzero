@@ -4,32 +4,89 @@ use tensorzero_auth::key::PUBLIC_ID_LENGTH;
 
 use crate::rate_limiting::{
     ApiKeyPublicIdConfigScope, ApiKeyPublicIdValueScope, RateLimit, RateLimitInterval,
-    RateLimitResource, RateLimitingConfigPriority, RateLimitingConfigRule, RateLimitingConfigScope,
-    RateLimitingConfigScopes, TagRateLimitingConfigScope, TagValueScope,
+    RateLimitResource, RateLimitingBackend, RateLimitingConfigPriority, RateLimitingConfigRule,
+    RateLimitingConfigScope, RateLimitingConfigScopes, TagRateLimitingConfigScope, TagValueScope,
+    UninitializedRateLimitingConfig,
 };
 
 /*
-This file deserializes rate limiting configuration from a shorthand format only
+This file provides TOML-specific deserialization for rate limiting configuration.
+
+TOML config files use a shorthand format:
 [[rate_limiting.rules]]
 RESOURCE_per_INTERVAL_1 = 10
-RESOURCE_per_INTERVAL_2 = { capacity =  20, refill_rate = 10 }
+RESOURCE_per_INTERVAL_2 = { capacity = 20, refill_rate = 10 }
 
-but the same config serializes to a more extensive format for programmatic use
-
+While the runtime types use an expanded format suitable for JSON/wire:
 [[rate_limiting.rules]]
 limits = [
     {
         resource: "model_inference",
         interval: "second",
-        amount: 10,
-    },
-    {
-        resource: "token",
-        interval: "minute",
-        amount: 20,
+        capacity: 10,
+        refill_rate: 10,
     },
 ]
+
+The TOML types in this file handle the shorthand format and convert to the runtime types.
 */
+
+// ============================================================================
+// TOML-specific types with custom deserializers
+// ============================================================================
+
+/// TOML-specific version of `UninitializedRateLimitingConfig` that uses shorthand format
+#[derive(Clone, Debug, Deserialize)]
+pub struct TomlUninitializedRateLimitingConfig {
+    #[serde(default)]
+    pub(crate) rules: Vec<TomlRateLimitingConfigRule>,
+    #[serde(default = "default_enabled")]
+    pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) backend: RateLimitingBackend,
+}
+
+impl Default for TomlUninitializedRateLimitingConfig {
+    fn default() -> Self {
+        Self {
+            rules: Vec::new(),
+            enabled: true,
+            backend: RateLimitingBackend::default(),
+        }
+    }
+}
+
+fn default_enabled() -> bool {
+    true
+}
+
+impl From<TomlUninitializedRateLimitingConfig> for UninitializedRateLimitingConfig {
+    fn from(toml_config: TomlUninitializedRateLimitingConfig) -> Self {
+        Self {
+            rules: toml_config.rules.into_iter().map(Into::into).collect(),
+            enabled: toml_config.enabled,
+            backend: toml_config.backend,
+        }
+    }
+}
+
+/// TOML-specific version of `RateLimitingConfigRule` that handles shorthand format
+#[derive(Clone, Debug)]
+pub struct TomlRateLimitingConfigRule {
+    pub limits: Vec<Arc<RateLimit>>,
+    pub scope: RateLimitingConfigScopes,
+    pub priority: RateLimitingConfigPriority,
+}
+
+impl From<TomlRateLimitingConfigRule> for RateLimitingConfigRule {
+    fn from(toml_rule: TomlRateLimitingConfigRule) -> Self {
+        Self {
+            limits: toml_rule.limits,
+            scope: toml_rule.scope,
+            priority: toml_rule.priority,
+        }
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -45,7 +102,7 @@ enum CapacityHelper {
     Amount(u64),
 }
 
-impl<'de> Deserialize<'de> for RateLimitingConfigRule {
+impl<'de> Deserialize<'de> for TomlRateLimitingConfigRule {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -106,9 +163,9 @@ impl<'de> Deserialize<'de> for RateLimitingConfigRule {
         #[derive(Deserialize)]
         struct RemainingFields {
             #[serde(default)]
-            scope: Vec<RateLimitingConfigScope>,
+            scope: Vec<TomlRateLimitingConfigScope>,
             #[serde(flatten)]
-            priority: RateLimitingConfigPriority,
+            priority: TomlRateLimitingConfigPriority,
         }
 
         // Convert the table back to a Value for deserialization
@@ -119,11 +176,13 @@ impl<'de> Deserialize<'de> for RateLimitingConfigRule {
             serde::de::Error::custom(format!("Error parsing rate limit scope and priority: {e}",))
         })?;
 
-        Ok(RateLimitingConfigRule {
+        let scope: Vec<RateLimitingConfigScope> =
+            remaining.scope.into_iter().map(Into::into).collect();
+
+        Ok(TomlRateLimitingConfigRule {
             limits,
-            scope: RateLimitingConfigScopes::new(remaining.scope)
-                .map_err(serde::de::Error::custom)?,
-            priority: remaining.priority,
+            scope: RateLimitingConfigScopes::new(scope).map_err(serde::de::Error::custom)?,
+            priority: remaining.priority.into(),
         })
     }
 }
@@ -137,6 +196,22 @@ fn parse_resource(resource_str: &str) -> Result<RateLimitResource, String> {
     }
 }
 
+/// TOML-specific version of `RateLimitingConfigPriority` that handles shorthand format
+#[derive(Debug)]
+pub enum TomlRateLimitingConfigPriority {
+    Priority(usize),
+    Always,
+}
+
+impl From<TomlRateLimitingConfigPriority> for RateLimitingConfigPriority {
+    fn from(toml_priority: TomlRateLimitingConfigPriority) -> Self {
+        match toml_priority {
+            TomlRateLimitingConfigPriority::Priority(p) => RateLimitingConfigPriority::Priority(p),
+            TomlRateLimitingConfigPriority::Always => RateLimitingConfigPriority::Always,
+        }
+    }
+}
+
 // Helper struct for deserialization
 #[derive(Deserialize)]
 struct PriorityHelper {
@@ -144,7 +219,7 @@ struct PriorityHelper {
     priority: Option<usize>,
 }
 
-impl<'de> Deserialize<'de> for RateLimitingConfigPriority {
+impl<'de> Deserialize<'de> for TomlRateLimitingConfigPriority {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -152,64 +227,40 @@ impl<'de> Deserialize<'de> for RateLimitingConfigPriority {
         let helper = PriorityHelper::deserialize(deserializer)?;
 
         match (helper.always, helper.priority) {
-            (Some(true), None) => Ok(RateLimitingConfigPriority::Always),
+            (Some(true), None) => Ok(TomlRateLimitingConfigPriority::Always),
             (Some(false), None) | (None, None) => Err(serde::de::Error::custom(
                 "the `priority` field is required when `always` is not true",
             )),
-            (None, Some(p)) => Ok(RateLimitingConfigPriority::Priority(p)),
+            (None, Some(p)) => Ok(TomlRateLimitingConfigPriority::Priority(p)),
             (Some(true), Some(_)) => Err(serde::de::Error::custom(
                 "cannot specify both `always` and `priority` fields",
             )),
-            (Some(false), Some(p)) => Ok(RateLimitingConfigPriority::Priority(p)),
+            (Some(false), Some(p)) => Ok(TomlRateLimitingConfigPriority::Priority(p)),
         }
     }
 }
 
-impl<'de> Deserialize<'de> for TagValueScope {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        if s == "tensorzero::each" {
-            Ok(TagValueScope::Each)
-        } else if s == "tensorzero::total" {
-            Ok(TagValueScope::Total)
-        } else if s.starts_with("tensorzero::") {
-            Err(serde::de::Error::custom(
-                r#"Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with "tensorzero::"."#,
-            ))
-        } else {
-            Ok(TagValueScope::Concrete(s))
+/// TOML-specific version of `RateLimitingConfigScope` that handles shorthand format
+#[derive(Debug)]
+pub enum TomlRateLimitingConfigScope {
+    Tag(TagRateLimitingConfigScope),
+    ApiKeyPublicId(ApiKeyPublicIdConfigScope),
+}
+
+impl From<TomlRateLimitingConfigScope> for RateLimitingConfigScope {
+    fn from(toml_scope: TomlRateLimitingConfigScope) -> Self {
+        match toml_scope {
+            TomlRateLimitingConfigScope::Tag(tag) => RateLimitingConfigScope::Tag(tag),
+            TomlRateLimitingConfigScope::ApiKeyPublicId(api_key) => {
+                RateLimitingConfigScope::ApiKeyPublicId(api_key)
+            }
         }
     }
 }
 
-impl<'de> Deserialize<'de> for ApiKeyPublicIdValueScope {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        if s == "tensorzero::each" {
-            Ok(ApiKeyPublicIdValueScope::Each)
-        } else if s.starts_with("tensorzero::") {
-            Err(serde::de::Error::custom(
-                r#"Api key public ID values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
-            ))
-        } else if s.len() != PUBLIC_ID_LENGTH {
-            Err(serde::de::Error::custom(format!(
-                "API key public ID `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public ID."
-            )))
-        } else {
-            Ok(ApiKeyPublicIdValueScope::Concrete(s))
-        }
-    }
-}
-
-// We use a custom deserializer for RateLimitingConfigScope
+// We use a custom deserializer for TomlRateLimitingConfigScope
 // so that we can handle the error messages gracefully for TagValueScope
-impl<'de> Deserialize<'de> for RateLimitingConfigScope {
+impl<'de> Deserialize<'de> for TomlRateLimitingConfigScope {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -221,13 +272,13 @@ impl<'de> Deserialize<'de> for RateLimitingConfigScope {
             if table.contains_key("tag_key") {
                 // If it looks like a Tag variant, try to deserialize it as such.
                 // If this fails, the specific error will be propagated.
-                return TagRateLimitingConfigScope::deserialize(value)
-                    .map(RateLimitingConfigScope::Tag)
+                return TomlTagRateLimitingConfigScope::deserialize(value)
+                    .map(|s| TomlRateLimitingConfigScope::Tag(s.into()))
                     .map_err(serde::de::Error::custom);
             }
             if table.contains_key("api_key_public_id") {
-                return ApiKeyPublicIdConfigScope::deserialize(value)
-                    .map(RateLimitingConfigScope::ApiKeyPublicId)
+                return TomlApiKeyPublicIdConfigScope::deserialize(value)
+                    .map(|s| TomlRateLimitingConfigScope::ApiKeyPublicId(s.into()))
                     .map_err(serde::de::Error::custom);
             }
             // As we add other variants, we will add impls here
@@ -241,11 +292,111 @@ impl<'de> Deserialize<'de> for RateLimitingConfigScope {
     }
 }
 
+/// TOML-specific version of `TagRateLimitingConfigScope`
+#[derive(Debug, Deserialize)]
+pub struct TomlTagRateLimitingConfigScope {
+    tag_key: String,
+    tag_value: TomlTagValueScope,
+}
+
+impl From<TomlTagRateLimitingConfigScope> for TagRateLimitingConfigScope {
+    fn from(toml_scope: TomlTagRateLimitingConfigScope) -> Self {
+        TagRateLimitingConfigScope::new(toml_scope.tag_key, toml_scope.tag_value.into())
+    }
+}
+
+/// TOML-specific version of `TagValueScope` that handles string parsing
+#[derive(Debug)]
+pub enum TomlTagValueScope {
+    Concrete(String),
+    Each,
+    Total,
+}
+
+impl From<TomlTagValueScope> for TagValueScope {
+    fn from(toml_scope: TomlTagValueScope) -> Self {
+        match toml_scope {
+            TomlTagValueScope::Concrete(s) => TagValueScope::Concrete(s),
+            TomlTagValueScope::Each => TagValueScope::Each,
+            TomlTagValueScope::Total => TagValueScope::Total,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for TomlTagValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "tensorzero::each" {
+            Ok(TomlTagValueScope::Each)
+        } else if s == "tensorzero::total" {
+            Ok(TomlTagValueScope::Total)
+        } else if s.starts_with("tensorzero::") {
+            Err(serde::de::Error::custom(
+                r#"Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with "tensorzero::"."#,
+            ))
+        } else {
+            Ok(TomlTagValueScope::Concrete(s))
+        }
+    }
+}
+
+/// TOML-specific version of `ApiKeyPublicIdConfigScope`
+#[derive(Debug, Deserialize)]
+pub struct TomlApiKeyPublicIdConfigScope {
+    api_key_public_id: TomlApiKeyPublicIdValueScope,
+}
+
+impl From<TomlApiKeyPublicIdConfigScope> for ApiKeyPublicIdConfigScope {
+    fn from(toml_scope: TomlApiKeyPublicIdConfigScope) -> Self {
+        ApiKeyPublicIdConfigScope::new(toml_scope.api_key_public_id.into())
+    }
+}
+
+/// TOML-specific version of `ApiKeyPublicIdValueScope` that handles string parsing
+#[derive(Debug)]
+pub enum TomlApiKeyPublicIdValueScope {
+    Concrete(String),
+    Each,
+}
+
+impl From<TomlApiKeyPublicIdValueScope> for ApiKeyPublicIdValueScope {
+    fn from(toml_scope: TomlApiKeyPublicIdValueScope) -> Self {
+        match toml_scope {
+            TomlApiKeyPublicIdValueScope::Concrete(s) => ApiKeyPublicIdValueScope::Concrete(s),
+            TomlApiKeyPublicIdValueScope::Each => ApiKeyPublicIdValueScope::Each,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for TomlApiKeyPublicIdValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "tensorzero::each" {
+            Ok(TomlApiKeyPublicIdValueScope::Each)
+        } else if s.starts_with("tensorzero::") {
+            Err(serde::de::Error::custom(
+                r#"Api key public ID values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
+            ))
+        } else if s.len() != PUBLIC_ID_LENGTH {
+            Err(serde::de::Error::custom(format!(
+                "API key public ID `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public ID."
+            )))
+        } else {
+            Ok(TomlApiKeyPublicIdValueScope::Concrete(s))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
-    use toml;
+    use crate::rate_limiting::RateLimitingConfig;
 
     #[test]
     fn test_basic_rate_limit_deserialization() {
@@ -256,8 +407,8 @@ mod tests {
             always = true
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
@@ -304,8 +455,8 @@ mod tests {
             priority = 0
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 8);
@@ -333,8 +484,8 @@ mod tests {
             ]
         "#;
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 2);
 
@@ -359,8 +510,8 @@ mod tests {
             always = true
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
@@ -381,8 +532,8 @@ mod tests {
             ]
         "#;
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].scope.len(), 1);
@@ -407,8 +558,8 @@ mod tests {
             ]
         "#;
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let check_config = |config: RateLimitingConfig| {
@@ -446,8 +597,8 @@ mod tests {
             ]
         "#;
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         check_config(config);
     }
@@ -487,8 +638,8 @@ mod tests {
             ]
         "#;
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 4);
 
@@ -625,8 +776,8 @@ mod tests {
             priority = 10
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert!(config.enabled());
 
@@ -645,8 +796,8 @@ mod tests {
             always = true
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert!(!config.enabled());
 
@@ -662,11 +813,31 @@ mod tests {
             enabled = true
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 0);
         assert!(config.enabled());
+    }
+
+    #[test]
+    fn test_default_enabled_when_section_missing() {
+        // When the entire [rate_limiting] section is missing from the TOML config,
+        // serde uses Default::default() for the struct. This test ensures that
+        // rate limiting is enabled by default in that case.
+        let default_config = TomlUninitializedRateLimitingConfig::default();
+        assert!(
+            default_config.enabled,
+            "Rate limiting should be enabled by default when section is missing"
+        );
+
+        // Also test that an empty string deserializes with enabled = true
+        let toml_str = "";
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        assert!(
+            toml_config.enabled,
+            "Rate limiting should be enabled by default when section is empty"
+        );
     }
 
     // Error case tests
@@ -678,7 +849,7 @@ mod tests {
             invalid_key = 10
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -689,7 +860,7 @@ mod tests {
             tokens_minute = 10
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -701,7 +872,7 @@ mod tests {
             priority = 0
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -718,7 +889,7 @@ mod tests {
             invalid_resource_per_second = 10
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -734,7 +905,7 @@ mod tests {
             tokens_per_invalid_interval = 10
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -745,7 +916,7 @@ mod tests {
             tokens_per_minute = -10
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -756,7 +927,7 @@ mod tests {
             tokens_per_minute = \"not_a_number\"
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -772,7 +943,7 @@ mod tests {
             tokens_per_minute = 10.5
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -790,7 +961,7 @@ mod tests {
             always = true
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -807,7 +978,7 @@ mod tests {
             always = false
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
 
         if let Err(e) = result {
@@ -827,8 +998,8 @@ mod tests {
             priority = 1
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
@@ -848,7 +1019,7 @@ mod tests {
             ]
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -862,7 +1033,7 @@ mod tests {
             ]
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -877,7 +1048,7 @@ mod tests {
             ]
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         let err = result.unwrap_err();
         assert!(
             err.to_string()
@@ -893,8 +1064,8 @@ mod tests {
             priority = 1
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 0);
@@ -908,8 +1079,8 @@ mod tests {
             priority = 0
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits[0].capacity, 0);
@@ -923,8 +1094,8 @@ mod tests {
             priority = 0
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits[0].capacity, 9223372036854775807);
@@ -940,8 +1111,8 @@ mod tests {
             priority = 0
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 2);
@@ -964,7 +1135,7 @@ mod tests {
             tokens_per_Second = 10
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -976,7 +1147,7 @@ mod tests {
             Tokens_per_second = 10
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -988,8 +1159,8 @@ mod tests {
             priority = 1
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 1);
@@ -1010,8 +1181,8 @@ mod tests {
             priority = 1
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 2);
@@ -1044,8 +1215,8 @@ mod tests {
             priority = 1
         ";
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 2);
@@ -1075,7 +1246,7 @@ mod tests {
             priority = 1
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -1087,7 +1258,7 @@ mod tests {
             priority = 1
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -1099,7 +1270,7 @@ mod tests {
             priority = 1
         ";
 
-        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let result: Result<TomlUninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
     }
 
@@ -1121,8 +1292,8 @@ mod tests {
             ]
         "#;
 
-        let uninitialized_config: UninitializedRateLimitingConfig =
-            toml::from_str(toml_str).unwrap();
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let result: Result<RateLimitingConfig, _> = uninitialized_config.try_into();
 
         assert!(result.is_err());
@@ -1167,9 +1338,77 @@ mod tests {
 
         "#;
 
-        let err_message = toml::from_str::<UninitializedRateLimitingConfig>(toml_str)
+        let err_message = toml::from_str::<TomlUninitializedRateLimitingConfig>(toml_str)
             .unwrap_err()
             .to_string();
         assert!(err_message.contains("Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with \"tensorzero::\"."));
+    }
+
+    // Test JSON deserialization for runtime types
+    #[test]
+    fn test_json_deserialization_runtime_types() {
+        let json_str = r#"{
+            "rules": [
+                {
+                    "limits": [
+                        {
+                            "resource": "token",
+                            "interval": "minute",
+                            "capacity": 100,
+                            "refill_rate": 50
+                        }
+                    ],
+                    "scope": [
+                        {
+                            "tag_key": "user_id",
+                            "tag_value": "tensorzero::each"
+                        }
+                    ],
+                    "priority": { "Priority": 1 }
+                }
+            ],
+            "enabled": true,
+            "backend": "auto"
+        }"#;
+
+        let config: UninitializedRateLimitingConfig = serde_json::from_str(json_str).unwrap();
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules[0].limits.len(), 1);
+        assert_eq!(config.rules[0].limits[0].capacity, 100);
+        assert_eq!(config.rules[0].limits[0].refill_rate, 50);
+        assert!(config.enabled);
+    }
+
+    #[test]
+    fn test_roundtrip_toml_to_json_to_runtime() {
+        // Parse from TOML shorthand
+        let toml_str = r#"
+            [[rules]]
+            tokens_per_minute = { capacity = 100, refill_rate = 50 }
+            priority = 1
+            scope = [
+                { tag_key = "user_id", tag_value = "tensorzero::each" }
+            ]
+        "#;
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+
+        // Serialize to JSON
+        let json_str = serde_json::to_string(&uninitialized_config).unwrap();
+
+        // Deserialize back from JSON
+        let roundtrip_config: UninitializedRateLimitingConfig =
+            serde_json::from_str(&json_str).unwrap();
+
+        // Verify the roundtrip
+        assert_eq!(roundtrip_config.rules.len(), 1);
+        assert_eq!(roundtrip_config.rules[0].limits.len(), 1);
+        assert_eq!(roundtrip_config.rules[0].limits[0].capacity, 100);
+        assert_eq!(roundtrip_config.rules[0].limits[0].refill_rate, 50);
+        assert_eq!(
+            roundtrip_config.rules[0].priority,
+            RateLimitingConfigPriority::Priority(1)
+        );
     }
 }

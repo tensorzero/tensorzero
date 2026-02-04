@@ -5,7 +5,6 @@
     clippy::print_stdout,
     clippy::unwrap_used
 )]
-mod batch;
 mod best_of_n;
 mod built_in;
 mod cache;
@@ -36,6 +35,7 @@ mod otel;
 mod otel_config_headers;
 mod otel_export;
 mod prometheus;
+mod provider_tools;
 mod providers;
 mod proxy;
 mod rate_limiting;

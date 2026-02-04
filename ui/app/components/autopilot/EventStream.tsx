@@ -1,4 +1,11 @@
-import { AlertCircle, AlertTriangle, ChevronRight } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  BarChart3,
+  ChevronRight,
+  RotateCcw,
+} from "lucide-react";
+import { Button } from "~/components/ui/button";
 import { Component, type RefObject, useState } from "react";
 import {
   AnimatedEllipsis,
@@ -13,13 +20,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
   AutopilotStatus,
   EventPayloadMessageContent,
   GatewayEvent,
   GatewayEventPayload,
+  TopKEvaluationVisualization,
+  VisualizationType,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
+import TopKEvaluationViz from "./TopKEvaluationViz";
 
 /**
  * Optimistic messages are shown after the API confirms receipt but before
@@ -49,6 +60,8 @@ type EventStreamProps = {
   className?: string;
   isLoadingOlder?: boolean;
   hasReachedStart?: boolean;
+  loadError?: string | null;
+  onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
   authLoadingStates?: Map<string, "approving" | "rejecting">;
@@ -83,7 +96,13 @@ export function ToolEventId({ id }: { id: string }) {
  */
 export type ToolEventPayload = Extract<
   GatewayEventPayload,
-  { type: "tool_call" | "tool_call_authorization" | "tool_result" }
+  {
+    type:
+      | "tool_call"
+      | "tool_call_authorization"
+      | "tool_result"
+      | "visualization";
+  }
 >;
 
 /**
@@ -98,25 +117,86 @@ export function isToolEvent(event: GatewayEvent): event is ToolEvent {
   return (
     event.payload.type === "tool_call" ||
     event.payload.type === "tool_call_authorization" ||
-    event.payload.type === "tool_result"
+    event.payload.type === "tool_result" ||
+    event.payload.type === "visualization"
   );
 }
 
 /**
- * Extracts the tool_call_event_id from a tool event.
+ * Extracts the tool execution ID from a tool event.
  * For tool_call events, this is in side_info.tool_call_event_id.
- * For tool_call_authorization and tool_result events, this is directly on the payload.
+ * For tool_call_authorization and tool_result events, this is tool_call_event_id on the payload.
+ * For visualization events, this is tool_execution_id on the payload.
  */
 export function getToolCallEventId(event: ToolEvent): string {
   const { payload } = event;
   if (payload.type === "tool_call") {
     return payload.side_info.tool_call_event_id;
   }
+  if (payload.type === "visualization") {
+    return payload.tool_execution_id;
+  }
   return payload.tool_call_event_id;
 }
 
 function getMessageText(content: EventPayloadMessageContent[]) {
   return content.map((cb) => cb.text).join("\n\n");
+}
+
+/**
+ * Get the title for a visualization based on its type.
+ */
+function getVisualizationTitle(visualization: VisualizationType): string {
+  if (typeof visualization !== "object" || visualization === null) {
+    return "Visualization";
+  }
+  if ("type" in visualization) {
+    if (visualization.type === "top_k_evaluation") {
+      return "Top-K Evaluation Results";
+    }
+    // Unknown visualization type with a type field
+    return `Visualization (${String(visualization.type)})`;
+  }
+  return "Visualization";
+}
+
+/**
+ * Renders the appropriate visualization component based on the type.
+ */
+function VisualizationRenderer({
+  visualization,
+}: {
+  visualization: VisualizationType;
+}) {
+  // Check for known visualization types
+  if (
+    typeof visualization === "object" &&
+    visualization !== null &&
+    "type" in visualization &&
+    visualization.type === "top_k_evaluation"
+  ) {
+    // Type assertion needed because TypeScript can't narrow through the untagged union
+    return (
+      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
+    );
+  }
+
+  // Unknown or malformed visualization - show raw JSON with a warning
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-fg-muted flex items-center gap-2 text-sm">
+        <AlertTriangle className="h-4 w-4 text-yellow-600" />
+        <span>
+          Unknown visualization type. Your TensorZero deployment may be
+          outdated.
+        </span>
+      </div>
+      <ReadOnlyCodeBlock
+        code={JSON.stringify(visualization, null, 2)}
+        language="json"
+      />
+    </div>
+  );
 }
 
 /**
@@ -173,6 +253,9 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return {
         description: payload.message,
       };
+    case "visualization":
+      // Visualization events render their own content, no text description needed
+      return {};
     case "unknown":
       return {};
     default:
@@ -298,6 +381,13 @@ function renderEventTitle(event: GatewayEvent) {
     case "error":
       // TODO: handle errors better
       return "Error";
+    case "visualization":
+      return (
+        <span className="inline-flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          <span>{getVisualizationTitle(payload.visualization)}</span>
+        </span>
+      );
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -382,12 +472,14 @@ function EventItem({
   event: GatewayEvent;
   isPending?: boolean;
 }) {
+  const { yoloMode } = useAutopilotSession();
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
   const isExpandable =
     event.payload.type === "tool_call" ||
     event.payload.type === "error" ||
+    event.payload.type === "visualization" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -419,7 +511,7 @@ function EventItem({
             >
               <ChevronRight className="h-4 w-4" />
             </span>
-            {isPending && (
+            {isPending && !yoloMode && (
               <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                 Action Required
               </span>
@@ -458,6 +550,9 @@ function EventItem({
             </p>
           )}
         </>
+      )}
+      {shouldShowDetails && event.payload.type === "visualization" && (
+        <VisualizationRenderer visualization={event.payload.visualization} />
       )}
     </div>
   );
@@ -545,28 +640,64 @@ function StatusIndicator({ status }: { status: AutopilotStatus }) {
   );
 }
 
+function LoadErrorNotice({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-2 text-sm text-amber-600">
+      <span>Failed to load older messages</span>
+      {onRetry && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRetry}
+          className="h-6 gap-1 px-2 text-amber-600 hover:text-amber-700"
+        >
+          <RotateCcw className="h-3 w-3" />
+          Retry
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function EventStream({
   events,
   className,
   isLoadingOlder = false,
   hasReachedStart = false,
+  loadError,
+  onRetryLoad,
   topSentinelRef,
   pendingToolCallIds,
   optimisticMessages = [],
   status,
 }: EventStreamProps) {
+  // Determine what to show at the top: sentinel, error, or session start
+  // Only show session start when there's content to display (events or optimistic messages)
+  const showSessionStart =
+    (hasReachedStart || optimisticMessages.length > 0) &&
+    !isLoadingOlder &&
+    !loadError &&
+    (events.length > 0 || optimisticMessages.length > 0);
+
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* Session start indicator, or sentinel for loading more */}
-      {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
-      {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
-        <SessionStartDivider />
-      ) : (
+      {/* Sentinel for loading more - always present unless showing session start */}
+      {/* Must stay in DOM during loading/error so IntersectionObserver keeps working */}
+      {!showSessionStart && (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
       )}
 
-      {/* Loading skeletons at the top */}
-      {isLoadingOlder && <EventSkeletons count={3} />}
+      {/* Error state - show retry notice (after sentinel so it appears below) */}
+      {loadError && <LoadErrorNotice onRetry={onRetryLoad} />}
+
+      {/* Session start indicator */}
+      {showSessionStart && <SessionStartDivider />}
+
+      {/* Show skeletons when more content exists above (not yet loaded) */}
+      {/* This prevents layout jump when loading starts */}
+      {!showSessionStart && !hasReachedStart && !loadError && (
+        <EventSkeletons count={3} />
+      )}
 
       {events.map((event) => (
         <EventErrorBoundary key={event.id} eventId={event.id}>

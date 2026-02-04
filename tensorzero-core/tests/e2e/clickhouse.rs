@@ -89,7 +89,7 @@ pub async fn get_clean_clickhouse(
     allow_db_missing: bool,
 ) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let database = format!(
-        "tensorzero-e2e_tests_migration_manager_{}",
+        "tensorzero_e2e_tests_migration_manager_{}",
         Uuid::now_v7().simple()
     );
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();

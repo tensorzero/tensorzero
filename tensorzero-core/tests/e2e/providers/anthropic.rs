@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use futures::StreamExt;
 use indexmap::IndexMap;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero::{
     ClientInferenceParams, File, InferenceOutput, InferenceResponse, Input, InputMessage,
@@ -259,6 +259,7 @@ async fn test_empty_chunks_success() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
@@ -728,6 +729,7 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
             .post(get_gateway_endpoint("/inference"))
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
         let mut first_inference_id = None;
         while let Some(event) = event_source.next().await {
@@ -789,12 +791,12 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
     if stream {
         assert_eq!(
             raw_request,
-            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
+            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}}"
         );
     } else {
         assert_eq!(
             raw_request,
-            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
+            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}}"
         );
     }
 }
@@ -829,6 +831,7 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
             .post(get_gateway_endpoint("/inference"))
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
         let mut first_inference_id = None;
         while let Some(event) = event_source.next().await {
@@ -955,6 +958,7 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {

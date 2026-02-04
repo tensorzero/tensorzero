@@ -441,8 +441,7 @@ impl ToolCallConfigDatabaseInsert {
     /// )
     /// // Converts back to: allowed_tools=Some(["a", "b"]), additional_tools=Some([x, y])
     /// ```
-    #[cfg(any(test, feature = "e2e_tests"))]
-    pub fn new_for_test(
+    pub fn new(
         dynamic_tools: Vec<Tool>,
         dynamic_provider_tools: Vec<ProviderTool>,
         allowed_tools: AllowedTools,
@@ -470,6 +469,58 @@ impl ToolCallConfigDatabaseInsert {
             parallel_tool_calls,
             tool_params: tool_config,
         }
+    }
+
+    /// Constructs an Optional `ToolCallConfigDatabaseInsert` from the stored values in the database.
+    /// This is used in the Postgres path, where we deserialized each field of a tool call config
+    /// independently. (In ClickHouse, this logic is in the deserializer.)
+    pub fn from_stored_values(
+        dynamic_tools: Vec<Tool>,
+        dynamic_provider_tools: Vec<ProviderTool>,
+        allowed_tools: Option<AllowedTools>,
+        tool_choice: Option<ToolChoice>,
+        parallel_tool_calls: Option<bool>,
+    ) -> Option<Self> {
+        // Check if we have any non-default values
+        let has_dynamic_tools = !dynamic_tools.is_empty();
+        let has_provider_tools = !dynamic_provider_tools.is_empty();
+        let has_allowed_tools = allowed_tools.is_some();
+        let has_tool_choice = tool_choice.is_some();
+        let has_parallel = parallel_tool_calls.is_some();
+
+        // If no tool params are set, return None
+        if !has_dynamic_tools
+            && !has_provider_tools
+            && !has_allowed_tools
+            && !has_tool_choice
+            && !has_parallel
+        {
+            return None;
+        }
+
+        Some(Self::new(
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools.unwrap_or_default(),
+            tool_choice.unwrap_or_default(),
+            parallel_tool_calls,
+        ))
+    }
+
+    pub fn new_for_test(
+        dynamic_tools: Vec<Tool>,
+        dynamic_provider_tools: Vec<ProviderTool>,
+        allowed_tools: AllowedTools,
+        tool_choice: ToolChoice,
+        parallel_tool_calls: Option<bool>,
+    ) -> Self {
+        Self::new(
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+        )
     }
 
     /// Converts back from a `ToolCallConfigDatabaseInsert` (storage type) to

@@ -618,10 +618,10 @@ mod tests {
                     tool_calls: None,
                 },
             }],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
-            },
+            }),
         };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),

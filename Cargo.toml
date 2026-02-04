@@ -22,11 +22,13 @@ members = [
     "internal/tensorzero-types",
     "internal/tensorzero-types-providers",
     "internal/autopilot-worker",
+    "internal/reqwest-sse-stream",
+    "internal/tensorzero-config-paths",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2026.1.6"
+version = "2026.2.0"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -40,11 +42,10 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.19.0", features = ["serde", "v7"] }
+uuid = { version = "1.20.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "0.9.11", features = ["preserve_order"] }
-reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 async-trait = "0.1.89"
 http = "1.4.0"
@@ -56,11 +57,13 @@ pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.53", features = ["derive"] }
+clap = { version = "4.5.55", features = ["derive"] }
 futures = "0.3.30"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
-minijinja = { version = "2.14.0", features = [
+sse-stream = "0.2.1"
+reqwest-sse-stream = { path = "internal/reqwest-sse-stream" }
+minijinja = { version = "2.15.1", features = [
     "loader",
     "debug",
     "json",
@@ -82,7 +85,7 @@ ts-rs = { version = "11.1.0", features = [
 ] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.43", features = ["serde"] }
-git2 = { version = "0.20.3", default-features = false }
+git2 = { version = "0.20.4", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
     "tracing_level_info",
 ] }
@@ -105,8 +108,8 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 ], default-features = false }
 schemars = "1.1.0"
 blake3 = "1.8.3"
-moka = { version = "0.12.10", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "b779f5a3f7e34f4f8a758ec4627d56538945cfeb" }
+moka = { version = "0.12.13", features = ["sync"] }
+durable = { git = "https://github.com/tensorzero/durable", rev = "5e0e7863a725f656ddd6b1ff3ea5b00594c203db" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
