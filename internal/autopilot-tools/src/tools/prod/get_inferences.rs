@@ -69,7 +69,8 @@ impl ToolMetadata for GetInferencesTool {
                     "description": "Source for the output field: 'inference' (original inference output) or 'demonstration' (demonstration feedback if available)."
                 }
             },
-            "required": ["ids"]
+            "required": ["ids"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
