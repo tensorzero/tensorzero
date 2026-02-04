@@ -10,7 +10,7 @@ import {
 } from "react-router";
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import { AlertCircle } from "lucide-react";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
 import { useFunctionConfig } from "~/context/config";
@@ -340,13 +340,10 @@ function MetricsSection({
 }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [metric_name, setMetricName] = useState(
-    () => searchParams.get("metric_name") || "",
-  );
+  const metric_name = searchParams.get("metric_name") || "";
 
   const handleMetricChange = (metric: string) => {
-    setMetricName(metric);
-    const newSearchParams = new URLSearchParams(window.location.search);
+    const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set("metric_name", metric);
     navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
