@@ -1,10 +1,14 @@
 services:
   postgres:
-    image: postgres:14-alpine
+    build:
+      context: ../../tensorzero-core/tests/e2e
+      dockerfile: Dockerfile.postgres
+    image: tensorzero/postgres-pg_cron:14-trixie-slim
     environment:
       POSTGRES_DB: tensorzero_ui_fixtures
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    command: [ "postgres", "-c", "cron.database_name=tensorzero_ui_fixtures" ]
     ports:
       - "5432:5432"
     healthcheck:
