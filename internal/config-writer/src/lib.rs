@@ -119,12 +119,16 @@ impl ConfigWriter {
         let mut variant_item = toml_writer::serialize_to_item(&payload.variant)?;
 
         // Extract any ResolvedTomlPathData fields and convert to relative paths
-        let template_files = toml_writer::extract_resolved_paths(
+        let template_files = path_resolver::extract_resolved_paths(
             &mut variant_item,
             &self.glob_base,
             &toml_file_dir,
-            &payload.function_name,
-            &payload.variant_name,
+            &[
+                "functions",
+                &payload.function_name,
+                "variants",
+                &payload.variant_name,
+            ],
         )?;
 
         // Apply the edit to the document
@@ -191,41 +195,12 @@ impl ConfigWriter {
         let mut evaluation_item = toml_writer::serialize_to_item(&payload.evaluation)?;
 
         // Extract any ResolvedTomlPathData fields from evaluator variants in this evaluation
-        let mut template_files = Vec::new();
-        if let Some(evaluators) = evaluation_item
-            .as_table_mut()
-            .and_then(|t| t.get_mut("evaluators"))
-            .and_then(|v| v.as_table_mut())
-        {
-            let evaluator_names: Vec<String> =
-                evaluators.iter().map(|(k, _)| k.to_string()).collect();
-            for evaluator_name in evaluator_names {
-                path_resolver::validate_path_component(&evaluator_name, "evaluator_name")?;
-                if let Some(evaluator_item) = evaluators.get_mut(&evaluator_name)
-                    && let Some(variants) = evaluator_item
-                        .as_table_mut()
-                        .and_then(|t| t.get_mut("variants"))
-                        .and_then(|v| v.as_table_mut())
-                {
-                    let variant_names: Vec<String> =
-                        variants.iter().map(|(k, _)| k.to_string()).collect();
-                    for variant_name in variant_names {
-                        path_resolver::validate_path_component(&variant_name, "variant_name")?;
-                        if let Some(variant_item) = variants.get_mut(&variant_name) {
-                            let variant_files = toml_writer::extract_resolved_paths_evaluator(
-                                variant_item,
-                                &self.glob_base,
-                                &toml_file_dir,
-                                &payload.evaluation_name,
-                                &evaluator_name,
-                                &variant_name,
-                            )?;
-                            template_files.extend(variant_files);
-                        }
-                    }
-                }
-            }
-        }
+        let template_files = path_resolver::extract_resolved_paths(
+            &mut evaluation_item,
+            &self.glob_base,
+            &toml_file_dir,
+            &["evaluations", &payload.evaluation_name],
+        )?;
 
         // Apply the edit to the document
         toml_writer::upsert_evaluation(
@@ -264,29 +239,17 @@ impl ConfigWriter {
         let mut evaluator_item = toml_writer::serialize_to_item(&payload.evaluator)?;
 
         // Extract any ResolvedTomlPathData fields from evaluator variants
-        // For LLM judge evaluators, we need to process each variant
-        let mut template_files = Vec::new();
-        if let Some(variants) = evaluator_item
-            .as_table_mut()
-            .and_then(|t| t.get_mut("variants"))
-            .and_then(|v| v.as_table_mut())
-        {
-            let variant_names: Vec<String> = variants.iter().map(|(k, _)| k.to_string()).collect();
-            for variant_name in variant_names {
-                path_resolver::validate_path_component(&variant_name, "variant_name")?;
-                if let Some(variant_item) = variants.get_mut(&variant_name) {
-                    let variant_files = toml_writer::extract_resolved_paths_evaluator(
-                        variant_item,
-                        &self.glob_base,
-                        &toml_file_dir,
-                        &payload.evaluation_name,
-                        &payload.evaluator_name,
-                        &variant_name,
-                    )?;
-                    template_files.extend(variant_files);
-                }
-            }
-        }
+        let template_files = path_resolver::extract_resolved_paths(
+            &mut evaluator_item,
+            &self.glob_base,
+            &toml_file_dir,
+            &[
+                "evaluations",
+                &payload.evaluation_name,
+                "evaluators",
+                &payload.evaluator_name,
+            ],
+        )?;
 
         // Apply the edit to the document
         toml_writer::upsert_evaluator(

@@ -20,6 +20,8 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use toml_edit::{Item, Value};
+
 use crate::error::ConfigWriterError;
 use tensorzero_config_paths::{PathComponent, TARGET_PATH_COMPONENTS};
 
@@ -40,51 +42,22 @@ pub struct FileToWrite {
 // Pattern-based Path Utilities
 // ============================================================================
 
-/// The prefix pattern for function variant paths in TARGET_PATH_COMPONENTS.
-/// Matches: `["functions", *, "variants", *]`
-const VARIANT_PREFIX_LEN: usize = 4;
-
-/// The prefix pattern for evaluator variant paths in TARGET_PATH_COMPONENTS.
-/// Matches: `["evaluations", *, "evaluators", *, "variants", *]`
-const EVALUATOR_PREFIX_LEN: usize = 6;
-
-/// Returns the suffix portions of all variant-related path patterns.
-/// These are the path components after `["functions", *, "variants", *]`.
+/// Check if a pattern's first N components match a given prefix.
 ///
-/// For example, `["functions", *, "variants", *, "system_template"]` returns `&["system_template"]`.
-/// And `["functions", *, "variants", *, "evaluator", "system_template"]` returns `&["evaluator", "system_template"]`.
-pub fn variant_path_suffixes() -> impl Iterator<Item = &'static [PathComponent]> {
-    TARGET_PATH_COMPONENTS.iter().filter_map(|pattern| {
-        if pattern.len() > VARIANT_PREFIX_LEN
-            && matches!(pattern[0], PathComponent::Literal("functions"))
-            && matches!(pattern[1], PathComponent::Wildcard)
-            && matches!(pattern[2], PathComponent::Literal("variants"))
-            && matches!(pattern[3], PathComponent::Wildcard)
-        {
-            Some(&pattern[VARIANT_PREFIX_LEN..])
-        } else {
-            None
-        }
-    })
-}
-
-/// Returns the suffix portions of all evaluator variant-related path patterns.
-/// These are the path components after `["evaluations", *, "evaluators", *, "variants", *]`.
-pub fn evaluator_path_suffixes() -> impl Iterator<Item = &'static [PathComponent]> {
-    TARGET_PATH_COMPONENTS.iter().filter_map(|pattern| {
-        if pattern.len() > EVALUATOR_PREFIX_LEN
-            && matches!(pattern[0], PathComponent::Literal("evaluations"))
-            && matches!(pattern[1], PathComponent::Wildcard)
-            && matches!(pattern[2], PathComponent::Literal("evaluators"))
-            && matches!(pattern[3], PathComponent::Wildcard)
-            && matches!(pattern[4], PathComponent::Literal("variants"))
-            && matches!(pattern[5], PathComponent::Wildcard)
-        {
-            Some(&pattern[EVALUATOR_PREFIX_LEN..])
-        } else {
-            None
-        }
-    })
+/// Literals must match exactly, wildcards match any prefix component.
+/// For example, pattern `["functions", *, "variants", *, "system_template"]`
+/// matches prefix `["functions", "my_func", "variants", "v1"]`.
+fn pattern_matches_prefix(pattern: &[PathComponent], prefix: &[&str]) -> bool {
+    if pattern.len() < prefix.len() {
+        return false;
+    }
+    pattern
+        .iter()
+        .zip(prefix.iter())
+        .all(|(component, key)| match component {
+            PathComponent::Wildcard => true,
+            PathComponent::Literal(lit) => *lit == *key,
+        })
 }
 
 /// Returns the file extension for a given terminal key name.
@@ -94,7 +67,7 @@ pub fn evaluator_path_suffixes() -> impl Iterator<Item = &'static [PathComponent
 /// - `system_instructions` → `.txt`
 /// - `user`, `system`, `assistant` (input wrappers) → `.minijinja`
 /// - `path` → `None` (preserve original extension)
-pub fn file_extension_for_key(key: &str) -> Option<&'static str> {
+fn file_extension_for_key(key: &str) -> Option<&'static str> {
     if key.ends_with("_template") {
         Some(".minijinja")
     } else if key.ends_with("_schema") || key == "parameters" {
@@ -110,16 +83,174 @@ pub fn file_extension_for_key(key: &str) -> Option<&'static str> {
     }
 }
 
-/// Converts a path suffix (sequence of PathComponents) to a list of literal key names.
-/// Returns None if any component is a Wildcard (which shouldn't happen for our suffixes).
-pub fn suffix_to_keys(suffix: &[PathComponent]) -> Option<Vec<&'static str>> {
-    suffix
-        .iter()
-        .map(|c| match c {
-            PathComponent::Literal(s) => Some(*s),
-            PathComponent::Wildcard => None,
-        })
-        .collect()
+/// Check if an Item is a ResolvedTomlPathData (has __tensorzero_remapped_path and __data).
+/// If so, extract the data and return it along with the original path.
+fn extract_resolved_path_data(
+    item: &Item,
+    key_path: &str,
+) -> Result<Option<(String, String)>, ConfigWriterError> {
+    let Some(table) = item.as_table() else {
+        return Ok(None);
+    };
+
+    if !table.contains_key("__tensorzero_remapped_path") {
+        return Ok(None);
+    }
+
+    let data = table
+        .get("__data")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
+            message: format!("`{key_path}` must contain string `__data`"),
+        })?;
+
+    let original_path = table
+        .get("__tensorzero_remapped_path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    Ok(Some((data.to_string(), original_path.to_string())))
+}
+
+/// Generate a canonical file path for a given terminal key and base directory.
+/// The extension is derived from the key name.
+fn canonical_file_path(base_dir: &Path, terminal_key: &str, original_path: &str) -> PathBuf {
+    let filename = if let Some(ext) = file_extension_for_key(terminal_key) {
+        format!("{terminal_key}{ext}")
+    } else {
+        // For `path` keys, preserve original filename
+        Path::new(original_path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("file")
+            .to_string()
+    };
+
+    base_dir.join(filename)
+}
+
+/// Process a pattern suffix recursively, handling wildcards by enumerating actual keys.
+///
+/// - `item`: The current TOML item to process
+/// - `pattern_suffix`: Remaining pattern components to process
+/// - `path_so_far`: Accumulated path components for output file path
+/// - `glob_base`: Base directory for output files
+/// - `toml_file_dir`: Directory containing the TOML file (for relative path calculation)
+fn process_pattern_suffix(
+    item: &mut Item,
+    pattern_suffix: &[PathComponent],
+    path_so_far: &Path,
+    glob_base: &Path,
+    toml_file_dir: &Path,
+) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+    let mut files = Vec::new();
+
+    let Some(first) = pattern_suffix.first() else {
+        // Empty suffix - nothing to process
+        return Ok(files);
+    };
+
+    match first {
+        PathComponent::Literal(key) => {
+            // Navigate into this key
+            let Some(table) = item.as_table_mut() else {
+                return Ok(files);
+            };
+            let Some(nested_item) = table.get_mut(key) else {
+                return Ok(files);
+            };
+
+            if pattern_suffix.len() == 1 {
+                // Terminal element - check for __tensorzero_remapped_path
+                let key_path = path_so_far.join(key).display().to_string();
+                if let Some((content, original_path)) =
+                    extract_resolved_path_data(nested_item, &key_path)?
+                {
+                    let base_dir = glob_base.join(path_so_far);
+                    let absolute_path = canonical_file_path(&base_dir, key, &original_path);
+                    let relative_path = compute_relative_path(toml_file_dir, &absolute_path)?;
+
+                    // Replace the table with a simple string value
+                    *nested_item = Item::Value(Value::from(relative_path));
+
+                    files.push(FileToWrite {
+                        absolute_path,
+                        content,
+                    });
+                }
+            } else {
+                // More components to process - recurse
+                let new_path = path_so_far.join(key);
+                files.extend(process_pattern_suffix(
+                    nested_item,
+                    &pattern_suffix[1..],
+                    &new_path,
+                    glob_base,
+                    toml_file_dir,
+                )?);
+            }
+        }
+        PathComponent::Wildcard => {
+            // Enumerate all keys in the current table
+            let Some(table) = item.as_table_mut() else {
+                return Ok(files);
+            };
+
+            let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
+            for key in keys {
+                if let Some(nested_item) = table.get_mut(&key) {
+                    let new_path = path_so_far.join(&key);
+                    files.extend(process_pattern_suffix(
+                        nested_item,
+                        &pattern_suffix[1..],
+                        &new_path,
+                        glob_base,
+                        toml_file_dir,
+                    )?);
+                }
+            }
+        }
+    }
+
+    Ok(files)
+}
+
+/// Extract all resolved paths from an item.
+///
+/// `matched_prefix` describes the position in the config tree:
+/// - For variant: `["functions", "my_func", "variants", "my_var"]`
+/// - For evaluator: `["evaluations", "my_eval", "evaluators", "my_evaluator"]`
+/// - For evaluation: `["evaluations", "my_eval"]`
+///
+/// This function finds all patterns in TARGET_PATH_COMPONENTS that match the given prefix,
+/// then processes the remaining suffix. Wildcards in the suffix are handled by enumerating
+/// actual keys in the TOML item.
+pub fn extract_resolved_paths(
+    item: &mut Item,
+    glob_base: &Path,
+    toml_file_dir: &Path,
+    matched_prefix: &[&str],
+) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+    let mut files = Vec::new();
+
+    // Build the base path from the prefix
+    let base_path: PathBuf = matched_prefix.iter().collect();
+
+    // Find all patterns matching this prefix and process their suffixes
+    for pattern in TARGET_PATH_COMPONENTS {
+        if pattern_matches_prefix(pattern, matched_prefix) && pattern.len() > matched_prefix.len() {
+            let suffix = &pattern[matched_prefix.len()..];
+            files.extend(process_pattern_suffix(
+                item,
+                suffix,
+                &base_path,
+                glob_base,
+                toml_file_dir,
+            )?);
+        }
+    }
+
+    Ok(files)
 }
 
 // ============================================================================
