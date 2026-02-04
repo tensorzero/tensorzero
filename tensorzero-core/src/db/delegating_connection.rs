@@ -41,7 +41,10 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRow,
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint};
+use crate::db::{
+    EpisodeByIdRow, EpisodeQueries, ModelLatencyDatapoint, ModelUsageTimePoint,
+    TableBoundsWithCount,
+};
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
@@ -81,6 +84,7 @@ pub trait DelegatingDatabaseQueries:
     + BatchInferenceQueries
     + ModelInferenceQueries
     + WorkflowEvaluationQueries
+    + EpisodeQueries
 {
 }
 impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
@@ -860,6 +864,24 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl EpisodeQueries for DelegatingDatabaseConnection {
+    async fn query_episode_table(
+        &self,
+        limit: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error> {
+        self.get_read_database()
+            .query_episode_table(limit, before, after)
+            .await
+    }
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
+        self.get_read_database().query_episode_table_bounds().await
     }
 }
 

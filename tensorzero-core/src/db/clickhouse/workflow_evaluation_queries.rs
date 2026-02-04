@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use super::select_queries::{parse_count, parse_json_rows};
+use super::episode_queries::{parse_count, parse_json_rows};
 use super::{ClickHouseConnectionInfo, escape_string_for_clickhouse_literal};
 use crate::config::snapshot::SnapshotHash;
 use crate::db::workflow_evaluation_queries::{

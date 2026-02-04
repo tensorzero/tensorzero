@@ -1,15 +1,15 @@
-use crate::{db::EpisodeByIdRow, serde_util::deserialize_u64};
+use async_trait::async_trait;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{
-    db::{SelectQueries, TableBoundsWithCount},
-    error::{Error, ErrorDetails},
-};
+use crate::db::{EpisodeByIdRow, EpisodeQueries, TableBoundsWithCount};
+use crate::error::{Error, ErrorDetails};
+use crate::serde_util::deserialize_u64;
 
 use super::ClickHouseConnectionInfo;
 
-impl SelectQueries for ClickHouseConnectionInfo {
+#[async_trait]
+impl EpisodeQueries for ClickHouseConnectionInfo {
     async fn query_episode_table(
         &self,
         limit: u32,
