@@ -3,15 +3,10 @@ import { Await } from "react-router";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
-import {
-  getTotalInferenceUsage,
-  type InferenceUsage,
-} from "~/utils/clickhouse/helpers";
+import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
-import { TryWithSelect } from "~/components/inference/TryWithSelect";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import type {
@@ -21,111 +16,105 @@ import type {
 
 interface InferenceActionBarProps {
   inference: StoredInference;
-  actionBarData: Promise<ActionBarData>;
+  actionBarDataPromise: Promise<ActionBarData>;
   inputPromise: Promise<Input>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
   locationKey: string;
 }
 
+/**
+ * Action bar with independent loading states for each button.
+ * - TryWithVariant: waits for actionBarData + input + modelInferences
+ * - AddToDataset: waits for actionBarData (hasDemonstration)
+ * - HumanFeedback: renders immediately (no async deps)
+ */
 export function InferenceActionBar({
   inference,
-  actionBarData,
+  actionBarDataPromise,
   inputPromise,
   modelInferencesPromise,
   onFeedbackAdded,
   locationKey,
 }: InferenceActionBarProps) {
   return (
-    <Suspense key={locationKey} fallback={<InferenceActionBarSkeleton />}>
-      <Await resolve={actionBarData} errorElement={<ActionBarAsyncError />}>
-        {(resolvedActionBarData) => (
-          <InferenceActionBarContent
-            inference={inference}
-            actionBarData={resolvedActionBarData}
-            inputPromise={inputPromise}
-            modelInferencesPromise={modelInferencesPromise}
-            onFeedbackAdded={onFeedbackAdded}
-          />
-        )}
-      </Await>
-    </Suspense>
+    <ActionBar>
+      <TryWithVariantActionStreaming
+        key={`try-${locationKey}`}
+        inference={inference}
+        actionBarDataPromise={actionBarDataPromise}
+        inputPromise={inputPromise}
+        modelInferencesPromise={modelInferencesPromise}
+        onFeedbackAdded={onFeedbackAdded}
+      />
+      <AddToDatasetButtonStreaming
+        key={`dataset-${locationKey}`}
+        inference={inference}
+        actionBarDataPromise={actionBarDataPromise}
+      />
+      <HumanFeedbackAction
+        inference={inference}
+        onFeedbackAdded={onFeedbackAdded}
+      />
+    </ActionBar>
   );
 }
 
-function InferenceActionBarSkeleton() {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Skeleton className="h-8 w-36" />
-      <Skeleton className="h-8 w-36" />
-      <Skeleton className="h-8 w-8" />
-    </div>
-  );
-}
+// -----------------------------------------------------------------------------
+// TryWithVariantAction with Suspense
+// -----------------------------------------------------------------------------
 
-interface InferenceActionBarContentProps {
+interface TryWithVariantActionStreamingProps {
   inference: StoredInference;
-  actionBarData: ActionBarData;
+  actionBarDataPromise: Promise<ActionBarData>;
   inputPromise: Promise<Input>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
 }
 
-function InferenceActionBarContent({
+function TryWithVariantActionStreaming({
   inference,
-  actionBarData,
+  actionBarDataPromise,
   inputPromise,
   modelInferencesPromise,
   onFeedbackAdded,
-}: InferenceActionBarContentProps) {
-  const { hasDemonstration, usedVariants } = actionBarData;
+}: TryWithVariantActionStreamingProps) {
   const config = useConfig();
   const functionConfig = useFunctionConfig(inference.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
   const isDefault = inference.function_name === DEFAULT_FUNCTION;
 
-  const modelsSet = new Set<string>([...usedVariants, ...config.model_names]);
-  const models = [...modelsSet].sort();
-  const options = isDefault ? models : variants;
-
-  // Combine promises for TryWithVariant - resolves when both input and model inferences are ready
-  const tryWithVariantDataPromise = useMemo(
+  // Combine all async data this component needs
+  const dataPromise = useMemo(
     () =>
-      Promise.all([inputPromise, modelInferencesPromise]).then(
-        ([input, modelInferences]) => ({
-          input,
-          inferenceUsage: getTotalInferenceUsage(modelInferences),
-        }),
-      ),
-    [inputPromise, modelInferencesPromise],
+      Promise.all([
+        actionBarDataPromise,
+        inputPromise,
+        modelInferencesPromise,
+      ]).then(([actionBarData, input, modelInferences]) => ({
+        usedVariants: actionBarData.usedVariants,
+        input,
+        inferenceUsage: getTotalInferenceUsage(modelInferences),
+      })),
+    [actionBarDataPromise, inputPromise, modelInferencesPromise],
   );
 
   return (
-    <ActionBar>
-      <Suspense
-        fallback={
-          <TryWithSelect
-            options={options}
-            onSelect={() => {}}
-            isLoading={false}
-            isDefaultFunction={isDefault}
-            disabled
-          />
-        }
+    <Suspense fallback={<Skeleton className="h-8 w-36" />}>
+      <Await
+        resolve={dataPromise}
+        errorElement={<Skeleton className="h-8 w-36" />}
       >
-        <Await
-          resolve={tryWithVariantDataPromise}
-          errorElement={
-            <TryWithSelect
-              options={options}
-              onSelect={() => {}}
-              isLoading={false}
-              isDefaultFunction={isDefault}
-              disabled
-            />
-          }
-        >
-          {(data: { input: Input; inferenceUsage: InferenceUsage }) => (
+        {(data) => {
+          // Calculate options with resolved usedVariants
+          const modelsSet = new Set([
+            ...data.usedVariants,
+            ...config.model_names,
+          ]);
+          const models = [...modelsSet].sort();
+          const options = isDefault ? models : variants;
+
+          return (
             <TryWithVariantAction
               inference={inference}
               options={options}
@@ -134,20 +123,42 @@ function InferenceActionBarContent({
               inferenceUsage={data.inferenceUsage}
               onFeedbackAdded={onFeedbackAdded}
             />
-          )}
-        </Await>
-      </Suspense>
-      <AddToDatasetButton
-        inferenceId={inference.inference_id}
-        functionName={inference.function_name}
-        variantName={inference.variant_name}
-        episodeId={inference.episode_id}
-        hasDemonstration={hasDemonstration}
-      />
-      <HumanFeedbackAction
-        inference={inference}
-        onFeedbackAdded={onFeedbackAdded}
-      />
-    </ActionBar>
+          );
+        }}
+      </Await>
+    </Suspense>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// AddToDatasetButton with Suspense
+// -----------------------------------------------------------------------------
+
+interface AddToDatasetButtonStreamingProps {
+  inference: StoredInference;
+  actionBarDataPromise: Promise<ActionBarData>;
+}
+
+function AddToDatasetButtonStreaming({
+  inference,
+  actionBarDataPromise,
+}: AddToDatasetButtonStreamingProps) {
+  return (
+    <Suspense fallback={<Skeleton className="h-8 w-36" />}>
+      <Await
+        resolve={actionBarDataPromise}
+        errorElement={<Skeleton className="h-8 w-36" />}
+      >
+        {(actionBarData) => (
+          <AddToDatasetButton
+            inferenceId={inference.inference_id}
+            functionName={inference.function_name}
+            variantName={inference.variant_name}
+            episodeId={inference.episode_id}
+            hasDemonstration={actionBarData.hasDemonstration}
+          />
+        )}
+      </Await>
+    </Suspense>
   );
 }

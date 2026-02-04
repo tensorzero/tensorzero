@@ -140,7 +140,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         />
         <InferenceActionBar
           inference={inference}
-          actionBarData={actionBarData}
+          actionBarDataPromise={actionBarData}
           inputPromise={input}
           modelInferencesPromise={modelInferences}
           onFeedbackAdded={handleFeedbackAdded}
