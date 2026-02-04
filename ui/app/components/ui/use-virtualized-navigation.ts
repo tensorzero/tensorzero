@@ -93,14 +93,16 @@ export function useVirtualizedNavigation({
 
         case "End":
           e.preventDefault();
-          setHighlightedIndex(Math.max(0, itemCount - 1));
+          // When no items exist, stay at minIndex (which is -1 for create option, 0 otherwise)
+          setHighlightedIndex(itemCount > 0 ? itemCount - 1 : minIndex);
           break;
 
         case "PageDown":
           e.preventDefault();
-          setHighlightedIndex((prev) =>
-            Math.min(prev + PAGE_JUMP_SIZE, itemCount - 1),
-          );
+          setHighlightedIndex((prev) => {
+            if (itemCount === 0) return minIndex;
+            return Math.min(prev + PAGE_JUMP_SIZE, itemCount - 1);
+          });
           break;
 
         case "PageUp":
