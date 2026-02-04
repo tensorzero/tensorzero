@@ -29,6 +29,26 @@ pub struct EvaluationLocation<'a> {
     pub file: &'a mut LoadedConfigFile,
 }
 
+/// Find the index of a config file containing an entity definition.
+///
+/// Searches for `[{table_name}.{entity_name}]` with a `type` key, which indicates
+/// the canonical definition (not just extensions like variants).
+fn find_entity_index(
+    files: &[LoadedConfigFile],
+    table_name: &str,
+    entity_name: &str,
+) -> Option<usize> {
+    files.iter().enumerate().find_map(|(index, file)| {
+        file.document
+            .get(table_name)
+            .and_then(|t| t.as_table())
+            .and_then(|t| t.get(entity_name))
+            .and_then(|e| e.as_table())
+            .filter(|t| t.contains_key("type"))
+            .map(|_| index)
+    })
+}
+
 /// Find the config file that contains the definition of a specific function.
 ///
 /// Searches through the loaded config files and returns the file whose
@@ -39,24 +59,10 @@ pub fn locate_function<'a>(
     files: &'a mut [LoadedConfigFile],
     function_name: &str,
 ) -> Result<FunctionLocation<'a>, ConfigWriterError> {
-    // First pass: find the index (immutable borrow)
-    // We look for the file that has `functions.<function_name>.type` to find the
-    // canonical definition, not just any file that mentions the function.
-    let found_index = files.iter().enumerate().find_map(|(index, file)| {
-        file.document
-            .get("functions")
-            .and_then(|f| f.as_table())
-            .and_then(|t| t.get(function_name))
-            .and_then(|f| f.as_table())
-            .filter(|t| t.contains_key("type"))
-            .map(|_| index)
-    });
-
-    match found_index {
-        Some(index) => {
-            let file = &mut files[index];
-            Ok(FunctionLocation { file })
-        }
+    match find_entity_index(files, "functions", function_name) {
+        Some(index) => Ok(FunctionLocation {
+            file: &mut files[index],
+        }),
         None => Err(ConfigWriterError::FunctionNotFound {
             function_name: function_name.to_string(),
         }),
@@ -73,34 +79,22 @@ pub fn locate_evaluation<'a>(
     files: &'a mut [LoadedConfigFile],
     evaluation_name: &str,
 ) -> Result<(EvaluationLocation<'a>, bool), ConfigWriterError> {
-    // First pass: find the index of an existing evaluation (immutable borrow)
-    // We look for the file that has `evaluations.<evaluation_name>.type` to find the
-    // canonical definition, not just any file that mentions the evaluation.
-    let found_index = files.iter().enumerate().find_map(|(index, file)| {
-        file.document
-            .get("evaluations")
-            .and_then(|e| e.as_table())
-            .and_then(|t| t.get(evaluation_name))
-            .and_then(|e| e.as_table())
-            .filter(|t| t.contains_key("type"))
-            .map(|_| index)
-    });
-
-    match found_index {
-        Some(index) => {
-            let file = &mut files[index];
-            Ok((EvaluationLocation { file }, false))
-        }
-        None => {
-            // If not found, return the first file (for creating a new evaluation)
-            if files.is_empty() {
-                return Err(ConfigWriterError::EvaluationNotFound {
-                    evaluation_name: evaluation_name.to_string(),
-                });
-            }
-            let file = &mut files[0];
-            Ok((EvaluationLocation { file }, true))
-        }
+    match find_entity_index(files, "evaluations", evaluation_name) {
+        Some(index) => Ok((
+            EvaluationLocation {
+                file: &mut files[index],
+            },
+            false,
+        )),
+        None if !files.is_empty() => Ok((
+            EvaluationLocation {
+                file: &mut files[0],
+            },
+            true,
+        )),
+        None => Err(ConfigWriterError::EvaluationNotFound {
+            evaluation_name: evaluation_name.to_string(),
+        }),
     }
 }
 
@@ -113,24 +107,10 @@ pub fn locate_evaluation_required<'a>(
     files: &'a mut [LoadedConfigFile],
     evaluation_name: &str,
 ) -> Result<EvaluationLocation<'a>, ConfigWriterError> {
-    // First pass: find the index (immutable borrow)
-    // We look for the file that has `evaluations.<evaluation_name>.type` to find the
-    // canonical definition, not just any file that mentions the evaluation.
-    let found_index = files.iter().enumerate().find_map(|(index, file)| {
-        file.document
-            .get("evaluations")
-            .and_then(|e| e.as_table())
-            .and_then(|t| t.get(evaluation_name))
-            .and_then(|e| e.as_table())
-            .filter(|t| t.contains_key("type"))
-            .map(|_| index)
-    });
-
-    match found_index {
-        Some(index) => {
-            let file = &mut files[index];
-            Ok(EvaluationLocation { file })
-        }
+    match find_entity_index(files, "evaluations", evaluation_name) {
+        Some(index) => Ok(EvaluationLocation {
+            file: &mut files[index],
+        }),
         None => Err(ConfigWriterError::EvaluationNotFound {
             evaluation_name: evaluation_name.to_string(),
         }),
