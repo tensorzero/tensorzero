@@ -1,4 +1,3 @@
-import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import {
   Await,
@@ -31,8 +30,6 @@ import {
 import { FunctionTypeBadge } from "~/components/function/FunctionSelector";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { FunctionConfig, TimeWindow } from "~/types/tensorzero";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { applyPaginationLogic } from "~/utils/pagination";
 import { Skeleton } from "~/components/ui/skeleton";
 import { PageErrorContent } from "~/components/ui/error";
 import {
@@ -43,10 +40,10 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-
-export type FunctionDetailData = Awaited<
-  ReturnType<typeof fetchFunctionDetailData>
->;
+import {
+  fetchAllFunctionDetailData,
+  type FunctionDetailData,
+} from "./function-data.server";
 
 function FunctionDetailPageHeader({
   functionName,
@@ -172,183 +169,6 @@ function SectionsErrorState() {
   );
 }
 
-type FetchParams = {
-  function_name: string;
-  function_config: FunctionConfig;
-  config: Awaited<ReturnType<typeof getConfig>>;
-  beforeInference: string | null;
-  afterInference: string | null;
-  limit: number;
-  metric_name: string | undefined;
-  time_granularity: TimeWindow;
-  throughput_time_granularity: TimeWindow;
-  feedback_time_granularity: TimeWindow;
-};
-
-async function fetchFunctionDetailData(params: FetchParams) {
-  const {
-    function_name,
-    function_config,
-    config,
-    beforeInference,
-    afterInference,
-    limit,
-    metric_name,
-    time_granularity,
-    throughput_time_granularity,
-    feedback_time_granularity,
-  } = params;
-
-  const client = getTensorZeroClient();
-  const inferencePromise = client.listInferenceMetadata({
-    function_name,
-    before: beforeInference || undefined,
-    after: afterInference || undefined,
-    limit: limit + 1, // Fetch one extra to determine pagination
-  });
-  const numInferencesPromise = countInferencesForFunction(function_name);
-  const tensorZeroClient = getTensorZeroClient();
-  const metricsWithFeedbackPromise =
-    tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
-  const variantCountsPromise = tensorZeroClient.getInferenceCount(
-    function_name,
-    {
-      groupBy: "variant",
-    },
-  );
-  const variantPerformancesPromise =
-    // Only get variant performances if metric_name is provided and valid
-    metric_name && config.metrics[metric_name]
-      ? tensorZeroClient
-          .getVariantPerformances(function_name, metric_name, time_granularity)
-          .then((response) =>
-            response.performances.length > 0
-              ? response.performances
-              : undefined,
-          )
-      : Promise.resolve(undefined);
-  const variantThroughputPromise = tensorZeroClient
-    .getFunctionThroughputByVariant(
-      function_name,
-      throughput_time_granularity,
-      10,
-    )
-    .then((response) => response.throughput);
-
-  // Get feedback timeseries
-  // For now, we only fetch this for track_and_stop experimentation
-  // but the underlying query is general and could be used for other experimentation types
-  const feedbackParams =
-    function_config.experimentation.type === "track_and_stop"
-      ? {
-          metric_name: function_config.experimentation.metric,
-          variant_names: function_config.experimentation.candidate_variants,
-        }
-      : null;
-  const feedbackTimeseriesPromise = feedbackParams
-    ? tensorZeroClient.getCumulativeFeedbackTimeseries({
-        function_name,
-        ...feedbackParams,
-        time_window: feedback_time_granularity as TimeWindow,
-        max_periods: 10,
-      })
-    : Promise.resolve(undefined);
-
-  // Get variant sampling probabilities from the gateway
-  const variantSamplingProbabilitiesPromise = tensorZeroClient
-    .getVariantSamplingProbabilities(function_name)
-    .then((response) => response.probabilities);
-
-  const [
-    inferenceResult,
-    num_inferences,
-    metricsWithFeedback,
-    variant_performances,
-    variant_counts,
-    variant_throughput,
-    feedback_timeseries,
-    variant_sampling_probabilities,
-  ] = await Promise.all([
-    inferencePromise,
-    numInferencesPromise,
-    metricsWithFeedbackPromise,
-    variantPerformancesPromise,
-    variantCountsPromise,
-    variantThroughputPromise,
-    feedbackTimeseriesPromise,
-    variantSamplingProbabilitiesPromise,
-  ]);
-
-  const variant_counts_with_metadata = (
-    variant_counts.count_by_variant ?? []
-  ).map((variant_count) => {
-    let variant_config = function_config.variants[
-      variant_count.variant_name
-    ] || {
-      inner: {
-        // In case the variant is not found, we still want to display the variant name
-        type: "unknown",
-        weight: 0,
-      },
-    };
-
-    if (function_name === DEFAULT_FUNCTION) {
-      variant_config = {
-        inner: {
-          type: "chat_completion",
-          model: variant_count.variant_name,
-          weight: null,
-          templates: {},
-          temperature: null,
-          top_p: null,
-          max_tokens: null,
-          presence_penalty: null,
-          frequency_penalty: null,
-          seed: null,
-          stop_sequences: null,
-          json_mode: null,
-          retries: { num_retries: 0, max_delay_s: 0 },
-        },
-        timeouts: {
-          non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null },
-        },
-      };
-      function_config.variants[variant_count.variant_name] = variant_config;
-    }
-
-    return {
-      ...variant_count,
-      type: variant_config.inner.type,
-      weight: variant_config.inner.weight,
-    };
-  });
-
-  // Handle pagination from listInferenceMetadata response
-  const {
-    items: inferences,
-    hasNextPage: hasNextInferencePage,
-    hasPreviousPage: hasPreviousInferencePage,
-  } = applyPaginationLogic(inferenceResult.inference_metadata, limit, {
-    before: beforeInference,
-    after: afterInference,
-  });
-
-  return {
-    function_name,
-    inferences,
-    hasNextInferencePage,
-    hasPreviousInferencePage,
-    num_inferences,
-    metricsWithFeedback,
-    variant_performances,
-    variant_throughput,
-    variant_counts: variant_counts_with_metadata,
-    feedback_timeseries,
-    variant_sampling_probabilities,
-  };
-}
-
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
@@ -376,7 +196,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     function_name,
-    functionDetailData: fetchFunctionDetailData({
+    functionDetailData: fetchAllFunctionDetailData({
       function_name,
       function_config,
       config,
