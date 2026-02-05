@@ -70,7 +70,7 @@ func TestExtraContent(t *testing.T) {
 		}
 
 		// Set extra content on the assistant message via extra fields
-		assistantMsg := roundtripReq.Messages[1].OfAssistant()
+		assistantMsg := roundtripReq.Messages[1].OfAssistant
 		if assistantMsg != nil {
 			assistantMsg.SetExtraFields(map[string]any{
 				"tensorzero_extra_content": extraContent,
@@ -157,7 +157,7 @@ func TestExtraContent(t *testing.T) {
 			}
 
 			// Set extra content on the assistant message via extra fields
-			assistantMsg := roundtripReq.Messages[1].OfAssistant()
+			assistantMsg := roundtripReq.Messages[1].OfAssistant
 			if assistantMsg != nil {
 				assistantMsg.SetExtraFields(map[string]any{
 					"tensorzero_extra_content": reconstructedExtraContent,
