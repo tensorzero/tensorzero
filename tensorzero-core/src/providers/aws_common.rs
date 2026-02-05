@@ -1683,4 +1683,169 @@ mod tests {
         // No endpoint - should NOT warn
         warn_if_credential_exfiltration_risk(&None, &static_creds, "test");
     }
+
+    // ===== AWSBedrockCredentials::from_fields priority tests =====
+
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_explicit_api_key_over_env_var() {
+        // Set env var that would otherwise be used
+        tensorzero_unsafe_helpers::set_env_var_tests_only(
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "env_token_should_not_be_used",
+        );
+
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        // Set an env var for the explicit api_key to use
+        tensorzero_unsafe_helpers::set_env_var_tests_only(
+            "TEST_EXPLICIT_API_KEY",
+            "explicit_api_key_value",
+        );
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            Some(CredentialLocation::Env("TEST_EXPLICIT_API_KEY".to_string())),
+            None,
+            None,
+            None,
+            &region,
+            "test",
+        )
+        .await
+        .expect("Explicit api_key should succeed");
+
+        assert!(
+            matches!(creds, AWSBedrockCredentials::ApiKey(_)),
+            "Explicit api_key should take priority and return ApiKey variant"
+        );
+
+        // Clean up
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("TEST_EXPLICIT_API_KEY");
+    }
+
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_explicit_iam_over_env_var() {
+        // Set env var that would otherwise be used
+        tensorzero_unsafe_helpers::set_env_var_tests_only(
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "env_token_should_not_be_used",
+        );
+
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        // Set env vars for explicit IAM credentials
+        tensorzero_unsafe_helpers::set_env_var_tests_only("TEST_AWS_ACCESS_KEY", "AKIATEST");
+        tensorzero_unsafe_helpers::set_env_var_tests_only("TEST_AWS_SECRET_KEY", "secrettest");
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            None,
+            Some(CredentialLocation::Env("TEST_AWS_ACCESS_KEY".to_string())),
+            Some(CredentialLocation::Env("TEST_AWS_SECRET_KEY".to_string())),
+            None,
+            &region,
+            "test",
+        )
+        .await
+        .expect("Explicit IAM credentials should succeed");
+
+        assert!(
+            matches!(creds, AWSBedrockCredentials::IAM { .. }),
+            "Explicit IAM credentials should take priority and return IAM variant"
+        );
+
+        // Clean up
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("TEST_AWS_ACCESS_KEY");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("TEST_AWS_SECRET_KEY");
+    }
+
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_env_var_when_nothing_configured() {
+        // Clear any explicit config and set the env var
+        tensorzero_unsafe_helpers::set_env_var_tests_only(
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "bearer_token_from_env",
+        );
+
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            None, // no api_key
+            None, // no access_key_id
+            None, // no secret_access_key
+            None, // no session_token
+            &region, "test",
+        )
+        .await
+        .expect("Env var AWS_BEARER_TOKEN_BEDROCK should be used");
+
+        assert!(
+            matches!(creds, AWSBedrockCredentials::ApiKey(_)),
+            "AWS_BEARER_TOKEN_BEDROCK env var should be used when nothing else is configured"
+        );
+
+        // Clean up
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+    }
+
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_empty_env_var_falls_back_to_sdk() {
+        // Set env var to empty string - should be ignored
+        tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK", "");
+
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            None, // no api_key
+            None, // no access_key_id
+            None, // no secret_access_key
+            None, // no session_token
+            &region, "test",
+        )
+        .await
+        .expect("Empty env var should fall back to SDK");
+
+        assert!(
+            matches!(
+                creds,
+                AWSBedrockCredentials::IAM {
+                    credentials: AWSIAMCredentials::Sdk,
+                    ..
+                }
+            ),
+            "Empty AWS_BEARER_TOKEN_BEDROCK should fall back to SDK credential chain"
+        );
+
+        // Clean up
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+    }
+
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_no_env_var_falls_back_to_sdk() {
+        // Ensure env var is not set
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            None, // no api_key
+            None, // no access_key_id
+            None, // no secret_access_key
+            None, // no session_token
+            &region, "test",
+        )
+        .await
+        .expect("No credentials should fall back to SDK");
+
+        assert!(
+            matches!(
+                creds,
+                AWSBedrockCredentials::IAM {
+                    credentials: AWSIAMCredentials::Sdk,
+                    ..
+                }
+            ),
+            "No credentials configured should fall back to SDK credential chain"
+        );
+    }
 }

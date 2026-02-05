@@ -370,7 +370,9 @@ impl InferenceProvider for AWSBedrockProvider {
                 credentials,
                 sdk_config,
             } => {
-                // SigV4 signing with IAM credentials
+                // SigV4 signing with IAM credentials.
+                // Note: We can't use `send_aws_request()` here because it reads the full response body.
+                // For streaming, we need access to the raw response to process events incrementally.
                 let resolved_credentials = resolve_request_credentials(
                     credentials,
                     sdk_config,
