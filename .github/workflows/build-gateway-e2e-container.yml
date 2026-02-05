@@ -48,7 +48,7 @@ jobs:
 
       - name: Build `gateway-e2e` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f gateway/Dockerfile --build-arg PROFILE=e2e --target gateway . -t tensorzero/gateway-e2e:sha-${{ github.sha }}
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f gateway/Dockerfile --build-arg PROFILE=dev --build-arg "CARGO_BUILD_FLAGS=--features e2e_tests" --target gateway . -t tensorzero/gateway-e2e:sha-${{ github.sha }}
 
       - name: Save `gateway-e2e` container
         run: docker save tensorzero/gateway-e2e:sha-${{ github.sha }} > gateway-e2e-container.tar
