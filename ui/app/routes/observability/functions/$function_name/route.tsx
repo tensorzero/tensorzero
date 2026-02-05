@@ -16,7 +16,6 @@ import { useFunctionConfig } from "~/context/config";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { Suspense, useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
-import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
 import {
   PageHeader,
   PageLayout,
@@ -41,11 +40,13 @@ import {
 import {
   fetchAllFunctionDetailData,
   fetchExperimentationSectionData,
+  fetchThroughputSectionData,
   fetchVariantsSectionData,
   type FunctionDetailData,
 } from "./function-data.server";
 import { VariantsSection } from "./VariantsSection";
 import { ExperimentationSection } from "./ExperimentationSection";
+import { ThroughputSection } from "./ThroughputSection";
 
 function FunctionDetailPageHeader({
   functionName,
@@ -76,11 +77,6 @@ function FunctionDetailPageHeader({
 function SectionsSkeleton() {
   return (
     <>
-      <SectionLayout>
-        <SectionHeader heading="Throughput" />
-        <Skeleton className="h-64 w-full" />
-      </SectionLayout>
-
       <SectionLayout>
         <SectionHeader heading="Metrics" />
         <Skeleton className="mb-4 h-10 w-64" />
@@ -171,6 +167,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             time_granularity: feedback_time_granularity,
           })
         : Promise.resolve(undefined),
+    throughputData: fetchThroughputSectionData({
+      function_name,
+      time_granularity: throughput_time_granularity,
+    }),
     functionDetailData: fetchAllFunctionDetailData({
       function_name,
       function_config,
@@ -202,7 +202,6 @@ function SectionsContent({
     num_inferences,
     metricsWithFeedback,
     variant_performances,
-    variant_throughput,
   } = data;
 
   const navigate = useNavigate();
@@ -249,11 +248,6 @@ function SectionsContent({
   return (
     <>
       <SectionLayout>
-        <SectionHeader heading="Throughput" />
-        <VariantThroughput variant_throughput={variant_throughput} />
-      </SectionLayout>
-
-      <SectionLayout>
         <SectionHeader heading="Metrics" />
         <MetricSelector
           metricsWithFeedback={metricsExcludingDemonstrations}
@@ -290,8 +284,13 @@ function SectionsContent({
 export default function FunctionDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { function_name, variantsData, experimentationData, functionDetailData } =
-    loaderData;
+  const {
+    function_name,
+    variantsData,
+    experimentationData,
+    throughputData,
+    functionDetailData,
+  } = loaderData;
   const location = useLocation();
   const function_config = useFunctionConfig(function_name);
 
@@ -321,6 +320,11 @@ export default function FunctionDetailPage({
             locationKey={location.key}
           />
         )}
+
+        <ThroughputSection
+          promise={throughputData}
+          locationKey={location.key}
+        />
 
         <Suspense key={location.key} fallback={<SectionsSkeleton />}>
           <Await

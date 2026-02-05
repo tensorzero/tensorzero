@@ -279,7 +279,6 @@ export type FunctionDetailData = {
   num_inferences: number;
   metricsWithFeedback: MetricsSectionData["metricsWithFeedback"];
   variant_performances: MetricsSectionData["variant_performances"];
-  variant_throughput: ThroughputSectionData;
 };
 
 export async function fetchAllFunctionDetailData(
@@ -298,17 +297,13 @@ export async function fetchAllFunctionDetailData(
     feedback_time_granularity,
   } = params;
 
-  const [throughput, metrics, inferences] = await Promise.all([
-    fetchThroughputSectionData({
-        function_name,
-        time_granularity: throughput_time_granularity,
-      }),
-      fetchMetricsSectionData({
-        function_name,
-        metric_name,
-        time_granularity,
-        config,
-      }),
+  const [metrics, inferences] = await Promise.all([
+    fetchMetricsSectionData({
+      function_name,
+      metric_name,
+      time_granularity,
+      config,
+    }),
     fetchInferencesSectionData({
       function_name,
       beforeInference,
@@ -325,6 +320,5 @@ export async function fetchAllFunctionDetailData(
     num_inferences: inferences.count,
     metricsWithFeedback: metrics.metricsWithFeedback,
     variant_performances: metrics.variant_performances,
-    variant_throughput: throughput,
   };
 }
