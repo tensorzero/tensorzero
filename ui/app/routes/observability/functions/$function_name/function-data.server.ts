@@ -256,7 +256,7 @@ export async function fetchExperimentationSectionData(
   return { feedback_timeseries, variant_sampling_probabilities };
 }
 
-// === Combined Fetch (used while sections share a single Suspense boundary) ===
+// === Combined Fetch (used while remaining sections share a single Suspense boundary) ===
 
 type FetchAllParams = {
   function_name: string;
@@ -280,7 +280,6 @@ export type FunctionDetailData = {
   metricsWithFeedback: MetricsSectionData["metricsWithFeedback"];
   variant_performances: MetricsSectionData["variant_performances"];
   variant_throughput: ThroughputSectionData;
-  variant_counts: VariantsSectionData["variant_counts"];
   feedback_timeseries: ExperimentationSectionData["feedback_timeseries"];
   variant_sampling_probabilities: ExperimentationSectionData["variant_sampling_probabilities"];
 };
@@ -301,9 +300,8 @@ export async function fetchAllFunctionDetailData(
     feedback_time_granularity,
   } = params;
 
-  const [variants, experimentation, throughput, metrics, inferences] =
+  const [experimentation, throughput, metrics, inferences] =
     await Promise.all([
-      fetchVariantsSectionData({ function_name, function_config }),
       fetchExperimentationSectionData({
         function_name,
         function_config,
@@ -336,7 +334,6 @@ export async function fetchAllFunctionDetailData(
     metricsWithFeedback: metrics.metricsWithFeedback,
     variant_performances: metrics.variant_performances,
     variant_throughput: throughput,
-    variant_counts: variants.variant_counts,
     feedback_timeseries: experimentation.feedback_timeseries,
     variant_sampling_probabilities:
       experimentation.variant_sampling_probabilities,
