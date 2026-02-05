@@ -142,7 +142,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+        "gateway --run-postgres-migrations --enable-optimization-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
       ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"

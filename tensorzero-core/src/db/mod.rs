@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
 use serde::{Deserialize, Serialize};
-use std::future::Future;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -240,44 +239,39 @@ pub struct DICLExampleWithDistance {
 /// DICL stores examples with embeddings for similarity search during inference.
 /// The variant retrieves similar examples based on the input embedding to provide
 /// in-context learning examples to the model.
-pub trait DICLQueries {
+#[async_trait]
+pub trait DICLQueries: Send + Sync {
     /// Insert a DICL example into the database.
-    fn insert_dicl_example(
-        &self,
-        example: &StoredDICLExample,
-    ) -> impl Future<Output = Result<(), Error>> + Send;
+    async fn insert_dicl_example(&self, example: &StoredDICLExample) -> Result<(), Error>;
 
     /// Insert multiple DICL examples in a batch.
-    fn insert_dicl_examples(
-        &self,
-        examples: &[StoredDICLExample],
-    ) -> impl Future<Output = Result<u64, Error>> + Send;
+    async fn insert_dicl_examples(&self, examples: &[StoredDICLExample]) -> Result<u64, Error>;
 
     /// Get similar DICL examples using cosine distance.
     ///
     /// Returns examples sorted by cosine distance (ascending).
-    fn get_similar_dicl_examples(
+    async fn get_similar_dicl_examples(
         &self,
         function_name: &str,
         variant_name: &str,
         embedding: &[f32],
         limit: u32,
-    ) -> impl Future<Output = Result<Vec<DICLExampleWithDistance>, Error>> + Send;
+    ) -> Result<Vec<DICLExampleWithDistance>, Error>;
 
     /// Check if DICL examples exist for a given function and variant.
-    fn has_dicl_examples(
+    async fn has_dicl_examples(
         &self,
         function_name: &str,
         variant_name: &str,
-    ) -> impl Future<Output = Result<bool, Error>> + Send;
+    ) -> Result<bool, Error>;
 
     /// Delete DICL examples for a given function and variant.
     ///
     /// If namespace is provided, only deletes examples in that namespace.
-    fn delete_dicl_examples(
+    async fn delete_dicl_examples(
         &self,
         function_name: &str,
         variant_name: &str,
         namespace: Option<&str>,
-    ) -> impl Future<Output = Result<u64, Error>> + Send;
+    ) -> Result<u64, Error>;
 }
