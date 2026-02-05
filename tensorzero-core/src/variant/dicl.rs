@@ -54,28 +54,38 @@ use super::{
 /// load() step to get the fully qualified path.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct DiclConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     weight: Option<f64>,
     embedding_model: Arc<str>,
     k: u32, // k as in k-nearest neighbors
     model: Arc<str>,
     system_instructions: ResolvedTomlPathData,
+    #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
     #[serde(flatten)]
     pub(crate) inference_params_v2: ChatCompletionInferenceParamsV2,
+    #[serde(skip_serializing_if = "Option::is_none")]
     json_mode: Option<JsonMode>,
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     extra_body: Option<ExtraBodyConfig>,
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     extra_headers: Option<ExtraHeadersConfig>,
     retries: RetryConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_distance: Option<f32>,
 }
 

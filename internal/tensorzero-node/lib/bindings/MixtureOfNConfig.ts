@@ -2,7 +2,7 @@
 import type { FuserConfig } from "./FuserConfig";
 
 export type MixtureOfNConfig = {
-  weight: number | null;
+  weight?: number;
   candidates: Array<string>;
   fuser: FuserConfig;
 };

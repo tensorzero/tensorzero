@@ -32,7 +32,7 @@ use super::{InferenceConfig, ModelUsedInfo, Variant};
 /// Use `chat_completion` with reasoning instead.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,

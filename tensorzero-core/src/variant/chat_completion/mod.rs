@@ -63,20 +63,29 @@ pub struct TemplateWithSchema {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Default, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ChatCompletionConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     weight: Option<f64>,
     model: Arc<str>,
     templates: ChatTemplates,
+    #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Vec<String>>,
     #[serde(flatten)]
     pub(crate) inference_params_v2: ChatCompletionInferenceParamsV2,
+    #[serde(skip_serializing_if = "Option::is_none")]
     json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     retries: RetryConfig,
     #[cfg_attr(feature = "ts-bindings", ts(skip))]

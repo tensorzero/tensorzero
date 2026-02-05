@@ -9,17 +9,17 @@ import type { ServiceTier } from "./ServiceTier";
  * Use `chat_completion` with reasoning instead.
  */
 export type ChainOfThoughtConfig = {
-  weight: number | null;
+  weight?: number;
   model: string;
   templates: ChatTemplates;
-  temperature: number | null;
-  top_p: number | null;
-  max_tokens: number | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  seed: number | null;
-  stop_sequences: Array<string> | null;
-  json_mode: JsonMode | null;
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  seed?: number;
+  stop_sequences?: Array<string>;
+  json_mode?: JsonMode;
   retries: RetryConfig;
   reasoning_effort?: string;
   service_tier?: ServiceTier;

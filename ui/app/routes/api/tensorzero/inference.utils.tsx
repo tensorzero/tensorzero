@@ -479,7 +479,7 @@ function variantInfoToUninitializedVariantInfo(
       return {
         ...baseUninitialized,
         type: "chat_completion" as const,
-        weight: inner.weight,
+        weight: inner.weight ?? null,
         model: inner.model,
         input_wrappers: null,
         // Set legacy fields to null when using new templates format
@@ -488,14 +488,14 @@ function variantInfoToUninitializedVariantInfo(
         assistant_template: null,
         // New templates field with all templates
         templates,
-        temperature: inner.temperature,
-        max_tokens: inner.max_tokens,
-        seed: inner.seed,
-        top_p: inner.top_p,
-        presence_penalty: inner.presence_penalty,
-        frequency_penalty: inner.frequency_penalty,
-        stop_sequences: inner.stop_sequences,
-        json_mode: inner.json_mode,
+        temperature: inner.temperature ?? null,
+        max_tokens: inner.max_tokens ?? null,
+        seed: inner.seed ?? null,
+        top_p: inner.top_p ?? null,
+        presence_penalty: inner.presence_penalty ?? null,
+        frequency_penalty: inner.frequency_penalty ?? null,
+        stop_sequences: inner.stop_sequences ?? null,
+        json_mode: inner.json_mode ?? null,
         retries: inner.retries,
       };
     }
@@ -509,10 +509,10 @@ function variantInfoToUninitializedVariantInfo(
       return {
         ...baseUninitialized,
         type: "experimental_best_of_n_sampling" as const,
-        weight: inner.weight ?? undefined,
+        weight: inner.weight,
         candidates: inner.candidates,
         evaluator: {
-          weight: inner.evaluator.weight,
+          weight: inner.evaluator.weight ?? null,
           model: inner.evaluator.model,
           input_wrappers: null,
           // Set legacy fields to null when using new templates format
@@ -521,14 +521,14 @@ function variantInfoToUninitializedVariantInfo(
           assistant_template: null,
           // New templates field with all templates
           templates: evaluatorTemplates,
-          temperature: inner.evaluator.temperature,
-          top_p: inner.evaluator.top_p,
-          max_tokens: inner.evaluator.max_tokens,
-          presence_penalty: inner.evaluator.presence_penalty,
-          frequency_penalty: inner.evaluator.frequency_penalty,
-          seed: inner.evaluator.seed,
-          stop_sequences: inner.evaluator.stop_sequences,
-          json_mode: inner.evaluator.json_mode,
+          temperature: inner.evaluator.temperature ?? null,
+          top_p: inner.evaluator.top_p ?? null,
+          max_tokens: inner.evaluator.max_tokens ?? null,
+          presence_penalty: inner.evaluator.presence_penalty ?? null,
+          frequency_penalty: inner.evaluator.frequency_penalty ?? null,
+          seed: inner.evaluator.seed ?? null,
+          stop_sequences: inner.evaluator.stop_sequences ?? null,
+          json_mode: inner.evaluator.json_mode ?? null,
           retries: inner.evaluator.retries,
         },
       };
@@ -538,21 +538,21 @@ function variantInfoToUninitializedVariantInfo(
       return {
         ...baseUninitialized,
         type: "experimental_dynamic_in_context_learning" as const,
-        weight: inner.weight,
+        weight: inner.weight ?? null,
         embedding_model: inner.embedding_model,
         k: inner.k,
         model: inner.model,
         system_instructions: stringToTemplate(inner.system_instructions.__data),
-        temperature: inner.temperature,
-        top_p: inner.top_p,
-        stop_sequences: inner.stop_sequences,
-        presence_penalty: inner.presence_penalty,
-        frequency_penalty: inner.frequency_penalty,
-        max_tokens: inner.max_tokens,
-        seed: inner.seed,
-        json_mode: inner.json_mode,
+        temperature: inner.temperature ?? null,
+        top_p: inner.top_p ?? null,
+        stop_sequences: inner.stop_sequences ?? null,
+        presence_penalty: inner.presence_penalty ?? null,
+        frequency_penalty: inner.frequency_penalty ?? null,
+        max_tokens: inner.max_tokens ?? null,
+        seed: inner.seed ?? null,
+        json_mode: inner.json_mode ?? null,
         retries: inner.retries,
-        max_distance: inner.max_distance,
+        max_distance: inner.max_distance ?? null,
       };
 
     case "mixture_of_n": {
@@ -562,10 +562,10 @@ function variantInfoToUninitializedVariantInfo(
       return {
         ...baseUninitialized,
         type: "experimental_mixture_of_n" as const,
-        weight: inner.weight ?? undefined,
+        weight: inner.weight,
         candidates: inner.candidates,
         fuser: {
-          weight: inner.fuser.weight,
+          weight: inner.fuser.weight ?? null,
           model: inner.fuser.model,
           input_wrappers: null,
           // Set legacy fields to null when using new templates format
@@ -574,14 +574,14 @@ function variantInfoToUninitializedVariantInfo(
           assistant_template: null,
           // New templates field with all templates
           templates: fuserTemplates,
-          temperature: inner.fuser.temperature,
-          top_p: inner.fuser.top_p,
-          max_tokens: inner.fuser.max_tokens,
-          presence_penalty: inner.fuser.presence_penalty,
-          frequency_penalty: inner.fuser.frequency_penalty,
-          seed: inner.fuser.seed,
-          stop_sequences: inner.fuser.stop_sequences,
-          json_mode: inner.fuser.json_mode,
+          temperature: inner.fuser.temperature ?? null,
+          top_p: inner.fuser.top_p ?? null,
+          max_tokens: inner.fuser.max_tokens ?? null,
+          presence_penalty: inner.fuser.presence_penalty ?? null,
+          frequency_penalty: inner.fuser.frequency_penalty ?? null,
+          seed: inner.fuser.seed ?? null,
+          stop_sequences: inner.fuser.stop_sequences ?? null,
+          json_mode: inner.fuser.json_mode ?? null,
           retries: inner.fuser.retries,
         },
       };
@@ -594,7 +594,7 @@ function variantInfoToUninitializedVariantInfo(
       return {
         ...baseUninitialized,
         type: "experimental_chain_of_thought" as const,
-        weight: inner.weight,
+        weight: inner.weight ?? null,
         model: inner.model,
         input_wrappers: null,
         // Set legacy fields to null when using new templates format
@@ -603,14 +603,14 @@ function variantInfoToUninitializedVariantInfo(
         assistant_template: null,
         // New templates field with all templates
         templates,
-        temperature: inner.temperature,
-        top_p: inner.top_p,
-        max_tokens: inner.max_tokens,
-        presence_penalty: inner.presence_penalty,
-        frequency_penalty: inner.frequency_penalty,
-        seed: inner.seed,
-        stop_sequences: inner.stop_sequences,
-        json_mode: inner.json_mode,
+        temperature: inner.temperature ?? null,
+        top_p: inner.top_p ?? null,
+        max_tokens: inner.max_tokens ?? null,
+        presence_penalty: inner.presence_penalty ?? null,
+        frequency_penalty: inner.frequency_penalty ?? null,
+        seed: inner.seed ?? null,
+        stop_sequences: inner.stop_sequences ?? null,
+        json_mode: inner.json_mode ?? null,
         retries: inner.retries,
       };
     }

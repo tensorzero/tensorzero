@@ -2,7 +2,7 @@
 import type { BestOfNEvaluatorConfig } from "./BestOfNEvaluatorConfig";
 
 export type BestOfNSamplingConfig = {
-  weight: number | null;
+  weight?: number;
   candidates: Array<string>;
   evaluator: BestOfNEvaluatorConfig;
 };

@@ -106,7 +106,7 @@ export function VariantEditor({
                 <div className="space-y-4">
                   <Label>Weight</Label>
                   <div className="text-sm">
-                    {config.weight !== null ? (
+                    {config.weight !== undefined ? (
                       <div className="font-mono text-sm">{config.weight}</div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
@@ -192,7 +192,7 @@ export function VariantEditor({
                 <div className="space-y-2">
                   <Label>Temperature</Label>
                   <div className="text-sm">
-                    {config.temperature !== null ? (
+                    {config.temperature !== undefined ? (
                       <div className="font-mono text-sm">
                         {config.temperature}
                       </div>
@@ -204,7 +204,7 @@ export function VariantEditor({
                 <div className="space-y-2">
                   <Label>Top P</Label>
                   <div className="text-sm">
-                    {config.top_p !== null ? (
+                    {config.top_p !== undefined ? (
                       <div className="font-mono text-sm">{config.top_p}</div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
@@ -214,7 +214,7 @@ export function VariantEditor({
                 <div className="space-y-2">
                   <Label>Max Tokens</Label>
                   <div className="text-sm">
-                    {config.max_tokens !== null ? (
+                    {config.max_tokens !== undefined ? (
                       <div className="font-mono text-sm">
                         {config.max_tokens}
                       </div>
@@ -226,7 +226,7 @@ export function VariantEditor({
                 <div className="space-y-2">
                   <Label>Seed</Label>
                   <div className="text-sm">
-                    {config.seed !== null ? (
+                    {config.seed !== undefined ? (
                       <div className="font-mono text-sm">{config.seed}</div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>
@@ -247,7 +247,7 @@ export function VariantEditor({
                 <div className="space-y-2">
                   <Label>Presence Penalty</Label>
                   <div className="text-sm">
-                    {config.presence_penalty !== null ? (
+                    {config.presence_penalty !== undefined ? (
                       <div className="font-mono text-sm">
                         {config.presence_penalty}
                       </div>
@@ -259,7 +259,7 @@ export function VariantEditor({
                 <div className="space-y-2">
                   <Label>Frequency Penalty</Label>
                   <div className="text-sm">
-                    {config.frequency_penalty !== null ? (
+                    {config.frequency_penalty !== undefined ? (
                       <div className="font-mono text-sm">
                         {config.frequency_penalty}
                       </div>

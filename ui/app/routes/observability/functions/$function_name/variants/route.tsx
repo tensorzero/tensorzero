@@ -347,16 +347,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
         inner: {
           type: "chat_completion",
           model: variant_name,
-          weight: null,
           templates: {},
-          temperature: null,
-          top_p: null,
-          max_tokens: null,
-          presence_penalty: null,
-          frequency_penalty: null,
-          seed: null,
-          stop_sequences: null,
-          json_mode: null,
           retries: { num_retries: 0, max_delay_s: 0 },
         },
         timeouts: {

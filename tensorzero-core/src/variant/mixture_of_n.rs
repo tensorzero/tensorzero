@@ -48,8 +48,9 @@ use super::{
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct MixtureOfNConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     weight: Option<f64>,
     candidates: Vec<String>,
     fuser: FuserConfig,

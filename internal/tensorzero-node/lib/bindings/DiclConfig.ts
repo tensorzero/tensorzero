@@ -11,21 +11,21 @@ import type { ServiceTier } from "./ServiceTier";
  * load() step to get the fully qualified path.
  */
 export type DiclConfig = {
-  weight: number | null;
+  weight?: number;
   embedding_model: string;
   k: number;
   model: string;
   system_instructions: ResolvedTomlPathData;
-  temperature: number | null;
-  top_p: number | null;
-  stop_sequences: Array<string> | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  max_tokens: number | null;
-  seed: number | null;
-  json_mode: JsonMode | null;
+  temperature?: number;
+  top_p?: number;
+  stop_sequences?: Array<string>;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  max_tokens?: number;
+  seed?: number;
+  json_mode?: JsonMode;
   retries: RetryConfig;
-  max_distance: number | null;
+  max_distance?: number;
   reasoning_effort?: string;
   service_tier?: ServiceTier;
   thinking_budget_tokens?: number;

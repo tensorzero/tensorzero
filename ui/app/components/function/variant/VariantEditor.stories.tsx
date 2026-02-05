@@ -134,17 +134,8 @@ export const MinimalConfig: Story = {
       initialInfo={{
         inner: {
           type: "chat_completion",
-          weight: null,
           model: "gpt-4.1-mini",
           templates: {},
-          temperature: null,
-          top_p: null,
-          max_tokens: null,
-          presence_penalty: null,
-          frequency_penalty: null,
-          seed: null,
-          stop_sequences: null,
-          json_mode: null,
           retries: {
             num_retries: 1,
             max_delay_s: 10,
@@ -201,8 +192,6 @@ export const WithJsonMode: Story = {
           temperature: 0.3,
           top_p: 0.95,
           max_tokens: 1024,
-          presence_penalty: null,
-          frequency_penalty: null,
           seed: 12345,
           stop_sequences: ["}"],
           json_mode: "on",
@@ -237,7 +226,6 @@ export const WithTemplatesOnly: Story = {
       initialInfo={{
         inner: {
           type: "chat_completion",
-          weight: null,
           model: "mixtral-8x7b",
           templates: {
             system: {
@@ -275,14 +263,6 @@ export const WithTemplatesOnly: Story = {
               legacy_definition: false,
             },
           },
-          temperature: null,
-          top_p: null,
-          max_tokens: null,
-          presence_penalty: null,
-          frequency_penalty: null,
-          seed: null,
-          stop_sequences: null,
-          json_mode: null,
           retries: {
             num_retries: 1,
             max_delay_s: 10,
@@ -314,7 +294,6 @@ export const WithCustomNamedTemplates: Story = {
       initialInfo={{
         inner: {
           type: "chat_completion",
-          weight: null,
           model: "gpt-5-mini",
           templates: {
             fun_fact_topic: {
@@ -350,13 +329,7 @@ Focus on:
             },
           },
           temperature: 0.8,
-          top_p: null,
           max_tokens: 512,
-          presence_penalty: null,
-          frequency_penalty: null,
-          seed: null,
-          stop_sequences: null,
-          json_mode: null,
           retries: {
             num_retries: 1,
             max_delay_s: 10,
@@ -397,13 +370,6 @@ export const UnsupportedVariantType: Story = {
               user_template: null,
               assistant_template: null,
               temperature: 0.7,
-              top_p: null,
-              max_tokens: null,
-              presence_penalty: null,
-              frequency_penalty: null,
-              seed: null,
-              stop_sequences: null,
-              json_mode: null,
               retries: {
                 num_retries: 1,
                 max_delay_s: 10,
@@ -423,13 +389,7 @@ export const UnsupportedVariantType: Story = {
             },
             assistant_template: null,
             temperature: 0.0,
-            top_p: null,
             max_tokens: 10,
-            presence_penalty: null,
-            frequency_penalty: null,
-            seed: null,
-            stop_sequences: null,
-            json_mode: null,
             retries: {
               num_retries: 1,
               max_delay_s: 10,
