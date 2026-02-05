@@ -1,5 +1,6 @@
 services:
   provider-proxy:
+    profiles: ["provider-proxy"]
     image: tensorzero/provider-proxy:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../..

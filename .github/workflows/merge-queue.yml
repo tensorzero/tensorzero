@@ -186,19 +186,19 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Pull images referenced by the compose file
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml pull --ignore-pull-failures
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
       - name: Run live tests container via Docker Compose
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
 
       - name: Print live tests logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs -t
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
 
       - name: Check e2e logs for impossible error messages
         run: |
-          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
+          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs gateway)
           if [ -z "$LOGS" ]; then
             echo "ERROR: Gateway logs are empty"
             exit 1
@@ -407,12 +407,12 @@ jobs:
 
       - name: Launch dependency services for E2E tests
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy up --no-build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs -t
 
       - name: Set up gateway environment file
         run: |
@@ -569,7 +569,7 @@ jobs:
 
       - name: Print provider-proxy logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs provider-proxy 2>&1 || echo "No provider-proxy logs available"
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs provider-proxy 2>&1 || echo "No provider-proxy logs available"
 
       - name: Print vLLM modal logs
         if: always()
