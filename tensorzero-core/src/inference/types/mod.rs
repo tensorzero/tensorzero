@@ -1042,6 +1042,135 @@ impl ContentBlockChatOutput {
 /// Placeholder text used when content is redacted for privacy
 pub const REDACTED_PLACEHOLDER: &str = "[REDACTED]";
 
+/// Check if a parsed streaming message contains sensitive content that should be filtered.
+///
+/// Returns `true` if the message contains user/assistant content that should be redacted.
+/// Returns `false` for metadata messages (usage, model info, etc.) that should be kept.
+fn is_sensitive_stream_message(json: &serde_json::Value) -> bool {
+    // Anthropic streaming: check the `type` field
+    if let Some(msg_type) = json.get("type").and_then(|t| t.as_str()) {
+        return matches!(
+            msg_type,
+            "content_block_delta" | "content_block_start" | "content_block_stop"
+        );
+        // "message_start", "message_delta", "message_stop", "ping", "error" are kept
+    }
+
+    // OpenAI streaming: check if choices[].delta contains content or tool_calls
+    if let Some(choices) = json.get("choices").and_then(|c| c.as_array()) {
+        for choice in choices {
+            if let Some(delta) = choice.get("delta").and_then(|d| d.as_object()) {
+                if delta.contains_key("content") || delta.contains_key("tool_calls") {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Redact raw response while preserving metadata (model, usage, etc.)
+///
+/// For streaming responses (NDJSON): parses each line as JSON and filters out
+/// content-bearing messages while keeping metadata (message_start, message_delta with usage).
+///
+/// For non-streaming responses (JSON): replaces the choices/content array with a minimal
+/// redacted version while preserving all other fields (id, model, usage, etc.).
+pub fn redact_raw_response(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return REDACTED_PLACEHOLDER.to_string();
+    }
+
+    // Try to parse as a single JSON object first (non-streaming)
+    if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(obj) = json.as_object_mut() {
+            // OpenAI format: replace choices array
+            if obj.contains_key("choices") {
+                obj.insert(
+                    "choices".to_string(),
+                    serde_json::json!([{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": REDACTED_PLACEHOLDER},
+                        "finish_reason": "stop"
+                    }]),
+                );
+                return serde_json::to_string(&json)
+                    .unwrap_or_else(|_| REDACTED_PLACEHOLDER.to_string());
+            }
+            // Anthropic non-streaming format: replace content array
+            if obj.contains_key("content") && obj.contains_key("role") {
+                obj.insert(
+                    "content".to_string(),
+                    serde_json::json!([{"type": "text", "text": REDACTED_PLACEHOLDER}]),
+                );
+                return serde_json::to_string(&json)
+                    .unwrap_or_else(|_| REDACTED_PLACEHOLDER.to_string());
+            }
+        }
+        // Valid JSON but unknown format - return as-is (could be metadata-only)
+        return serde_json::to_string(&json).unwrap_or_else(|_| REDACTED_PLACEHOLDER.to_string());
+    }
+
+    // Not a single JSON object - treat as streaming (NDJSON)
+    // Parse each line and filter based on message type
+    let filtered: Vec<&str> = trimmed
+        .lines()
+        .filter(|line| {
+            let l = line.trim();
+            if l.is_empty() {
+                return false;
+            }
+            // Parse as JSON and check if it's sensitive content
+            match serde_json::from_str::<serde_json::Value>(l) {
+                Ok(json) => !is_sensitive_stream_message(&json),
+                Err(_) => false, // Skip unparseable lines in streaming mode
+            }
+        })
+        .collect();
+
+    if filtered.is_empty() {
+        // No valid JSON lines found - return placeholder
+        REDACTED_PLACEHOLDER.to_string()
+    } else {
+        filtered.join("\n")
+    }
+}
+
+/// Redact raw request while preserving metadata (model, parameters, etc.)
+///
+/// Similar to redact_raw_response but for request payloads.
+/// Preserves model name, parameters, but redacts message content.
+pub fn redact_raw_request(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return REDACTED_PLACEHOLDER.to_string();
+    }
+
+    if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(obj) = json.as_object_mut() {
+            // Replace messages with redacted version (OpenAI format)
+            if obj.contains_key("messages") {
+                obj.insert(
+                    "messages".to_string(),
+                    serde_json::json!([{"role": "user", "content": REDACTED_PLACEHOLDER}]),
+                );
+            }
+            // Handle system prompt if present
+            if obj.contains_key("system") {
+                obj.insert(
+                    "system".to_string(),
+                    serde_json::json!(REDACTED_PLACEHOLDER),
+                );
+            }
+        }
+        serde_json::to_string(&json).unwrap_or_else(|_| REDACTED_PLACEHOLDER.to_string())
+    } else {
+        REDACTED_PLACEHOLDER.to_string()
+    }
+}
+
 impl ContentBlockOutput {
     /// Returns a redacted version of this content block.
     /// Text content is replaced with "[REDACTED]", tool call arguments are redacted
@@ -1854,8 +1983,8 @@ impl StoredModelInference {
         // Apply redaction if requested
         let (raw_request, raw_response, system, input_messages, output) = if redact_content {
             (
-                REDACTED_PLACEHOLDER.to_string(),
-                REDACTED_PLACEHOLDER.to_string(),
+                redact_raw_request(&result.raw_request),
+                redact_raw_response(&result.raw_response),
                 result.system.map(|_| REDACTED_PLACEHOLDER.to_string()),
                 stored_input_messages.iter().map(|m| m.redact()).collect(),
                 result.output.iter().map(|c| c.redact()).collect(),
@@ -3787,5 +3916,148 @@ mod tests {
             }
             _ => panic!("Expected Text variant after file redaction"),
         }
+    }
+
+    #[test]
+    fn test_redact_raw_response_non_streaming_openai() {
+        let raw = r#"{
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "created": 1770304682,
+            "model": "gpt-4o-mini",
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": "Secret message here"},
+                "finish_reason": "stop"
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        }"#;
+
+        let redacted = redact_raw_response(raw);
+        let parsed: serde_json::Value = serde_json::from_str(&redacted).unwrap();
+
+        // Metadata preserved
+        assert_eq!(parsed["id"], "chatcmpl-123", "ID should be preserved");
+        assert_eq!(parsed["model"], "gpt-4o-mini", "Model should be preserved");
+        assert_eq!(
+            parsed["usage"]["prompt_tokens"], 10,
+            "Usage should be preserved"
+        );
+
+        // Content redacted
+        assert_eq!(
+            parsed["choices"][0]["message"]["content"], REDACTED_PLACEHOLDER,
+            "Content should be redacted"
+        );
+    }
+
+    #[test]
+    fn test_redact_raw_response_streaming_anthropic() {
+        let raw = r#"{"type":"message_start","message":{"model":"claude-3","usage":{"input_tokens":100}}}
+{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Secret"}}
+{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" content"}}
+{"type":"content_block_stop","index":0}
+{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":50}}"#;
+
+        let redacted = redact_raw_response(raw);
+        let lines: Vec<&str> = redacted.lines().collect();
+
+        // Should keep message_start and message_delta (have metadata/usage)
+        assert!(
+            lines.iter().any(|l| l.contains("message_start")),
+            "Should keep message_start"
+        );
+        assert!(
+            lines.iter().any(|l| l.contains("message_delta")),
+            "Should keep message_delta"
+        );
+
+        // Should filter out content lines
+        assert!(
+            !lines.iter().any(|l| l.contains("content_block_delta")),
+            "Should filter content_block_delta"
+        );
+        assert!(
+            !lines.iter().any(|l| l.contains("content_block_start")),
+            "Should filter content_block_start"
+        );
+        assert!(
+            !lines.iter().any(|l| l.contains("Secret")),
+            "Should not contain secret content"
+        );
+    }
+
+    #[test]
+    fn test_redact_raw_request_openai() {
+        let raw = r#"{
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are helpful"},
+                {"role": "user", "content": "Tell me a secret"}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 100
+        }"#;
+
+        let redacted = redact_raw_request(raw);
+        let parsed: serde_json::Value = serde_json::from_str(&redacted).unwrap();
+
+        // Metadata preserved
+        assert_eq!(parsed["model"], "gpt-4o-mini", "Model should be preserved");
+        assert_eq!(
+            parsed["temperature"], 0.7,
+            "Temperature should be preserved"
+        );
+        assert_eq!(parsed["max_tokens"], 100, "Max tokens should be preserved");
+
+        // Messages redacted
+        assert_eq!(
+            parsed["messages"][0]["content"], REDACTED_PLACEHOLDER,
+            "Message content should be redacted"
+        );
+    }
+
+    #[test]
+    fn test_redact_raw_request_with_system() {
+        let raw = r#"{
+            "model": "claude-3",
+            "system": "You are a helpful assistant with secrets",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "max_tokens": 500
+        }"#;
+
+        let redacted = redact_raw_request(raw);
+        let parsed: serde_json::Value = serde_json::from_str(&redacted).unwrap();
+
+        assert_eq!(parsed["model"], "claude-3", "Model should be preserved");
+        assert_eq!(parsed["max_tokens"], 500, "Max tokens should be preserved");
+        assert_eq!(
+            parsed["system"], REDACTED_PLACEHOLDER,
+            "System prompt should be redacted"
+        );
+    }
+
+    #[test]
+    fn test_redact_raw_response_empty() {
+        assert_eq!(
+            redact_raw_response(""),
+            REDACTED_PLACEHOLDER,
+            "Empty string should return placeholder"
+        );
+        assert_eq!(
+            redact_raw_response("   "),
+            REDACTED_PLACEHOLDER,
+            "Whitespace should return placeholder"
+        );
+    }
+
+    #[test]
+    fn test_redact_raw_response_invalid_json() {
+        assert_eq!(
+            redact_raw_response("not valid json"),
+            REDACTED_PLACEHOLDER,
+            "Invalid JSON should return placeholder"
+        );
     }
 }
