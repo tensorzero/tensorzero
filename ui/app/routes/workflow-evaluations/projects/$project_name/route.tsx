@@ -8,7 +8,10 @@ import {
 } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
 import { WorkflowEvalRunSelector } from "~/routes/workflow-evaluations/projects/$project_name/WorkflowEvalRunSelector";
-import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
+import type {
+  WorkflowEvaluationRun,
+  WorkflowEvaluationRunStatistics,
+} from "~/types/tensorzero";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
 import {
@@ -51,12 +54,7 @@ function ProjectPageHeader({ projectName }: { projectName: string }) {
   );
 }
 
-type ProjectData = {
-  runInfos: Awaited<
-    ReturnType<
-      ReturnType<typeof getTensorZeroClient>["getWorkflowEvaluationRuns"]
-    >
-  >["runs"];
+type ResultsData = {
   runStats: Record<string, WorkflowEvaluationRunStatistics[]>;
   episodeInfo: Awaited<
     ReturnType<
@@ -68,22 +66,11 @@ type ProjectData = {
   count: number;
 };
 
-async function fetchProjectData(
-  projectName: string,
+async function fetchResultsData(
   runIds: string[],
   limit: number,
   offset: number,
-): Promise<ProjectData> {
-  if (runIds.length === 0) {
-    return {
-      runInfos: [],
-      runStats: {},
-      episodeInfo: [],
-      count: 0,
-    };
-  }
-
-  const runStats: Record<string, WorkflowEvaluationRunStatistics[]> = {};
+): Promise<ResultsData> {
   const tensorZeroClient = getTensorZeroClient();
 
   const statsPromises = runIds.map((runId) =>
@@ -92,32 +79,24 @@ async function fetchProjectData(
       .then((response) => response.statistics),
   );
 
-  const runInfosPromise = tensorZeroClient
-    .getWorkflowEvaluationRuns(runIds, projectName)
-    .then((response) => response.runs);
-
   const episodeInfoPromise = tensorZeroClient
     .listWorkflowEvaluationRunEpisodesByTaskName(runIds, limit, offset)
     .then((response) => response.episodes);
   const countPromise =
     tensorZeroClient.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
 
-  const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
+  const [statsResults, episodeInfo, count] = await Promise.all([
     Promise.all(statsPromises),
-    runInfosPromise,
     episodeInfoPromise,
     countPromise,
   ]);
 
+  const runStats: Record<string, WorkflowEvaluationRunStatistics[]> = {};
   runIds.forEach((runId, index) => {
     runStats[runId] = statsResults[index];
   });
 
-  // Sort runInfos to match the order from URL params
-  runInfos.sort((a, b) => runIds.indexOf(a.id) - runIds.indexOf(b.id));
-
   return {
-    runInfos,
     runStats,
     episodeInfo,
     count,
@@ -132,61 +111,65 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const runIds = searchParams.get("run_ids")?.split(",") || [];
 
+  const tensorZeroClient = getTensorZeroClient();
+  let runInfos: WorkflowEvaluationRun[] = [];
+  if (runIds.length > 0) {
+    const response = await tensorZeroClient.getWorkflowEvaluationRuns(
+      runIds,
+      projectName,
+    );
+    runInfos = response.runs;
+    // Sort runInfos to match the order from URL params
+    runInfos.sort((a, b) => runIds.indexOf(a.id) - runIds.indexOf(b.id));
+  }
+
   return {
     projectName,
-    projectData: fetchProjectData(projectName, runIds, limit, offset),
+    runInfos,
+    resultsData:
+      runIds.length > 0
+        ? fetchResultsData(runIds, limit, offset)
+        : Promise.resolve(null),
     limit,
     offset,
   };
 }
 
-function ContentSkeleton({ projectName }: { projectName: string }) {
-  return (
-    <>
-      <ProjectPageHeader projectName={projectName} />
-      <SectionLayout>
-        <Skeleton className="mb-4 h-10 w-full" />
-        <Skeleton className="h-64 w-full" />
-      </SectionLayout>
-    </>
-  );
+function ResultsSkeleton() {
+  return <Skeleton className="h-64 w-full" />;
 }
 
-function ContentError({ projectName }: { projectName: string }) {
+function ResultsError() {
   const error = useAsyncError();
-  let message = "Failed to load workflow evaluation project";
+  let message = "Failed to load workflow evaluation results";
   if (isRouteErrorResponse(error)) {
     message = typeof error.data === "string" ? error.data : message;
   } else if (error instanceof Error) {
     message = error.message;
   }
   return (
-    <>
-      <ProjectPageHeader projectName={projectName} />
-      <SectionErrorNotice
-        icon={AlertCircle}
-        title="Error loading workflow evaluation project"
-        description={message}
-      />
-    </>
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading results"
+      description={message}
+    />
   );
 }
 
-function ProjectContent({
-  projectName,
+function ResultsContent({
+  runInfos,
   data,
   limit,
   offset,
 }: {
-  projectName: string;
-  data: ProjectData;
+  runInfos: WorkflowEvaluationRun[];
+  data: ResultsData;
   limit: number;
   offset: number;
 }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { runInfos, runStats, episodeInfo, count } = data;
-  const selectedRunIds = runInfos.map((run) => run.id);
+  const { runStats, episodeInfo, count } = data;
 
   const handleNextPage = () => {
     const newSearchParams = new URLSearchParams(searchParams);
@@ -201,55 +184,54 @@ function ProjectContent({
   };
 
   return (
-    <ColorAssignerProvider selectedRunIds={selectedRunIds}>
-      <ProjectPageHeader projectName={projectName} />
-      <SectionLayout>
-        <WorkflowEvalRunSelector
-          projectName={projectName}
-          selectedRunInfos={runInfos}
-        />
-        <WorkflowEvaluationProjectResultsTable
-          selected_run_infos={runInfos}
-          evaluation_results={episodeInfo}
-          evaluation_statistics={runStats}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset <= 0}
-          disableNext={offset + limit >= count}
-        />
-      </SectionLayout>
-    </ColorAssignerProvider>
+    <>
+      <WorkflowEvaluationProjectResultsTable
+        selected_run_infos={runInfos}
+        evaluation_results={episodeInfo}
+        evaluation_statistics={runStats}
+      />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={offset <= 0}
+        disableNext={offset + limit >= count}
+      />
+    </>
   );
 }
 
 export default function WorkflowEvaluationProjectPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { projectName, projectData, limit, offset } = loaderData;
+  const { projectName, runInfos, resultsData, limit, offset } = loaderData;
   const location = useLocation();
+  const selectedRunIds = runInfos.map((run) => run.id);
 
   return (
-    <PageLayout>
-      <Suspense
-        key={location.key}
-        fallback={<ContentSkeleton projectName={projectName} />}
-      >
-        <Await
-          resolve={projectData}
-          errorElement={<ContentError projectName={projectName} />}
-        >
-          {(data) => (
-            <ProjectContent
-              projectName={projectName}
-              data={data}
-              limit={limit}
-              offset={offset}
-            />
-          )}
-        </Await>
-      </Suspense>
-    </PageLayout>
+    <ColorAssignerProvider selectedRunIds={selectedRunIds}>
+      <PageLayout>
+        <ProjectPageHeader projectName={projectName} />
+        <SectionLayout>
+          <WorkflowEvalRunSelector
+            projectName={projectName}
+            selectedRunInfos={runInfos}
+          />
+          <Suspense key={location.key} fallback={<ResultsSkeleton />}>
+            <Await resolve={resultsData} errorElement={<ResultsError />}>
+              {(data) =>
+                data && (
+                  <ResultsContent
+                    runInfos={runInfos}
+                    data={data}
+                    limit={limit}
+                    offset={offset}
+                  />
+                )
+              }
+            </Await>
+          </Suspense>
+        </SectionLayout>
+      </PageLayout>
+    </ColorAssignerProvider>
   );
 }
