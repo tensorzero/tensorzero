@@ -132,6 +132,8 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_variant_name: Option<String>,
     #[serde(rename = "tensorzero::dryrun")]
     pub tensorzero_dryrun: Option<bool>,
+    #[serde(rename = "tensorzero::redact_content")]
+    pub tensorzero_redact_content: Option<bool>,
     #[serde(rename = "tensorzero::episode_id")]
     pub tensorzero_episode_id: Option<Uuid>,
     #[serde(rename = "tensorzero::cache_options")]
@@ -442,8 +444,7 @@ impl Params {
             params: inference_params,
             variant_name: openai_compatible_params.tensorzero_variant_name,
             dryrun: openai_compatible_params.tensorzero_dryrun,
-            // redact_content is not currently supported via the OpenAI-compatible endpoint
-            redact_content: None,
+            redact_content: openai_compatible_params.tensorzero_redact_content,
             dynamic_tool_params,
             output_schema,
             credentials: openai_compatible_params.tensorzero_credentials,
