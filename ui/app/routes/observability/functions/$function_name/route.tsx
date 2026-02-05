@@ -1,18 +1,9 @@
 import type { Route } from "./+types/route";
-import {
-  Await,
-  data,
-  useAsyncError,
-  useLocation,
-  useNavigate,
-} from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
+import { data, useLocation } from "react-router";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
-import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import { useFunctionConfig } from "~/context/config";
-import { Suspense } from "react";
 import {
   PageHeader,
   PageLayout,
@@ -24,28 +15,18 @@ import {
 import { FunctionTypeBadge } from "~/components/function/FunctionSelector";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { FunctionConfig, TimeWindow } from "~/types/tensorzero";
-import { Skeleton } from "~/components/ui/skeleton";
-import { PageErrorContent } from "~/components/ui/error";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
-import {
-  fetchAllFunctionDetailData,
-  fetchExperimentationSectionData,
-  fetchMetricsSectionData,
-  fetchThroughputSectionData,
+  fetchInferencesSectionData,
   fetchVariantsSectionData,
-  type FunctionDetailData,
+  fetchThroughputSectionData,
+  fetchMetricsSectionData,
+  fetchExperimentationSectionData,
 } from "./function-data.server";
+import { InferencesSection } from "./InferencesSection";
 import { VariantsSection } from "./VariantsSection";
-import { ExperimentationSection } from "./ExperimentationSection";
 import { ThroughputSection } from "./ThroughputSection";
 import { MetricsSection } from "./MetricsSection";
+import { ExperimentationSection } from "./ExperimentationSection";
 
 function FunctionDetailPageHeader({
   functionName,
@@ -73,54 +54,6 @@ function FunctionDetailPageHeader({
   );
 }
 
-function SectionsSkeleton() {
-  return (
-    <>
-      <SectionLayout>
-        <SectionHeader heading="Schemas" />
-        <Skeleton className="h-32 w-full" />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Inferences" />
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Variant</TableHead>
-              <TableHead>Time</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <TableRow key={i}>
-                <TableCell>
-                  <Skeleton className="h-4 w-48" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-24" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-32" />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </SectionLayout>
-    </>
-  );
-}
-
-function SectionsErrorState() {
-  const error = useAsyncError();
-  return (
-    <SectionLayout>
-      <PageErrorContent error={error} />
-    </SectionLayout>
-  );
-}
-
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
@@ -137,6 +70,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const feedback_time_granularity = (url.searchParams.get(
     "cumulative_feedback_time_granularity",
   ) || "week") as TimeWindow;
+
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
@@ -148,10 +82,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     function_name,
-    variantsData: fetchVariantsSectionData({
-      function_name,
-      function_config,
-    }),
+    variantsData: fetchVariantsSectionData({ function_name, function_config }),
     experimentationData:
       function_name !== DEFAULT_FUNCTION
         ? fetchExperimentationSectionData({
@@ -170,73 +101,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       time_granularity,
       config,
     }),
-    functionDetailData: fetchAllFunctionDetailData({
+    inferencesData: fetchInferencesSectionData({
       function_name,
       beforeInference,
       afterInference,
       limit,
     }),
   };
-}
-
-function SectionsContent({
-  data,
-  functionName,
-  functionConfig,
-}: {
-  data: FunctionDetailData;
-  functionName: string;
-  functionConfig: FunctionConfig;
-}) {
-  const {
-    inferences,
-    hasNextInferencePage,
-    hasPreviousInferencePage,
-    num_inferences,
-  } = data;
-
-  const navigate = useNavigate();
-
-  // Only get top/bottom inferences if array is not empty
-  const topInference = inferences.length > 0 ? inferences[0] : null;
-  const bottomInference =
-    inferences.length > 0 ? inferences[inferences.length - 1] : null;
-
-  const handleNextInferencePage = () => {
-    if (!bottomInference) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousInferencePage = () => {
-    if (!topInference) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  return (
-    <>
-      <SectionLayout>
-        <SectionHeader heading="Schemas" />
-        <FunctionSchema functionConfig={functionConfig} />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Inferences" count={num_inferences} />
-        <FunctionInferenceTable inferences={inferences} />
-        <PageButtons
-          onPreviousPage={handlePreviousInferencePage}
-          onNextPage={handleNextInferencePage}
-          disablePrevious={!hasPreviousInferencePage}
-          disableNext={!hasNextInferencePage}
-        />
-      </SectionLayout>
-    </>
-  );
 }
 
 export default function FunctionDetailPage({
@@ -248,7 +119,7 @@ export default function FunctionDetailPage({
     experimentationData,
     throughputData,
     metricsData,
-    functionDetailData,
+    inferencesData,
   } = loaderData;
   const location = useLocation();
   const function_config = useFunctionConfig(function_name);
@@ -287,20 +158,15 @@ export default function FunctionDetailPage({
 
         <MetricsSection promise={metricsData} locationKey={location.key} />
 
-        <Suspense key={location.key} fallback={<SectionsSkeleton />}>
-          <Await
-            resolve={functionDetailData}
-            errorElement={<SectionsErrorState />}
-          >
-            {(data) => (
-              <SectionsContent
-                data={data}
-                functionName={function_name}
-                functionConfig={function_config}
-              />
-            )}
-          </Await>
-        </Suspense>
+        <SectionLayout>
+          <SectionHeader heading="Schemas" />
+          <FunctionSchema functionConfig={function_config} />
+        </SectionLayout>
+
+        <InferencesSection
+          promise={inferencesData}
+          locationKey={location.key}
+        />
       </SectionsGroup>
     </PageLayout>
   );
