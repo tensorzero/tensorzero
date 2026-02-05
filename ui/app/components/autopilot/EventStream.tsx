@@ -572,7 +572,7 @@ function EventItem({
         )}
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
           {isConfigWrite && configWriteEnabled && sessionId && (
-            <WriteConfigButton sessionId={sessionId} eventId={event.id} />
+            <WriteConfigButton sessionId={sessionId} event={event} />
           )}
           {eventIsToolEvent && (
             <>

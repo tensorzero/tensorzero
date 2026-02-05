@@ -199,6 +199,35 @@ export class AutopilotClient extends BaseTensorZeroClient {
   }
 }
 
+const CONFIG_WRITES_PAGE_SIZE = 100;
+
+/**
+ * Fetches all config writes for a session by paginating through results.
+ * Uses the N+1 pattern: requests `pageSize + 1` items to detect if more pages exist.
+ */
+export async function listAllConfigWrites(
+  client: Pick<AutopilotClient, "listConfigWrites">,
+  sessionId: string,
+  pageSize: number = CONFIG_WRITES_PAGE_SIZE,
+): Promise<GatewayEvent[]> {
+  const allConfigWrites: GatewayEvent[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await client.listConfigWrites(sessionId, {
+      limit: pageSize + 1,
+      offset,
+    });
+    const hasMore = page.config_writes.length > pageSize;
+    const items = hasMore
+      ? page.config_writes.slice(0, pageSize)
+      : page.config_writes;
+    allConfigWrites.push(...items);
+    if (!hasMore) break;
+    offset += pageSize;
+  }
+  return allConfigWrites;
+}
+
 /**
  * Extracts the EditPayload from a config write event.
  *

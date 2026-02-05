@@ -7,6 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import type { GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 
 type WriteConfigResponse =
@@ -15,13 +16,13 @@ type WriteConfigResponse =
 
 interface WriteConfigButtonProps {
   sessionId: string;
-  eventId: string;
+  event: GatewayEvent;
   disabled?: boolean;
 }
 
 export function WriteConfigButton({
   sessionId,
-  eventId,
+  event,
   disabled,
 }: WriteConfigButtonProps) {
   const fetcher = useFetcher<WriteConfigResponse>();
@@ -55,7 +56,7 @@ export function WriteConfigButton({
 
   const handleClick = () => {
     fetcher.submit(
-      { event_id: eventId },
+      { event: JSON.stringify(event) },
       {
         method: "POST",
         action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/config-writes/write`,

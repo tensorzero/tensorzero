@@ -3,7 +3,10 @@ import { ConfigWriter } from "tensorzero-node";
 import { getEnv } from "~/utils/env.server";
 import { getAutopilotClient } from "~/utils/get-autopilot-client.server";
 import { logger } from "~/utils/logger";
-import { extractEditPayloadsFromConfigWrite } from "~/utils/tensorzero/autopilot-client";
+import {
+  extractEditPayloadsFromConfigWrite,
+  listAllConfigWrites,
+} from "~/utils/tensorzero/autopilot-client";
 
 /**
  * Result of writing a config write to file.
@@ -73,15 +76,17 @@ export async function action({
   }
 
   try {
-    // Fetch config writes for the session
-    const configWritesResponse =
-      await getAutopilotClient().listConfigWrites(sessionId);
+    // Fetch all config writes for the session, paginating through results
+    const allConfigWrites = await listAllConfigWrites(
+      getAutopilotClient(),
+      sessionId,
+    );
 
     // Create ConfigWriter and write all config writes
     const configWriter = await ConfigWriter.new(configFile);
     const results: WriteConfigWriteResult[] = [];
 
-    for (const event of configWritesResponse.config_writes) {
+    for (const event of allConfigWrites) {
       const editPayloads = extractEditPayloadsFromConfigWrite(event);
       const writtenPaths: string[] = [];
       for (const editPayload of editPayloads) {

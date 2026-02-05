@@ -1,12 +1,12 @@
 import type { ActionFunctionArgs } from "react-router";
 import { ConfigWriter } from "tensorzero-node";
+import type { GatewayEvent } from "~/types/tensorzero";
 import { getEnv } from "~/utils/env.server";
-import { getAutopilotClient } from "~/utils/get-autopilot-client.server";
 import { logger } from "~/utils/logger";
 import { extractEditPayloadsFromConfigWrite } from "~/utils/tensorzero/autopilot-client";
 
 type WriteConfigRequest = {
-  event_id: string;
+  event: string;
 };
 
 type WriteConfigResponse =
@@ -19,7 +19,7 @@ type WriteConfigResponse =
  * Route: POST /api/autopilot/sessions/:session_id/config-writes/write
  *
  * Request body:
- * - event_id: string - ID of the config write event to write
+ * - event: GatewayEvent - The config write event to write
  *
  * Response:
  * - { success: true, written_paths: string[] } on success
@@ -70,33 +70,24 @@ export async function action({
     );
   }
 
-  if (!body.event_id) {
+  if (!body.event) {
     return Response.json(
-      { success: false, error: "event_id is required" } as WriteConfigResponse,
+      { success: false, error: "event is required" } as WriteConfigResponse,
+      { status: 400 },
+    );
+  }
+
+  let event: GatewayEvent;
+  try {
+    event = JSON.parse(body.event) as GatewayEvent;
+  } catch {
+    return Response.json(
+      { success: false, error: "Invalid event JSON" } as WriteConfigResponse,
       { status: 400 },
     );
   }
 
   try {
-    // Fetch config writes for the session
-    const configWritesResponse =
-      await getAutopilotClient().listConfigWrites(sessionId);
-
-    // Find the event by ID
-    const event = configWritesResponse.config_writes.find(
-      (e) => e.id === body.event_id,
-    );
-
-    if (!event) {
-      return Response.json(
-        {
-          success: false,
-          error: `Config write event with ID ${body.event_id} not found`,
-        } as WriteConfigResponse,
-        { status: 404 },
-      );
-    }
-
     // Create ConfigWriter and apply the edits
     const configWriter = await ConfigWriter.new(configFile);
     const editPayloads = extractEditPayloadsFromConfigWrite(event);
