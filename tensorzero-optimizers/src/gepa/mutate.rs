@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use serde_json::{Map, from_value, json, to_value};
+use serde_json::{Map, Value, from_value, json, to_value};
 
 use tensorzero_core::{
     client::{
@@ -28,7 +28,9 @@ use tensorzero_core::{
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
-use crate::gepa::{GEPAVariant, analyze::Analysis, validate::FunctionContext};
+use crate::gepa::{
+    GEPAVariant, analyze::Analysis, json_utils::sort_json_keys, validate::FunctionContext,
+};
 
 /// Helper struct to deserialize the JSON response that matches the output schema.
 /// The schema defines templates as an array of objects with name and content fields.
@@ -102,14 +104,12 @@ fn build_mutate_input(
     } = function_context;
 
     // Extract templates map from variant config
-    // Sort keys for deterministic serialization order (important for caching)
-    let mut template_names: Vec<_> = variant_config.templates.inner.keys().collect();
-    template_names.sort();
-    let mut templates_map = Map::new();
-    for name in template_names {
-        let config = &variant_config.templates.inner[name];
-        templates_map.insert(name.clone(), json!(config.path.data()));
-    }
+    let templates_map: Map<String, Value> = variant_config
+        .templates
+        .inner
+        .iter()
+        .map(|(name, config)| (name.clone(), json!(config.path.data())))
+        .collect();
 
     // Serialize analyses to JSON
     // Note: Thought signatures in inference outputs are already conditionally stripped
@@ -121,17 +121,24 @@ fn build_mutate_input(
     })?;
 
     // Build the input with high-level objects that will be serialized in the template
+    // Sort JSON keys for deterministic serialization (important for caching)
     let mut map = Map::new();
-    map.insert("function_config".to_string(), to_value(function_config)?);
+    map.insert(
+        "function_config".to_string(),
+        sort_json_keys(to_value(function_config)?),
+    );
     if let Some(tools) = static_tools {
-        map.insert("static_tools".to_string(), json!(tools));
+        map.insert("static_tools".to_string(), sort_json_keys(json!(tools)));
     }
     map.insert(
         "evaluation_config".to_string(),
-        to_value(evaluation_config)?,
+        sort_json_keys(to_value(evaluation_config)?),
     );
-    map.insert("templates_map".to_string(), json!(templates_map));
-    map.insert("analyses".to_string(), analyses_json);
+    map.insert(
+        "templates_map".to_string(),
+        sort_json_keys(json!(templates_map)),
+    );
+    map.insert("analyses".to_string(), sort_json_keys(analyses_json));
 
     Ok(Arguments(map))
 }

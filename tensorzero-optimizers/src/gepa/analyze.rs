@@ -30,7 +30,7 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-use crate::gepa::validate::FunctionContext;
+use crate::gepa::{json_utils::sort_json_keys, validate::FunctionContext};
 
 /// Fields to include when serializing datapoints for GEPA functions.
 /// Only these fields are relevant for prompt optimization analysis.
@@ -203,45 +203,49 @@ pub fn build_analyze_input(
     } = function_context;
 
     // Extract templates map from variant config
-    // Sort keys for deterministic serialization order (important for caching)
-    let mut template_names: Vec<_> = variant_config.templates.inner.keys().collect();
-    template_names.sort();
-    let mut templates_map = Map::new();
-    for name in template_names {
-        let config = &variant_config.templates.inner[name];
-        templates_map.insert(name.clone(), json!(config.path.data()));
-    }
+    let templates_map: Map<String, Value> = variant_config
+        .templates
+        .inner
+        .iter()
+        .map(|(name, config)| (name.clone(), json!(config.path.data())))
+        .collect();
 
     // Build evaluation_scores map with just the scores
-    // Sort keys for deterministic serialization order (important for caching)
-    let mut evaluator_names: Vec<_> = eval_info.evaluations.keys().collect();
-    evaluator_names.sort();
-    let mut evaluation_scores = Map::new();
-    for evaluator_name in evaluator_names {
-        let result_opt = &eval_info.evaluations[evaluator_name];
-        // Preserve the score type (number, boolean, or null)
-        let score = result_opt
-            .as_ref()
-            .map(|value| match value {
-                Value::Number(n) => json!(n),
-                Value::Bool(b) => json!(b),
-                _ => json!(null),
-            })
-            .unwrap_or(json!(null));
-        evaluation_scores.insert(evaluator_name.clone(), score);
-    }
+    // Preserve the score type (number, boolean, or null)
+    let evaluation_scores: Map<String, Value> = eval_info
+        .evaluations
+        .iter()
+        .map(|(name, result_opt)| {
+            let score = result_opt
+                .as_ref()
+                .map(|value| match value {
+                    Value::Number(n) => json!(n),
+                    Value::Bool(b) => json!(b),
+                    _ => json!(null),
+                })
+                .unwrap_or(json!(null));
+            (name.clone(), score)
+        })
+        .collect();
 
     // Build the input with high-level objects that will be serialized in the template
+    // Sort JSON keys for deterministic serialization (important for caching)
     let mut map = Map::new();
-    map.insert("function_config".to_string(), to_value(function_config)?);
+    map.insert(
+        "function_config".to_string(),
+        sort_json_keys(to_value(function_config)?),
+    );
     if let Some(tools) = static_tools {
-        map.insert("static_tools".to_string(), json!(tools));
+        map.insert("static_tools".to_string(), sort_json_keys(json!(tools)));
     }
     map.insert(
         "evaluation_config".to_string(),
-        to_value(evaluation_config)?,
+        sort_json_keys(to_value(evaluation_config)?),
     );
-    map.insert("templates_map".to_string(), json!(templates_map));
+    map.insert(
+        "templates_map".to_string(),
+        sort_json_keys(json!(templates_map)),
+    );
 
     // Strip thought signatures at the type level before serialization.
     // Only Chat types can contain Thought blocks; Json outputs are left intact.
@@ -255,7 +259,7 @@ pub fn build_analyze_input(
 
     // Serialize with filtered fields
     let datapoint_value = serialize_filtered_datapoint(&datapoint_for_serialization)?;
-    map.insert("datapoint".to_string(), datapoint_value);
+    map.insert("datapoint".to_string(), sort_json_keys(datapoint_value));
 
     let output_value = match &eval_info.response {
         InferenceResponse::Chat(chat_response) => {
@@ -265,9 +269,12 @@ pub fn build_analyze_input(
         }
         InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
     };
-    map.insert("output".to_string(), output_value);
+    map.insert("output".to_string(), sort_json_keys(output_value));
 
-    map.insert("evaluation_scores".to_string(), json!(evaluation_scores));
+    map.insert(
+        "evaluation_scores".to_string(),
+        sort_json_keys(json!(evaluation_scores)),
+    );
 
     Ok(Arguments(map))
 }
