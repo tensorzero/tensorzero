@@ -2,10 +2,10 @@ import * as React from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 /**
- * CommandItem height: py-1.5 (12px) + text line height (~24px) = 36px
+ * CommandItem height: py-1.5 (12px) + text-sm line height (20px) = 32px
  * This matches the CommandItem className in command.tsx
  */
-const COMMAND_ITEM_HEIGHT = 36;
+const COMMAND_ITEM_HEIGHT = 32;
 
 /** Extra items rendered above/below viewport for smooth scrolling */
 const OVERSCAN = 8;
