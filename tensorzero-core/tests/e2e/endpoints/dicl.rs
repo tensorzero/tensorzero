@@ -1,4 +1,9 @@
+/// Tests for inference with `experimental_dynamic_in_context_learning` variants.
+///
+/// These tests exercise the DICL inference pipeline: embedding the input,
+/// retrieving similar examples from the database, and generating a response.
 use crate::common::get_gateway_endpoint;
+use chrono::Utc;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
@@ -17,8 +22,8 @@ use tensorzero_core::{
     cache::{CacheEnabledMode, CacheOptions},
     config::provider_types::ProviderTypesConfig,
     db::{
-        clickhouse::{ClickHouseConnectionInfo, test_helpers::select_json_inference_clickhouse},
-        postgres::PostgresConnectionInfo,
+        DICLQueries, StoredDICLExample, clickhouse::test_helpers::select_json_inference_clickhouse,
+        delegating_connection::DelegatingDatabaseConnection, postgres::PostgresConnectionInfo,
     },
     embeddings::{EmbeddingEncodingFormat, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
     endpoints::inference::{InferenceClients, InferenceCredentials},
@@ -316,7 +321,7 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
 }
 // Stick an embedding example into the database
 async fn embed_insert_example(
-    clickhouse: &ClickHouseConnectionInfo,
+    db: &(impl DICLQueries + Sync),
     input: ResolvedInput,
     output: String,
     function_name: &str,
@@ -345,11 +350,12 @@ async fn embed_insert_example(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
+    let clickhouse = get_clickhouse().await;
     let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
         Arc::new(Default::default());
     let clients = InferenceClients {
         http_client: client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        clickhouse_connection_info: clickhouse,
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         credentials: Arc::new(api_keys),
         cache_options: CacheOptions {
@@ -376,43 +382,34 @@ async fn embed_insert_example(
         .embed(&request, &clients, &(&provider_config).into())
         .await
         .unwrap();
-    let id = Uuid::now_v7();
-    let embedding = &response.embeddings[0];
-    let input_string = serde_json::to_string(&input.clone().into_stored_input()).unwrap();
-    let row = serde_json::json!({
-        "id": id,
-        "function_name": function_name,
-        "variant_name": variant_name,
-        "input": input_string,
-        "output": output,
-        "embedding": embedding,
-    });
-    let query = format!(
-        "INSERT INTO DynamicInContextLearningExample\n\
-        SETTINGS async_insert=1, wait_for_async_insert=1\n\
-        FORMAT JSONEachRow\n\
-        {}",
-        serde_json::to_string(&row).unwrap()
-    );
-    clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
+    let embedding = response.embeddings[0]
+        .as_float()
+        .expect("Expected float embedding")
+        .clone();
+    let input_string = serde_json::to_string(&input.into_stored_input()).unwrap();
+    let example = StoredDICLExample {
+        id: Uuid::now_v7(),
+        function_name: function_name.to_string(),
+        variant_name: variant_name.to_string(),
+        namespace: String::new(),
+        input: input_string,
+        output,
+        embedding,
+        created_at: Utc::now(),
+    };
+    db.insert_dicl_examples(&[example]).await.unwrap();
 }
 /// Testing a DICL variant
 /// Trying to get the LLM to learn that Pinocchio is a liar from examples
 #[tokio::test]
 pub async fn test_dicl_inference_request_simple() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl";
     let function_name = "basic_test";
     // Delete any existing examples for this function and variant
-    let delete_query = format!(
-        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
-    );
-    clickhouse
-        .run_query_synchronous_no_params(delete_query)
+    database
+        .delete_dicl_examples(function_name, variant_name, None)
         .await
         .unwrap();
     // Insert examples into the database
@@ -432,7 +429,7 @@ pub async fn test_dicl_inference_request_simple() {
     let output: Vec<ContentBlockChatOutput> = vec!["100 degrees Celsius".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -454,7 +451,7 @@ pub async fn test_dicl_inference_request_simple() {
         vec!["Ahmedabad (nose grows 3 inches)".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -479,7 +476,7 @@ pub async fn test_dicl_inference_request_simple() {
     ];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -501,7 +498,7 @@ pub async fn test_dicl_inference_request_simple() {
         vec!["J.K. Rowling (nose grows 5 inches)".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -509,7 +506,7 @@ pub async fn test_dicl_inference_request_simple() {
     ));
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
-    // Wait for 1 second
+    // Wait for data to be visible
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Launch the dicl inference request
     let payload = json!({
@@ -941,16 +938,13 @@ pub async fn test_dicl_inference_request_simple() {
 }
 #[tokio::test]
 async fn test_dicl_json_request() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl";
     let function_name = "json_success";
     // Delete any existing examples for this function and variant
-    let delete_query = format!(
-        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
-    );
-    clickhouse
-        .run_query_synchronous_no_params(delete_query)
+    database
+        .delete_dicl_examples(function_name, variant_name, None)
         .await
         .unwrap();
     // Insert examples into the database
@@ -977,7 +971,7 @@ async fn test_dicl_json_request() {
     };
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1005,7 +999,7 @@ async fn test_dicl_json_request() {
     };
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1033,7 +1027,7 @@ async fn test_dicl_json_request() {
     };
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1061,7 +1055,7 @@ async fn test_dicl_json_request() {
     };
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1069,7 +1063,7 @@ async fn test_dicl_json_request() {
     ));
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
-    // Wait for 1 second
+    // Wait for data to be visible
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Launch the dicl inference request
     let payload = json!({
@@ -1270,7 +1264,7 @@ async fn test_dicl_json_request() {
 /// Test that max_distance filters out all irrelevant examples, falling back to vanilla chat completion
 #[tokio::test]
 pub async fn test_dicl_max_distance_filters_all_examples() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl_max_distance_strict";
     let function_name = "basic_test";
@@ -1288,11 +1282,8 @@ max_tokens = 100
 "#;
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
     // Delete any existing examples for this function and variant
-    let delete_query = format!(
-        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
-    );
-    clickhouse
-        .run_query_synchronous_no_params(delete_query)
+    database
+        .delete_dicl_examples(function_name, variant_name, None)
         .await
         .unwrap();
     // Insert geography examples (countries and capitals)
@@ -1309,7 +1300,7 @@ max_tokens = 100
     let output: Vec<ContentBlockChatOutput> = vec!["Paris".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1327,7 +1318,7 @@ max_tokens = 100
     let output: Vec<ContentBlockChatOutput> = vec!["Berlin".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1345,7 +1336,7 @@ max_tokens = 100
     let output: Vec<ContentBlockChatOutput> = vec!["Rome".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1353,7 +1344,7 @@ max_tokens = 100
     ));
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
-    // Wait for 1 second for ClickHouse to process
+    // Wait for data to be visible
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Query about a completely unrelated topic (programming/software)
     // The max_distance should filter out all geography examples due to high cosine distance
@@ -1422,7 +1413,7 @@ max_tokens = 100
 /// Test that max_distance keeps relevant examples when cosine distance is below threshold
 #[tokio::test]
 pub async fn test_dicl_max_distance_keeps_relevant_examples() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl_max_distance_moderate";
     let function_name = "basic_test";
@@ -1440,11 +1431,8 @@ max_tokens = 100
 "#;
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
     // Delete any existing examples for this function and variant
-    let delete_query = format!(
-        "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{function_name}' AND variant_name = '{variant_name}'"
-    );
-    clickhouse
-        .run_query_synchronous_no_params(delete_query)
+    database
+        .delete_dicl_examples(function_name, variant_name, None)
         .await
         .unwrap();
     let mut tasks = Vec::new();
@@ -1461,7 +1449,7 @@ max_tokens = 100
         vec!["Ahmedabad (nose grows 3 inches)".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1483,7 +1471,7 @@ max_tokens = 100
     ];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1502,7 +1490,7 @@ max_tokens = 100
         vec!["J.K. Rowling (nose grows 5 inches)".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
-        &clickhouse,
+        &database,
         input,
         output_string,
         function_name,
@@ -1510,7 +1498,7 @@ max_tokens = 100
     ));
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
-    // Wait for 1 second for ClickHouse to process
+    // Wait for data to be visible
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Query about a similar topic (Harry Potter author, similar to Lord of the Rings question)
     // The max_distance=0.6 should keep relevant examples

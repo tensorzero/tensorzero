@@ -42,6 +42,7 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRow,
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
+use crate::db::{DICLExampleWithDistance, DICLQueries, StoredDICLExample};
 use crate::db::{
     EpisodeByIdRow, EpisodeQueries, ModelLatencyDatapoint, ModelUsageTimePoint,
     TableBoundsWithCount,
@@ -917,6 +918,92 @@ impl EpisodeQueries for DelegatingDatabaseConnection {
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
         self.get_read_database().query_episode_table_bounds().await
+    }
+}
+
+impl DICLQueries for DelegatingDatabaseConnection {
+    async fn insert_dicl_example(&self, example: &StoredDICLExample) -> Result<(), Error> {
+        self.clickhouse.insert_dicl_example(example).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_dicl_example(example).await
+        {
+            tracing::error!("Error writing DICL example to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    async fn insert_dicl_examples(
+        &self,
+        examples: &[StoredDICLExample],
+    ) -> Result<u64, Error> {
+        let count = self.clickhouse.insert_dicl_examples(examples).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_dicl_examples(examples).await
+        {
+            tracing::error!("Error writing DICL examples to Postgres: {e}");
+        }
+
+        Ok(count)
+    }
+
+    async fn get_similar_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        embedding: &[f32],
+        limit: u32,
+    ) -> Result<Vec<DICLExampleWithDistance>, Error> {
+        if ENABLE_POSTGRES_READ.get() {
+            self.postgres
+                .get_similar_dicl_examples(function_name, variant_name, embedding, limit)
+                .await
+        } else {
+            self.clickhouse
+                .get_similar_dicl_examples(function_name, variant_name, embedding, limit)
+                .await
+        }
+    }
+
+    async fn has_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+    ) -> Result<bool, Error> {
+        if ENABLE_POSTGRES_READ.get() {
+            self.postgres
+                .has_dicl_examples(function_name, variant_name)
+                .await
+        } else {
+            self.clickhouse
+                .has_dicl_examples(function_name, variant_name)
+                .await
+        }
+    }
+
+    async fn delete_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        namespace: Option<&str>,
+    ) -> Result<u64, Error> {
+        let count = self
+            .clickhouse
+            .delete_dicl_examples(function_name, variant_name, namespace)
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .delete_dicl_examples(function_name, variant_name, namespace)
+                .await
+        {
+            tracing::error!("Error deleting DICL examples from Postgres: {e}");
+        }
+
+        Ok(count)
     }
 }
 

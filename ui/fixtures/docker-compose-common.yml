@@ -31,7 +31,7 @@ services:
       postgres:
         condition: service_healthy
     entrypoint: [ "/bin/sh", "-c" ]
-    command: [ "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity" ]
+    command: [ "gateway --run-postgres-migrations --enable-optimizer-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity" ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
