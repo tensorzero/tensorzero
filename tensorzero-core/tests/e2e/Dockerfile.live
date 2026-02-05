@@ -28,9 +28,14 @@ RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file test
 
 # ========== test-env ==========
 
-FROM base AS test-env
+FROM debian:trixie-slim AS test-env
+
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Copy nextest binary
+COPY --from=builder /usr/local/cargo/bin/cargo-nextest /usr/local/bin/cargo-nextest
 
 # Copy workspace structure but exclude target directory
 COPY . ./
@@ -44,4 +49,4 @@ ENV CI=true
 
 # Set the entrypoint to run tests from archive with absolute config file path and e2e profile
 # If CARGO_NEXTEST_FLAKY_TESTS is set, exclude those tests using -E filter
-CMD ["sh", "-c", "cargo nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app --config-file /app/.config/nextest.toml --profile e2e -j 32 ${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not ($CARGO_NEXTEST_FLAKY_TESTS)\"}"]
+CMD ["sh", "-c", "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app --config-file /app/.config/nextest.toml --profile e2e -j 32 ${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not ($CARGO_NEXTEST_FLAKY_TESTS)\"}"]
