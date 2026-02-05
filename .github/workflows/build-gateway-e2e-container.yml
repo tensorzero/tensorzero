@@ -52,7 +52,7 @@ jobs:
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Build test containers
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml build provider-proxy gateway live-tests
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy build provider-proxy gateway live-tests
 
       - name: Save test containers
         run: |
@@ -90,4 +90,4 @@ jobs:
       # Note that this pushes an e2e build of the gateway to 'tensorzero/gateway-e2e'.
       # It does *not* push to the production 'tensorzero/gateway' repo.
       - name: Push test containers
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml push provider-proxy gateway live-tests
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy push provider-proxy gateway live-tests
