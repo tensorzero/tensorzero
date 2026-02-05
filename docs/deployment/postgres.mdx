@@ -25,6 +25,127 @@ If you find any compatibility issues, please open a detailed [GitHub Discussion]
 
 </Note>
 
+### pg_cron Requirement
+
+TensorZero requires the [pg_cron](https://github.com/citusdata/pg_cron) extension to be installed and enabled in your database. pg_cron is used for scheduled maintenance tasks like partition management.
+
+<Warning>
+
+If your Postgres deployment contains multiple logical databases, and you've configured TensorZero to use a non-default logical database, the pg_cron extension **must be configured to run in your TensorZero database**.
+
+</Warning>
+
+<Tabs>
+
+<Tab title="Self-Hosted Postgres">
+
+1. Install pg_cron following the [official instructions](https://github.com/citusdata/pg_cron#installing-pg_cron).
+
+2. In your `postgresql.conf`, add pg_cron to `shared_preload_libraries` and configure pg_cron to use your TensorZero database by setting `cron.database_name`:
+
+```ini title="postgresql.conf"
+shared_preload_libraries = 'pg_cron'
+
+# Use the name of TensorZero's database,
+# or 'postgres' if you use the default database for TensorZero
+cron.database_name = 'tensorzero'
+```
+
+3. (Optional) If you use a non-default Postgres user for TensorZero, create the extension and grant permissions to the user by connecting to your database and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Use the user in TensorZero's Postgres connection string
+GRANT USAGE ON SCHEMA cron TO [username];
+```
+
+4. Restart Postgres to apply the configuration changes.
+
+</Tab>
+
+<Tab title="AWS RDS">
+
+1. Create a custom parameter group if you haven't already.
+
+2. Add `pg_cron` to the `shared_preload_libraries` parameter.
+
+3. Set `cron.database_name` to your TensorZero database name.
+
+4. Reboot the RDS instance to apply changes.
+
+5. Connect to your database and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+```
+
+6. Grant permissions in the `cron` schema to TensorZero's postgres user:
+
+```sql
+-- Use the user in TensorZero's Postgres connection string
+GRANT USAGE ON SCHEMA cron TO [username];
+```
+
+See the [AWS documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL_pg_cron.html) for more details.
+
+</Tab>
+
+<Tab title="GCP Cloud SQL">
+
+1. Set the `cloudsql.enable_pg_cron` [database flag](https://docs.cloud.google.com/sql/docs/postgres/flags) to `on`.
+
+2. Set the `cron.database_name` database flag to your TensorZero database name.
+
+3. Connect to your database and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+```
+
+4. If TensorZero uses a non-default user, grant permissions:
+
+```sql
+-- Use the user in TensorZero's Postgres connection string
+GRANT USAGE ON SCHEMA cron TO [username];
+```
+
+See the [Cloud SQL documentation](https://docs.cloud.google.com/sql/docs/postgres/extensions#pg_cron) for more details.
+
+</Tab>
+
+<Tab title="Supabase">
+
+Enable pg_cron from the Database Extensions page in your Supabase dashboard, or run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+```
+
+See the [Supabase documentation](https://supabase.com/docs/guides/cron) for more details.
+
+</Tab>
+
+<Tab title="PlanetScale">
+
+1. In the PlanetScale dashboard, select your database and navigate to **Clusters**.
+
+2. Select the branch to configure, then go to the **Extensions** tab.
+
+3. Enable pg_cron and set `cron.database_name` to your TensorZero database name, then click **Queue extension changes** and **Apply changes**.
+
+4. Connect to your database and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+```
+
+See the [PlanetScale documentation](https://planetscale.com/docs/postgres/extensions/pg_cron) for more details.
+
+</Tab>
+
+</Tabs>
+
 ## Configure
 
 ### Connect to Postgres
