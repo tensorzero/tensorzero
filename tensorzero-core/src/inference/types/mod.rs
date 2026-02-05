@@ -1023,9 +1023,9 @@ impl ContentBlockChatOutput {
                 name: tc.name.clone(),
                 arguments: None,
             }),
-            Self::Thought(_) => Self::Thought(Thought {
+            Self::Thought(t) => Self::Thought(Thought {
                 text: Some(REDACTED_PLACEHOLDER.to_string()),
-                signature: None,
+                signature: t.signature.clone(),
                 summary: None,
                 provider_type: None,
                 extra_data: None,
@@ -1056,9 +1056,9 @@ impl ContentBlockOutput {
                 name: tc.name.clone(),
                 arguments: REDACTED_PLACEHOLDER.to_string(),
             }),
-            Self::Thought(_) => Self::Thought(Thought {
+            Self::Thought(t) => Self::Thought(Thought {
                 text: Some(REDACTED_PLACEHOLDER.to_string()),
-                signature: None,
+                signature: t.signature.clone(),
                 summary: None,
                 provider_type: None,
                 extra_data: None,
@@ -1094,9 +1094,9 @@ impl StoredContentBlock {
             Self::File(_) => Self::Text(Text {
                 text: REDACTED_PLACEHOLDER.to_string(),
             }),
-            Self::Thought(_) => Self::Thought(Thought {
+            Self::Thought(t) => Self::Thought(Thought {
                 text: Some(REDACTED_PLACEHOLDER.to_string()),
-                signature: None,
+                signature: t.signature.clone(),
                 summary: None,
                 provider_type: None,
                 extra_data: None,
@@ -3670,7 +3670,11 @@ mod tests {
                     Some(REDACTED_PLACEHOLDER.to_string()),
                     "Thought text should be redacted"
                 );
-                assert!(t.signature.is_none(), "Signature should be None");
+                assert_eq!(
+                    t.signature,
+                    Some("sig123".to_string()),
+                    "Signature should be preserved for multi-turn reasoning"
+                );
                 assert!(t.summary.is_none(), "Summary should be None");
                 assert!(t.provider_type.is_none(), "Provider type should be None");
                 assert!(t.extra_data.is_none(), "Extra data should be None");
