@@ -98,7 +98,12 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   live-tests:
-    needs: [build-gateway-e2e-container, build-gateway-container]
+    needs:
+      [
+        build-gateway-e2e-container,
+        build-gateway-container,
+        build-fixtures-container,
+      ]
     # Run even when build-gateway-e2e-container is skipped (merge_group case)
     if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
@@ -106,8 +111,6 @@ jobs:
     permissions:
       # Permission to checkout the repository
       contents: read
-      # Permission to fetch GitHub OIDC token authentication
-      id-token: write
       # Permission to download artifacts
       actions: read
     timeout-minutes: 45
@@ -120,14 +123,6 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-
-      - name: Configure Namespace-powered Buildx
-        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
-        with:
-          wait-for-builder: true
-
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
@@ -136,8 +131,33 @@ jobs:
         with:
           name: build-gateway-container
 
-      - name: Load gateway container
-        run: docker load < gateway-container.tar
+      - name: Download provider-proxy container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-provider-proxy-container
+
+      - name: Download gateway-e2e container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-gateway-e2e-container
+
+      - name: Download live-tests container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-live-tests-container
+
+      - name: Download fixtures container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-fixtures-container
+
+      - name: Load container images
+        run: |
+          docker load < gateway-container.tar
+          docker load < provider-proxy-container.tar
+          docker load < gateway-e2e-container.tar
+          docker load < live-tests-container.tar
+          docker load < fixtures-container.tar
 
       - name: Restore provider-proxy cache
         if: github.event_name != 'schedule'
@@ -220,8 +240,6 @@ jobs:
     permissions:
       # Permission to checkout the repository
       contents: read
-      # Permission to fetch GitHub OIDC token authentication
-      id-token: write
       # Permission to download artifacts
       actions: read
     timeout-minutes: 45
@@ -276,25 +294,38 @@ jobs:
           done
         shell: bash
 
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-
-      - name: Login to Namespace registry
-        run: nsc docker login
-
-      - name: Pull pre-built containers from Namespace registry
-        run: |
-          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
-
-      - name: Configure Namespace-powered Buildx
-        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+      - name: Download gateway container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          wait-for-builder: true
+          name: build-gateway-container
+
+      - name: Download mock-provider-api container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-mock-provider-api-container
+
+      - name: Download fixtures container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-fixtures-container
+
+      - name: Download gateway-e2e container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-gateway-e2e-container
+
+      - name: Download provider-proxy container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-provider-proxy-container
+
+      - name: Load container images
+        run: |
+          docker load < gateway-container.tar
+          docker load < mock-provider-api-container.tar
+          docker load < fixtures-container.tar
+          docker load < gateway-e2e-container.tar
+          docker load < provider-proxy-container.tar
 
       - name: Install Rust toolchain
         run: |
@@ -376,19 +407,12 @@ jobs:
 
       - name: Launch dependency services for E2E tests
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
         run: |
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
-
-      - name: Launch the provider-proxy cache for E2E tests
-        run: |
-          ./ci/run-provider-proxy.sh ci
-
-      - name: Pull gateway-e2e container
-        run: docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
 
       - name: Set up gateway environment file
         run: |
@@ -545,7 +569,7 @@ jobs:
 
       - name: Print provider-proxy logs
         if: always()
-        run: cat provider_proxy_logs.txt
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs provider-proxy 2>&1 || echo "No provider-proxy logs available"
 
       - name: Print vLLM modal logs
         if: always()

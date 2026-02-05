@@ -55,6 +55,39 @@ jobs:
       - name: Build test containers
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml build --push provider-proxy gateway live-tests
 
+      - name: Save test containers
+        run: |
+          docker save tensorzero/provider-proxy:sha-${{ github.sha }} > provider-proxy-container.tar
+          docker save tensorzero/gateway-e2e:sha-${{ github.sha }} > gateway-e2e-container.tar
+          docker save tensorzero/live-tests:sha-${{ github.sha }} > live-tests-container.tar
+
+      - name: Upload provider-proxy container as artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: build-provider-proxy-container
+          path: provider-proxy-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+
+      - name: Upload gateway-e2e container as artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: build-gateway-e2e-container
+          path: gateway-e2e-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+
+      - name: Upload live-tests container as artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: build-live-tests-container
+          path: live-tests-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+
       # Note that this pushes an e2e build of the gateway to 'tensorzero/gateway-e2e'.
       # It does *not* push to the production 'tensorzero/gateway' repo.
       - name: Push test containers
