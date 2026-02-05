@@ -278,7 +278,7 @@ export function ModelLatency({
             Quantiles of latency metrics by model
           </CardDescription>
         </div>
-        <div className="flex flex-col justify-center gap-2">
+        <div className="flex items-center gap-2">
           <LatencyTimeWindowSelector
             value={timeGranularity}
             onValueChange={onTimeGranularityChange}

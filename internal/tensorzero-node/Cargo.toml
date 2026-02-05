@@ -17,6 +17,8 @@ napi = { version = "3.8.2", default-features = false, features = [
 napi-derive = "3.5.1"
 serde_json.workspace = true
 secrecy.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+config-writer = { path = "../config-writer" }
 tensorzero-core = { path = "../../tensorzero-core" }
 tensorzero-auth = { path = "../../internal/tensorzero-auth" }
 

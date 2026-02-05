@@ -28,9 +28,10 @@ use uuid::Uuid;
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
-use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::InferenceQueries;
+use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -783,13 +784,12 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // is cancelled. This reduces the chances that we only write to some tables and not others
             // (but this is inherently best-effort due to ClickHouse's lack of transactions).
             let write_future = deferred_tasks.spawn(async move {
-                let inference_database = DelegatingDatabaseConnection::new(
-                    clickhouse_connection_info.clone(),
+                let database = DelegatingDatabaseConnection::new(
+                    clickhouse_connection_info,
                     postgres_connection_info,
                 );
                 let _: () = write_inference(
-                    &clickhouse_connection_info,
-                    &inference_database,
+                    &database,
                     &config,
                     Arc::unwrap_or_clone(resolved_input).resolve().await?,
                     result_to_write,
@@ -1199,14 +1199,12 @@ fn create_stream(
                     let config = config.clone();
                         match Arc::unwrap_or_clone(input).resolve().await {
                             Ok(input) => {
-                                let clickhouse_connection_info = clickhouse_connection_info.clone();
-                                let inference_database = DelegatingDatabaseConnection::new(
+                                let database = DelegatingDatabaseConnection::new(
                                     clickhouse_connection_info.clone(),
                                     postgres_connection_info.clone(),
                                 );
                                 write_inference(
-                                    &clickhouse_connection_info,
-                                    &inference_database,
+                                    &database,
                                     &config,
                                     input,
                                     inference_response,
@@ -1375,26 +1373,22 @@ pub struct InferenceDatabaseInsertMetadata {
     pub snapshot_hash: SnapshotHash,
 }
 
-async fn write_inference<T: InferenceQueries + Send + Sync>(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    inference_database: &T,
+async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sync>(
+    database: &T,
     config: &Config,
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let model_responses: Vec<serde_json::Value> = result
-        .get_serialized_model_inferences(metadata.snapshot_hash.clone())
+    let model_inferences = result
+        .get_model_inferences(metadata.snapshot_hash.clone())
         .await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);
-    // Write the model responses to the ModelInference table
-    // TODO(#5691): replace clickhouse_connection_info when we implement model inferences in Postgres
+    // Write the model inferences to the database (dual-write via ModelInferenceQueries trait)
     futures.push(
         async {
-            let _ = clickhouse_connection_info
-                .write_batched(&model_responses, TableName::ModelInference)
-                .await;
+            let _ = database.insert_model_inferences(&model_inferences).await;
         }
         .boxed(),
     );
@@ -1405,17 +1399,13 @@ async fn write_inference<T: InferenceQueries + Send + Sync>(
                 let stored_input = input.clone().into_stored_input();
                 let chat_inference =
                     ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
-                let _ = inference_database
-                    .insert_chat_inferences(&[chat_inference])
-                    .await;
+                let _ = database.insert_chat_inferences(&[chat_inference]).await;
             }
             InferenceResult::Json(result) => {
                 let stored_input = input.clone().into_stored_input();
                 let json_inference =
                     JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
-                let _ = inference_database
-                    .insert_json_inferences(&[json_inference])
-                    .await;
+                let _ = database.insert_json_inferences(&[json_inference]).await;
             }
         }
     }));

@@ -23,9 +23,9 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
-use crate::db::clickhouse::TableName;
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::InferenceQueries;
+use crate::db::model_inferences::ModelInferenceQueries;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
@@ -40,7 +40,7 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, InferenceDatabaseInsert,
     InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput, Latency,
-    ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, Usage,
+    ModelInferenceResponseWithMetadata, RequestMessagesOrBatch, StoredModelInference, Usage,
 };
 use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::JSONSchema;
@@ -922,7 +922,7 @@ pub async fn write_completed_batch_inference<'a>(
     let function = config.get_function(function_name)?;
     let mut inferences: Vec<InferenceResponse> = Vec::new();
     let mut inference_rows_to_write: Vec<InferenceDatabaseInsert> = Vec::new();
-    let mut model_inference_rows_to_write: Vec<Value> = Vec::new();
+    let mut model_inference_rows_to_write: Vec<StoredModelInference> = Vec::new();
     for batch_model_inference in batch_model_inferences {
         let BatchModelInferenceRow {
             inference_id,
@@ -1045,7 +1045,7 @@ pub async fn write_completed_batch_inference<'a>(
         };
         model_inference_rows_to_write.extend(
             inference_result
-                .get_serialized_model_inferences(config.hash.clone())
+                .get_model_inferences(config.hash.clone())
                 .await,
         );
         match inference_result {
@@ -1084,11 +1084,9 @@ pub async fn write_completed_batch_inference<'a>(
         database.insert_chat_inferences(&chat_inferences),
         database.insert_json_inferences(&json_inferences)
     )?;
-    // Write all the ModelInference rows to the database
-    // Note: model_inferences dual-write deferred to step 1-1
+    // Write all the ModelInference rows to the database (dual-write via ModelInferenceQueries trait)
     database
-        .clickhouse
-        .write_batched(&model_inference_rows_to_write, TableName::ModelInference)
+        .insert_model_inferences(&model_inference_rows_to_write)
         .await?;
 
     Ok(inferences)

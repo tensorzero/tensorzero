@@ -10,37 +10,20 @@ import hashlib
 import os
 import subprocess
 import time
-from pathlib import Path
 
 import requests
+from download_fixtures_consts import (
+    LARGE_FIXTURES as FIXTURES,
+)
+from download_fixtures_consts import (
+    LARGE_FIXTURES_DIR,
+    PART_SIZE,
+    R2_PUBLIC_BUCKET_URL,
+    R2_S3_ENDPOINT_URL,
+)
 
 # cd to directory of this file
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-
-# =============================================================================
-# Constants
-# =============================================================================
-
-PART_SIZE = 8388608
-FIXTURES = [
-    "large_chat_inference_v2.parquet",
-    "large_chat_model_inference_v2.parquet",
-    "large_json_inference_v2.parquet",
-    "large_json_model_inference_v2.parquet",
-    "large_chat_boolean_feedback.parquet",
-    "large_chat_float_feedback.parquet",
-    "large_chat_comment_feedback.parquet",
-    "large_chat_demonstration_feedback.parquet",
-    "large_json_boolean_feedback.parquet",
-    "large_json_float_feedback.parquet",
-    "large_json_comment_feedback.parquet",
-    "large_json_demonstration_feedback.parquet",
-]
-R2_PUBLIC_BUCKET_URL = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
-R2_S3_ENDPOINT_URL = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/"
-LARGE_FIXTURES_DIR = Path("./large-fixtures")
-
 
 # =============================================================================
 # Shared utilities

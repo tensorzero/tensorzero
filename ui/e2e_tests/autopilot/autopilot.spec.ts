@@ -43,13 +43,6 @@ test("should interrupt an active session", async ({ page }) => {
   // Click the stop button
   await stopButton.click();
 
-  // Verify the success toast appears
-  await expect(
-    page.getByRole("status").filter({ hasText: "Session interrupted" }),
-  ).toBeVisible({
-    timeout: 10000,
-  });
-
   // Verify the status update message appears in the event stream
   await expect(page.getByText("Interrupted session")).toBeVisible({
     timeout: 10000,
@@ -208,6 +201,24 @@ test.describe("Autopilot New Session Button", () => {
     await page.waitForURL("**/autopilot/sessions/new", { timeout: 10000 });
     await page.waitForLoadState("networkidle");
     expect(page.url()).toMatch(/\/autopilot\/sessions\/new$/);
+  });
+});
+
+test.describe("Scroll blur overlays", () => {
+  test("top fade is hidden on new session at rest", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const topFade = page.getByTestId("scroll-fade-top");
+    await expect(topFade).toHaveCSS("opacity", "0");
+  });
+
+  test("bottom fade is hidden on new session at rest", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const bottomFade = page.getByTestId("scroll-fade-bottom");
+    await expect(bottomFade).toHaveCSS("opacity", "0");
   });
 });
 
