@@ -64,7 +64,7 @@ export default function BasicInfo({
             </BasicInfoItemContent>
           </BasicInfoItem>
 
-          {variantConfig.temperature !== null && (
+          {variantConfig.temperature != null && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -73,7 +73,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.top_p !== null && (
+          {variantConfig.top_p != null && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Top P</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -82,7 +82,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.max_tokens !== null && (
+          {variantConfig.max_tokens != null && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Max Tokens</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -91,7 +91,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.presence_penalty !== null && (
+          {variantConfig.presence_penalty != null && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Presence Penalty</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -100,7 +100,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.frequency_penalty !== null && (
+          {variantConfig.frequency_penalty != null && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Frequency Penalty</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -109,7 +109,7 @@ export default function BasicInfo({
             </BasicInfoItem>
           )}
 
-          {variantConfig.seed !== null && (
+          {variantConfig.seed != null && (
             <BasicInfoItem>
               <BasicInfoItemTitle>Seed</BasicInfoItemTitle>
               <BasicInfoItemContent>
@@ -133,7 +133,7 @@ export default function BasicInfo({
                 </BasicInfoItemContent>
               </BasicInfoItem>
 
-              {config.evaluator.temperature !== null && (
+              {config.evaluator.temperature != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -142,7 +142,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.top_p !== null && (
+              {config.evaluator.top_p != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Top P</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -151,7 +151,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.max_tokens !== null && (
+              {config.evaluator.max_tokens != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Max Tokens</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -160,7 +160,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.presence_penalty !== null && (
+              {config.evaluator.presence_penalty != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Presence Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -171,7 +171,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.frequency_penalty !== null && (
+              {config.evaluator.frequency_penalty != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Frequency Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -182,7 +182,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.evaluator.seed !== null && (
+              {config.evaluator.seed != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Seed</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -245,7 +245,7 @@ export default function BasicInfo({
                 <BasicInfoItemContent>
                   <Chip
                     label={
-                      config.max_distance !== null
+                      config.max_distance != null
                         ? config.max_distance.toString()
                         : "-"
                     }
@@ -253,7 +253,7 @@ export default function BasicInfo({
                 </BasicInfoItemContent>
               </BasicInfoItem>
 
-              {config.temperature !== null && (
+              {config.temperature != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -262,7 +262,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.top_p !== null && (
+              {config.top_p != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Top P</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -271,7 +271,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.max_tokens !== null && (
+              {config.max_tokens != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Max Tokens</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -280,7 +280,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.presence_penalty !== null && (
+              {config.presence_penalty != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Presence Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -289,7 +289,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.frequency_penalty !== null && (
+              {config.frequency_penalty != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Frequency Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -298,7 +298,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.seed !== null && (
+              {config.seed != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Seed</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -323,7 +323,7 @@ export default function BasicInfo({
                 </BasicInfoItemContent>
               </BasicInfoItem>
 
-              {config.fuser.temperature !== null && (
+              {config.fuser.temperature != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -332,7 +332,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.top_p !== null && (
+              {config.fuser.top_p != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Top P</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -341,7 +341,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.max_tokens !== null && (
+              {config.fuser.max_tokens != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Max Tokens</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -350,7 +350,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.presence_penalty !== null && (
+              {config.fuser.presence_penalty != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Presence Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -359,7 +359,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.frequency_penalty !== null && (
+              {config.fuser.frequency_penalty != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Frequency Penalty</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -368,7 +368,7 @@ export default function BasicInfo({
                 </BasicInfoItem>
               )}
 
-              {config.fuser.seed !== null && (
+              {config.fuser.seed != null && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Seed</BasicInfoItemTitle>
                   <BasicInfoItemContent>
@@ -397,7 +397,7 @@ export default function BasicInfo({
         })()}
 
       {/* Weight */}
-      {variantConfig.weight !== null && (
+      {variantConfig.weight != null && (
         <BasicInfoItem>
           <BasicInfoItemTitle>Weight</BasicInfoItemTitle>
           <BasicInfoItemContent>
