@@ -8,7 +8,7 @@ import type { FunctionConfig } from "~/types/tensorzero";
 import type { ExperimentationSectionData } from "./function-data.server";
 
 interface ExperimentationSectionProps {
-  promise: Promise<ExperimentationSectionData>;
+  promise: Promise<ExperimentationSectionData | undefined>;
   functionName: string;
   functionConfig: FunctionConfig;
   locationKey: string;
@@ -33,14 +33,18 @@ export function ExperimentationSection({
             <SectionAsyncErrorState defaultMessage="Failed to load experimentation data" />
           }
         >
-          {(data) => (
-            <FunctionExperimentation
-              functionConfig={functionConfig}
-              functionName={functionName}
-              feedbackTimeseries={data.feedback_timeseries}
-              variantSamplingProbabilities={data.variant_sampling_probabilities}
-            />
-          )}
+          {(data) =>
+            data ? (
+              <FunctionExperimentation
+                functionConfig={functionConfig}
+                functionName={functionName}
+                feedbackTimeseries={data.feedback_timeseries}
+                variantSamplingProbabilities={
+                  data.variant_sampling_probabilities
+                }
+              />
+            ) : null
+          }
         </Await>
       </Suspense>
     </SectionLayout>

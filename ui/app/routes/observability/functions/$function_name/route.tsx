@@ -83,11 +83,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     function_name,
     variantsData: fetchVariantsSectionData({ function_name, function_config }),
-    experimentationData: fetchExperimentationSectionData({
-      function_name,
-      function_config,
-      time_granularity: feedback_time_granularity,
-    }),
+    experimentationData:
+      function_name !== DEFAULT_FUNCTION
+        ? fetchExperimentationSectionData({
+            function_name,
+            function_config,
+            time_granularity: feedback_time_granularity,
+          })
+        : Promise.resolve(undefined),
     throughputData: fetchThroughputSectionData({
       function_name,
       time_granularity: throughput_time_granularity,
