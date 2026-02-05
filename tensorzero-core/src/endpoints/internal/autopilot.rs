@@ -18,10 +18,9 @@ use uuid::Uuid;
 
 use autopilot_client::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
-    CreateEventResponse, EventPayload, GatewayEvent, GatewayListConfigWritesResponse,
-    GatewayListEventsResponse, GatewayStreamUpdate, ListConfigWritesParams,
-    ListConfigWritesResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
-    StreamEventsParams,
+    CreateEventResponse, EventPayload, GatewayListConfigWritesResponse, GatewayListEventsResponse,
+    GatewayStreamUpdate, ListConfigWritesParams, ListEventsParams, ListSessionsParams,
+    ListSessionsResponse, StreamEventsParams,
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -177,28 +176,10 @@ pub async fn list_config_writes(
     session_id: Uuid,
     params: ListConfigWritesParams,
 ) -> Result<GatewayListConfigWritesResponse, Error> {
-    let response: ListConfigWritesResponse = autopilot_client
+    autopilot_client
         .list_config_writes(session_id, params)
         .await
-        .map_err(Error::from)?;
-
-    // Convert to gateway types
-    let gateway_config_writes: Vec<GatewayEvent> = response
-        .config_writes
-        .into_iter()
-        .map(|event| {
-            event.try_into().map_err(|e| {
-                Error::new(ErrorDetails::Autopilot {
-                    message: format!("Event conversion failed: {e}"),
-                    status_code: None,
-                })
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(GatewayListConfigWritesResponse {
-        config_writes: gateway_config_writes,
-    })
+        .map_err(Error::from)
 }
 
 // =============================================================================

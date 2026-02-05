@@ -18,4 +18,7 @@ pub trait ModelInferenceQueries {
         &self,
         inference_id: Uuid,
     ) -> Result<Vec<StoredModelInference>, Error>;
+
+    /// Insert model inferences into the database.
+    async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error>;
 }

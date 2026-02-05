@@ -1,27 +1,43 @@
-//! Shared test logic for InferenceCountQueries implementations (ClickHouse and Postgres).
+//! Shared test logic for InferenceQueries implementations (ClickHouse and Postgres).
 //!
-//! Each test function accepts a connection implementing `InferenceCountQueries`.
+//! Each test function accepts a connection implementing `InferenceQueries`.
 //! Tests use `>=` assertions since ClickHouse may accumulate data from other tests.
 
-use tensorzero_core::db::inference_count::{
-    CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
-    CountInferencesWithFeedbackParams, InferenceCountQueries,
+use std::path::Path;
+
+use tensorzero_core::db::clickhouse::query_builder::InferenceFilter;
+use tensorzero_core::db::inferences::{
+    CountInferencesForFunctionParams, CountInferencesParams, InferenceQueries,
+};
+use tensorzero_core::endpoints::stored_inferences::v1::types::{
+    BooleanMetricFilter, DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter,
 };
 use tensorzero_core::{
-    config::{MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
+    config::{Config, ConfigFileGlob},
     function::FunctionConfigType,
 };
 
-// ===== SHARED TEST IMPLEMENTATIONS =====
+async fn get_e2e_config() -> Config {
+    Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(Path::new("tests/e2e/config/tensorzero.*.toml")).unwrap(),
+        false,
+    )
+    .await
+    .unwrap()
+    .into_config_without_writing_for_tests()
+}
 
-async fn test_count_inferences_for_chat_function(conn: impl InferenceCountQueries) {
+// ===== SHARED TEST IMPLEMENTATIONS =====
+// These tests use InferenceQueries::count_inferences which works with both backends.
+
+async fn test_count_inferences_for_chat_function(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
     let params = CountInferencesParams {
-        function_name: "write_haiku",
-        function_type: FunctionConfigType::Chat,
-        variant_name: None,
+        function_name: Some("write_haiku"),
+        ..Default::default()
     };
 
-    let count = conn.count_inferences_for_function(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     // The fixture data has 804 inferences for write_haiku
     // ClickHouse may have more due to other tests
@@ -32,14 +48,14 @@ async fn test_count_inferences_for_chat_function(conn: impl InferenceCountQuerie
 }
 make_db_test!(test_count_inferences_for_chat_function);
 
-async fn test_count_inferences_for_json_function(conn: impl InferenceCountQueries) {
+async fn test_count_inferences_for_json_function(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
     let params = CountInferencesParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
-        variant_name: None,
+        function_name: Some("extract_entities"),
+        ..Default::default()
     };
 
-    let count = conn.count_inferences_for_function(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     // The fixture data has 604 inferences for extract_entities
     assert!(
@@ -49,14 +65,15 @@ async fn test_count_inferences_for_json_function(conn: impl InferenceCountQuerie
 }
 make_db_test!(test_count_inferences_for_json_function);
 
-async fn test_count_inferences_for_chat_function_with_variant(conn: impl InferenceCountQueries) {
+async fn test_count_inferences_for_chat_function_with_variant(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
     let params = CountInferencesParams {
-        function_name: "write_haiku",
-        function_type: FunctionConfigType::Chat,
+        function_name: Some("write_haiku"),
         variant_name: Some("initial_prompt_gpt4o_mini"),
+        ..Default::default()
     };
 
-    let count = conn.count_inferences_for_function(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     // The fixture data has 649 inferences for write_haiku with variant initial_prompt_gpt4o_mini
     assert!(
@@ -66,14 +83,15 @@ async fn test_count_inferences_for_chat_function_with_variant(conn: impl Inferen
 }
 make_db_test!(test_count_inferences_for_chat_function_with_variant);
 
-async fn test_count_inferences_for_json_function_with_variant(conn: impl InferenceCountQueries) {
+async fn test_count_inferences_for_json_function_with_variant(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
     let params = CountInferencesParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
+        function_name: Some("extract_entities"),
         variant_name: Some("gpt4o_initial_prompt"),
+        ..Default::default()
     };
 
-    let count = conn.count_inferences_for_function(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     // The fixture data has 132 inferences for extract_entities with variant gpt4o_initial_prompt
     assert!(
@@ -83,36 +101,38 @@ async fn test_count_inferences_for_json_function_with_variant(conn: impl Inferen
 }
 make_db_test!(test_count_inferences_for_json_function_with_variant);
 
-async fn test_count_inferences_for_nonexistent_function(conn: impl InferenceCountQueries) {
+async fn test_count_inferences_for_nonexistent_function(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
     let params = CountInferencesParams {
-        function_name: "nonexistent_function",
-        function_type: FunctionConfigType::Chat,
-        variant_name: None,
+        function_name: Some("nonexistent_function"),
+        ..Default::default()
     };
 
-    let count = conn.count_inferences_for_function(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     assert_eq!(count, 0, "Expected 0 for nonexistent function");
 }
 make_db_test!(test_count_inferences_for_nonexistent_function);
 
-async fn test_count_inferences_for_nonexistent_variant(conn: impl InferenceCountQueries) {
+async fn test_count_inferences_for_nonexistent_variant(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
     let params = CountInferencesParams {
-        function_name: "write_haiku",
-        function_type: FunctionConfigType::Chat,
+        function_name: Some("write_haiku"),
         variant_name: Some("nonexistent_variant"),
+        ..Default::default()
     };
 
-    let count = conn.count_inferences_for_function(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     assert_eq!(count, 0, "Expected 0 for nonexistent variant");
 }
 make_db_test!(test_count_inferences_for_nonexistent_variant);
 
-async fn test_count_inferences_by_variant_for_chat_function(
-    conn: impl InferenceCountQueries + Clone,
-) {
-    let params = CountInferencesParams {
+// These tests use InferenceQueries methods that provide grouping functionality.
+
+async fn test_count_inferences_by_variant_for_chat_function(conn: impl InferenceQueries + Clone) {
+    let config = get_e2e_config().await;
+    let params = CountInferencesForFunctionParams {
         function_name: "write_haiku",
         function_type: FunctionConfigType::Chat,
         variant_name: None,
@@ -127,18 +147,14 @@ async fn test_count_inferences_by_variant_for_chat_function(
         rows.len()
     );
 
-    // The sum of all variant counts should match the total count
+    // The sum of all variant counts should match the total count from InferenceQueries
     let total_from_variants: u64 = rows.iter().map(|r| r.inference_count).sum();
 
     let total_params = CountInferencesParams {
-        function_name: "write_haiku",
-        function_type: FunctionConfigType::Chat,
-        variant_name: None,
+        function_name: Some("write_haiku"),
+        ..Default::default()
     };
-    let total_count = conn
-        .count_inferences_for_function(total_params)
-        .await
-        .unwrap();
+    let total_count = conn.count_inferences(&config, &total_params).await.unwrap();
 
     assert_eq!(
         total_from_variants, total_count,
@@ -167,8 +183,8 @@ async fn test_count_inferences_by_variant_for_chat_function(
 }
 make_db_test!(test_count_inferences_by_variant_for_chat_function);
 
-async fn test_count_inferences_by_variant_for_json_function(conn: impl InferenceCountQueries) {
-    let params = CountInferencesParams {
+async fn test_count_inferences_by_variant_for_json_function(conn: impl InferenceQueries) {
+    let params = CountInferencesForFunctionParams {
         function_name: "extract_entities",
         function_type: FunctionConfigType::Json,
         variant_name: None,
@@ -192,10 +208,8 @@ async fn test_count_inferences_by_variant_for_json_function(conn: impl Inference
 }
 make_db_test!(test_count_inferences_by_variant_for_json_function);
 
-async fn test_count_inferences_by_variant_for_nonexistent_function(
-    conn: impl InferenceCountQueries,
-) {
-    let params = CountInferencesParams {
+async fn test_count_inferences_by_variant_for_nonexistent_function(conn: impl InferenceQueries) {
+    let params = CountInferencesForFunctionParams {
         function_name: "nonexistent_function",
         function_type: FunctionConfigType::Chat,
         variant_name: None,
@@ -210,7 +224,7 @@ async fn test_count_inferences_by_variant_for_nonexistent_function(
 }
 make_db_test!(test_count_inferences_by_variant_for_nonexistent_function);
 
-async fn test_list_functions_with_inference_count(conn: impl InferenceCountQueries) {
+async fn test_list_functions_with_inference_count(conn: impl InferenceQueries) {
     let rows = conn.list_functions_with_inference_count().await.unwrap();
 
     // Should return multiple functions
@@ -260,184 +274,175 @@ async fn test_list_functions_with_inference_count(conn: impl InferenceCountQueri
 }
 make_db_test!(test_list_functions_with_inference_count);
 
-// ===== CLICKHOUSE-ONLY TEST IMPLEMENTATIONS =====
-// These tests require feedback tables which are not yet implemented for Postgres.
+// ===== FEEDBACK FILTER TESTS =====
+// These tests use InferenceQueries::count_inferences with metric filters.
 
-async fn test_count_feedbacks_for_float_metric(conn: impl InferenceCountQueries) {
-    let metric_config = MetricConfig {
-        r#type: MetricConfigType::Float,
-        optimize: MetricConfigOptimize::Max,
-        level: MetricConfigLevel::Inference,
-        description: None,
+async fn test_count_feedbacks_for_float_metric(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::FloatMetric(FloatMetricFilter {
+        metric_name: "haiku_rating".to_string(),
+        value: 0.0,
+        comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
+    });
+    let params = CountInferencesParams {
+        function_name: Some("write_haiku"),
+        filters: Some(&filter),
+        ..Default::default()
     };
 
-    let params = CountInferencesWithFeedbackParams {
-        function_name: "write_haiku",
-        function_type: FunctionConfigType::Chat,
-        metric_name: "haiku_rating",
-        metric_config: &metric_config,
-        metric_threshold: None,
-    };
-
-    let count = conn.count_inferences_with_feedback(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     assert!(
         count > 0,
         "Should have feedbacks for haiku_rating metric on write_haiku"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_feedbacks_for_float_metric);
+make_db_test!(test_count_feedbacks_for_float_metric);
 
-async fn test_count_feedbacks_for_boolean_metric(conn: impl InferenceCountQueries) {
-    let metric_config = MetricConfig {
-        r#type: MetricConfigType::Boolean,
-        optimize: MetricConfigOptimize::Max,
-        level: MetricConfigLevel::Inference,
-        description: None,
+async fn test_count_feedbacks_for_boolean_metric(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: true,
+    });
+    let params = CountInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter),
+        ..Default::default()
     };
 
-    let params = CountInferencesWithFeedbackParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
-        metric_name: "exact_match",
-        metric_config: &metric_config,
-        metric_threshold: None,
-    };
-
-    let count = conn.count_inferences_with_feedback(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     assert!(
         count > 0,
         "Should have feedbacks for exact_match metric on extract_entities"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_feedbacks_for_boolean_metric);
+make_db_test!(test_count_feedbacks_for_boolean_metric);
 
-async fn test_count_inferences_with_threshold_float_metric(conn: impl InferenceCountQueries) {
-    let metric_config = MetricConfig {
-        r#type: MetricConfigType::Float,
-        optimize: MetricConfigOptimize::Max,
-        level: MetricConfigLevel::Inference,
-        description: None,
+async fn test_count_inferences_with_threshold_float_metric(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+
+    // First get total feedbacks (any haiku_rating >= 0)
+    let filter_all = InferenceFilter::FloatMetric(FloatMetricFilter {
+        metric_name: "haiku_rating".to_string(),
+        value: 0.0,
+        comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
+    });
+    let params_all = CountInferencesParams {
+        function_name: Some("write_haiku"),
+        filters: Some(&filter_all),
+        ..Default::default()
     };
 
-    // First get total feedbacks
-    let total_params = CountInferencesWithFeedbackParams {
-        function_name: "write_haiku",
-        function_type: FunctionConfigType::Chat,
-        metric_name: "haiku_rating",
-        metric_config: &metric_config,
-        metric_threshold: None,
-    };
+    let total_feedbacks = conn.count_inferences(&config, &params_all).await.unwrap();
 
-    let total_feedbacks = conn
-        .count_inferences_with_feedback(total_params)
-        .await
-        .unwrap();
-
-    // Then get with threshold
-    let threshold_params = CountInferencesWithFeedbackParams {
-        function_name: "write_haiku",
-        function_type: FunctionConfigType::Chat,
-        metric_name: "haiku_rating",
-        metric_config: &metric_config,
-        metric_threshold: Some(0.5),
+    // Then get with threshold (haiku_rating > 0.5)
+    let filter_threshold = InferenceFilter::FloatMetric(FloatMetricFilter {
+        metric_name: "haiku_rating".to_string(),
+        value: 0.5,
+        comparison_operator: FloatComparisonOperator::GreaterThan,
+    });
+    let params_threshold = CountInferencesParams {
+        function_name: Some("write_haiku"),
+        filters: Some(&filter_threshold),
+        ..Default::default()
     };
 
     let threshold_count = conn
-        .count_inferences_with_feedback(threshold_params)
+        .count_inferences(&config, &params_threshold)
         .await
         .unwrap();
 
-    // Threshold count should be <= total feedbacks
+    // Threshold count should be < total feedbacks
+    assert!(
+        threshold_count > 0,
+        "Should have at least one inference with feedback > 0.5"
+    );
     assert!(
         threshold_count < total_feedbacks,
-        "Threshold count should be < total feedbacks"
+        "Threshold count ({threshold_count}) should be < total feedbacks ({total_feedbacks})"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_inferences_with_threshold_float_metric);
+make_db_test!(test_count_inferences_with_threshold_float_metric);
 
-async fn test_count_inferences_with_threshold_boolean_metric_max(conn: impl InferenceCountQueries) {
-    let metric_config = MetricConfig {
-        r#type: MetricConfigType::Boolean,
-        optimize: MetricConfigOptimize::Max,
-        level: MetricConfigLevel::Inference,
-        description: None,
+async fn test_count_inferences_with_threshold_boolean_metric_max(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+
+    // Get count of exact_match = true
+    let filter_true = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: true,
+    });
+    let params_true = CountInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_true),
+        ..Default::default()
     };
 
-    // First get total feedbacks
-    let total_params = CountInferencesWithFeedbackParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
-        metric_name: "exact_match",
-        metric_config: &metric_config,
-        metric_threshold: None,
+    let true_count = conn.count_inferences(&config, &params_true).await.unwrap();
+
+    // Get count of exact_match = false
+    let filter_false = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match".to_string(),
+        value: false,
+    });
+    let params_false = CountInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter_false),
+        ..Default::default()
     };
 
-    let total_feedbacks = conn
-        .count_inferences_with_feedback(total_params)
-        .await
-        .unwrap();
+    let false_count = conn.count_inferences(&config, &params_false).await.unwrap();
 
-    // Then get with threshold (value = 1 for max optimization)
-    let threshold_params = CountInferencesWithFeedbackParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
-        metric_name: "exact_match",
-        metric_config: &metric_config,
-        metric_threshold: Some(0.0), // Not used for boolean, but required
-    };
-
-    let threshold_count = conn
-        .count_inferences_with_feedback(threshold_params)
-        .await
-        .unwrap();
-
-    // Threshold count should be <= total feedbacks
+    // Both should have some counts (showing the filter works)
     assert!(
-        threshold_count < total_feedbacks,
-        "Threshold count should be < total feedbacks"
+        true_count > 0,
+        "Should have some exact_match = true feedbacks"
+    );
+    assert!(
+        false_count > 0,
+        "Should have some exact_match = false feedbacks"
+    );
+    // true_count should be less than total (true + false)
+    assert!(
+        true_count < true_count + false_count,
+        "true_count ({true_count}) should be < total ({}) since there are false values",
+        true_count + false_count
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_inferences_with_threshold_boolean_metric_max);
+make_db_test!(test_count_inferences_with_threshold_boolean_metric_max);
 
-async fn test_count_demonstration_feedbacks(conn: impl InferenceCountQueries) {
-    let params = CountInferencesWithDemonstrationFeedbacksParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
+async fn test_count_demonstration_feedbacks(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+        has_demonstration: true,
+    });
+    let params = CountInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter),
+        ..Default::default()
     };
 
-    let count = conn
-        .count_inferences_with_demonstration_feedback(params)
-        .await
-        .unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     assert!(count > 0, "Should have demonstrations for extract_entities");
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_demonstration_feedbacks);
+make_db_test!(test_count_demonstration_feedbacks);
 
-async fn test_count_feedbacks_for_episode_level_boolean_metric(conn: impl InferenceCountQueries) {
-    let metric_config = MetricConfig {
-        r#type: MetricConfigType::Boolean,
-        optimize: MetricConfigOptimize::Max,
-        level: MetricConfigLevel::Episode,
-        description: None,
+async fn test_count_feedbacks_for_episode_level_boolean_metric(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::BooleanMetric(BooleanMetricFilter {
+        metric_name: "exact_match_episode".to_string(),
+        value: true,
+    });
+    let params = CountInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter),
+        ..Default::default()
     };
 
-    let params = CountInferencesWithFeedbackParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
-        metric_name: "exact_match_episode",
-        metric_config: &metric_config,
-        metric_threshold: None,
-    };
-
-    let count = conn.count_inferences_with_feedback(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     // We're verifying the query executes successfully with episode-level join
     assert!(
@@ -445,26 +450,22 @@ async fn test_count_feedbacks_for_episode_level_boolean_metric(conn: impl Infere
         "Should have feedbacks for boolean metric exact_match_episode on extract_entities"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_feedbacks_for_episode_level_boolean_metric);
+make_db_test!(test_count_feedbacks_for_episode_level_boolean_metric);
 
-async fn test_count_feedbacks_for_episode_level_float_metric(conn: impl InferenceCountQueries) {
-    let metric_config = MetricConfig {
-        r#type: MetricConfigType::Float,
-        optimize: MetricConfigOptimize::Max,
-        level: MetricConfigLevel::Episode,
-        description: None,
+async fn test_count_feedbacks_for_episode_level_float_metric(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+    let filter = InferenceFilter::FloatMetric(FloatMetricFilter {
+        metric_name: "jaccard_similarity_episode".to_string(),
+        value: 0.0,
+        comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
+    });
+    let params = CountInferencesParams {
+        function_name: Some("extract_entities"),
+        filters: Some(&filter),
+        ..Default::default()
     };
 
-    let params = CountInferencesWithFeedbackParams {
-        function_name: "extract_entities",
-        function_type: FunctionConfigType::Json,
-        metric_name: "jaccard_similarity_episode",
-        metric_config: &metric_config,
-        metric_threshold: None,
-    };
-
-    let count = conn.count_inferences_with_feedback(params).await.unwrap();
+    let count = conn.count_inferences(&config, &params).await.unwrap();
 
     // We're verifying the query executes successfully with episode-level join
     assert!(
@@ -472,5 +473,4 @@ async fn test_count_feedbacks_for_episode_level_float_metric(conn: impl Inferenc
         "Should have feedbacks for float metric jaccard_similarity_episode on extract_entities"
     );
 }
-// TODO(#5691): Implement feedback tables for Postgres and switch to make_db_test
-make_clickhouse_only_test!(test_count_feedbacks_for_episode_level_float_metric);
+make_db_test!(test_count_feedbacks_for_episode_level_float_metric);

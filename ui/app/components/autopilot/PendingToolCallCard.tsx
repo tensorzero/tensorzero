@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import type { GatewayEvent } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
@@ -8,8 +9,9 @@ import { getToolCallEventId, isToolEvent, ToolEventId } from "./EventStream";
 type PendingToolCallCardProps = {
   event: GatewayEvent;
   isLoading: boolean;
-  loadingAction?: "approving" | "rejecting";
+  loadingAction?: "approving" | "rejecting" | "approving_all";
   onAuthorize: (approved: boolean) => void;
+  onApproveAll?: () => void;
   additionalCount: number;
   isInCooldown?: boolean;
   className?: string;
@@ -20,6 +22,7 @@ export function PendingToolCallCard({
   isLoading,
   loadingAction,
   onAuthorize,
+  onApproveAll,
   additionalCount,
   isInCooldown = false,
   className,
@@ -75,8 +78,9 @@ export function PendingToolCallCard({
           className="inline-flex cursor-pointer items-center gap-2 text-left"
           onClick={() => setIsExpanded((current) => !current)}
         >
-          <span className="text-sm font-medium">
-            Tool Call &middot;{" "}
+          <span className="inline-flex items-center gap-2 text-sm font-medium">
+            Tool Call
+            <DotSeparator />
             <span className="font-mono font-medium">{name}</span>
           </span>
           <span
@@ -125,6 +129,18 @@ export function PendingToolCallCard({
                   +{additionalCount}
                 </span>
               )}
+              {additionalCount > 0 && onApproveAll && (
+                <button
+                  type="button"
+                  className="h-6 cursor-pointer rounded border border-green-600 bg-green-50 px-2 text-xs font-medium text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-600 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-900/40"
+                  disabled={isDisabled}
+                  onClick={onApproveAll}
+                >
+                  {loadingAction === "approving_all"
+                    ? "Approving..."
+                    : `Approve All (${additionalCount + 1})`}
+                </button>
+              )}
               <button
                 type="button"
                 className="bg-fg-primary text-bg-primary hover:bg-fg-secondary h-6 cursor-pointer rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
@@ -145,7 +161,7 @@ export function PendingToolCallCard({
           )}
           <div className="text-fg-muted flex items-center gap-1.5 text-xs">
             <ToolEventId id={getToolCallEventId(event)} />
-            <span aria-hidden="true">&middot;</span>
+            <DotSeparator />
             <TableItemTime timestamp={event.created_at} />
           </div>
         </div>

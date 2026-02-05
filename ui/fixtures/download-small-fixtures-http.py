@@ -10,42 +10,21 @@ import concurrent.futures
 import hashlib
 import os
 import time
-from pathlib import Path
 
 import requests
+from download_fixtures_consts import (
+    PART_SIZE,
+    R2_PUBLIC_BUCKET_URL,
+)
+from download_fixtures_consts import (
+    SMALL_FIXTURES as FIXTURES,
+)
+from download_fixtures_consts import (
+    SMALL_FIXTURES_DIR as FIXTURES_DIR,
+)
 
 # cd to directory of this file
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-
-# =============================================================================
-# Constants
-# =============================================================================
-
-PART_SIZE = 8388608
-
-# Map of remote filename (in R2) -> local filename
-# When a file needs updating, add version suffix to remote name (e.g., "file_v2.jsonl")
-# and keep the local name unchanged (e.g., "file.jsonl")
-FIXTURES = {
-    "model_inference_examples.jsonl": "model_inference_examples.jsonl",
-    "chat_inference_examples_20260123.jsonl": "chat_inference_examples.jsonl",
-    "json_inference_examples.jsonl": "json_inference_examples.jsonl",
-    "boolean_metric_feedback_examples.jsonl": "boolean_metric_feedback_examples.jsonl",
-    "float_metric_feedback_examples.jsonl": "float_metric_feedback_examples.jsonl",
-    "demonstration_feedback_examples.jsonl": "demonstration_feedback_examples.jsonl",
-    "model_inference_cache_e2e_20260122_183412.jsonl": "model_inference_cache_e2e.jsonl",
-    "json_inference_datapoint_examples.jsonl": "json_inference_datapoint_examples.jsonl",
-    "chat_inference_datapoint_examples.jsonl": "chat_inference_datapoint_examples.jsonl",
-    "dynamic_evaluation_run_episode_examples.jsonl": "dynamic_evaluation_run_episode_examples.jsonl",
-    "jaro_winkler_similarity_feedback.jsonl": "jaro_winkler_similarity_feedback.jsonl",
-    "comment_feedback_examples.jsonl": "comment_feedback_examples.jsonl",
-    "dynamic_evaluation_run_examples.jsonl": "dynamic_evaluation_run_examples.jsonl",
-}
-
-R2_PUBLIC_BUCKET_URL = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
-FIXTURES_DIR = Path("./small-fixtures")
-
 
 # =============================================================================
 # Utilities

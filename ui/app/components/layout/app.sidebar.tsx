@@ -146,7 +146,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent className="overflow-x-hidden! overflow-y-auto! transition-[width] duration-200">
         <SidebarGroup>
-          <SidebarGroupContent>
+          <SidebarGroupContent className="flex flex-col gap-1">
             <SidebarMenuItem className="list-none">
               <SidebarMenuButton
                 asChild

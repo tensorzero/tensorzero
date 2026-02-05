@@ -8,7 +8,9 @@ import {
   Tooltip,
 } from "recharts";
 import React, { useState, useMemo } from "react";
-import { Await } from "react-router";
+import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertCircle } from "lucide-react";
 import { CHART_COLORS } from "~/utils/chart";
 import {
   Select,
@@ -88,6 +90,23 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
 }
 
 const MARGIN = { top: 12, right: 16, bottom: 28, left: 56 };
+
+function ModelLatencyError() {
+  const error = useAsyncError();
+  let message = "Failed to load latency data";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading latency data"
+      description={message}
+    />
+  );
+}
 
 function LatencyTimeWindowSelector({
   value,
@@ -259,7 +278,7 @@ export function ModelLatency({
             Quantiles of latency metrics by model
           </CardDescription>
         </div>
-        <div className="flex flex-col justify-center gap-2">
+        <div className="flex items-center gap-2">
           <LatencyTimeWindowSelector
             value={timeGranularity}
             onValueChange={onTimeGranularityChange}
@@ -280,7 +299,10 @@ export function ModelLatency({
       </CardHeader>
       <CardContent>
         <React.Suspense fallback={<div>Loading latency data...</div>}>
-          <Await resolve={modelLatencyDataPromise}>
+          <Await
+            resolve={modelLatencyDataPromise}
+            errorElement={<ModelLatencyError />}
+          >
             {(latencyData) => (
               <LatencyQuantileChart
                 latencyData={latencyData}

@@ -13,9 +13,10 @@ export type WriteConfigToolParams = {
   /**
    * Templates that should be stored with the config.
    */
-  extra_templates: { [key in string]?: string };
+  extra_templates: { [key in string]: string };
   /**
-   * Only set if the config write is an upsert to a single TOML entry (so that we can add nice edit handling)
+   * We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
+   * Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
    */
-  edit: EditPayload | null;
+  edit: Array<EditPayload> | null;
 };

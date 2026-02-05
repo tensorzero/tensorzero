@@ -19,7 +19,7 @@ export type StoredChatInference = {
   timestamp: string;
   episode_id: string;
   inference_id: string;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   extra_body: Array<ExtraBody>;
   inference_params: InferenceParams;
   processing_time_ms?: bigint;

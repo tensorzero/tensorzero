@@ -8,5 +8,5 @@ export type UninitializedTrackAndStopConfig = {
   delta: number;
   epsilon: number;
   update_period_s: bigint;
-  min_prob: number | null;
+  min_prob?: number;
 };

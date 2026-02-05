@@ -2,8 +2,8 @@ use axum::Json;
 use axum::extract::{Query, State};
 use tracing::instrument;
 
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::datasets::{DatasetQueries, GetDatasetMetadataParams};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -17,7 +17,11 @@ pub async fn list_datasets_handler(
     State(app_state): AppState,
     Query(params): Query<ListDatasetsRequest>,
 ) -> Result<Json<ListDatasetsResponse>, Error> {
-    let response = list_datasets(&app_state.clickhouse_connection_info, params).await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = list_datasets(&database, params).await?;
     Ok(Json(response))
 }
 
@@ -25,7 +29,7 @@ pub async fn list_datasets_handler(
 ///
 /// This is the non-handler function for use by the embedded client.
 pub async fn list_datasets(
-    clickhouse: &ClickHouseConnectionInfo,
+    database: &(dyn DatasetQueries + Sync),
     params: ListDatasetsRequest,
 ) -> Result<ListDatasetsResponse, Error> {
     let db_params = GetDatasetMetadataParams {
@@ -33,7 +37,7 @@ pub async fn list_datasets(
         limit: params.limit,
         offset: params.offset,
     };
-    let db_datasets = clickhouse.get_dataset_metadata(&db_params).await?;
+    let db_datasets = database.get_dataset_metadata(&db_params).await?;
 
     // Convert from DB type to API type
     let datasets = db_datasets

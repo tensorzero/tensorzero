@@ -141,12 +141,12 @@ export async function listConfigWrites(
  * Extracts the EditPayload from a config write event.
  *
  * @param event - A GatewayEvent that should be a write_config tool call
- * @returns The EditPayload from the event's arguments
+ * @returns The EditPayload array from the event's arguments
  * @throws Error if the event is not a write_config tool call or has no edit payload
  */
-export function extractEditPayloadFromConfigWrite(
+export function extractEditPayloadsFromConfigWrite(
   event: GatewayEvent,
-): EditPayload {
+): EditPayload[] {
   if (event.payload.type !== "tool_call") {
     throw new Error(
       `Expected tool_call event but got ${event.payload.type} for event ${event.id}`,
@@ -190,8 +190,12 @@ export async function writeConfigWriteToFile(
   configWriter: ConfigWriter,
   event: GatewayEvent,
 ): Promise<WriteConfigWriteResult> {
-  const editPayload = extractEditPayloadFromConfigWrite(event);
-  const writtenPaths = await configWriter.applyEdit(editPayload);
+  const editPayloads = extractEditPayloadsFromConfigWrite(event);
+  const writtenPaths: string[] = [];
+  for (const editPayload of editPayloads) {
+    const paths = await configWriter.applyEdit(editPayload);
+    writtenPaths.push(...paths);
+  }
   return {
     eventId: event.id,
     writtenPaths,

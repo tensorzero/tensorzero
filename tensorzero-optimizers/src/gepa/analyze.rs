@@ -3,7 +3,6 @@
 //! Analyzes inference outputs to identify errors, improvements, and optimal patterns.
 //! Builds inputs for the analyze function and handles results with optional inference context.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::future::join_all;
@@ -33,35 +32,42 @@ use evaluations::stats::EvaluationInfo;
 
 use crate::gepa::validate::FunctionContext;
 
-/// Fields to exclude when serializing datapoints for GEPA functions.
-/// These metadata fields are not relevant for prompt optimization and waste tokens.
-const DATAPOINT_FIELDS_TO_DROP: &[&str] = &[
-    "dataset_name",
-    "id",
-    "episode_id",
-    "auxiliary",
-    "is_deleted",
-    "is_custom",
-    "source_inference_id",
-    "staled_at",
-    "updated_at",
-    "name",
+/// Fields to include when serializing datapoints for GEPA functions.
+/// Only these fields are relevant for prompt optimization analysis.
+/// This reduces token usage by excluding IDs, timestamps, and internal flags.
+/// Note: `tool_params` fields are flattened into the top-level object.
+const DATAPOINT_FIELDS_TO_KEEP: &[&str] = &[
+    "function_name",
+    "input",
+    "output",
+    "output_schema", // JSON datapoints only
+    "tags",
+    // Flattened DynamicToolParams fields (Chat datapoints only)
+    "allowed_tools",
+    "additional_tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "provider_tools",
 ];
 
-/// Serialize a datapoint for GEPA functions, excluding superfluous metadata fields.
+/// Serialize a datapoint for GEPA functions, including only whitelisted fields.
 ///
-/// This reduces token usage by removing fields like IDs, timestamps, and flags
-/// that are not relevant for prompt optimization analysis.
+/// This reduces token usage by only including fields relevant for prompt
+/// optimization analysis, excluding IDs, timestamps, and internal flags.
 fn serialize_filtered_datapoint(datapoint: &Datapoint) -> Result<Value, Error> {
-    let mut value = to_value(datapoint)?;
+    let value = to_value(datapoint)?;
 
-    if let Some(obj) = value.as_object_mut() {
-        for field in DATAPOINT_FIELDS_TO_DROP {
-            obj.remove(*field);
-        }
-    }
+    let Some(obj) = value.as_object() else {
+        return Ok(value);
+    };
 
-    Ok(value)
+    let filtered: Map<String, Value> = obj
+        .iter()
+        .filter(|(key, _)| DATAPOINT_FIELDS_TO_KEEP.contains(&key.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    Ok(Value::Object(filtered))
 }
 
 // ============================================================================
@@ -197,16 +203,22 @@ pub fn build_analyze_input(
     } = function_context;
 
     // Extract templates map from variant config
-    let templates_map: HashMap<String, String> = variant_config
-        .templates
-        .inner
-        .iter()
-        .map(|(name, config)| (name.clone(), config.path.data().to_string()))
-        .collect();
+    // Sort keys for deterministic serialization order (important for caching)
+    let mut template_names: Vec<_> = variant_config.templates.inner.keys().collect();
+    template_names.sort();
+    let mut templates_map = Map::new();
+    for name in template_names {
+        let config = &variant_config.templates.inner[name];
+        templates_map.insert(name.clone(), json!(config.path.data()));
+    }
 
     // Build evaluation_scores map with just the scores
+    // Sort keys for deterministic serialization order (important for caching)
+    let mut evaluator_names: Vec<_> = eval_info.evaluations.keys().collect();
+    evaluator_names.sort();
     let mut evaluation_scores = Map::new();
-    for (evaluator_name, result_opt) in &eval_info.evaluations {
+    for evaluator_name in evaluator_names {
+        let result_opt = &eval_info.evaluations[evaluator_name];
         // Preserve the score type (number, boolean, or null)
         let score = result_opt
             .as_ref()

@@ -436,3 +436,113 @@ async fn test_inference_with_thinking_budget_tokens() {
         .expect("Expected thinking budget tokens");
     assert_eq!(budget_tokens, 1024);
 }
+
+/// Test that AWS Bedrock API key (bearer token) authentication works in isolation.
+/// Removes all IAM credentials to ensure only bearer token auth is used.
+#[tokio::test]
+async fn test_aws_bedrock_auth_bearer_token_only() {
+    use tensorzero::{
+        ClientInferenceParams, Input, InputMessage, InputMessageContent, Role,
+        test_helpers::make_embedded_gateway_with_config,
+    };
+    use tensorzero_core::inference::types::Text;
+
+    // Require bearer token to be set
+    let _api_key = std::env::var("AWS_BEARER_TOKEN_BEDROCK")
+        .expect("AWS_BEARER_TOKEN_BEDROCK must be set to run this test");
+
+    // Remove all IAM credentials to ensure only bearer token auth is used
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_ACCESS_KEY_ID");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_SECRET_ACCESS_KEY");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_SESSION_TOKEN");
+
+    let config = r#"
+[models.test-bedrock-bearer]
+routing = ["aws_bedrock"]
+
+[models.test-bedrock-bearer.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+region = "us-east-1"
+"#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+
+    let result = client
+        .inference(ClientInferenceParams {
+            model_name: Some("test-bedrock-bearer".to_string()),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Say hello".into(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "Bearer token authentication failed: {:?}",
+        result.err()
+    );
+}
+
+/// Test that AWS Bedrock IAM (SigV4) authentication works in isolation.
+/// Removes bearer token to ensure only IAM auth is used.
+#[tokio::test]
+async fn test_aws_bedrock_auth_iam_credentials_only() {
+    use tensorzero::{
+        ClientInferenceParams, Input, InputMessage, InputMessageContent, Role,
+        test_helpers::make_embedded_gateway_with_config,
+    };
+    use tensorzero_core::inference::types::Text;
+
+    // Require IAM credentials to be set
+    let _access_key_id =
+        std::env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID must be set to run this test");
+    let _secret_access_key = std::env::var("AWS_SECRET_ACCESS_KEY")
+        .expect("AWS_SECRET_ACCESS_KEY must be set to run this test");
+
+    // Remove bearer token to ensure only IAM auth is used
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+
+    let config = r#"
+[models.test-bedrock-iam]
+routing = ["aws_bedrock"]
+
+[models.test-bedrock-iam.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+region = "us-east-1"
+"#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+
+    let result = client
+        .inference(ClientInferenceParams {
+            model_name: Some("test-bedrock-iam".to_string()),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Say hello".into(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "IAM (SigV4) authentication failed: {:?}",
+        result.err()
+    );
+}
