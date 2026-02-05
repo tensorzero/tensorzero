@@ -23,6 +23,6 @@ EXPOSE 3030
 
 USER nonroot:nonroot
 
-HEALTHCHECK --start-period=30s --start-interval=1s --timeout=1s CMD ["/busybox/wget", "--spider", "--tries=1", "http://localhost:3030/status"]
+HEALTHCHECK --start-period=30s --start-interval=1s --timeout=1s CMD ["mock-provider-api", "health-check"]
 
 ENTRYPOINT ["mock-provider-api"]
