@@ -16,7 +16,7 @@ RUN cargo build -p provider-proxy $CARGO_BUILD_FLAGS && \
 
 # ========== provider-proxy ==========
 
-FROM gcr.io/distroless/cc-debian12:debug AS provider-proxy
+FROM gcr.io/distroless/cc-debian12 AS provider-proxy
 
 COPY --from=builder /release/provider-proxy /usr/local/bin/provider-proxy
 

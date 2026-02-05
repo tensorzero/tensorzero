@@ -13,7 +13,7 @@ RUN cargo build -p mock-provider-api $CARGO_BUILD_FLAGS && \
 
 # ========== mock-provider-api ==========
 
-FROM gcr.io/distroless/cc-debian12:debug AS mock-provider-api
+FROM gcr.io/distroless/cc-debian12 AS mock-provider-api
 
 COPY --from=builder /release/mock-provider-api /usr/local/bin/mock-provider-api
 
