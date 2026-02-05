@@ -1,6 +1,9 @@
 import { createRequire } from "module";
-import type { KeyInfo } from "./bindings";
-import type { PostgresClient as NativePostgresClientType } from "../index";
+import type { EditPayload, KeyInfo } from "./bindings";
+import type {
+  ConfigWriter as NativeConfigWriterType,
+  PostgresClient as NativePostgresClientType,
+} from "../index";
 
 // Re-export types from bindings
 export type * from "./bindings";
@@ -8,8 +11,10 @@ export type * from "./bindings";
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
 
-const { PostgresClient: NativePostgresClient } =
-  require("../index.cjs") as typeof import("../index");
+const {
+  ConfigWriter: NativeConfigWriter,
+  PostgresClient: NativePostgresClient,
+} = require("../index.cjs") as typeof import("../index");
 
 /**
  * Wrapper class for type safety and convenience
@@ -48,5 +53,25 @@ export class PostgresClient {
       description ?? null,
     );
     return JSON.parse(result) as KeyInfo;
+  }
+}
+
+/**
+ * Wrapper class for type safety and convenience
+ * around the native ConfigWriter
+ */
+export class ConfigWriter {
+  private nativeConfigWriter: NativeConfigWriterType;
+
+  private constructor(writer: NativeConfigWriterType) {
+    this.nativeConfigWriter = writer;
+  }
+
+  static async new(globPattern: string): Promise<ConfigWriter> {
+    return new ConfigWriter(await NativeConfigWriter.new(globPattern));
+  }
+
+  async applyEdit(edit: EditPayload): Promise<string[]> {
+    return this.nativeConfigWriter.applyEdit(JSON.stringify(edit));
   }
 }
