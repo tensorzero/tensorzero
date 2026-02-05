@@ -37,7 +37,8 @@ impl ToolMetadata for GetConfigTool {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Get the config snapshot. No parameters required.",
-            "properties": {}
+            "properties": {},
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

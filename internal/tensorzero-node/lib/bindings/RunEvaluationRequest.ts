@@ -50,5 +50,5 @@ export type RunEvaluationRequest = {
   /**
    * Per-evaluator precision targets for adaptive stopping
    */
-  precision_targets?: { [key in string]?: number };
+  precision_targets?: { [key in string]: number };
 };

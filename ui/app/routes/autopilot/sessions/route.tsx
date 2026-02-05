@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
-import { Suspense, use } from "react";
+import { Suspense } from "react";
 import type { Route } from "./+types/route";
-import { data, useLocation, useNavigate } from "react-router";
+import { Await, data, useLocation, useNavigate } from "react-router";
 import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import {
   PageHeader,
@@ -18,6 +18,7 @@ import type { Session } from "~/types/tensorzero";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   Table,
+  TableAsyncErrorState,
   TableBody,
   TableCell,
   TableHead,
@@ -74,7 +75,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-// Skeleton rows for loading state - matches table columns (Session ID, Created)
+// Skeleton rows for loading state - matches table columns (Session ID, Summary, Created)
 function SkeletonRows() {
   return (
     <>
@@ -83,57 +84,15 @@ function SkeletonRows() {
           <TableCell>
             <Skeleton className="h-5 w-24" />
           </TableCell>
-          <TableCell className="w-0 text-right whitespace-nowrap">
-            <Skeleton className="ml-auto h-5 w-36" />
+          <TableCell className="max-w-xs">
+            <Skeleton className="h-5 w-48" />
+          </TableCell>
+          <TableCell className="w-52 whitespace-nowrap">
+            <Skeleton className="h-5 w-36" />
           </TableCell>
         </TableRow>
       ))}
     </>
-  );
-}
-
-// Resolves promise and renders table rows
-function TableBodyContent({
-  data,
-  gatewayVersion,
-  uiVersion,
-}: {
-  data: Promise<SessionsData>;
-  gatewayVersion?: string;
-  uiVersion?: string;
-}) {
-  const { sessions } = use(data);
-
-  return (
-    <SessionsTableRows
-      sessions={sessions}
-      gatewayVersion={gatewayVersion}
-      uiVersion={uiVersion}
-    />
-  );
-}
-
-// Resolves promise and renders pagination
-function PaginationContent({
-  data,
-  offset,
-  onPreviousPage,
-  onNextPage,
-}: {
-  data: Promise<SessionsData>;
-  offset: number;
-  onPreviousPage: () => void;
-  onNextPage: () => void;
-}) {
-  const { hasMore } = use(data);
-
-  return (
-    <PageButtons
-      onPreviousPage={onPreviousPage}
-      onNextPage={onNextPage}
-      disablePrevious={offset <= 0}
-      disableNext={!hasMore}
-    />
   );
 }
 
@@ -179,29 +138,44 @@ export default function AutopilotSessionsPage({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Session ID</TableHead>
-              <TableHead className="w-0 text-right whitespace-nowrap">
-                Created
-              </TableHead>
+              <TableHead className="w-36">Session ID</TableHead>
+              <TableHead>Summary</TableHead>
+              <TableHead className="w-52 whitespace-nowrap">Created</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <Suspense key={location.search} fallback={<SkeletonRows />}>
-              <TableBodyContent
-                data={sessionsData}
-                gatewayVersion={gatewayVersion}
-                uiVersion={uiVersion}
-              />
+              <Await
+                resolve={sessionsData}
+                errorElement={
+                  <TableAsyncErrorState
+                    colSpan={3}
+                    defaultMessage="Failed to load sessions"
+                  />
+                }
+              >
+                {({ sessions }) => (
+                  <SessionsTableRows
+                    sessions={sessions}
+                    gatewayVersion={gatewayVersion}
+                    uiVersion={uiVersion}
+                  />
+                )}
+              </Await>
             </Suspense>
           </TableBody>
         </Table>
         <Suspense key={location.search} fallback={<PageButtons disabled />}>
-          <PaginationContent
-            data={sessionsData}
-            offset={offset}
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-          />
+          <Await resolve={sessionsData} errorElement={<PageButtons disabled />}>
+            {({ hasMore }) => (
+              <PageButtons
+                onPreviousPage={handlePreviousPage}
+                onNextPage={handleNextPage}
+                disablePrevious={offset <= 0}
+                disableNext={!hasMore}
+              />
+            )}
+          </Await>
         </Suspense>
       </SectionLayout>
     </PageLayout>

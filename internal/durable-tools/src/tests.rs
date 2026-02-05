@@ -327,7 +327,7 @@ mod registry_tests {
                 assert_eq!(func.name, "echo_simple");
                 assert_eq!(func.description, "Echoes the input message");
                 assert!(func.parameters.is_object());
-                assert!(!func.strict);
+                assert!(func.strict);
             }
             Tool::OpenAICustom(_) => panic!("Expected Function tool"),
         }
@@ -561,19 +561,6 @@ mod builder_tests {
 mod error_tests {
     use super::*;
     use durable::{ControlFlow, TaskError};
-
-    #[test]
-    fn tool_error_from_task_error_task_internal() {
-        let task_err = TaskError::TaskInternal(anyhow::anyhow!("test error"));
-        let tool_err: ToolError = task_err.into();
-
-        match tool_err {
-            ToolError::NonControl(NonControlToolError::Internal { message }) => {
-                assert_eq!(message, "test error");
-            }
-            _ => panic!("Expected NonControl(Internal)"),
-        }
-    }
 
     #[test]
     fn tool_error_from_task_error_control_flow_suspend() {

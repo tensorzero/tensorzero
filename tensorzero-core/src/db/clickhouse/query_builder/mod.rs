@@ -24,7 +24,10 @@ pub use crate::endpoints::stored_inferences::v1::types::{
 };
 
 #[cfg(test)]
-pub mod test_util;
+pub mod test_util {
+    // re-export from old module for backwards compatibility
+    pub use crate::db::test_helpers::*;
+}
 
 impl FloatComparisonOperator {
     pub fn to_clickhouse_operator(&self) -> &str {

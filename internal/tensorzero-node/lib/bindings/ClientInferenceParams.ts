@@ -21,7 +21,7 @@ export type ClientInferenceParams = {
   variant_name?: string;
   dryrun?: boolean;
   internal: boolean;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   output_schema?: JsonValue;
   credentials: Map<string, string>;
   cache_options: CacheParamsOptions;

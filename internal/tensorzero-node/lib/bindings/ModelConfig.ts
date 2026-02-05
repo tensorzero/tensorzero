@@ -4,7 +4,7 @@ import type { TimeoutsConfig } from "./TimeoutsConfig";
 
 export type ModelConfig = {
   routing: Array<string>;
-  providers: { [key in string]?: ModelProvider };
+  providers: { [key in string]: ModelProvider };
   timeouts: TimeoutsConfig;
   skip_relay: boolean;
 };

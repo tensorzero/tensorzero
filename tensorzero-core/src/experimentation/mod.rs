@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use schemars::JsonSchema;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tensorzero_derive::TensorZeroDeserialize;
@@ -115,9 +116,11 @@ impl Default for ExperimentationConfig {
     }
 }
 
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform(uniform::UniformConfig),

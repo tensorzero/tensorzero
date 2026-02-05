@@ -265,6 +265,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/autopilot/v1/sessions/{session_id}/actions/interrupt",
             post(endpoints::internal::autopilot::interrupt_session_handler),
         )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/config-writes",
+            get(endpoints::internal::autopilot::list_config_writes_handler),
+        )
         // Other Autopilot endpoints
         .route(
             "/internal/autopilot/status",

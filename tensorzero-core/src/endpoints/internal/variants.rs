@@ -7,7 +7,7 @@ use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::db::inference_count::{CountInferencesParams, InferenceCountQueries};
+use crate::db::inferences::{CountInferencesForFunctionParams, InferenceQueries};
 use crate::error::Error;
 use crate::feature_flags::ENABLE_POSTGRES_READ;
 use crate::function::DEFAULT_FUNCTION_NAME;
@@ -52,7 +52,7 @@ pub async fn list_variants_handler(
     State(app_state): AppState,
     Path(function_name): Path<String>,
 ) -> Result<Json<ListVariantsResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
         &app_state.postgres_connection_info
     } else {
         &app_state.clickhouse_connection_info
@@ -65,7 +65,7 @@ pub async fn list_variants_handler(
 /// Core business logic for listing variants with statistics
 async fn list_variants(
     app_state: &AppStateData,
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
     function_name: &str,
 ) -> Result<ListVariantsResponse, Error> {
     let config = &app_state.config;
@@ -74,7 +74,7 @@ async fn list_variants(
     let function = config.get_function(function_name)?;
 
     // Query ClickHouse for inference counts by variant
-    let count_params = CountInferencesParams {
+    let count_params = CountInferencesForFunctionParams {
         function_name,
         function_type: function.config_type(),
         variant_name: None,
@@ -137,7 +137,7 @@ mod tests {
     use super::*;
     use crate::config::{Config, ConfigFileGlob};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
-    use crate::db::inference_count::CountByVariant;
+    use crate::db::inferences::CountByVariant;
     use crate::testing::get_unit_test_gateway_handle;
     use std::io::Write;
     use std::sync::Arc;
@@ -177,7 +177,7 @@ mod tests {
         // Mock ClickHouse to return data for only variant_a
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
+            .inference_queries
             .expect_count_inferences_by_variant()
             .times(1)
             .returning(|_| {
@@ -242,7 +242,7 @@ mod tests {
         // Mock ClickHouse to return observed model variants
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
+            .inference_queries
             .expect_count_inferences_by_variant()
             .times(1)
             .returning(|_| {

@@ -5,6 +5,6 @@ export type EvaluationRunSuccessEvent = {
   evaluation_run_id: string;
   datapoint: JsonValue;
   response: JsonValue;
-  evaluations: { [key in string]?: JsonValue | null };
-  evaluator_errors: { [key in string]?: string };
+  evaluations: { [key in string]: JsonValue | null };
+  evaluator_errors: { [key in string]: string };
 };

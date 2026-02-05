@@ -15,6 +15,12 @@ use tensorzero_core::config::UninitializedConfig;
 
 use autopilot_client::AutopilotSideInfo;
 
+// Re-export EditPayload types from tensorzero-config-writer
+pub use config_writer::{
+    EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
+    UpsertVariantPayload,
+};
+
 /// Parameters for the write_config tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WriteConfigToolParams {
@@ -23,6 +29,9 @@ pub struct WriteConfigToolParams {
     /// Templates that should be stored with the config.
     #[serde(default)]
     pub extra_templates: HashMap<String, String>,
+    /// We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
+    /// Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
+    pub edit: Option<Vec<EditPayload>>,
 }
 
 /// Tool for writing config snapshots.
@@ -113,7 +122,8 @@ impl ToolMetadata for WriteConfigTool {
                     "additionalProperties": { "type": "string" }
                 }
             },
-            "required": ["config"]
+            "required": ["config"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

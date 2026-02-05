@@ -8,11 +8,14 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::TimeWindow;
-use crate::db::inference_count::{
-    CountByVariant, CountInferencesParams, CountInferencesWithDemonstrationFeedbacksParams,
+use crate::db::clickhouse::query_builder::InferenceFilter;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::inferences::{
+    CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
     CountInferencesWithFeedbackParams, FunctionInferenceCount,
-    GetFunctionThroughputByVariantParams, InferenceCountQueries, VariantThroughput,
+    GetFunctionThroughputByVariantParams, InferenceQueries, VariantThroughput,
 };
+use crate::endpoints::stored_inferences::v1::types::DemonstrationFeedbackFilter;
 use crate::error::{Error, ErrorDetails};
 use crate::feature_flags::ENABLE_POSTGRES_READ;
 use crate::function::DEFAULT_FUNCTION_NAME;
@@ -137,13 +140,12 @@ pub async fn get_inference_count_handler(
     Path(function_name): Path<String>,
     Query(params): Query<InferenceCountQueryParams>,
 ) -> Result<Json<InferenceCountResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
-        &app_state.postgres_connection_info
-    } else {
-        &app_state.clickhouse_connection_info
-    };
-
-    let response = get_inference_count(&app_state.config, database, &function_name, params).await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response =
+        get_inference_count(&app_state.config, &database, &function_name, params).await?;
     Ok(Json(response))
 }
 
@@ -162,15 +164,14 @@ pub async fn get_inference_with_feedback_count_handler(
     Path((function_name, metric_name)): Path<(String, String)>,
     Query(params): Query<InferenceWithFeedbackCountQueryParams>,
 ) -> Result<Json<InferenceWithFeedbackCountResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
-        &app_state.postgres_connection_info
-    } else {
-        &app_state.clickhouse_connection_info
-    };
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
 
     let response = get_inference_with_feedback_count(
         &app_state.config,
-        database,
+        &database,
         function_name,
         metric_name,
         params,
@@ -182,7 +183,7 @@ pub async fn get_inference_with_feedback_count_handler(
 /// Core business logic for getting inference count
 async fn get_inference_count(
     config: &Config,
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
     function_name: &str,
     params: InferenceCountQueryParams,
 ) -> Result<InferenceCountResponse, Error> {
@@ -201,15 +202,13 @@ async fn get_inference_count(
         .into());
     }
 
-    // Standard count (optionally filtered by variant_name)
-    let count_params = CountInferencesParams {
-        function_name,
-        function_type: function.config_type(),
-        variant_name: params.variant_name.as_deref(),
-    };
-
-    // Handle group_by=variant case
+    // Handle group_by=variant case - this requires the specialized method
     if let Some(InferenceCountGroupBy::Variant) = params.group_by {
+        let count_params = CountInferencesForFunctionParams {
+            function_name,
+            function_type: function.config_type(),
+            variant_name: params.variant_name.as_deref(),
+        };
         let variant_rows = database.count_inferences_by_variant(count_params).await?;
 
         let inference_count = variant_rows.iter().map(|r| r.inference_count).sum();
@@ -221,7 +220,13 @@ async fn get_inference_count(
         });
     }
 
-    let inference_count = database.count_inferences_for_function(count_params).await?;
+    // Standard count uses the generic count_inferences method
+    let count_params = CountInferencesParams {
+        function_name: Some(function_name),
+        variant_name: params.variant_name.as_deref(),
+        ..Default::default()
+    };
+    let inference_count = database.count_inferences(config, &count_params).await?;
 
     Ok(InferenceCountResponse {
         inference_count,
@@ -232,7 +237,7 @@ async fn get_inference_count(
 /// Core business logic for getting feedback count
 async fn get_inference_with_feedback_count(
     config: &Config,
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
     function_name: String,
     metric_name: String,
     params: InferenceWithFeedbackCountQueryParams,
@@ -241,18 +246,19 @@ async fn get_inference_with_feedback_count(
     let function_config = config.get_function(&function_name)?;
     let function_type = function_config.config_type();
 
-    // Demonstration feedbacks are simple
+    // Demonstration feedbacks use the generic count_inferences with a filter
     // TODO(shuyangli): it's probably wrong that we're not distinguishing between the feedback type
     // ("demonstration") and the metric name, but we can fix it later.
     if metric_name == "demonstration" {
-        let feedback_count = database
-            .count_inferences_with_demonstration_feedback(
-                CountInferencesWithDemonstrationFeedbacksParams {
-                    function_name: &function_name,
-                    function_type,
-                },
-            )
-            .await?;
+        let filter = InferenceFilter::DemonstrationFeedback(DemonstrationFeedbackFilter {
+            has_demonstration: true,
+        });
+        let count_params = CountInferencesParams {
+            function_name: Some(&function_name),
+            filters: Some(&filter),
+            ..Default::default()
+        };
+        let feedback_count = database.count_inferences(config, &count_params).await?;
 
         // Each inference has one demonstration feedback
         return Ok(InferenceWithFeedbackCountResponse {
@@ -301,14 +307,14 @@ pub async fn get_function_throughput_by_variant_handler(
     Path(function_name): Path<String>,
     Query(params): Query<FunctionThroughputByVariantQueryParams>,
 ) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
-        &state.postgres_connection_info
-    } else {
-        &state.clickhouse_connection_info
-    };
+    let database = DelegatingDatabaseConnection::new(
+        state.clickhouse_connection_info.clone(),
+        state.postgres_connection_info.clone(),
+    );
 
     let response =
-        get_function_throughput_by_variant(&state.config, database, &function_name, params).await?;
+        get_function_throughput_by_variant(&state.config, &database, &function_name, params)
+            .await?;
 
     Ok(Json(response))
 }
@@ -317,7 +323,7 @@ pub async fn get_function_throughput_by_variant_handler(
 /// Validates the function exists and returns throughput data grouped by variant and time period.
 pub async fn get_function_throughput_by_variant(
     config: &Config,
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
     function_name: &str,
     params: FunctionThroughputByVariantQueryParams,
 ) -> Result<GetFunctionThroughputByVariantResponse, Error> {
@@ -341,7 +347,7 @@ pub async fn get_function_throughput_by_variant(
 pub async fn list_functions_with_inference_count_handler(
     State(state): State<AppStateData>,
 ) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
-    let database: &(dyn InferenceCountQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
         &state.postgres_connection_info
     } else {
         &state.clickhouse_connection_info
@@ -353,7 +359,7 @@ pub async fn list_functions_with_inference_count_handler(
 
 /// Core business logic for listing all functions with their inference counts
 async fn list_functions_with_inference_count(
-    database: &(dyn InferenceCountQueries + Sync),
+    database: &(dyn InferenceQueries + Sync),
 ) -> Result<ListFunctionsWithInferenceCountResponse, Error> {
     let functions = database.list_functions_with_inference_count().await?;
 
@@ -366,7 +372,6 @@ mod tests {
     use crate::config::{Config, ConfigFileGlob};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
     use crate::db::postgres::PostgresConnectionInfo;
-    use crate::function::FunctionConfigType;
     use crate::testing::get_unit_test_gateway_handle;
     use std::io::Write;
     use std::sync::Arc;
@@ -528,16 +533,15 @@ mod tests {
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
-            .expect_count_inferences_for_function()
-            .withf(|params| {
-                assert_eq!(params.function_name, "test_function");
-                assert_eq!(params.function_type, FunctionConfigType::Chat);
+            .inference_queries
+            .expect_count_inferences()
+            .withf(|_, params| {
+                assert_eq!(params.function_name, Some("test_function"));
                 assert!(params.variant_name.is_none());
                 true
             })
             .times(1)
-            .returning(|_| Box::pin(async move { Ok(42) }));
+            .returning(|_, _| Box::pin(async move { Ok(42) }));
 
         let params = InferenceCountQueryParams {
             variant_name: None,
@@ -558,7 +562,7 @@ mod tests {
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
+            .inference_queries
             .expect_list_functions_with_inference_count()
             .times(1)
             .returning(|| {
@@ -593,7 +597,7 @@ mod tests {
     async fn test_list_functions_with_inference_count_empty() {
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
+            .inference_queries
             .expect_list_functions_with_inference_count()
             .times(1)
             .returning(|| Box::pin(async move { Ok(vec![]) }));
@@ -613,16 +617,15 @@ mod tests {
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
         mock_clickhouse
-            .inference_count_queries
-            .expect_count_inferences_for_function()
-            .withf(|params| {
-                assert_eq!(params.function_name, DEFAULT_FUNCTION_NAME);
-                assert_eq!(params.function_type, FunctionConfigType::Chat);
+            .inference_queries
+            .expect_count_inferences()
+            .withf(|_, params| {
+                assert_eq!(params.function_name, Some(DEFAULT_FUNCTION_NAME));
                 assert_eq!(params.variant_name, Some("openai::gpt-5-mini"));
                 true
             })
             .times(1)
-            .returning(|_| Box::pin(async move { Ok(10) }));
+            .returning(|_, _| Box::pin(async move { Ok(10) }));
 
         let params = InferenceCountQueryParams {
             variant_name: Some("openai::gpt-5-mini".to_string()),

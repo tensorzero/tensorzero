@@ -91,7 +91,8 @@ impl ToolMetadata for CreateDatapointsTool {
                     }
                 }
             },
-            "required": ["dataset_name", "datapoints"]
+            "required": ["dataset_name", "datapoints"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
