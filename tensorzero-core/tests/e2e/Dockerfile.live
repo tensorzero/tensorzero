@@ -1,34 +1,48 @@
-# ========== base ==========
+# ========== chef ==========
 
-FROM rust:1.90.0-slim AS base
+FROM lukemathwalker/cargo-chef:latest-rust-1.88-trixie AS chef
 
-RUN apt-get update && apt-get install -y curl
+WORKDIR /src
 
- # Install cargo-binstall for faster tool installation
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-binstall for faster tool installation
 RUN curl -L --proto '=https' --tlsv1.2 -sSf \
   https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
 # Install cargo-nextest using binstall
 RUN cargo binstall -y cargo-nextest --secure
 
-# ========== build-env ==========
+# ========== planner ==========
 
-FROM base AS builder
+FROM chef AS planner
+WORKDIR /app
+COPY . .
+RUN git rev-parse HEAD
+RUN cargo chef prepare --recipe-path recipe.json
+
+# ========== builder ==========
+
+FROM chef AS builder
 
 WORKDIR /app
+
+# Copy recipe and cook dependencies first (cached layer)
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --features e2e_tests --recipe-path recipe.json
 
 # Copy the entire project
 COPY . .
 
-# Fetch all dependencies first (including dev-dependencies needed by trybuild)
+# Fetch all dependencies (including dev-dependencies needed by trybuild)
 RUN cargo fetch --locked
 
-# Build and archive tests instead of copying entire target directory
+# Build and archive tests
 RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst --offline
 
 # ========== test-env ==========
 
-FROM base AS test-env
+FROM chef AS test-env
 
 WORKDIR /app
 
