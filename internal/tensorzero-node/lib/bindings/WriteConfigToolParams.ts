@@ -18,5 +18,5 @@ export type WriteConfigToolParams = {
    * We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
    * Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
    */
-  edit: Array<EditPayload> | null;
+  edit?: Array<EditPayload>;
 };
