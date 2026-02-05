@@ -2,6 +2,8 @@
 
 This folder contains the code for the [Guides > Optimization > Supervised Fine-Tuning](https://www.tensorzero.com/docs/optimization/supervised-fine-tuning/) page in the documentation.
 
+This example focuses on OpenAI, but TensorZero also integrates with other provides.
+
 ## Prerequisites
 
 1. Set the `OPENAI_API_KEY` environment variable

@@ -1,59 +1,39 @@
 ---
 title: Overview
-description: Learn more about using TensorZero Recipes to optimize your LLM applications.
+description: Learn more about using TensorZero to optimize your LLM applications.
 ---
 
-TensorZero Recipes are a set of pre-built workflows for optimizing your LLM applications.
-You can also create your own recipes to customize the workflow to your needs.
+TensorZero provides pre-built optimization workflows covering models, prompts, and inference strategies.
+You can also create your own workflows to cover your specific needs.
 
-The [TensorZero Gateway](/gateway/) collects structured inference data and the downstream feedback associated with it.
+The TensorZero Gateway collects structured inference data and the downstream [metrics and feedback](/gateway/guides/metrics-feedback) associated with it.
 This dataset sets the perfect foundation for building and optimizing LLM applications.
 As this dataset builds up, you can use these recipes to generate powerful variants for your functions.
 For example, you can use this dataset to curate data to fine-tune a custom LLM, or run an automated prompt engineering workflow.
 
-In other words, TensorZero Recipes optimize TensorZero functions by generating new variants from historical inference and feedback data.
-
 ## Model Optimizations
 
-### Supervised Fine-tuning
+### Supervised Fine-tuning (SFT)
 
-A fine-tuning recipe curates a dataset from your historical inferences and fine-tunes an LLM on it.
-You can use the feedback associated with those inferences to select the right subset of data.
-A simple example is to use only inferences that led to good outcomes according to a metric you defined.
+Supervised Fine-Tuning (SFT) trains a language model on curated examples of good behavior, resulting in a custom model that performs better on your specific use case.
 
+TensorZero has fine-tuning integrations with OpenAI, GCP Vertex AI, Fireworks AI, and Together AI.
 See the [Supervised Fine-Tuning Guide](/optimization/supervised-fine-tuning) to learn more.
 
-We also provide sample fine-tuning recipes using different providers:
+Additionally, we provide recipes for self-hosted fine-tuning with [`axolotl`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/axolotl/), [`torchtune`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/torchtune/), and [`unsloth`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/unsloth/).
 
-- [Fine-tuning with Fireworks AI](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/fireworks)
-- [Fine-tuning with GCP Vertex AI Gemini](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/gcp-vertex-gemini/)
-- [Fine-tuning with OpenAI](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/openai)
-- [Fine-tuning with Together AI](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/together/)
-- [Fine-tuning with Unsloth](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/unsloth/)
+### Reinforcement Fine-tuning (RFT)
 
-### RLHF
+_Guide coming soon..._
 
-#### DPO (Preference Fine-tuning)
+### Direct Preference Optimization (DPO)
 
 A direct preference optimization (DPO) &mdash; also known as preference fine-tuning &mdash; recipe fine-tunes an LLM on a dataset of preference pairs.
 You can use demonstration feedback collected with TensorZero to curate a dataset of preference pairs and fine-tune an LLM on it.
 
-We present a sample DPO recipe for OpenAI:
-
-- [DPO (Preference Fine-tuning) with OpenAI](https://github.com/tensorzero/tensorzero/blob/main/recipes/dpo/openai/)
-
-<Tip>
-
-Many more recipes are on the way. This will be our primary engineering focus in the coming months.
-We also plan to publish a dashboard that'll further streamline some of these recipes (e.g. one-click fine-tuning).
-
-Read more about our [Vision & Roadmap](/vision-and-roadmap/).
-
-</Tip>
+We provide a recipe for [DPO (Preference Fine-tuning) with OpenAI](https://github.com/tensorzero/tensorzero/blob/main/recipes/dpo/openai/).
 
 ## Prompt Optimization
-
-TensorZero offers prompt optimization recipes that automatically improve your prompts using historical inference data.
 
 ### GEPA
 
@@ -70,17 +50,21 @@ MIPRO (Multi-prompt Instruction PRoposal Optimizer) is a method for automaticall
 
 MIPRO can optimize prompts across an entire LLM pipeline without needing fine-grained labels or gradients. Instead, it uses a Bayesian optimizer to figure out which instructions and demonstrations actually improve end-to-end performance. By combining application-aware prompt proposals and stochastic mini-batch evaluations, MIPRO can improve downstream task performance compared to traditional prompt engineering approaches.
 
-See [Automated Prompt Engineering with MIPRO](https://github.com/tensorzero/tensorzero/tree/main/recipes/mipro) on GitHub for more details.
+We provide a recipe for [Automated Prompt Engineering with MIPRO](https://github.com/tensorzero/tensorzero/tree/main/recipes/mipro).
 
 ## Inference-Time Optimization
 
-The TensorZero Gateway offers built-in inference-time optimizations like dynamic in-context learning and best/mixture-of-N sampling.
+### Best-of-N & Mixture-of-N Sampling
 
-See [Inference-Time Optimizations](/gateway/guides/inference-time-optimizations/) for more information.
+Best-of-N Sampling generates multiple candidate responses from a single model and selects the best one based on a scoring function or verifier.
+Mixture-of-N Sampling extends this by generating candidates across multiple models or variants, combining diversity with quality selection.
+Both techniques improve output quality at inference time without requiring additional training or fine-tuning.
+
+See [Inference-Time Optimizations](/gateway/guides/inference-time-optimizations) to learn more.
 
 ### Dynamic In-Context Learning
 
-![Inference-Time Optimization: Dynamic In-Context Learning](./inference-time-optimizations-dynamic-in-context-learning.png)
+![Inference-Time Optimization: Dynamic In-Context Learning](./dynamic-in-context-learning-dicl-diagram.png)
 
 Dynamic In-Context Learning (DICL) is an inference-time optimization that improves LLM performance by incorporating relevant historical examples into your prompt.
 Instead of incorporating static examples manually in your prompts, DICL selects the most relevant examples at inference time.
@@ -90,10 +74,10 @@ See the [Dynamic In-Context Learning (DICL) Guide](/optimization/dynamic-in-cont
 ## Custom Recipes
 
 You can also create your own recipes.
-
-Put simply, a recipe takes inference and feedback data stored that the TensorZero Gateway stored in your ClickHouse database, and generates a new set of variants for your functions.
+Put simply, a recipe takes inference and feedback data collected by TensorZero and generates a new set of variants for your functions.
 You should should be able to use virtually any LLM engineering workflow with TensorZero, ranging from automated prompt engineering to advanced RLHF workflows.
-See an example of a custom recipe using DSPy below.
+
+For example, see our recipes for self-hosted supervised fine-tuning (SFT) with [`axolotl`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/axolotl/), [`torchtune`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/torchtune/), and [`unsloth`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/unsloth/).
 
 ## Examples
 
@@ -104,4 +88,3 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 - [Writing Haikus to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences) — This example fine-tunes GPT-4o Mini to generate haikus tailored to a specific taste. You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants. You'll see progress by fine-tuning the LLM multiple times.
 - [Image Data Extraction — Multimodal (Vision) Fine-tuning](https://github.com/tensorzero/tensorzero/tree/main/examples/multimodal-vision-finetuning) — This example shows how to fine-tune multimodal models (VLMs) like GPT-4o to improve their performance on vision-language tasks. Specifically, we'll build a system that categorizes document images (screenshots of computer science research papers).
 - [Improving LLM Chess Ability with Best/Mixture-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles/) — This example showcases how best-of-N sampling and mixture-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
-- [Improving Math Reasoning with a Custom Recipe for Automated Prompt Engineering (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy) — TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows. But you can also easily create your own recipes and workflows! This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy.

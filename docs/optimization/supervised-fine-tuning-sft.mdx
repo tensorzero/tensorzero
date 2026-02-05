@@ -1,5 +1,5 @@
 ---
-title: Supervised Fine-Tuning
+title: Supervised Fine-Tuning (SFT)
 sidebarTitle: Supervised Fine-Tuning
 description: Learn how to fine-tune LLMs using TensorZero.
 ---
@@ -9,24 +9,24 @@ TensorZero simplifies the SFT workflow by helping you curate training data from 
 
 Here's how it works:
 
-1. You collect examples of good LLM behavior (demonstrations or high-scoring inferences).
+1. You collect examples of good LLM behavior (demonstrations or inferences with good metrics).
 2. TensorZero renders these examples using your prompt templates into a training dataset.
-3. TensorZero uploads the dataset and launches a fine-tuning job on your provider (OpenAI, Fireworks, Together, or GCP Vertex AI).
+3. TensorZero uploads the dataset and launches a fine-tuning job on your provider (OpenAI, GCP Vertex AI, Fireworks, or Together).
 4. The provider trains a custom model and returns a model identifier.
 5. You update your configuration to use the fine-tuned model.
 
-## When should you use SFT?
+## When should you use supervised fine-tuning (SFT)?
 
-SFT is particularly useful when you have substantial high-quality data and want to improve model behavior beyond what prompting alone can achieve.
+Supervised fine-tuning is particularly useful when you have substantial high-quality data and want to improve model behavior beyond what prompting alone can achieve.
 
-| Criterion            | Impact   | Details                                                   |
-| -------------------- | -------- | --------------------------------------------------------- |
-| Complexity           | Low      | Requires data curation; few parameters                    |
-| Data Efficiency      | Moderate | Requires hundreds to thousands of high-quality examples   |
-| Optimization Ceiling | High     | Can significantly improve model behavior beyond prompting |
-| Optimization Cost    | Moderate | More expensive than DICL, but relatively cost effective   |
-| Inference Cost       | Low      | Fine-tuned models typically have the same cost as base    |
-| Inference Latency    | Low      | No runtime overhead unlike DICL                           |
+| Criterion            | Impact   | Details                                                     |
+| -------------------- | -------- | ----------------------------------------------------------- |
+| Complexity           | Low      | Requires data curation; few parameters                      |
+| Data Efficiency      | Moderate | Requires hundreds to thousands of high-quality examples     |
+| Optimization Ceiling | High     | Can significantly improve model behavior beyond prompting   |
+| Optimization Cost    | Moderate | More expensive than DICL, but relatively cost effective     |
+| Inference Cost       | Low      | Fine-tuned models typically cost the same as the base model |
+| Inference Latency    | Low      | No runtime overhead                                         |
 
 <Tip>
 
@@ -222,6 +222,27 @@ OpenAI uses credentials from the `OPENAI_API_KEY` environment variable by defaul
 
 </Tab>
 
+<Tab title="GCP Vertex AI Gemini">
+
+```python
+from tensorzero import GCPVertexGeminiSFTConfig
+
+optimization_config = GCPVertexGeminiSFTConfig(
+    model="gemini-2.5-flash",
+)
+```
+
+GCP Vertex AI requires project and storage configuration in `tensorzero.toml`:
+
+```toml title="tensorzero.toml"
+[provider_types.gcp_vertex_gemini.sft]
+project_id = "your-gcp-project-id"
+region = "us-central1"
+bucket_name = "your-training-data-bucket"
+```
+
+</Tab>
+
 <Tab title="Fireworks">
 
 ```python
@@ -265,32 +286,11 @@ wandb_project_name = "my-project"     # optional
 
 </Tab>
 
-<Tab title="GCP Vertex AI Gemini">
-
-```python
-from tensorzero import GCPVertexGeminiSFTConfig
-
-optimization_config = GCPVertexGeminiSFTConfig(
-    model="gemini-2.5-flash",
-)
-```
-
-GCP Vertex AI requires project and storage configuration in `tensorzero.toml`:
-
-```toml title="tensorzero.toml"
-[provider_types.gcp_vertex_gemini.sft]
-project_id = "your-gcp-project-id"
-region = "us-central1"
-bucket_name = "your-training-data-bucket"
-```
-
-</Tab>
-
 </Tabs>
 
 </Step>
 
-<Step title="Launch SFT job">
+<Step title="Launch the SFT job">
 
 Launch the SFT job using the TensorZero Gateway:
 
@@ -322,7 +322,7 @@ job_info = t0.experimental_poll_optimization(job_handle=job_handle)
 # For long-running jobs, poll periodically:
 while job_info.status == OptimizationJobStatus.Pending:
     print(f"Job status: {job_info.status}")
-    time.sleep(60)  # Wait 1 minute between polls
+    time.sleep(60)  # wait 1 minute between polls
     job_info = t0.experimental_poll_optimization(job_handle=job_handle)
 
 if job_info.status == OptimizationJobStatus.Completed:
@@ -357,7 +357,7 @@ routing = ["openai"]
 
 [models.extract_entities_fine_tuned.providers.openai]
 type = "openai"
-model_name = "ft:gpt-4.1-2025-04-14:org::xxxxx"  # fine_tuned_model from above
+model_name = "ft:gpt-4.1-2025-04-14:org::xxxxx"  # from above
 
 [functions.extract_entities.variants.fine_tuned]
 type = "chat_completion"
@@ -426,6 +426,44 @@ Configure OpenAI supervised fine-tuning by creating an `OpenAISFTConfig` object 
 
 <ParamField body="suffix" type="str">
   Suffix to add to the fine-tuned model name for identification.
+</ParamField>
+
+### `GCPVertexGeminiSFTConfig`
+
+Configure GCP Vertex AI Gemini supervised fine-tuning by creating a `GCPVertexGeminiSFTConfig` object with the following parameters:
+
+{/* Required Parameters */}
+
+<ParamField body="model" type="str" required>
+  The base model to fine-tune. See [Vertex AI's supported
+  models](https://cloud.google.com/vertex-ai/generative-ai/docs/models/tune-gemini-overview)
+  for available options.
+</ParamField>
+
+{/* Optional Parameters */}
+
+<ParamField body="adapter_size" type="int">
+  Adapter size for parameter-efficient tuning.
+</ParamField>
+
+<ParamField body="export_last_checkpoint_only" type="bool">
+  Whether to export only the final checkpoint instead of all checkpoints.
+</ParamField>
+
+<ParamField body="learning_rate_multiplier" type="float">
+  Learning rate multiplier for training.
+</ParamField>
+
+<ParamField body="n_epochs" type="int">
+  Number of training epochs.
+</ParamField>
+
+<ParamField body="seed" type="int">
+  Random seed for reproducibility.
+</ParamField>
+
+<ParamField body="tuned_model_display_name" type="str">
+  Display name for the tuned model in the Vertex AI console.
 </ParamField>
 
 ### `FireworksSFTConfig`
@@ -590,42 +628,4 @@ Configure Together supervised fine-tuning by creating a `TogetherSFTConfig` obje
 
 <ParamField body="weight_decay" type="float" default={0.0}>
   Weight decay regularization parameter.
-</ParamField>
-
-### `GCPVertexGeminiSFTConfig`
-
-Configure GCP Vertex AI Gemini supervised fine-tuning by creating a `GCPVertexGeminiSFTConfig` object with the following parameters:
-
-{/* Required Parameters */}
-
-<ParamField body="model" type="str" required>
-  The base model to fine-tune. See [Vertex AI's supported
-  models](https://cloud.google.com/vertex-ai/generative-ai/docs/models/tune-gemini-overview)
-  for available options.
-</ParamField>
-
-{/* Optional Parameters */}
-
-<ParamField body="adapter_size" type="int">
-  Adapter size for parameter-efficient tuning.
-</ParamField>
-
-<ParamField body="export_last_checkpoint_only" type="bool">
-  Whether to export only the final checkpoint instead of all checkpoints.
-</ParamField>
-
-<ParamField body="learning_rate_multiplier" type="float">
-  Learning rate multiplier for training.
-</ParamField>
-
-<ParamField body="n_epochs" type="int">
-  Number of training epochs.
-</ParamField>
-
-<ParamField body="seed" type="int">
-  Random seed for reproducibility.
-</ParamField>
-
-<ParamField body="tuned_model_display_name" type="str">
-  Display name for the tuned model in the Vertex AI console.
 </ParamField>
