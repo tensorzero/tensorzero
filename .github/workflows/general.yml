@@ -1215,6 +1215,30 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
+  build-provider-proxy-container:
+    uses: ./.github/workflows/build-provider-proxy-container.yml
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-live-tests-container:
+    uses: ./.github/workflows/build-live-tests-container.yml
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
     permissions:
@@ -1367,6 +1391,8 @@ jobs:
         build-gateway-e2e-container,
         build-mock-provider-api-container,
         build-fixtures-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
       ]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
@@ -1436,6 +1462,8 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
         build-mock-provider-api-container,
         mocked-batch-tests,
         publish-dev-docker-hub-images,

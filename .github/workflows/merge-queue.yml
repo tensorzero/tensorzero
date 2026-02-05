@@ -97,12 +97,34 @@ jobs:
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
+  build-provider-proxy-container:
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    uses: ./.github/workflows/build-provider-proxy-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-live-tests-container:
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    uses: ./.github/workflows/build-live-tests-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
   live-tests:
     needs:
       [
         build-gateway-e2e-container,
         build-gateway-container,
         build-fixtures-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
       ]
     # Run even when build-gateway-e2e-container is skipped (merge_group case)
     if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
@@ -232,6 +254,7 @@ jobs:
         build-gateway-container,
         build-mock-provider-api-container,
         build-fixtures-container,
+        build-provider-proxy-container,
       ]
     # Run even when build jobs are skipped (merge_group case where general.yml already built them)
     if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
