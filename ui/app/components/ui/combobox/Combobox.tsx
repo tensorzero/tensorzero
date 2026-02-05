@@ -9,10 +9,10 @@ import { ComboboxContent } from "./ComboboxContent";
 import { ComboboxHint } from "./ComboboxHint";
 import { ComboboxMenuItems } from "./ComboboxMenuItems";
 import { useCombobox } from "./use-combobox";
-import { useVirtualizedNavigation } from "~/components/ui/use-virtualized-navigation";
-
-/** Default threshold for enabling virtualization */
-const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
+import {
+  DEFAULT_VIRTUALIZE_THRESHOLD,
+  useVirtualizedNavigation,
+} from "~/components/ui/use-virtualized-navigation";
 
 export type ComboboxItem = string | { value: string; label: string };
 
@@ -153,12 +153,8 @@ export function Combobox({
   // Combined keyboard handler
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (shouldVirtualize) {
+      if (shouldVirtualize && open) {
         virtualizedHandleKeyDown(e);
-        // Still need base handler for opening dropdown on arrow keys
-        if (!open && ["ArrowDown", "ArrowUp"].includes(e.key)) {
-          baseHandleKeyDown(e);
-        }
       } else {
         baseHandleKeyDown(e);
       }

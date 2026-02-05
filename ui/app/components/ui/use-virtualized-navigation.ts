@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
+/** Default threshold for enabling virtualization */
+export const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
+
 /** Page jump size for PageUp/PageDown navigation */
 const PAGE_JUMP_SIZE = 8;
 

@@ -13,11 +13,11 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import { ComboboxMenuItems } from "~/components/ui/combobox/ComboboxMenuItems";
-import { useVirtualizedNavigation } from "~/components/ui/use-virtualized-navigation";
+import {
+  DEFAULT_VIRTUALIZE_THRESHOLD,
+  useVirtualizedNavigation,
+} from "~/components/ui/use-virtualized-navigation";
 import clsx from "clsx";
-
-/** Default threshold for enabling virtualization */
-const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
 
 export interface ButtonSelectRenderTriggerProps {
   open: boolean;
@@ -146,6 +146,7 @@ export function ButtonSelect({
         handleSelectItem(item, false);
       }
     },
+    onClose: () => setOpen(false),
     hasCreateOption: showCreateOption,
     onSelectCreate: () => {
       handleSelectItem(searchValue.trim(), true);
