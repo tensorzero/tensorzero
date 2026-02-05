@@ -1,7 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
-import { data, useLocation, useNavigate, type RouteHandle } from "react-router";
+import {
+  data,
+  useLocation,
+  useNavigate,
+  type RouteHandle,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
 import {
   PageHeader,
   PageLayout,
@@ -36,6 +42,26 @@ export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
 };
 
+/**
+ * Prevent revalidation when fetchers submit to API routes.
+ * With streaming/deferred data, revalidation re-runs the loader and waits for
+ * deferred promises to resolve, keeping the fetcher in "loading" state and
+ * blocking downstream effects that depend on "idle" state.
+ */
+export function shouldRevalidate({
+  formAction,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    formAction?.startsWith("/api/feedback") ||
+    formAction?.startsWith("/api/datasets/datapoints/from-inference") ||
+    formAction?.startsWith("/api/tensorzero/inference")
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
+}
+
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
   const url = new URL(request.url);
@@ -64,9 +90,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     newFeedbackId,
     modelInferences: fetchModelInferences(inference_id),
     usedVariants: fetchUsedVariants(inference.function_name),
-    // Fetched synchronously so AddToDatasetButton stays outside Suspense
-    // (toast notifications get dismissed during Suspense re-suspension)
-    hasDemonstration: await fetchHasDemonstration(inference_id),
+    hasDemonstration: fetchHasDemonstration(inference_id),
     input: fetchInput(inference),
     feedbackData: fetchFeedbackData(inference_id, {
       newFeedbackId,
@@ -146,7 +170,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         <InferenceActionBar
           inference={inference}
           usedVariantsPromise={usedVariants}
-          hasDemonstration={hasDemonstration}
+          hasDemonstrationPromise={hasDemonstration}
           inputPromise={input}
           modelInferencesPromise={modelInferences}
           onFeedbackAdded={handleFeedbackAdded}
