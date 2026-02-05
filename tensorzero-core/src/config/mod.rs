@@ -1,4 +1,7 @@
-use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
+use crate::experimentation::{
+    ExperimentationConfig, ExperimentationConfigWithNamespaces,
+    UninitializedExperimentationConfigWithNamespaces,
+};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 use crate::relay::TensorzeroRelay;
@@ -97,6 +100,111 @@ pub fn skip_credential_validation() -> bool {
 /// the original credential validation behavior will be restored after the outermost future completes
 pub async fn with_skip_credential_validation<T>(f: impl Future<Output = T>) -> T {
     SKIP_CREDENTIAL_VALIDATION.scope((), f).await
+}
+
+/// A validated namespace identifier.
+///
+/// Namespace identifiers must:
+/// - Start with a lowercase letter (a-z)
+/// - Contain only lowercase letters, digits, and underscores (a-z, 0-9, _)
+///
+/// This is the same pattern used for function names and other identifiers in TensorZero.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, type = "string"))]
+pub struct Namespace(String);
+
+impl Namespace {
+    /// Creates a new Namespace, validating the identifier format.
+    pub fn new(namespace: impl Into<String>) -> Result<Self, Error> {
+        let namespace = namespace.into();
+        validate_namespace_identifier(&namespace)?;
+        Ok(Self(namespace))
+    }
+
+    /// Returns the namespace as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consumes the Namespace and returns the inner String.
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Display for Namespace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for Namespace {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl serde::Serialize for Namespace {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Namespace {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Namespace::new(s).map_err(|e| serde::de::Error::custom(e.to_string()))
+    }
+}
+
+/// Validates that a namespace identifier matches the required format.
+/// Namespace identifiers must:
+/// - Start with a lowercase letter (a-z)
+/// - Contain only lowercase letters, digits, and underscores (a-z, 0-9, _)
+fn validate_namespace_identifier(namespace: &str) -> Result<(), Error> {
+    if namespace.is_empty() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Namespace identifier cannot be empty".to_string(),
+        }));
+    }
+
+    let mut chars = namespace.chars();
+
+    // First character must be a lowercase letter
+    let Some(first) = chars.next() else {
+        // This branch shouldn't be reached since we check for empty string above,
+        // but we handle it gracefully anyway
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Namespace identifier cannot be empty".to_string(),
+        }));
+    };
+    if !first.is_ascii_lowercase() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: format!(
+                "Namespace identifier `{namespace}` must start with a lowercase letter (a-z), but starts with `{first}`"
+            ),
+        }));
+    }
+
+    // Remaining characters must be lowercase letters, digits, or underscores
+    for c in chars {
+        if !c.is_ascii_lowercase() && !c.is_ascii_digit() && c != '_' {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "Namespace identifier `{namespace}` contains invalid character `{c}`. Only lowercase letters (a-z), digits (0-9), and underscores (_) are allowed."
+                ),
+            }));
+        }
+    }
+
+    Ok(())
 }
 
 // Note - the `Default` impl only exists for convenience in tests
@@ -1867,7 +1975,7 @@ pub struct UninitializedFunctionConfigChat {
     pub parallel_tool_calls: Option<bool>,
     #[serde(default)]
     pub description: Option<String>,
-    pub experimentation: Option<UninitializedExperimentationConfig>,
+    pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1882,7 +1990,7 @@ pub struct UninitializedFunctionConfigJson {
     pub output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
     pub description: Option<String>,
-    pub experimentation: Option<UninitializedExperimentationConfig>,
+    pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -2105,9 +2213,12 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics))
+                    .map(|config| config.load(&variants, metrics, function_name))
                     .transpose()?
-                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
+                    .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
+                        base: ExperimentationConfig::legacy_from_variants_map(&variants),
+                        namespaces: std::collections::HashMap::new(),
+                    });
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     schemas: schema_data,
@@ -2199,9 +2310,12 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics))
+                    .map(|config| config.load(&variants, metrics, function_name))
                     .transpose()?
-                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
+                    .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
+                        base: ExperimentationConfig::legacy_from_variants_map(&variants),
+                        namespaces: std::collections::HashMap::new(),
+                    });
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: schema_data,
