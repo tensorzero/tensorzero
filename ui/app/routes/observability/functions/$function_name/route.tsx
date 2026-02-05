@@ -12,7 +12,6 @@ import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
-import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { Suspense, useMemo } from "react";
@@ -41,10 +40,12 @@ import {
 } from "~/components/ui/table";
 import {
   fetchAllFunctionDetailData,
+  fetchExperimentationSectionData,
   fetchVariantsSectionData,
   type FunctionDetailData,
 } from "./function-data.server";
 import { VariantsSection } from "./VariantsSection";
+import { ExperimentationSection } from "./ExperimentationSection";
 
 function FunctionDetailPageHeader({
   functionName,
@@ -75,11 +76,6 @@ function FunctionDetailPageHeader({
 function SectionsSkeleton() {
   return (
     <>
-      <SectionLayout>
-        <SectionHeader heading="Experimentation" />
-        <Skeleton className="h-32 w-full" />
-      </SectionLayout>
-
       <SectionLayout>
         <SectionHeader heading="Throughput" />
         <Skeleton className="h-64 w-full" />
@@ -167,6 +163,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       function_name,
       function_config,
     }),
+    experimentationData:
+      function_name !== DEFAULT_FUNCTION
+        ? fetchExperimentationSectionData({
+            function_name,
+            function_config,
+            time_granularity: feedback_time_granularity,
+          })
+        : Promise.resolve(undefined),
     functionDetailData: fetchAllFunctionDetailData({
       function_name,
       function_config,
@@ -199,8 +203,6 @@ function SectionsContent({
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    feedback_timeseries,
-    variant_sampling_probabilities,
   } = data;
 
   const navigate = useNavigate();
@@ -246,18 +248,6 @@ function SectionsContent({
 
   return (
     <>
-      {functionName !== DEFAULT_FUNCTION && (
-        <SectionLayout>
-          <SectionHeader heading="Experimentation" />
-          <FunctionExperimentation
-            functionConfig={functionConfig}
-            functionName={functionName}
-            feedbackTimeseries={feedback_timeseries}
-            variantSamplingProbabilities={variant_sampling_probabilities}
-          />
-        </SectionLayout>
-      )}
-
       <SectionLayout>
         <SectionHeader heading="Throughput" />
         <VariantThroughput variant_throughput={variant_throughput} />
@@ -300,7 +290,8 @@ function SectionsContent({
 export default function FunctionDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { function_name, variantsData, functionDetailData } = loaderData;
+  const { function_name, variantsData, experimentationData, functionDetailData } =
+    loaderData;
   const location = useLocation();
   const function_config = useFunctionConfig(function_name);
 
@@ -321,6 +312,15 @@ export default function FunctionDetailPage({
           functionName={function_name}
           locationKey={location.key}
         />
+
+        {function_name !== DEFAULT_FUNCTION && (
+          <ExperimentationSection
+            promise={experimentationData}
+            functionName={function_name}
+            functionConfig={function_config}
+            locationKey={location.key}
+          />
+        )}
 
         <Suspense key={location.key} fallback={<SectionsSkeleton />}>
           <Await

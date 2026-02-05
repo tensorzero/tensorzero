@@ -280,8 +280,6 @@ export type FunctionDetailData = {
   metricsWithFeedback: MetricsSectionData["metricsWithFeedback"];
   variant_performances: MetricsSectionData["variant_performances"];
   variant_throughput: ThroughputSectionData;
-  feedback_timeseries: ExperimentationSectionData["feedback_timeseries"];
-  variant_sampling_probabilities: ExperimentationSectionData["variant_sampling_probabilities"];
 };
 
 export async function fetchAllFunctionDetailData(
@@ -300,14 +298,8 @@ export async function fetchAllFunctionDetailData(
     feedback_time_granularity,
   } = params;
 
-  const [experimentation, throughput, metrics, inferences] =
-    await Promise.all([
-      fetchExperimentationSectionData({
-        function_name,
-        function_config,
-        time_granularity: feedback_time_granularity,
-      }),
-      fetchThroughputSectionData({
+  const [throughput, metrics, inferences] = await Promise.all([
+    fetchThroughputSectionData({
         function_name,
         time_granularity: throughput_time_granularity,
       }),
@@ -317,13 +309,13 @@ export async function fetchAllFunctionDetailData(
         time_granularity,
         config,
       }),
-      fetchInferencesSectionData({
-        function_name,
-        beforeInference,
-        afterInference,
-        limit,
-      }),
-    ]);
+    fetchInferencesSectionData({
+      function_name,
+      beforeInference,
+      afterInference,
+      limit,
+    }),
+  ]);
 
   return {
     function_name,
@@ -334,8 +326,5 @@ export async function fetchAllFunctionDetailData(
     metricsWithFeedback: metrics.metricsWithFeedback,
     variant_performances: metrics.variant_performances,
     variant_throughput: throughput,
-    feedback_timeseries: experimentation.feedback_timeseries,
-    variant_sampling_probabilities:
-      experimentation.variant_sampling_probabilities,
   };
 }
