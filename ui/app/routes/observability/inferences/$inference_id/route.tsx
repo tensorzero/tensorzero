@@ -155,10 +155,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   // Show toast when feedback is successfully added
   useEffect(() => {
     if (newFeedbackId) {
-      const { dismiss } = toast.success({ title: "Feedback Added" });
-      return () => dismiss({ immediate: true });
+      toast.success({ title: "Feedback Added" });
     }
-    return;
   }, [newFeedbackId, toast]);
 
   // Feedback pagination

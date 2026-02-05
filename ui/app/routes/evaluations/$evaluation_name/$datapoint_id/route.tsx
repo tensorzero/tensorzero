@@ -419,10 +419,8 @@ export default function EvaluationDatapointPage({
   // Show toast when feedback is successfully added (outside Suspense to avoid repeating)
   useEffect(() => {
     if (newFeedbackId) {
-      const { dismiss } = toast.success({ title: "Feedback Added" });
-      return () => dismiss({ immediate: true });
+      toast.success({ title: "Feedback Added" });
     }
-    return;
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   return (

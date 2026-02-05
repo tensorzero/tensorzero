@@ -156,13 +156,11 @@ export default function DatasetDetailPage({
   // Use useEffect to show toast only after component mounts
   useEffect(() => {
     if (rowsAdded !== null) {
-      const { dismiss } = toast.success({
+      toast.success({
         title: "Dataset Updated",
         description: `Added ${rowsAdded} rows to the dataset.`,
       });
-      return () => dismiss({ immediate: true });
     }
-    return;
     // TODO: Fix and stop ignoring lint rule
   }, [rowsAdded, toast]);
 

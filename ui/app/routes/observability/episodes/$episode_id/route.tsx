@@ -356,10 +356,8 @@ export default function EpisodeDetailPage({
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
-      const { dismiss } = toast.success({ title: "Feedback Added" });
-      return () => dismiss({ immediate: true });
+      toast.success({ title: "Feedback Added" });
     }
-    return;
   }, [newFeedbackId, toast]);
 
   const humanFeedbackFetcher = useFetcherWithReset<FeedbackActionData>();
