@@ -90,9 +90,9 @@ pub async fn create_evaluation_dataset(
 /// Holds the results of evaluating variants on a dataset
 #[derive(Clone, Debug)]
 pub struct EvaluationResults {
-    /// Full evaluation info for each datapoint
-    /// Compatible with analyze_inferences(&[EvaluationInfo])
-    pub evaluation_infos: Vec<EvaluationInfo>,
+    /// Full evaluation info for each datapoint, sorted by datapoint ID.
+    /// Sorting ensures deterministic ordering regardless of task completion order.
+    evaluation_infos: Vec<EvaluationInfo>,
 
     /// Aggregated statistics across all datapoints
     /// Key: evaluator_name
@@ -101,6 +101,23 @@ pub struct EvaluationResults {
 }
 
 impl EvaluationResults {
+    /// Create new EvaluationResults, sorting evaluation_infos by datapoint ID.
+    pub fn new(
+        mut evaluation_infos: Vec<EvaluationInfo>,
+        evaluation_stats: HashMap<EvaluatorName, EvaluatorStats>,
+    ) -> Self {
+        evaluation_infos.sort_by_key(|info| info.datapoint.id());
+        Self {
+            evaluation_infos,
+            evaluation_stats,
+        }
+    }
+
+    /// Returns the evaluation infos, sorted by datapoint ID.
+    pub fn evaluation_infos(&self) -> &[EvaluationInfo] {
+        &self.evaluation_infos
+    }
+
     /// Extract per-datapoint scores for Pareto frontier analysis
     ///
     /// Returns a HashMap mapping datapoint_id to a HashMap of evaluator scores.
@@ -223,8 +240,8 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         evaluation_stats.compute_stats(evaluators)
     };
 
-    Ok(EvaluationResults {
-        evaluation_infos: evaluation_stats.evaluation_infos,
-        evaluation_stats: evaluation_stats_map,
-    })
+    Ok(EvaluationResults::new(
+        evaluation_stats.evaluation_infos,
+        evaluation_stats_map,
+    ))
 }
