@@ -1,11 +1,9 @@
 import type { ActionFunctionArgs } from "react-router";
-import {
-  ConfigWriter,
-  listConfigWrites,
-  writeConfigWriteToFile,
-} from "tensorzero-node";
+import { ConfigWriter } from "tensorzero-node";
 import { getEnv } from "~/utils/env.server";
+import { getAutopilotClient } from "~/utils/get-autopilot-client.server";
 import { logger } from "~/utils/logger";
+import { extractEditPayloadsFromConfigWrite } from "~/utils/tensorzero/autopilot-client";
 
 type WriteConfigRequest = {
   event_id: string;
@@ -81,10 +79,8 @@ export async function action({
 
   try {
     // Fetch config writes for the session
-    const configWritesResponse = await listConfigWrites(sessionId, {
-      baseUrl: env.TENSORZERO_GATEWAY_URL,
-      apiKey: env.TENSORZERO_API_KEY,
-    });
+    const configWritesResponse =
+      await getAutopilotClient().listConfigWrites(sessionId);
 
     // Find the event by ID
     const event = configWritesResponse.config_writes.find(
@@ -101,13 +97,18 @@ export async function action({
       );
     }
 
-    // Create ConfigWriter and apply the edit
+    // Create ConfigWriter and apply the edits
     const configWriter = await ConfigWriter.new(configFile);
-    const result = await writeConfigWriteToFile(configWriter, event);
+    const editPayloads = extractEditPayloadsFromConfigWrite(event);
+    const writtenPaths: string[] = [];
+    for (const editPayload of editPayloads) {
+      const paths = await configWriter.applyEdit(editPayload);
+      writtenPaths.push(...paths);
+    }
 
     return Response.json({
       success: true,
-      written_paths: result.writtenPaths,
+      written_paths: writtenPaths,
     } as WriteConfigResponse);
   } catch (error) {
     logger.error("Failed to write config:", error);

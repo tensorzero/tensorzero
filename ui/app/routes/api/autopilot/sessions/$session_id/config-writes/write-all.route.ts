@@ -1,8 +1,19 @@
 import type { ActionFunctionArgs } from "react-router";
-import { ConfigWriter, writeSessionConfigWritesToFile } from "tensorzero-node";
-import type { WriteConfigWriteResult } from "~/types/tensorzero";
+import { ConfigWriter } from "tensorzero-node";
 import { getEnv } from "~/utils/env.server";
+import { getAutopilotClient } from "~/utils/get-autopilot-client.server";
 import { logger } from "~/utils/logger";
+import { extractEditPayloadsFromConfigWrite } from "~/utils/tensorzero/autopilot-client";
+
+/**
+ * Result of writing a config write to file.
+ */
+interface WriteConfigWriteResult {
+  /** The event ID that was processed */
+  eventId: string;
+  /** Paths of files that were written */
+  writtenPaths: string[];
+}
 
 type WriteAllConfigsResponse =
   | {
@@ -62,21 +73,31 @@ export async function action({
   }
 
   try {
-    // Create ConfigWriter and write all config writes from the session
+    // Fetch config writes for the session
+    const configWritesResponse =
+      await getAutopilotClient().listConfigWrites(sessionId);
+
+    // Create ConfigWriter and write all config writes
     const configWriter = await ConfigWriter.new(configFile);
-    const result = await writeSessionConfigWritesToFile(
-      configWriter,
-      sessionId,
-      {
-        baseUrl: env.TENSORZERO_GATEWAY_URL,
-        apiKey: env.TENSORZERO_API_KEY,
-      },
-    );
+    const results: WriteConfigWriteResult[] = [];
+
+    for (const event of configWritesResponse.config_writes) {
+      const editPayloads = extractEditPayloadsFromConfigWrite(event);
+      const writtenPaths: string[] = [];
+      for (const editPayload of editPayloads) {
+        const paths = await configWriter.applyEdit(editPayload);
+        writtenPaths.push(...paths);
+      }
+      results.push({
+        eventId: event.id,
+        writtenPaths,
+      });
+    }
 
     return Response.json({
       success: true,
-      results: result.results,
-      total_processed: result.totalProcessed,
+      results,
+      total_processed: results.length,
     } as WriteAllConfigsResponse);
   } catch (error) {
     logger.error("Failed to write configs:", error);

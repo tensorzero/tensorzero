@@ -4,12 +4,17 @@ import type {
   ApproveAllToolCallsResponse,
   CreateEventGatewayRequest,
   CreateEventResponse,
+  EditPayload,
+  GatewayEvent,
+  GatewayListConfigWritesResponse,
   GatewayListEventsResponse,
   GatewayStreamUpdate,
+  ListConfigWritesParams,
   ListEventsParams,
   ListSessionsParams,
   ListSessionsResponse,
   StreamEventsParams,
+  WriteConfigToolParams,
 } from "~/types/tensorzero";
 
 /**
@@ -167,4 +172,61 @@ export class AutopilotClient extends BaseTensorZeroClient {
       reader.releaseLock();
     }
   }
+
+  /**
+   * Lists config writes (write_config tool calls) for a session.
+   */
+  async listConfigWrites(
+    sessionId: string,
+    params?: ListConfigWritesParams,
+  ): Promise<GatewayListConfigWritesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit !== undefined) {
+      searchParams.set("limit", params.limit.toString());
+    }
+    if (params?.offset !== undefined) {
+      searchParams.set("offset", params.offset.toString());
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/config-writes${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GatewayListConfigWritesResponse;
+  }
+}
+
+/**
+ * Extracts the EditPayload from a config write event.
+ *
+ * @param event - A GatewayEvent that should be a write_config tool call
+ * @returns The EditPayload array from the event's arguments
+ * @throws Error if the event is not a write_config tool call or has no edit payload
+ */
+export function extractEditPayloadsFromConfigWrite(
+  event: GatewayEvent,
+): EditPayload[] {
+  if (event.payload.type !== "tool_call") {
+    throw new Error(
+      `Expected tool_call event but got ${event.payload.type} for event ${event.id}`,
+    );
+  }
+
+  if (event.payload.name !== "write_config") {
+    throw new Error(
+      `Expected write_config tool call but got ${event.payload.name} for event ${event.id}`,
+    );
+  }
+
+  const args = event.payload.arguments as unknown as WriteConfigToolParams;
+  if (!args.edit) {
+    throw new Error(
+      `Config write event ${event.id} does not have an edit payload. Args: ${JSON.stringify(args)}`,
+    );
+  }
+
+  return args.edit;
 }

@@ -3,7 +3,16 @@ import { useFetcher } from "react-router";
 import { useEffect, useRef } from "react";
 import { Button } from "~/components/ui/button";
 import { useToast } from "~/hooks/use-toast";
-import type { WriteConfigWriteResult } from "~/types/tensorzero";
+
+/**
+ * Result of writing a config write to file.
+ */
+interface WriteConfigWriteResult {
+  /** The event ID that was processed */
+  eventId: string;
+  /** Paths of files that were written */
+  writtenPaths: string[];
+}
 
 type WriteAllConfigsResponse =
   | {
