@@ -29,7 +29,6 @@ use crate::{JobHandle, Optimizer};
 
 pub mod analyze;
 pub mod evaluate;
-mod json_utils;
 pub mod mutate;
 pub mod pareto;
 pub mod validate;

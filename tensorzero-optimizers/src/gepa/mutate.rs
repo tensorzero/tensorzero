@@ -28,9 +28,7 @@ use tensorzero_core::{
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
-use crate::gepa::{
-    GEPAVariant, analyze::Analysis, json_utils::sort_json_keys, validate::FunctionContext,
-};
+use crate::gepa::{GEPAVariant, analyze::Analysis, validate::FunctionContext};
 
 /// Helper struct to deserialize the JSON response that matches the output schema.
 /// The schema defines templates as an array of objects with name and content fields.
@@ -121,26 +119,28 @@ fn build_mutate_input(
     })?;
 
     // Build the input with high-level objects that will be serialized in the template
-    // Sort JSON keys for deterministic serialization (important for caching)
     let mut map = Map::new();
-    map.insert(
-        "function_config".to_string(),
-        sort_json_keys(to_value(function_config)?),
-    );
+    map.insert("function_config".to_string(), to_value(function_config)?);
     if let Some(tools) = static_tools {
-        map.insert("static_tools".to_string(), sort_json_keys(json!(tools)));
+        map.insert("static_tools".to_string(), json!(tools));
     }
     map.insert(
         "evaluation_config".to_string(),
-        sort_json_keys(to_value(evaluation_config)?),
+        to_value(evaluation_config)?,
     );
-    map.insert(
-        "templates_map".to_string(),
-        sort_json_keys(json!(templates_map)),
-    );
-    map.insert("analyses".to_string(), sort_json_keys(analyses_json));
+    map.insert("templates_map".to_string(), json!(templates_map));
+    map.insert("analyses".to_string(), analyses_json);
 
-    Ok(Arguments(map))
+    // Sort all JSON keys for deterministic serialization (important for caching)
+    let mut value = Value::Object(map);
+    value.sort_all_objects();
+    let Value::Object(sorted_map) = value else {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: "sort_all_objects changed Value variant".to_string(),
+        }));
+    };
+
+    Ok(Arguments(sorted_map))
 }
 
 /// Generate improved templates using the GEPA mutate function.

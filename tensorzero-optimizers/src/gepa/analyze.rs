@@ -30,7 +30,7 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-use crate::gepa::{json_utils::sort_json_keys, validate::FunctionContext};
+use crate::gepa::validate::FunctionContext;
 
 /// Fields to include when serializing datapoints for GEPA functions.
 /// Only these fields are relevant for prompt optimization analysis.
@@ -228,25 +228,6 @@ pub fn build_analyze_input(
         })
         .collect();
 
-    // Build the input with high-level objects that will be serialized in the template
-    // Sort JSON keys for deterministic serialization (important for caching)
-    let mut map = Map::new();
-    map.insert(
-        "function_config".to_string(),
-        sort_json_keys(to_value(function_config)?),
-    );
-    if let Some(tools) = static_tools {
-        map.insert("static_tools".to_string(), sort_json_keys(json!(tools)));
-    }
-    map.insert(
-        "evaluation_config".to_string(),
-        sort_json_keys(to_value(evaluation_config)?),
-    );
-    map.insert(
-        "templates_map".to_string(),
-        sort_json_keys(json!(templates_map)),
-    );
-
     // Strip thought signatures at the type level before serialization.
     // Only Chat types can contain Thought blocks; Json outputs are left intact.
     let mut datapoint_for_serialization = eval_info.datapoint.clone();
@@ -257,10 +238,6 @@ pub fn build_analyze_input(
         Datapoint::Json(_) => {} // No signatures to strip in JSON
     }
 
-    // Serialize with filtered fields
-    let datapoint_value = serialize_filtered_datapoint(&datapoint_for_serialization)?;
-    map.insert("datapoint".to_string(), sort_json_keys(datapoint_value));
-
     let output_value = match &eval_info.response {
         InferenceResponse::Chat(chat_response) => {
             let mut content = chat_response.content.clone();
@@ -269,14 +246,35 @@ pub fn build_analyze_input(
         }
         InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
     };
-    map.insert("output".to_string(), sort_json_keys(output_value));
 
+    // Build the input with high-level objects that will be serialized in the template
+    let mut map = Map::new();
+    map.insert("function_config".to_string(), to_value(function_config)?);
+    if let Some(tools) = static_tools {
+        map.insert("static_tools".to_string(), json!(tools));
+    }
     map.insert(
-        "evaluation_scores".to_string(),
-        sort_json_keys(json!(evaluation_scores)),
+        "evaluation_config".to_string(),
+        to_value(evaluation_config)?,
     );
+    map.insert("templates_map".to_string(), json!(templates_map));
+    map.insert(
+        "datapoint".to_string(),
+        serialize_filtered_datapoint(&datapoint_for_serialization)?,
+    );
+    map.insert("output".to_string(), output_value);
+    map.insert("evaluation_scores".to_string(), json!(evaluation_scores));
 
-    Ok(Arguments(map))
+    // Sort all JSON keys for deterministic serialization (important for caching)
+    let mut value = Value::Object(map);
+    value.sort_all_objects();
+    let Value::Object(sorted_map) = value else {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: "sort_all_objects changed Value variant".to_string(),
+        }));
+    };
+
+    Ok(Arguments(sorted_map))
 }
 
 /// Analyzes a single inference using the analyze function.
