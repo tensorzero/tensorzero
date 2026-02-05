@@ -1,13 +1,15 @@
-name: Build Fixtures Container
+name: Build Live Tests Container
 
 on:
   workflow_call:
     secrets:
+      DOCKERHUB_USERNAME:
+        required: true
       DOCKERHUB_LIMITED_TOKEN:
         required: true
 
 jobs:
-  build-fixtures-container:
+  build-live-tests-container:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
@@ -39,29 +41,21 @@ jobs:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Build `fixtures` container
+      - name: Build `live-tests` container
         run: |
-          docker buildx build -f ui/fixtures/Dockerfile . -t tensorzero/fixtures:sha-${{ github.sha }} -t nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/e2e/Dockerfile.live . -t tensorzero/live-tests:sha-${{ github.sha }}
 
-      - name: Save `fixtures` container
-        run: docker save tensorzero/fixtures:sha-${{ github.sha }} > fixtures-container.tar
+      - name: Save `live-tests` container
+        run: docker save tensorzero/live-tests:sha-${{ github.sha }} > live-tests-container.tar
 
-      - name: Upload `fixtures` container as an artifact
+      - name: Upload `live-tests` container as an artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: build-fixtures-container
-          path: fixtures-container.tar
+          name: build-live-tests-container
+          path: live-tests-container.tar
           retention-days: 1
           if-no-files-found: error
           overwrite: false
 
-      - name: Push `fixtures` container to Docker Hub
-        run: docker push tensorzero/fixtures:sha-${{ github.sha }}
-
-      - name: Login to Namespace registry
-        run: nsc docker login
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
-
-      - name: Push `fixtures` container to Namespace registry
-        run: docker push nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+      - name: Push `live-tests` container to DockerHub
+        run: docker push tensorzero/live-tests:sha-${{ github.sha }}
