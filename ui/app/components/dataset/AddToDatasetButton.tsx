@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useFetcher, Link } from "react-router";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import {
@@ -43,23 +43,12 @@ export function AddToDatasetButton({
 }: AddToDatasetButtonProps) {
   const [selectedDataset, setSelectedDataset] = useState("");
   const [outputDialogOpen, setOutputDialogOpen] = useState(false);
-  // Keyed fetcher persists state across Suspense unmount/remount cycles
-  const fetcher = useFetcher({ key: `add-to-dataset-${inferenceId}` });
+  const fetcher = useFetcher();
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
 
-  // Track processed fetcher data to prevent duplicate toasts across remounts
-  const processedDataRef = useRef<unknown>(fetcher.data ?? null);
-
-  // Show toast when fetcher completes. The keyed fetcher preserves data across
-  // Suspense unmount/remount cycles so it's still available when idle.
   useEffect(() => {
-    if (
-      (fetcher.state === "idle" || fetcher.state === "loading") &&
-      fetcher.data
-    ) {
-      if (processedDataRef.current === fetcher.data) return;
-      processedDataRef.current = fetcher.data;
+    if (fetcher.state === "idle" && fetcher.data) {
       if (fetcher.data.error) {
         const { dismiss } = toast.error({
           title: "Failed to add to dataset",
