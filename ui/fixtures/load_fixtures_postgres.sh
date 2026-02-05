@@ -358,6 +358,17 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id) DO NOTHING;
 "
 
+echo "Refreshing materialized views..."
+psql -q "$POSTGRES_URL" <<EOF
+REFRESH MATERIALIZED VIEW tensorzero.model_provider_statistics;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_hour;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_day;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_week;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_month;
+EOF
+
+
 echo ""
 echo "All fixtures loaded successfully!"
 
