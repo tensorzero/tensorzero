@@ -790,6 +790,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         otlp_traces_extra_attributes: HashMap::new(),
         otlp_traces_extra_resources: HashMap::new(),
         api_key: None,
+        redact_content: None,
     };
     debug!("Making inference request");
     let inference_result = clients.inference_executor.inference(params).await?;

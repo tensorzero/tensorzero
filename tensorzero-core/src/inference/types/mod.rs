@@ -1007,6 +1007,107 @@ impl ContentBlockChatOutput {
             self
         }
     }
+
+    /// Returns a redacted version of this content block.
+    /// Text content is replaced with "[REDACTED]", tool call arguments are redacted
+    /// but tool names are preserved.
+    pub fn redact(&self) -> Self {
+        match self {
+            Self::Text(_) => Self::Text(Text {
+                text: REDACTED_PLACEHOLDER.to_string(),
+            }),
+            Self::ToolCall(tc) => Self::ToolCall(InferenceResponseToolCall {
+                id: tc.id.clone(),
+                raw_name: tc.raw_name.clone(),
+                raw_arguments: REDACTED_PLACEHOLDER.to_string(),
+                name: tc.name.clone(),
+                arguments: None,
+            }),
+            Self::Thought(_) => Self::Thought(Thought {
+                text: Some(REDACTED_PLACEHOLDER.to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            Self::Unknown(_) => Self::Unknown(Unknown {
+                data: serde_json::json!(REDACTED_PLACEHOLDER),
+                model_name: None,
+                provider_name: None,
+            }),
+        }
+    }
+}
+
+/// Placeholder text used when content is redacted for privacy
+pub const REDACTED_PLACEHOLDER: &str = "[REDACTED]";
+
+impl ContentBlockOutput {
+    /// Returns a redacted version of this content block.
+    /// Text content is replaced with "[REDACTED]", tool call arguments are redacted
+    /// but tool names are preserved.
+    pub fn redact(&self) -> Self {
+        match self {
+            Self::Text(_) => Self::Text(Text {
+                text: REDACTED_PLACEHOLDER.to_string(),
+            }),
+            Self::ToolCall(tc) => Self::ToolCall(ToolCall {
+                id: tc.id.clone(),
+                name: tc.name.clone(),
+                arguments: REDACTED_PLACEHOLDER.to_string(),
+            }),
+            Self::Thought(_) => Self::Thought(Thought {
+                text: Some(REDACTED_PLACEHOLDER.to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            Self::Unknown(_) => Self::Unknown(Unknown {
+                data: serde_json::json!(REDACTED_PLACEHOLDER),
+                model_name: None,
+                provider_name: None,
+            }),
+        }
+    }
+}
+
+impl StoredContentBlock {
+    /// Returns a redacted version of this content block.
+    /// Text content is replaced with "[REDACTED]", tool call arguments are redacted
+    /// but tool names are preserved. Files and tool results are fully redacted.
+    pub fn redact(&self) -> Self {
+        match self {
+            Self::Text(_) => Self::Text(Text {
+                text: REDACTED_PLACEHOLDER.to_string(),
+            }),
+            Self::ToolCall(tc) => Self::ToolCall(ToolCall {
+                id: tc.id.clone(),
+                name: tc.name.clone(),
+                arguments: REDACTED_PLACEHOLDER.to_string(),
+            }),
+            Self::ToolResult(tr) => Self::ToolResult(ToolResult {
+                id: tr.id.clone(),
+                name: tr.name.clone(),
+                result: REDACTED_PLACEHOLDER.to_string(),
+            }),
+            Self::File(_) => Self::Text(Text {
+                text: REDACTED_PLACEHOLDER.to_string(),
+            }),
+            Self::Thought(_) => Self::Thought(Thought {
+                text: Some(REDACTED_PLACEHOLDER.to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            Self::Unknown(_) => Self::Unknown(Unknown {
+                data: serde_json::json!(REDACTED_PLACEHOLDER),
+                model_name: None,
+                provider_name: None,
+            }),
+        }
+    }
 }
 
 /// A RequestMessage is a message sent to a model
@@ -1699,10 +1800,15 @@ impl ModelInferenceResponseWithMetadata {
 impl StoredModelInference {
     /// Create a new StoredModelInference from a runtime ModelInferenceResponseWithMetadata.
     /// Used when inserting into ClickHouse.
+    ///
+    /// If `redact_content` is true, sensitive fields (raw_request, raw_response, system,
+    /// input_messages, output) are replaced with "[REDACTED]" placeholders while preserving
+    /// usage statistics and metadata.
     pub async fn new(
         result: ModelInferenceResponseWithMetadata,
         inference_id: Uuid,
         snapshot_hash: SnapshotHash,
+        redact_content: bool,
     ) -> Result<Self, Error> {
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
@@ -1745,13 +1851,32 @@ impl StoredModelInference {
             RequestMessagesOrBatch::BatchInput(stored) => stored,
         };
 
+        // Apply redaction if requested
+        let (raw_request, raw_response, system, input_messages, output) = if redact_content {
+            (
+                REDACTED_PLACEHOLDER.to_string(),
+                REDACTED_PLACEHOLDER.to_string(),
+                result.system.map(|_| REDACTED_PLACEHOLDER.to_string()),
+                stored_input_messages.iter().map(|m| m.redact()).collect(),
+                result.output.iter().map(|c| c.redact()).collect(),
+            )
+        } else {
+            (
+                result.raw_request,
+                result.raw_response,
+                result.system,
+                stored_input_messages,
+                result.output,
+            )
+        };
+
         Ok(Self {
             id: Uuid::now_v7(),
             inference_id,
-            raw_request: result.raw_request,
-            raw_response: result.raw_response,
-            system: result.system,
-            output: result.output,
+            raw_request,
+            raw_response,
+            system,
+            output,
             input_tokens,
             output_tokens,
             response_time_ms: latency_ms,
@@ -1760,7 +1885,7 @@ impl StoredModelInference {
             model_name: result.model_name.to_string(),
             cached: result.cached,
             finish_reason: result.finish_reason,
-            input_messages: stored_input_messages,
+            input_messages,
             snapshot_hash: Some(snapshot_hash),
             // timestamp is a materialized column, not set during insert
             timestamp: None,
@@ -1814,9 +1939,12 @@ impl InferenceResult {
 
     /// Get the model inferences as `StoredModelInference` structs ready for database insertion.
     /// Any errors during construction are logged and the result is skipped.
+    ///
+    /// If `redact_content` is true, sensitive content will be replaced with "[REDACTED]" placeholders.
     pub async fn get_model_inferences(
         &self,
         snapshot_hash: SnapshotHash,
+        redact_content: bool,
     ) -> Vec<StoredModelInference> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
@@ -1826,7 +1954,14 @@ impl InferenceResult {
         join_all(model_inference_responses.iter().map(|r| {
             let snapshot_hash = snapshot_hash.clone();
             async move {
-                match StoredModelInference::new(r.clone(), inference_id, snapshot_hash).await {
+                match StoredModelInference::new(
+                    r.clone(),
+                    inference_id,
+                    snapshot_hash,
+                    redact_content,
+                )
+                .await
+                {
                     Ok(model_inference) => Some(model_inference),
                     Err(e) => {
                         ErrorDetails::Serialization {
@@ -2002,6 +2137,16 @@ impl ChatInferenceDatabaseInsert {
         let tool_params = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = chat_result.inference_params;
 
+        // Apply redaction if requested
+        let (input, output) = if metadata.redact_content {
+            (
+                StoredInput::redacted(),
+                chat_result.content.iter().map(|c| c.redact()).collect(),
+            )
+        } else {
+            (input, chat_result.content)
+        };
+
         Self {
             id: chat_result.inference_id,
             function_name: metadata.function_name,
@@ -2010,7 +2155,7 @@ impl ChatInferenceDatabaseInsert {
             input,
             tool_params,
             inference_params,
-            output: chat_result.content,
+            output,
             processing_time_ms,
             tags: metadata.tags,
             ttft_ms: metadata.ttft_ms,
@@ -2037,7 +2182,24 @@ impl JsonInferenceDatabaseInsert {
             auxiliary_content,
             ..
         } = json_result.output;
-        let output = JsonInferenceOutput { raw, parsed };
+
+        // Apply redaction if requested
+        let (input, output, auxiliary_content) = if metadata.redact_content {
+            (
+                StoredInput::redacted(),
+                JsonInferenceOutput {
+                    raw: Some(REDACTED_PLACEHOLDER.to_string()),
+                    parsed: Some(serde_json::json!(REDACTED_PLACEHOLDER)),
+                },
+                auxiliary_content.iter().map(|c| c.redact()).collect(),
+            )
+        } else {
+            (
+                input,
+                JsonInferenceOutput { raw, parsed },
+                auxiliary_content,
+            )
+        };
 
         Self {
             id: json_result.inference_id,
@@ -3440,5 +3602,186 @@ mod tests {
             None,
             "Empty slice should return None"
         );
+    }
+
+    #[test]
+    fn test_content_block_chat_output_redact_text() {
+        let text = ContentBlockChatOutput::Text(Text {
+            text: "sensitive information".to_string(),
+        });
+        let redacted = text.redact();
+        match redacted {
+            ContentBlockChatOutput::Text(t) => {
+                assert_eq!(
+                    t.text, REDACTED_PLACEHOLDER,
+                    "Text content should be replaced with redacted placeholder"
+                );
+            }
+            _ => panic!("Expected Text variant after redaction"),
+        }
+    }
+
+    #[test]
+    fn test_content_block_chat_output_redact_tool_call() {
+        let tool_call = ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
+            id: "tool-123".to_string(),
+            raw_name: "get_weather".to_string(),
+            raw_arguments: "{\"location\": \"secret city\"}".to_string(),
+            name: Some("get_weather".to_string()),
+            arguments: Some(json!({"location": "secret city"})),
+        });
+        let redacted = tool_call.redact();
+        match redacted {
+            ContentBlockChatOutput::ToolCall(tc) => {
+                assert_eq!(tc.id, "tool-123", "Tool ID should be preserved");
+                assert_eq!(tc.raw_name, "get_weather", "Tool name should be preserved");
+                assert_eq!(
+                    tc.raw_arguments, REDACTED_PLACEHOLDER,
+                    "Tool arguments should be redacted"
+                );
+                assert_eq!(
+                    tc.name,
+                    Some("get_weather".to_string()),
+                    "Parsed name should be preserved"
+                );
+                assert!(
+                    tc.arguments.is_none(),
+                    "Parsed arguments should be None after redaction"
+                );
+            }
+            _ => panic!("Expected ToolCall variant after redaction"),
+        }
+    }
+
+    #[test]
+    fn test_content_block_chat_output_redact_thought() {
+        let thought = ContentBlockChatOutput::Thought(Thought {
+            text: Some("internal reasoning".to_string()),
+            signature: Some("sig123".to_string()),
+            summary: Some(vec![]),
+            provider_type: None,
+            extra_data: Some(json!({"key": "value"})),
+        });
+        let redacted = thought.redact();
+        match redacted {
+            ContentBlockChatOutput::Thought(t) => {
+                assert_eq!(
+                    t.text,
+                    Some(REDACTED_PLACEHOLDER.to_string()),
+                    "Thought text should be redacted"
+                );
+                assert!(t.signature.is_none(), "Signature should be None");
+                assert!(t.summary.is_none(), "Summary should be None");
+                assert!(t.provider_type.is_none(), "Provider type should be None");
+                assert!(t.extra_data.is_none(), "Extra data should be None");
+            }
+            _ => panic!("Expected Thought variant after redaction"),
+        }
+    }
+
+    #[test]
+    fn test_content_block_chat_output_redact_unknown() {
+        let unknown = ContentBlockChatOutput::Unknown(Unknown {
+            data: json!({"secret": "data"}),
+            model_name: Some("model".to_string()),
+            provider_name: Some("provider".to_string()),
+        });
+        let redacted = unknown.redact();
+        match redacted {
+            ContentBlockChatOutput::Unknown(u) => {
+                assert_eq!(
+                    u.data,
+                    json!(REDACTED_PLACEHOLDER),
+                    "Unknown data should be redacted"
+                );
+                assert!(u.model_name.is_none(), "Model name should be None");
+                assert!(u.provider_name.is_none(), "Provider name should be None");
+            }
+            _ => panic!("Expected Unknown variant after redaction"),
+        }
+    }
+
+    #[test]
+    fn test_content_block_output_redact_text() {
+        let text = ContentBlockOutput::Text(Text {
+            text: "sensitive info".to_string(),
+        });
+        let redacted = text.redact();
+        match redacted {
+            ContentBlockOutput::Text(t) => {
+                assert_eq!(t.text, REDACTED_PLACEHOLDER, "Text should be redacted");
+            }
+            _ => panic!("Expected Text variant after redaction"),
+        }
+    }
+
+    #[test]
+    fn test_content_block_output_redact_tool_call() {
+        let tool_call = ContentBlockOutput::ToolCall(ToolCall {
+            id: "tool-456".to_string(),
+            name: "search".to_string(),
+            arguments: "{\"query\": \"secret\"}".to_string(),
+        });
+        let redacted = tool_call.redact();
+        match redacted {
+            ContentBlockOutput::ToolCall(tc) => {
+                assert_eq!(tc.id, "tool-456", "Tool ID should be preserved");
+                assert_eq!(tc.name, "search", "Tool name should be preserved");
+                assert_eq!(
+                    tc.arguments, REDACTED_PLACEHOLDER,
+                    "Tool arguments should be redacted"
+                );
+            }
+            _ => panic!("Expected ToolCall variant after redaction"),
+        }
+    }
+
+    #[test]
+    fn test_stored_content_block_redact_tool_result() {
+        let tool_result = StoredContentBlock::ToolResult(ToolResult {
+            id: "result-789".to_string(),
+            name: "search".to_string(),
+            result: "found secret documents".to_string(),
+        });
+        let redacted = tool_result.redact();
+        match redacted {
+            StoredContentBlock::ToolResult(tr) => {
+                assert_eq!(tr.id, "result-789", "Tool result ID should be preserved");
+                assert_eq!(tr.name, "search", "Tool result name should be preserved");
+                assert_eq!(
+                    tr.result, REDACTED_PLACEHOLDER,
+                    "Tool result should be redacted"
+                );
+            }
+            _ => panic!("Expected ToolResult variant after redaction"),
+        }
+    }
+
+    #[test]
+    fn test_stored_content_block_redact_file() {
+        use crate::inference::types::storage::{StorageKind, StoragePath};
+
+        let file = StoredContentBlock::File(Box::new(StoredFile(
+            autopilot_client::ObjectStoragePointer {
+                source_url: Some("http://example.com/secret.pdf".parse().unwrap()),
+                mime_type: mime::APPLICATION_PDF,
+                storage_path: StoragePath {
+                    kind: StorageKind::Disabled,
+                    path: object_store::path::Path::parse("test/secret.pdf").unwrap(),
+                },
+                detail: None,
+                filename: None,
+            },
+        )));
+        let redacted = file.redact();
+        match redacted {
+            StoredContentBlock::Text(t) => {
+                assert_eq!(
+                    t.text, REDACTED_PLACEHOLDER,
+                    "File should be redacted to text placeholder"
+                );
+            }
+            _ => panic!("Expected Text variant after file redaction"),
+        }
     }
 }

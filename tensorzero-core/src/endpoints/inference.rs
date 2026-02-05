@@ -96,6 +96,8 @@ pub struct Params {
     pub variant_name: Option<String>,
     // if true, the inference will not be stored
     pub dryrun: Option<bool>,
+    // if true, the inference input/output content will be redacted but usage statistics will still be stored
+    pub redact_content: Option<bool>,
     // if true, the inference will be internal and validation of tags will be skipped
     #[serde(default)]
     pub internal: bool,
@@ -154,6 +156,7 @@ struct InferenceMetadata {
     pub inference_id: Uuid,
     pub input: Arc<LazyResolvedInput>,
     pub dryrun: bool,
+    pub redact_content: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
     pub model_name: Arc<str>,
@@ -392,6 +395,8 @@ pub async fn inference(
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
+    // Should we redact input/output content but still store usage statistics?
+    let redact_content = params.redact_content.unwrap_or(false);
     if params.internal_dynamic_variant_config.is_some() && !dryrun {
         return Err(ErrorDetails::InvalidRequest {
             message:
@@ -485,6 +490,7 @@ pub async fn inference(
             inference_id,
             episode_id,
             dryrun,
+            redact_content,
             start_time,
             stream,
             resolved_input,
@@ -544,6 +550,7 @@ pub async fn inference(
             inference_id,
             episode_id,
             dryrun,
+            redact_content,
             start_time,
             stream,
             resolved_input: resolved_input.clone(),
@@ -604,6 +611,7 @@ struct InferVariantArgs<'a> {
     inference_id: Uuid,
     episode_id: Uuid,
     dryrun: bool,
+    redact_content: bool,
     start_time: Instant,
     stream: bool,
     resolved_input: Arc<LazyResolvedInput>,
@@ -633,6 +641,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         inference_id,
         episode_id,
         dryrun,
+        redact_content,
         start_time,
         stream,
         resolved_input,
@@ -702,6 +711,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             episode_id,
             input: resolved_input,
             dryrun,
+            redact_content,
             start_time,
             inference_params: model_used_info.inference_params.clone(),
             model_name: model_used_info.model_name,
@@ -769,6 +779,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 extra_body,
                 extra_headers,
                 snapshot_hash: config.hash.clone(),
+                redact_content,
             };
 
             let async_writes = config.gateway.observability.async_writes;
@@ -1122,6 +1133,7 @@ fn create_stream(
                 episode_id,
                 input,
                 dryrun: _,
+                redact_content,
                 start_time,
                 inference_params,
                 model_name,
@@ -1195,6 +1207,7 @@ fn create_stream(
                         extra_body,
                         extra_headers,
                         snapshot_hash: config.hash.clone(),
+                        redact_content,
                     };
                     let config = config.clone();
                         match Arc::unwrap_or_clone(input).resolve().await {
@@ -1371,6 +1384,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub snapshot_hash: SnapshotHash,
+    pub redact_content: bool,
 }
 
 async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sync>(
@@ -1381,10 +1395,14 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let model_inferences = result
-        .get_model_inferences(metadata.snapshot_hash.clone())
+        .get_model_inferences(metadata.snapshot_hash.clone(), metadata.redact_content)
         .await;
-    let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
-        input.clone().write_all_files(config);
+    // Skip file writes when redacting content to avoid storing sensitive data
+    let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> = if metadata.redact_content {
+        vec![]
+    } else {
+        input.clone().write_all_files(config)
+    };
     // Write the model inferences to the database (dual-write via ModelInferenceQueries trait)
     futures.push(
         async {
@@ -2103,6 +2121,7 @@ mod tests {
                 system: None,
             }),
             dryrun: false,
+            redact_content: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
             model_name: "test_model".into(),
@@ -2170,6 +2189,7 @@ mod tests {
                 system: None,
             }),
             dryrun: false,
+            redact_content: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
             model_name: "test_model".into(),
@@ -2564,6 +2584,7 @@ mod tests {
                 system: None,
             }),
             dryrun: false,
+            redact_content: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
             model_name: "test_model".into(),

@@ -141,6 +141,7 @@ pub async fn run_llm_judge_evaluator(
         otlp_traces_extra_attributes: HashMap::new(),
         otlp_traces_extra_resources: HashMap::new(),
         api_key: None,
+        redact_content: None,
     };
     let result = clients.inference_executor.inference(params).await?;
     let response = match result {

@@ -96,6 +96,15 @@ impl StoredInput {
                 .collect(),
         }
     }
+
+    /// Returns a redacted version of this input where all content is replaced with "[REDACTED]".
+    /// This preserves the structure but removes sensitive data.
+    pub fn redacted() -> Self {
+        Self {
+            system: Some(System::Text(super::REDACTED_PLACEHOLDER.to_string())),
+            messages: vec![],
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -509,6 +518,16 @@ pub struct StoredRequestMessage {
     pub content: Vec<StoredContentBlock>,
 }
 
+impl StoredRequestMessage {
+    /// Returns a redacted version of this message where all content is replaced with "[REDACTED]".
+    pub fn redact(&self) -> Self {
+        Self {
+            role: self.role,
+            content: self.content.iter().map(|c| c.redact()).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,5 +781,102 @@ mod tests {
         let deserialized: StoredFile = serde_json::from_value(json).unwrap();
 
         assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn test_stored_input_redacted() {
+        use crate::inference::types::REDACTED_PLACEHOLDER;
+        use crate::inference::types::System;
+
+        let redacted = StoredInput::redacted();
+
+        match &redacted.system {
+            Some(System::Text(text)) => {
+                assert_eq!(
+                    text, REDACTED_PLACEHOLDER,
+                    "Redacted input should have system set to redacted placeholder"
+                );
+            }
+            _ => panic!("Expected Some(System::Text(...)) for redacted input"),
+        }
+
+        assert!(
+            redacted.messages.is_empty(),
+            "Redacted input should have empty messages"
+        );
+    }
+
+    #[test]
+    fn test_stored_request_message_redact() {
+        use crate::inference::types::REDACTED_PLACEHOLDER;
+        use crate::inference::types::StoredContentBlock;
+        use crate::inference::types::Text;
+        use crate::inference::types::ToolCall;
+        use crate::inference::types::ToolResult;
+
+        let message = StoredRequestMessage {
+            role: Role::User,
+            content: vec![
+                StoredContentBlock::Text(Text {
+                    text: "sensitive user message".to_string(),
+                }),
+                StoredContentBlock::ToolCall(ToolCall {
+                    id: "tc-123".to_string(),
+                    name: "get_data".to_string(),
+                    arguments: "{\"secret\": \"value\"}".to_string(),
+                }),
+                StoredContentBlock::ToolResult(ToolResult {
+                    id: "tr-456".to_string(),
+                    name: "get_data".to_string(),
+                    result: "secret result data".to_string(),
+                }),
+            ],
+        };
+
+        let redacted = message.redact();
+
+        assert_eq!(redacted.role, Role::User, "Role should be preserved");
+        assert_eq!(
+            redacted.content.len(),
+            3,
+            "Content length should be preserved"
+        );
+
+        // Check text content is redacted
+        match &redacted.content[0] {
+            StoredContentBlock::Text(t) => {
+                assert_eq!(
+                    t.text, REDACTED_PLACEHOLDER,
+                    "Text content should be redacted"
+                );
+            }
+            _ => panic!("Expected Text variant"),
+        }
+
+        // Check tool call - name preserved, arguments redacted
+        match &redacted.content[1] {
+            StoredContentBlock::ToolCall(tc) => {
+                assert_eq!(tc.id, "tc-123", "Tool call ID should be preserved");
+                assert_eq!(tc.name, "get_data", "Tool call name should be preserved");
+                assert_eq!(
+                    tc.arguments, REDACTED_PLACEHOLDER,
+                    "Tool call arguments should be redacted"
+                );
+            }
+            _ => panic!("Expected ToolCall variant"),
+        }
+
+        // Check tool result - name preserved, result redacted
+        match &redacted.content[2] {
+            StoredContentBlock::ToolResult(tr) => {
+                assert_eq!(tr.id, "tr-456", "Tool result ID should be preserved");
+                assert_eq!(tr.name, "get_data", "Tool result name should be preserved");
+                assert_eq!(
+                    tr.result, REDACTED_PLACEHOLDER,
+                    "Tool result should be redacted"
+                );
+            }
+            _ => panic!("Expected ToolResult variant"),
+        }
     }
 }

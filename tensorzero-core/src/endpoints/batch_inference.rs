@@ -1042,10 +1042,12 @@ pub async fn write_completed_batch_inference<'a>(
             extra_body: Default::default(),
             extra_headers: Default::default(),
             snapshot_hash: config.hash.clone(),
+            // redact_content is not currently supported for batch inference
+            redact_content: false,
         };
         model_inference_rows_to_write.extend(
             inference_result
-                .get_model_inferences(config.hash.clone())
+                .get_model_inferences(config.hash.clone(), false)
                 .await,
         );
         match inference_result {

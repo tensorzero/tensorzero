@@ -42,6 +42,8 @@ pub struct ClientInferenceParams {
     pub variant_name: Option<String>,
     // if true, the inference will not be stored
     pub dryrun: Option<bool>,
+    // if true, the inference input/output content will be redacted but usage statistics will still be stored
+    pub redact_content: Option<bool>,
     // if true, the inference will be internal and validation of tags will be skipped
     pub internal: bool,
     // the tags to add to the inference
@@ -132,6 +134,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             params: this.params,
             variant_name: this.variant_name,
             dryrun: this.dryrun,
+            redact_content: this.redact_content,
             tags: this.tags,
             internal: this.internal,
             dynamic_tool_params: this.dynamic_tool_params,
@@ -167,6 +170,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         params,
         variant_name,
         dryrun,
+        redact_content,
         tags,
         internal,
         dynamic_tool_params,
@@ -193,6 +197,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         params,
         variant_name,
         dryrun,
+        redact_content,
         tags,
         internal,
         dynamic_tool_params,

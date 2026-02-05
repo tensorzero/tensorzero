@@ -442,6 +442,8 @@ impl Params {
             params: inference_params,
             variant_name: openai_compatible_params.tensorzero_variant_name,
             dryrun: openai_compatible_params.tensorzero_dryrun,
+            // redact_content is not currently supported via the OpenAI-compatible endpoint
+            redact_content: None,
             dynamic_tool_params,
             output_schema,
             credentials: openai_compatible_params.tensorzero_credentials,
