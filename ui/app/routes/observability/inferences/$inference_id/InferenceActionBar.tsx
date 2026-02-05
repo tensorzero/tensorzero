@@ -10,14 +10,12 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
-import type {
-  ActionBarData,
-  ModelInferencesData,
-} from "./inference-data.server";
+import type { ModelInferencesData } from "./inference-data.server";
 
 interface InferenceActionBarProps {
   inference: StoredInference;
-  actionBarDataPromise: Promise<ActionBarData>;
+  usedVariantsPromise: Promise<string[]>;
+  hasDemonstrationPromise: Promise<boolean>;
   inputPromise: Promise<Input>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
@@ -26,7 +24,8 @@ interface InferenceActionBarProps {
 
 export function InferenceActionBar({
   inference,
-  actionBarDataPromise,
+  usedVariantsPromise,
+  hasDemonstrationPromise,
   inputPromise,
   modelInferencesPromise,
   onFeedbackAdded,
@@ -37,7 +36,7 @@ export function InferenceActionBar({
       <TryWithVariantActionStreaming
         key={`try-${locationKey}`}
         inference={inference}
-        actionBarDataPromise={actionBarDataPromise}
+        usedVariantsPromise={usedVariantsPromise}
         inputPromise={inputPromise}
         modelInferencesPromise={modelInferencesPromise}
         onFeedbackAdded={onFeedbackAdded}
@@ -45,7 +44,7 @@ export function InferenceActionBar({
       <AddToDatasetButtonStreaming
         key={`dataset-${locationKey}`}
         inference={inference}
-        actionBarDataPromise={actionBarDataPromise}
+        hasDemonstrationPromise={hasDemonstrationPromise}
       />
       <HumanFeedbackAction
         key={`human-${locationKey}`}
@@ -58,7 +57,7 @@ export function InferenceActionBar({
 
 interface TryWithVariantActionStreamingProps {
   inference: StoredInference;
-  actionBarDataPromise: Promise<ActionBarData>;
+  usedVariantsPromise: Promise<string[]>;
   inputPromise: Promise<Input>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
@@ -66,7 +65,7 @@ interface TryWithVariantActionStreamingProps {
 
 function TryWithVariantActionStreaming({
   inference,
-  actionBarDataPromise,
+  usedVariantsPromise,
   inputPromise,
   modelInferencesPromise,
   onFeedbackAdded,
@@ -79,15 +78,15 @@ function TryWithVariantActionStreaming({
   const dataPromise = useMemo(
     () =>
       Promise.all([
-        actionBarDataPromise,
+        usedVariantsPromise,
         inputPromise,
         modelInferencesPromise,
-      ]).then(([actionBarData, input, modelInferences]) => ({
-        usedVariants: actionBarData.usedVariants,
+      ]).then(([usedVariants, input, modelInferences]) => ({
+        usedVariants,
         input,
         inferenceUsage: getTotalInferenceUsage(modelInferences),
       })),
-    [actionBarDataPromise, inputPromise, modelInferencesPromise],
+    [usedVariantsPromise, inputPromise, modelInferencesPromise],
   );
 
   return (
@@ -119,26 +118,26 @@ function TryWithVariantActionStreaming({
 
 interface AddToDatasetButtonStreamingProps {
   inference: StoredInference;
-  actionBarDataPromise: Promise<ActionBarData>;
+  hasDemonstrationPromise: Promise<boolean>;
 }
 
 function AddToDatasetButtonStreaming({
   inference,
-  actionBarDataPromise,
+  hasDemonstrationPromise,
 }: AddToDatasetButtonStreamingProps) {
   return (
     <Suspense fallback={<Skeleton className="h-8 w-36" />}>
       <Await
-        resolve={actionBarDataPromise}
+        resolve={hasDemonstrationPromise}
         errorElement={<ActionBarAsyncError />}
       >
-        {(actionBarData) => (
+        {(hasDemonstration) => (
           <AddToDatasetButton
             inferenceId={inference.inference_id}
             functionName={inference.function_name}
             variantName={inference.variant_name}
             episodeId={inference.episode_id}
-            hasDemonstration={actionBarData.hasDemonstration}
+            hasDemonstration={hasDemonstration}
           />
         )}
       </Await>

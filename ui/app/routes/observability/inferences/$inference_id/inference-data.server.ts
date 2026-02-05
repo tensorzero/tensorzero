@@ -16,11 +16,6 @@ import { DEFAULT_FUNCTION } from "~/utils/constants";
 // Types for streamed data
 export type ModelInferencesData = ParsedModelInferenceRow[];
 
-export type ActionBarData = {
-  hasDemonstration: boolean;
-  usedVariants: string[];
-};
-
 export type FeedbackData = {
   feedback: FeedbackRow[];
   feedback_bounds: FeedbackBounds;
@@ -36,21 +31,25 @@ export async function fetchModelInferences(
   return resolveModelInferences(response.model_inferences);
 }
 
-export async function fetchActionBarData(
-  inference_id: string,
+export async function fetchUsedVariants(
   functionName: string,
-): Promise<ActionBarData> {
+): Promise<string[]> {
+  if (functionName !== DEFAULT_FUNCTION) {
+    return [];
+  }
   const tensorZeroClient = getTensorZeroClient();
-  const [demonstrationFeedback, usedVariants] = await Promise.all([
-    tensorZeroClient.getDemonstrationFeedback(inference_id, { limit: 1 }),
-    functionName === DEFAULT_FUNCTION
-      ? tensorZeroClient.getUsedVariants(functionName)
-      : Promise.resolve([]),
-  ]);
-  return {
-    hasDemonstration: demonstrationFeedback.length > 0,
-    usedVariants,
-  };
+  return tensorZeroClient.getUsedVariants(functionName);
+}
+
+export async function fetchHasDemonstration(
+  inference_id: string,
+): Promise<boolean> {
+  const tensorZeroClient = getTensorZeroClient();
+  const demonstrationFeedback = await tensorZeroClient.getDemonstrationFeedback(
+    inference_id,
+    { limit: 1 },
+  );
+  return demonstrationFeedback.length > 0;
 }
 
 export async function fetchInput(inference: StoredInference): Promise<Input> {

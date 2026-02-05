@@ -21,7 +21,8 @@ import { ToolParametersSection } from "~/components/inference/ToolParametersSect
 import { TagsTable } from "~/components/tags/TagsTable";
 import {
   fetchModelInferences,
-  fetchActionBarData,
+  fetchUsedVariants,
+  fetchHasDemonstration,
   fetchInput,
   fetchFeedbackData,
 } from "./inference-data.server";
@@ -62,7 +63,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     inference,
     newFeedbackId,
     modelInferences: fetchModelInferences(inference_id),
-    actionBarData: fetchActionBarData(inference_id, inference.function_name),
+    usedVariants: fetchUsedVariants(inference.function_name),
+    hasDemonstration: fetchHasDemonstration(inference_id),
     input: fetchInput(inference),
     feedbackData: fetchFeedbackData(inference_id, {
       newFeedbackId,
@@ -78,7 +80,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     inference,
     newFeedbackId,
     modelInferences,
-    actionBarData,
+    usedVariants,
+    hasDemonstration,
     input,
     feedbackData,
   } = loaderData;
@@ -140,7 +143,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         />
         <InferenceActionBar
           inference={inference}
-          actionBarDataPromise={actionBarData}
+          usedVariantsPromise={usedVariants}
+          hasDemonstrationPromise={hasDemonstration}
           inputPromise={input}
           modelInferencesPromise={modelInferences}
           onFeedbackAdded={handleFeedbackAdded}
