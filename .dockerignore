@@ -11,6 +11,7 @@ target-rust-analyzer
 **/.claude
 ui/fixtures/small-fixtures
 ui/fixtures/large-fixtures
+**/test-results
 /recipes
 gcp_jwt_key.json
 .credentials/
