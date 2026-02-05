@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::postgres::PgRow;
 use sqlx::types::Json;
 use sqlx::{PgPool, QueryBuilder, Row};
@@ -24,7 +24,7 @@ use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
 use crate::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTerm};
-use crate::endpoints::datasets::validate_dataset_name;
+use crate::endpoints::datasets::{CLICKHOUSE_DATETIME_FORMAT, validate_dataset_name};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput};
@@ -34,6 +34,18 @@ use crate::tool::types::{ProviderTool, Tool};
 use crate::tool::wire::ToolChoice;
 
 use super::PostgresConnectionInfo;
+
+/// Parses a datetime string in ClickHouse format to DateTime<Utc>.
+/// Returns None if the input is None, or an error if parsing fails.
+fn parse_clickhouse_datetime(s: &str) -> Result<DateTime<Utc>, Error> {
+    NaiveDateTime::parse_from_str(s, CLICKHOUSE_DATETIME_FORMAT)
+        .map(|naive| naive.and_utc())
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse datetime string '{s}': {e}"),
+            })
+        })
+}
 
 // =====================================================================
 // DatasetQueries trait implementation
@@ -597,13 +609,8 @@ async fn insert_chat_datapoints(
             let staled_at = dp
                 .staled_at
                 .as_ref()
-                .map(|s| s.parse::<DateTime<Utc>>())
-                .transpose()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!("Failed to parse chat datapoint staled_at: {e}"),
-                    })
-                })?;
+                .map(|s| parse_clickhouse_datetime(s))
+                .transpose()?;
             let created_at = uuid_to_datetime(dp.id)?;
             Ok((staled_at, created_at))
         })
@@ -705,13 +712,8 @@ async fn insert_json_datapoints(
             let staled_at = dp
                 .staled_at
                 .as_ref()
-                .map(|s| s.parse::<DateTime<Utc>>())
-                .transpose()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!("Failed to parse json datapoint staled_at: {e}"),
-                    })
-                })?;
+                .map(|s| parse_clickhouse_datetime(s))
+                .transpose()?;
             let created_at = uuid_to_datetime(dp.id)?;
             Ok((staled_at, created_at))
         })
@@ -814,7 +816,8 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredChatInferenceDatapoi
             input: input.0,
             output: output.map(|v| v.0),
             tool_params,
-            tags: if tags.is_empty() { None } else { Some(tags) },
+            // TODO(shuyangli): Let's figure out whether we want to return empty maps as {} or skip
+            tags: Some(tags),
             is_custom: row.try_get("is_custom")?,
             source_inference_id: row.try_get("source_inference_id")?,
             name: row.try_get("name")?,
@@ -850,7 +853,8 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredJsonInferenceDatapoi
             input: input.0,
             output: output.map(|v| v.0),
             output_schema,
-            tags: if tags.is_empty() { None } else { Some(tags) },
+            // TODO(shuyangli): Let's figure out whether we want to return empty maps as {} or skip
+            tags: Some(tags),
             is_custom: row.try_get("is_custom")?,
             source_inference_id: row.try_get("source_inference_id")?,
             name: row.try_get("name")?,
@@ -1620,5 +1624,26 @@ mod tests {
                 UNION ALL SELECT id FROM tensorzero.json_datapoints WHERE id = ANY($2) AND staled_at IS NULL) AS combined
             ",
         );
+    }
+
+    #[test]
+    fn test_parse_clickhouse_datetime() {
+        // Test parsing ClickHouse datetime format with microseconds
+        let result = parse_clickhouse_datetime("2025-01-15 12:34:56.123456").unwrap();
+        assert_eq!(
+            result.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2025-01-15 12:34:56"
+        );
+
+        // Test parsing without microseconds (6 zeros)
+        let result = parse_clickhouse_datetime("2025-01-15 12:34:56.000000").unwrap();
+        assert_eq!(
+            result.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "2025-01-15 12:34:56"
+        );
+
+        // Test that RFC 3339 format fails (as expected - we only support ClickHouse format)
+        let result = parse_clickhouse_datetime("2025-01-15T12:34:56Z");
+        assert!(result.is_err(), "RFC 3339 format should fail");
     }
 }
