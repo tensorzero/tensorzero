@@ -509,7 +509,6 @@ impl DatasetQueries for DelegatingDatabaseConnection {
         Ok(results)
     }
 }
-
 #[async_trait]
 impl BatchInferenceQueries for DelegatingDatabaseConnection {
     // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
@@ -627,5 +626,42 @@ impl ModelInferenceQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+mod test_helpers_impl {
+    use super::DelegatingDatabaseConnection;
+    use crate::db::clickhouse::test_helpers::get_clickhouse;
+    use crate::db::postgres::test_helpers::get_postgres;
+    use crate::db::test_helpers::TestDatabaseHelpers;
+    use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
+    use async_trait::async_trait;
+
+    impl DelegatingDatabaseConnection {
+        pub async fn new_for_e2e_test() -> Self {
+            let clickhouse = get_clickhouse().await;
+            let postgres = get_postgres().await;
+            Self::new(clickhouse, postgres)
+        }
+    }
+
+    #[async_trait]
+    impl TestDatabaseHelpers for DelegatingDatabaseConnection {
+        async fn flush_pending_writes(&self) {
+            if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
+                self.postgres.flush_pending_writes().await;
+            } else {
+                self.clickhouse.flush_pending_writes().await;
+            }
+        }
+
+        async fn sleep_for_writes_to_be_visible(&self) {
+            if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
+                self.postgres.sleep_for_writes_to_be_visible().await;
+            } else {
+                self.clickhouse.sleep_for_writes_to_be_visible().await;
+            }
+        }
     }
 }
