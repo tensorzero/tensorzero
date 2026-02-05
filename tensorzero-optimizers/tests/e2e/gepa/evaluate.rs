@@ -74,7 +74,7 @@ async fn test_evaluate_variant_chat() {
 
     let evaluation_results = evaluation_result.unwrap();
     assert_eq!(
-        evaluation_results.evaluation_infos.len(),
+        evaluation_results.evaluation_infos().len(),
         2,
         "Expected 2 evaluation results"
     );
@@ -146,7 +146,7 @@ async fn test_evaluate_variant_json() {
 
     let evaluation_results = evaluation_result.unwrap();
     assert_eq!(
-        evaluation_results.evaluation_infos.len(),
+        evaluation_results.evaluation_infos().len(),
         2,
         "Expected 2 evaluation results"
     );
