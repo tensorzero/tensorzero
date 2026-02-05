@@ -64,7 +64,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     newFeedbackId,
     modelInferences: fetchModelInferences(inference_id),
     usedVariants: fetchUsedVariants(inference.function_name),
-    hasDemonstration: fetchHasDemonstration(inference_id),
+    // Fetched synchronously so AddToDatasetButton stays outside Suspense
+    // (toast notifications get dismissed during Suspense re-suspension)
+    hasDemonstration: await fetchHasDemonstration(inference_id),
     input: fetchInput(inference),
     feedbackData: fetchFeedbackData(inference_id, {
       newFeedbackId,
@@ -144,7 +146,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         <InferenceActionBar
           inference={inference}
           usedVariantsPromise={usedVariants}
-          hasDemonstrationPromise={hasDemonstration}
+          hasDemonstration={hasDemonstration}
           inputPromise={input}
           modelInferencesPromise={modelInferences}
           onFeedbackAdded={handleFeedbackAdded}

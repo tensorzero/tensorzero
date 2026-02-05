@@ -15,7 +15,7 @@ import type { ModelInferencesData } from "./inference-data.server";
 interface InferenceActionBarProps {
   inference: StoredInference;
   usedVariantsPromise: Promise<string[]>;
-  hasDemonstrationPromise: Promise<boolean>;
+  hasDemonstration: boolean;
   inputPromise: Promise<Input>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
@@ -25,7 +25,7 @@ interface InferenceActionBarProps {
 export function InferenceActionBar({
   inference,
   usedVariantsPromise,
-  hasDemonstrationPromise,
+  hasDemonstration,
   inputPromise,
   modelInferencesPromise,
   onFeedbackAdded,
@@ -41,10 +41,13 @@ export function InferenceActionBar({
         modelInferencesPromise={modelInferencesPromise}
         onFeedbackAdded={onFeedbackAdded}
       />
-      <AddToDatasetButtonStreaming
+      <AddToDatasetButton
         key={`dataset-${locationKey}`}
-        inference={inference}
-        hasDemonstrationPromise={hasDemonstrationPromise}
+        inferenceId={inference.inference_id}
+        functionName={inference.function_name}
+        variantName={inference.variant_name}
+        episodeId={inference.episode_id}
+        hasDemonstration={hasDemonstration}
       />
       <HumanFeedbackAction
         key={`human-${locationKey}`}
@@ -111,35 +114,6 @@ function TryWithVariantActionStreaming({
             />
           );
         }}
-      </Await>
-    </Suspense>
-  );
-}
-
-interface AddToDatasetButtonStreamingProps {
-  inference: StoredInference;
-  hasDemonstrationPromise: Promise<boolean>;
-}
-
-function AddToDatasetButtonStreaming({
-  inference,
-  hasDemonstrationPromise,
-}: AddToDatasetButtonStreamingProps) {
-  return (
-    <Suspense fallback={<Skeleton className="h-8 w-36" />}>
-      <Await
-        resolve={hasDemonstrationPromise}
-        errorElement={<ActionBarAsyncError />}
-      >
-        {(hasDemonstration) => (
-          <AddToDatasetButton
-            inferenceId={inference.inference_id}
-            functionName={inference.function_name}
-            variantName={inference.variant_name}
-            episodeId={inference.episode_id}
-            hasDemonstration={hasDemonstration}
-          />
-        )}
       </Await>
     </Suspense>
   );
