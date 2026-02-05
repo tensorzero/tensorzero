@@ -1,0 +1,34 @@
+services:
+  provider-proxy:
+    image: tensorzero/provider-proxy:${TENSORZERO_GATEWAY_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: provider-proxy/Dockerfile
+      target: provider-proxy
+    ports:
+      - "3003:3003"
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    volumes:
+      # Mount cache directory for downloading cache files separately
+      - ../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
+    # Cache mode can be overridden via PROVIDER_PROXY_CACHE_MODE environment variable.
+    # Options: read-old-write-new (default), read-only, read-write
+    # See: https://github.com/tensorzero/tensorzero/issues/5380
+    command:
+      [
+        "--cache-path",
+        "/app/ci/provider-proxy-cache",
+        "--mode",
+        "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
+      ]
+    healthcheck:
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
+  gateway:
+    environment:
+      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
+    depends_on:
+      provider-proxy:
+        condition: service_healthy

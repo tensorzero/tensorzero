@@ -6,10 +6,17 @@ set -euxo pipefail
 
 cd "$(dirname "$0")"/../
 
-docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
-docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
-TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030 TENSORZERO_SKIP_LARGE_FIXTURES=1 TENSORZERO_UI_FORCE_CACHE_ON=1 docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml up --force-recreate -d
-docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml wait fixtures
+# Build compose file arguments - optionally include provider-proxy if TENSORZERO_USE_PROVIDER_PROXY is set
+COMPOSE_FILES="-f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml"
+if [ "${TENSORZERO_USE_PROVIDER_PROXY:-}" = "1" ]; then
+  COMPOSE_FILES="$COMPOSE_FILES -f ./fixtures/docker-compose.provider-proxy.yml"
+fi
+
+docker compose $COMPOSE_FILES down
+docker compose $COMPOSE_FILES rm -f
+DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030 TENSORZERO_SKIP_LARGE_FIXTURES=1 TENSORZERO_UI_FORCE_CACHE_ON=1 docker compose $COMPOSE_FILES up --force-recreate -d
+docker compose $COMPOSE_FILES wait fixtures
+
 # Wipe the ModelInferenceCache table to ensure that we regenerate everything
 docker run --add-host=host.docker.internal:host-gateway clickhouse/clickhouse-server clickhouse-client --host host.docker.internal --user chuser --password chpassword --database tensorzero_ui_fixtures 'TRUNCATE TABLE ModelInferenceCache SYNC'
 # Don't use any retries, since this will pollute the model inference cache with duplicate entries.
@@ -20,3 +27,4 @@ pnpm test-e2e -j 1 --grep-invert "@credentials" --max-failures 1
 # Remove the existing file if it exists (it may have restricted permissions from R2 download)
 rm -f ./fixtures/small-fixtures/model_inference_cache_e2e.jsonl
 docker run --add-host=host.docker.internal:host-gateway clickhouse/clickhouse-server clickhouse-client --host host.docker.internal --user chuser --password chpassword --database tensorzero_ui_fixtures 'SELECT * FROM ModelInferenceCache ORDER BY long_cache_key ASC FORMAT JSONEachRow' > ./fixtures/small-fixtures/model_inference_cache_e2e.jsonl
+docker compose $COMPOSE_FILES logs -t
