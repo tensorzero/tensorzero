@@ -260,15 +260,9 @@ export async function fetchExperimentationSectionData(
 
 type FetchAllParams = {
   function_name: string;
-  function_config: FunctionConfig;
-  config: Awaited<ReturnType<typeof getConfig>>;
   beforeInference: string | null;
   afterInference: string | null;
   limit: number;
-  metric_name: string | undefined;
-  time_granularity: TimeWindow;
-  throughput_time_granularity: TimeWindow;
-  feedback_time_granularity: TimeWindow;
 };
 
 export type FunctionDetailData = {
@@ -277,40 +271,19 @@ export type FunctionDetailData = {
   hasNextInferencePage: boolean;
   hasPreviousInferencePage: boolean;
   num_inferences: number;
-  metricsWithFeedback: MetricsSectionData["metricsWithFeedback"];
-  variant_performances: MetricsSectionData["variant_performances"];
 };
 
 export async function fetchAllFunctionDetailData(
   params: FetchAllParams,
 ): Promise<FunctionDetailData> {
-  const {
+  const { function_name, beforeInference, afterInference, limit } = params;
+
+  const inferences = await fetchInferencesSectionData({
     function_name,
-    function_config,
-    config,
     beforeInference,
     afterInference,
     limit,
-    metric_name,
-    time_granularity,
-    throughput_time_granularity,
-    feedback_time_granularity,
-  } = params;
-
-  const [metrics, inferences] = await Promise.all([
-    fetchMetricsSectionData({
-      function_name,
-      metric_name,
-      time_granularity,
-      config,
-    }),
-    fetchInferencesSectionData({
-      function_name,
-      beforeInference,
-      afterInference,
-      limit,
-    }),
-  ]);
+  });
 
   return {
     function_name,
@@ -318,7 +291,5 @@ export async function fetchAllFunctionDetailData(
     hasNextInferencePage: inferences.hasNextPage,
     hasPreviousInferencePage: inferences.hasPreviousPage,
     num_inferences: inferences.count,
-    metricsWithFeedback: metrics.metricsWithFeedback,
-    variant_performances: metrics.variant_performances,
   };
 }

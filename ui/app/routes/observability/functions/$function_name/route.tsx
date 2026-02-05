@@ -5,7 +5,6 @@ import {
   useAsyncError,
   useLocation,
   useNavigate,
-  useSearchParams,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
@@ -13,9 +12,7 @@ import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import { useFunctionConfig } from "~/context/config";
-import { MetricSelector } from "~/components/function/variant/MetricSelector";
-import { Suspense, useMemo } from "react";
-import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
+import { Suspense } from "react";
 import {
   PageHeader,
   PageLayout,
@@ -40,6 +37,7 @@ import {
 import {
   fetchAllFunctionDetailData,
   fetchExperimentationSectionData,
+  fetchMetricsSectionData,
   fetchThroughputSectionData,
   fetchVariantsSectionData,
   type FunctionDetailData,
@@ -47,6 +45,7 @@ import {
 import { VariantsSection } from "./VariantsSection";
 import { ExperimentationSection } from "./ExperimentationSection";
 import { ThroughputSection } from "./ThroughputSection";
+import { MetricsSection } from "./MetricsSection";
 
 function FunctionDetailPageHeader({
   functionName,
@@ -77,12 +76,6 @@ function FunctionDetailPageHeader({
 function SectionsSkeleton() {
   return (
     <>
-      <SectionLayout>
-        <SectionHeader heading="Metrics" />
-        <Skeleton className="mb-4 h-10 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </SectionLayout>
-
       <SectionLayout>
         <SectionHeader heading="Schemas" />
         <Skeleton className="h-32 w-full" />
@@ -171,17 +164,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       function_name,
       time_granularity: throughput_time_granularity,
     }),
+    metricsData: fetchMetricsSectionData({
+      function_name,
+      metric_name,
+      time_granularity,
+      config,
+    }),
     functionDetailData: fetchAllFunctionDetailData({
       function_name,
-      function_config,
-      config,
       beforeInference,
       afterInference,
       limit,
-      metric_name,
-      time_granularity,
-      throughput_time_granularity,
-      feedback_time_granularity,
     }),
   };
 }
@@ -200,12 +193,9 @@ function SectionsContent({
     hasNextInferencePage,
     hasPreviousInferencePage,
     num_inferences,
-    metricsWithFeedback,
-    variant_performances,
   } = data;
 
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
   // Only get top/bottom inferences if array is not empty
   const topInference = inferences.length > 0 ? inferences[0] : null;
@@ -228,40 +218,8 @@ function SectionsContent({
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  const metric_name = searchParams.get("metric_name") || "";
-
-  const handleMetricChange = (metric: string) => {
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("metric_name", metric);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const metricsExcludingDemonstrations = useMemo(
-    () => ({
-      metrics: metricsWithFeedback.metrics.filter(
-        ({ metric_type }) => metric_type !== "demonstration",
-      ),
-    }),
-    [metricsWithFeedback],
-  );
-
   return (
     <>
-      <SectionLayout>
-        <SectionHeader heading="Metrics" />
-        <MetricSelector
-          metricsWithFeedback={metricsExcludingDemonstrations}
-          selectedMetric={metric_name || ""}
-          onMetricChange={handleMetricChange}
-        />
-        {variant_performances && (
-          <VariantPerformance
-            variant_performances={variant_performances}
-            metric_name={metric_name}
-          />
-        )}
-      </SectionLayout>
-
       <SectionLayout>
         <SectionHeader heading="Schemas" />
         <FunctionSchema functionConfig={functionConfig} />
@@ -289,6 +247,7 @@ export default function FunctionDetailPage({
     variantsData,
     experimentationData,
     throughputData,
+    metricsData,
     functionDetailData,
   } = loaderData;
   const location = useLocation();
@@ -325,6 +284,8 @@ export default function FunctionDetailPage({
           promise={throughputData}
           locationKey={location.key}
         />
+
+        <MetricsSection promise={metricsData} locationKey={location.key} />
 
         <Suspense key={location.key} fallback={<SectionsSkeleton />}>
           <Await
