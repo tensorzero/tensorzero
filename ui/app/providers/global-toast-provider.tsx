@@ -42,8 +42,13 @@ export function GlobalToastProvider({
       const id = genId();
       const update = (props: ToasterToast) =>
         dispatch({ type: "UPDATE_TOAST", id, toast: props });
-      const dismiss = () =>
-        dispatch({ type: "QUEUE_DISMISS_TOAST", id, addToRemoveQueue });
+      const dismiss = (args?: { immediate?: boolean }) => {
+        if (args?.immediate) {
+          dispatch({ type: "REMOVE_TOAST", id });
+        } else {
+          dispatch({ type: "QUEUE_DISMISS_TOAST", id, addToRemoveQueue });
+        }
+      };
 
       dispatch({
         type: "ADD_TOAST",
