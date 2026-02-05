@@ -237,7 +237,7 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         // Action endpoint for executing with historical config snapshots
         .route(
             "/internal/action",
-            post(endpoints::internal::action::action_handler),
+            post(super::action::action_handler),
         )
         // Autopilot proxy endpoints
         .route(
@@ -252,5 +252,22 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/autopilot/v1/sessions/{session_id}/events/stream",
             get(endpoints::internal::autopilot::stream_events_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/actions/approve_all",
+            post(endpoints::internal::autopilot::approve_all_tool_calls_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/actions/interrupt",
+            post(endpoints::internal::autopilot::interrupt_session_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/config-writes",
+            get(endpoints::internal::autopilot::list_config_writes_handler),
+        )
+        // Other Autopilot endpoints
+        .route(
+            "/internal/autopilot/status",
+            get(endpoints::internal::autopilot::autopilot_status_handler),
         )
 }

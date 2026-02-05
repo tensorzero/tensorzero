@@ -27,12 +27,12 @@ pub use table_name::TableName;
 #[cfg(any(test, feature = "pyo3"))]
 use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
 
+mod batch_inference;
 mod batching;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
 pub mod dataset_queries;
 pub mod evaluation_queries;
 pub mod feedback;
-pub mod inference_count;
 pub mod inference_queries;
 pub mod migration_manager;
 pub mod model_inferences;
@@ -333,7 +333,6 @@ impl HealthCheckable for ClickHouseConnectionInfo {
     }
 }
 
-#[async_trait]
 impl ConfigQueries for ClickHouseConnectionInfo {
     async fn get_config_snapshot(
         &self,

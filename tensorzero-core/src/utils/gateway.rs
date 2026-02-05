@@ -1,10 +1,9 @@
+use std::collections::HashSet;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::db::postgres::PostgresConnectionInfo;
-use crate::endpoints::openai_compatible::RouterExt;
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
 use moka::sync::Cache;
@@ -22,10 +21,14 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::feedback::FeedbackQueries;
+use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
+use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
+use crate::rate_limiting::RateLimitingManager;
 use autopilot_client::AutopilotClient;
 
 #[cfg(test)]
@@ -57,7 +60,6 @@ pub type DropWrapper = fn(Box<dyn FnOnce() + Send + '_>);
 /// so that it's easy for us to tell where it gets dropped.
 pub struct GatewayHandle {
     pub app_state: AppStateData,
-    pub cancel_token: CancellationToken,
     drop_wrapper: Option<DropWrapper>,
     _private: (),
 }
@@ -66,7 +68,7 @@ impl Drop for GatewayHandle {
     fn drop(&mut self) {
         let drop_wrapper = self.drop_wrapper.take();
         let mut drop_self = || {
-            self.cancel_token.cancel();
+            self.app_state.shutdown_token.cancel();
             let handle = self
                 .app_state
                 .clickhouse_connection_info
@@ -95,6 +97,15 @@ impl Drop for GatewayHandle {
                 });
                 tracing::info!("ClickHouse batch writer finished");
             }
+            // Return unused rate limit tokens to the database
+            if !self.app_state.rate_limiting_manager.is_empty() {
+                tracing::info!("Returning unused rate limit tokens to database");
+                if let Err(e) = self.app_state.rate_limiting_manager.shutdown() {
+                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
+                }
+                tracing::info!("Rate limit token return complete");
+            }
+
             self.app_state.deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.
             // Closing the pool doesn't block more futures from being added, so checking
@@ -130,6 +141,7 @@ pub struct AppStateData {
     pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
+    pub valkey_connection_info: ValkeyConnectionInfo,
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
     pub deferred_tasks: TaskTracker,
@@ -141,6 +153,9 @@ pub struct AppStateData {
     pub autopilot_client: Option<Arc<AutopilotClient>>,
     /// The deployment ID from ClickHouse (64-char hex string)
     pub deployment_id: Option<String>,
+    /// Token pool manager for rate limiting pre-borrowing
+    pub rate_limiting_manager: Arc<RateLimitingManager>,
+    pub shutdown_token: CancellationToken,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -175,13 +190,19 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
 }
 
 impl GatewayHandle {
-    pub async fn new(config: UnwrittenConfig) -> Result<Self, Error> {
+    pub async fn new(
+        config: UnwrittenConfig,
+        available_tools: HashSet<String>,
+    ) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
+        let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
         Box::pin(Self::new_with_databases(
             config,
             clickhouse_url,
             postgres_url,
+            valkey_url,
+            available_tools,
         ))
         .await
     }
@@ -190,17 +211,22 @@ impl GatewayHandle {
         config: UnwrittenConfig,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
+        valkey_url: Option<String>,
+        available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let config = Arc::new(Box::pin(config.into_config(&clickhouse_connection_info)).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
+        let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
             postgres_connection_info,
+            valkey_connection_info,
             http_client,
             None,
+            available_tools,
         )
         .await
     }
@@ -216,20 +242,31 @@ impl GatewayHandle {
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
         let auth_cache = create_auth_cache_from_config(&config);
+        // In unit tests, use Postgres for rate limiting (Valkey disabled)
+        let rate_limiting_manager = Arc::new(
+            RateLimitingManager::new_from_connections(
+                Arc::new(config.rate_limiting.clone()),
+                &ValkeyConnectionInfo::Disabled,
+                &postgres_connection_info,
+            )
+            .unwrap(),
+        );
         Self {
             app_state: AppStateData {
                 config,
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                valkey_connection_info: ValkeyConnectionInfo::Disabled,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache: None,
                 autopilot_client: None,
                 deployment_id: None,
+                rate_limiting_manager,
+                shutdown_token: cancel_token,
                 _private: (),
             },
-            cancel_token,
             drop_wrapper: None,
             _private: (),
         }
@@ -239,18 +276,16 @@ impl GatewayHandle {
         config: Arc<Config>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
+        valkey_connection_info: ValkeyConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
+        available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
-        // Validate that rate limiting is not configured when Postgres is disabled
-        if config.rate_limiting.enabled()
-            && !config.rate_limiting.rules().is_empty()
-            && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
-        {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
-            }));
-        }
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
+            Arc::new(config.rate_limiting.clone()),
+            &valkey_connection_info,
+            &postgres_connection_info,
+        )?);
 
         let cancel_token = CancellationToken::new();
         setup_howdy(
@@ -286,8 +321,12 @@ impl GatewayHandle {
                 .build(),
         );
 
-        let autopilot_client =
-            setup_autopilot_client(&postgres_connection_info, deployment_id.as_ref()).await?;
+        let autopilot_client = setup_autopilot_client(
+            &postgres_connection_info,
+            deployment_id.as_ref(),
+            available_tools,
+        )
+        .await?;
 
         Ok(Self {
             app_state: AppStateData {
@@ -295,14 +334,16 @@ impl GatewayHandle {
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                valkey_connection_info,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache,
                 autopilot_client,
                 deployment_id,
+                rate_limiting_manager,
+                shutdown_token: cancel_token,
                 _private: (),
             },
-            cancel_token,
             drop_wrapper,
             _private: (),
         })
@@ -318,20 +359,30 @@ impl AppStateData {
         http_client: TensorzeroHttpClient,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
+        valkey_connection_info: ValkeyConnectionInfo,
         deferred_tasks: TaskTracker,
-    ) -> Self {
-        Self {
+        shutdown_token: CancellationToken,
+    ) -> Result<Self, Error> {
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
+            Arc::new(config.rate_limiting.clone()),
+            &valkey_connection_info,
+            &postgres_connection_info,
+        )?);
+        Ok(Self {
             config,
             http_client,
             clickhouse_connection_info,
             postgres_connection_info,
+            valkey_connection_info,
             deferred_tasks,
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
             deployment_id: None,
+            rate_limiting_manager,
+            shutdown_token,
             _private: (),
-        }
+        })
     }
 }
 
@@ -427,6 +478,8 @@ async fn create_postgres_connection(
     Ok(connection_info)
 }
 
+// TODO(#5764): We should test that on startup we issue the correct SQL for write_retention_config,
+// but this is currently structured that's difficult to swap in a Mock.
 pub async fn setup_postgres(
     config: &Config,
     postgres_url: Option<String>,
@@ -461,7 +514,28 @@ pub async fn setup_postgres(
         }
     };
 
+    // Write retention config to Postgres (syncs tensorzero.toml -> database)
+    postgres_connection_info
+        .write_retention_config(config.postgres.inference_retention_days)
+        .await?;
+
     Ok(postgres_connection_info)
+}
+
+/// Sets up the Valkey connection from the provided URL.
+///
+/// Valkey is optional; if no URL is provided, rate limiting will fall back to PostgreSQL.
+///
+/// # Arguments
+/// * `valkey_url` - Optional Valkey URL (from `TENSORZERO_VALKEY_URL` env var)
+pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionInfo, Error> {
+    match valkey_url {
+        Some(url) => ValkeyConnectionInfo::new(url).await,
+        None => {
+            tracing::debug!("Disabling Valkey: `TENSORZERO_VALKEY_URL` is not set.");
+            Ok(ValkeyConnectionInfo::Disabled)
+        }
+    }
 }
 
 /// Sets up the Autopilot API client from the environment.
@@ -476,6 +550,7 @@ pub async fn setup_postgres(
 async fn setup_autopilot_client(
     postgres_connection_info: &PostgresConnectionInfo,
     deployment_id: Option<&String>,
+    available_tools: HashSet<String>,
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
@@ -486,21 +561,22 @@ async fn setup_autopilot_client(
                 })
             })?;
 
-            // Require deployment_id (from ClickHouse) for autopilot
+            // Require `deployment_id` (from ClickHouse) for autopilot
             if deployment_id.is_none() {
                 return Err(Error::new(ErrorDetails::AppState {
                     message:
-                        "Autopilot client requires ClickHouse; set `TENSORZERO_CLICKHOUSE_URL`."
+                        "Failed to fetch the deployment ID from ClickHouse. Please make sure that ClickHouse is running and accessible."
                             .to_string(),
                 }));
             }
             let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
                 .unwrap_or_else(|_| "autopilot".to_string());
 
-            let mut builder = AutopilotClient::builder().api_key(api_key);
-            builder = builder
+            let mut builder = AutopilotClient::builder()
+                .api_key(api_key)
                 .spawn_pool(pool.clone())
-                .spawn_queue_name(queue_name);
+                .spawn_queue_name(queue_name)
+                .available_tools(available_tools);
 
             // Allow custom base URL for testing
             if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
@@ -536,6 +612,41 @@ async fn setup_autopilot_client(
 /// and instead simply assume that the request body is a JSON object.
 pub struct StructuredJson<T>(pub T);
 
+/// Shared JSON deserialization logic used by both `StructuredJson` and `OpenAIStructuredJson`.
+///
+/// Parses the request body as JSON and deserializes it into the target type `T`,
+/// using `serde_path_to_error` for detailed error messages.
+pub(crate) async fn deserialize_json_request<S, T>(req: Request, state: &S) -> Result<T, Error>
+where
+    S: Send + Sync,
+    T: DeserializeOwned,
+{
+    // Retrieve the request body as Bytes before deserializing it
+    let bytes = bytes::Bytes::from_request(req, state).await.map_err(|e| {
+        Error::new(ErrorDetails::JsonRequest {
+            message: format!("{} ({})", e, e.status()),
+        })
+    })?;
+
+    // Convert the entire body into `serde_json::Value`
+    let value = Json::<serde_json::Value>::from_bytes(&bytes)
+        .map_err(|e| {
+            Error::new(ErrorDetails::JsonRequest {
+                message: format!("{} ({})", e, e.status()),
+            })
+        })?
+        .0;
+
+    // Now use `serde_path_to_error::deserialize` to attempt deserialization into `T`
+    let deserialized: T = serde_path_to_error::deserialize(&value).map_err(|e| {
+        Error::new(ErrorDetails::JsonRequest {
+            message: e.to_string(),
+        })
+    })?;
+
+    Ok(deserialized)
+}
+
 impl<S, T> FromRequest<S> for StructuredJson<T>
 where
     Json<T>: FromRequest<S, Rejection = JsonRejection>,
@@ -546,30 +657,9 @@ where
 
     #[instrument(skip_all, level = "trace", name = "StructuredJson::from_request")]
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        // Retrieve the request body as Bytes before deserializing it
-        let bytes = bytes::Bytes::from_request(req, state).await.map_err(|e| {
-            Error::new(ErrorDetails::JsonRequest {
-                message: format!("{} ({})", e, e.status()),
-            })
-        })?;
-
-        // Convert the entire body into `serde_json::Value`
-        let value = Json::<serde_json::Value>::from_bytes(&bytes)
-            .map_err(|e| {
-                Error::new(ErrorDetails::JsonRequest {
-                    message: format!("{} ({})", e, e.status()),
-                })
-            })?
-            .0;
-
-        // Now use `serde_path_to_error::deserialize` to attempt deserialization into `T`
-        let deserialized: T = serde_path_to_error::deserialize(&value).map_err(|e| {
-            Error::new(ErrorDetails::JsonRequest {
-                message: e.to_string(),
-            })
-        })?;
-
-        Ok(StructuredJson(deserialized))
+        deserialize_json_request(req, state)
+            .await
+            .map(StructuredJson)
     }
 }
 
@@ -597,6 +687,7 @@ pub async fn start_openai_compatible_gateway(
     config_file: Option<String>,
     clickhouse_url: Option<String>,
     postgres_url: Option<String>,
+    valkey_url: Option<String>,
 ) -> Result<(SocketAddr, ShutdownHandle), Error> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -622,6 +713,8 @@ pub async fn start_openai_compatible_gateway(
         config_load_info,
         clickhouse_url,
         postgres_url,
+        valkey_url,
+        HashSet::new(), // available_tools
     ))
     .await?;
 
@@ -868,6 +961,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -886,6 +980,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -909,6 +1004,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: None,
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -927,6 +1023,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(true),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -945,6 +1042,7 @@ mod tests {
             postgres: PostgresConfig {
                 enabled: Some(true),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             ..Default::default()
         }));
@@ -955,28 +1053,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_rate_limiting_requires_postgres() {
+    async fn test_no_rate_limiting_does_not_require_postgres_or_valkey() {
         // Rate limiting enabled=false should not fail validation (no rules configured)
         let config_no_rules = Arc::new(Config {
             postgres: PostgresConfig {
                 enabled: Some(false),
                 connection_pool_size: 20,
+                inference_retention_days: None,
             },
             rate_limiting: Default::default(),
             ..Default::default()
         });
 
-        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
-        let postgres_connection_info = PostgresConnectionInfo::Disabled;
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
 
         // This should succeed because rate limiting has no rules
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config_no_rules,
-            clickhouse_connection_info,
-            postgres_connection_info,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
             http_client,
             None,
+            HashSet::new(), // available_tools
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");

@@ -25,10 +25,19 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     };
+
+    let claude_thinking_provider = E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-thinking".to_string(),
+        model_name: "claude-sonnet-4-5-thinking-aws-bedrock".into(),
+        model_provider_name: "aws_bedrock".into(),
+        credentials: HashMap::new(),
+    };
+
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock".to_string(),
-        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
@@ -39,7 +48,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock-extra-body".to_string(),
-        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
@@ -47,7 +56,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws-bedrock-extra-headers".to_string(),
-        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
@@ -56,21 +65,21 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "aws-bedrock".to_string(),
-            model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+            model_name: "claude-haiku-4-5-aws-bedrock".into(),
             model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "aws-bedrock-implicit".to_string(),
-            model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+            model_name: "claude-haiku-4-5-aws-bedrock".into(),
             model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "aws-bedrock-strict".to_string(),
-            model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+            model_name: "claude-haiku-4-5-aws-bedrock".into(),
             model_provider_name: "aws_bedrock".into(),
             credentials: HashMap::new(),
         },
@@ -79,19 +88,51 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "aws_bedrock_json_mode_off".to_string(),
-        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_name: "claude-haiku-4-5-aws-bedrock".into(),
         model_provider_name: "aws_bedrock".into(),
         credentials: HashMap::new(),
     }];
 
+    // Cache providers - use Claude Haiku 4.5 which supports prompt caching on AWS Bedrock
+    // (Claude 3 Haiku does not support caching on Bedrock)
+    let cache_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "aws-bedrock".to_string(),
+            model_name: "claude-haiku-4-5-aws-bedrock".into(),
+            model_provider_name: "aws_bedrock".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "aws-bedrock".to_string(),
+            model_name: "nova-lite-v1".into(),
+            model_provider_name: "aws_bedrock".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
+    // Dynamic region provider - passes region at request time
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "aws-bedrock-dynamic-region".to_string(),
+        model_name: "claude-haiku-4-5-aws-bedrock-dynamic-region".into(),
+        model_provider_name: "aws-bedrock-dynamic-region".into(),
+        credentials: HashMap::from([("aws_bedrock_region".to_string(), "us-east-1".to_string())]),
+    }];
+
     E2ETestProviders {
-        simple_inference: simple_inference_providers,
+        simple_inference: simple_inference_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
+        // Bedrock JSON + reasoning tests are skipped because Bedrock uses prefill (which conflicts with reasoning)
+        // Bedrock's Converse API doesn't support Anthropic's output_format parameter
+        reasoning_inference: vec![claude_thinking_provider.clone()],
+        reasoning_usage_inference: vec![claude_thinking_provider],
+        cache_input_tokens_inference: cache_providers,
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
-        inference_params_dynamic_credentials: vec![],
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: vec![],
         provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: standard_providers.clone(),
@@ -103,9 +144,8 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: standard_providers.clone(),
         pdf_inference: standard_providers.clone(),
         input_audio: vec![],
-
         shorthand_inference: vec![],
-        // AWS bedrock only works with SDK credentials
+        // AWS Bedrock only works with SDK credentials
         credential_fallbacks: vec![],
     }
 }
@@ -203,7 +243,7 @@ async fn test_inference_with_explicit_region() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "claude-3-haiku-20240307-us-east-1");
+    assert_eq!(model_name, "claude-haiku-4-5-us-east-1");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "aws-bedrock-us-east-1");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
@@ -395,4 +435,114 @@ async fn test_inference_with_thinking_budget_tokens() {
         .or_else(|| thinking.get("budgetTokens").and_then(Value::as_i64))
         .expect("Expected thinking budget tokens");
     assert_eq!(budget_tokens, 1024);
+}
+
+/// Test that AWS Bedrock API key (bearer token) authentication works in isolation.
+/// Removes all IAM credentials to ensure only bearer token auth is used.
+#[tokio::test]
+async fn test_aws_bedrock_auth_bearer_token_only() {
+    use tensorzero::{
+        ClientInferenceParams, Input, InputMessage, InputMessageContent, Role,
+        test_helpers::make_embedded_gateway_with_config,
+    };
+    use tensorzero_core::inference::types::Text;
+
+    // Require bearer token to be set
+    let _api_key = std::env::var("AWS_BEARER_TOKEN_BEDROCK")
+        .expect("AWS_BEARER_TOKEN_BEDROCK must be set to run this test");
+
+    // Remove all IAM credentials to ensure only bearer token auth is used
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_ACCESS_KEY_ID");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_SECRET_ACCESS_KEY");
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_SESSION_TOKEN");
+
+    let config = r#"
+[models.test-bedrock-bearer]
+routing = ["aws_bedrock"]
+
+[models.test-bedrock-bearer.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+region = "us-east-1"
+"#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+
+    let result = client
+        .inference(ClientInferenceParams {
+            model_name: Some("test-bedrock-bearer".to_string()),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Say hello".into(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "Bearer token authentication failed: {:?}",
+        result.err()
+    );
+}
+
+/// Test that AWS Bedrock IAM (SigV4) authentication works in isolation.
+/// Removes bearer token to ensure only IAM auth is used.
+#[tokio::test]
+async fn test_aws_bedrock_auth_iam_credentials_only() {
+    use tensorzero::{
+        ClientInferenceParams, Input, InputMessage, InputMessageContent, Role,
+        test_helpers::make_embedded_gateway_with_config,
+    };
+    use tensorzero_core::inference::types::Text;
+
+    // Require IAM credentials to be set
+    let _access_key_id =
+        std::env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID must be set to run this test");
+    let _secret_access_key = std::env::var("AWS_SECRET_ACCESS_KEY")
+        .expect("AWS_SECRET_ACCESS_KEY must be set to run this test");
+
+    // Remove bearer token to ensure only IAM auth is used
+    tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+
+    let config = r#"
+[models.test-bedrock-iam]
+routing = ["aws_bedrock"]
+
+[models.test-bedrock-iam.providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+region = "us-east-1"
+"#;
+
+    let client = make_embedded_gateway_with_config(config).await;
+
+    let result = client
+        .inference(ClientInferenceParams {
+            model_name: Some("test-bedrock-iam".to_string()),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Say hello".into(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "IAM (SigV4) authentication failed: {:?}",
+        result.err()
+    );
 }

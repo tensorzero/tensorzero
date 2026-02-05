@@ -69,22 +69,22 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     type Output = LaunchOptimizationWorkflowToolOutput;
     type LlmParams = LaunchOptimizationWorkflowToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("launch_optimization_workflow")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Launch an optimization workflow (fine-tuning, prompt optimization, etc.) \
              using stored inferences and poll until completion.",
         )
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(default_max_wait_secs())
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Launch an optimization workflow using stored inferences.",
@@ -155,7 +155,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Suffix for the fine-tuned model name in OpenAI."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -207,7 +208,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Whether to deploy the model after training."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -243,7 +245,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Display name for the tuned model."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -279,7 +282,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Suffix for the fine-tuned model name."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -327,7 +331,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Whether to append to existing variants. Default: false."
                                 }
                             },
-                            "required": ["type", "embedding_model", "variant_name", "function_name"]
+                            "required": ["type", "embedding_model", "variant_name", "function_name"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -348,11 +353,11 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                 },
                                 "analysis_model": {
                                     "type": "string",
-                                    "description": "Model for analysis (e.g., 'anthropic::claude-sonnet-4-5-20250929')."
+                                    "description": "Model for analysis (e.g., 'anthropic::claude-sonnet-4-5')."
                                 },
                                 "mutation_model": {
                                     "type": "string",
-                                    "description": "Model for mutation (e.g., 'anthropic::claude-sonnet-4-5-20250929')."
+                                    "description": "Model for mutation (e.g., 'anthropic::claude-sonnet-4-5')."
                                 },
                                 "initial_variants": {
                                     "type": "array",
@@ -388,12 +393,14 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Max tokens for analysis/mutation model calls."
                                 }
                             },
-                            "required": ["type", "function_name", "evaluation_name", "analysis_model", "mutation_model"]
+                            "required": ["type", "function_name", "evaluation_name", "analysis_model", "mutation_model"],
+                            "additionalProperties": false
                         }
                     ]
                 }
             },
-            "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"]
+            "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -403,11 +410,16 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
             .into()
         })
     }
+
+    fn strict(&self) -> bool {
+        false // Too many optional parameters for anthropic
+    }
 }
 
 #[async_trait]
 impl TaskTool for LaunchOptimizationWorkflowTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
         ctx: &mut ToolContext<'_>,

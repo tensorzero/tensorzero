@@ -71,6 +71,26 @@ class DatapointMetadataUpdate:
 
 
 @dataclass(kw_only=True)
+class DatasetMetadata:
+    """
+    Metadata for a single dataset.
+    """
+
+    datapoint_count: int
+    """
+    The total number of datapoints in the dataset.
+    """
+    dataset_name: str
+    """
+    The name of the dataset.
+    """
+    last_updated: str
+    """
+    The timestamp of the last update (ISO 8601 format).
+    """
+
+
+@dataclass(kw_only=True)
 class DeleteDatapointsRequest:
     """
     Request to delete datapoints from a dataset.
@@ -520,6 +540,17 @@ class InputMessageContentTemplate:
 
 
 @dataclass(kw_only=True)
+class InputMessageContentInferenceResponseToolCall(InferenceResponseToolCall):
+    """
+    `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+    Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+    but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
+    """
+
+    type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
 class InputMessageContentToolResult:
     """
     A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
@@ -573,6 +604,40 @@ class JsonInferenceOutput:
 
 
 JsonMode = Literal["off", "on", "strict", "tool"]
+
+
+@dataclass(kw_only=True)
+class ListDatasetsRequest:
+    """
+    Request to list datasets with optional filtering and pagination.
+    Used by the `GET /internal/datasets` endpoint.
+    """
+
+    function_name: str | None = None
+    """
+    Optional function name to filter datasets by.
+    If provided, only datasets with datapoints for this function will be returned.
+    """
+    limit: int | None = None
+    """
+    The maximum number of datasets to return.
+    """
+    offset: int | None = None
+    """
+    The number of datasets to skip before starting to return results.
+    """
+
+
+@dataclass(kw_only=True)
+class ListDatasetsResponse:
+    """
+    Response containing a list of datasets.
+    """
+
+    datasets: list[DatasetMetadata]
+    """
+    List of dataset metadata.
+    """
 
 
 @dataclass(kw_only=True)
@@ -1119,7 +1184,13 @@ class InferenceParams:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentToolCall:
+class InputMessageContentToolCall(ToolCall):
+    """
+    `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+    Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+    but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
+    """
+
     type: Literal["tool_call"] = "tool_call"
 
 
@@ -1257,6 +1328,12 @@ class Thought:
     Struct that represents a model's reasoning
     """
 
+    extra_data: Any | None = None
+    """
+    Provider-specific opaque data for multi-turn reasoning support.
+    For example, OpenRouter stores encrypted reasoning blocks with `{"format": "...", "encrypted": true}` structure.
+    Note: Not exposed to Python because `Value` doesn't implement `IntoPyObject`.
+    """
     provider_type: str | None = None
     """
     When set, this `Thought` block will only be used for providers
@@ -1265,8 +1342,8 @@ class Thought:
     """
     signature: str | None = None
     """
-    An optional signature - currently, this is only used with Anthropic,
-    and is ignored by other providers.
+    An optional signature - used with Anthropic and OpenRouter for multi-turn
+    reasoning conversations. Other providers will ignore this field.
     """
     summary: list[ThoughtSummaryBlock] | None = None
     text: str | None = None
@@ -1333,6 +1410,7 @@ InputMessageContent = (
     InputMessageContentText
     | InputMessageContentTemplate
     | InputMessageContentToolCall
+    | InputMessageContentInferenceResponseToolCall
     | InputMessageContentToolResult
     | InputMessageContentRawText
     | InputMessageContentThought

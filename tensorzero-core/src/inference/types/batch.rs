@@ -8,6 +8,7 @@ use super::{
     chat_completion_inference_params::ServiceTier,
 };
 
+use crate::config::snapshot::SnapshotHash;
 use crate::inference::types::StoredRequestMessage;
 use crate::serde_util::deserialize_json_string;
 use crate::{
@@ -16,13 +17,14 @@ use crate::{
         inference::{ChatCompletionInferenceParams, InferenceParams},
     },
     error::{Error, ErrorDetails},
-    jsonschema_util::DynamicJSONSchema,
+    jsonschema_util::JSONSchema,
     tool::{ToolCallConfig, ToolCallConfigDatabaseInsert, deserialize_optional_tool_info},
     utils::uuid::validate_tensorzero_uuid,
 };
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
 pub enum BatchStatus {
     Pending,
     Completed,
@@ -160,6 +162,8 @@ pub struct BatchRequestRow<'a> {
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
     pub errors: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug)]
@@ -215,6 +219,8 @@ pub struct BatchModelInferenceRow<'a> {
     pub model_name: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
     pub tags: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 pub struct UnparsedBatchRequestRow<'a> {
@@ -228,6 +234,7 @@ pub struct UnparsedBatchRequestRow<'a> {
     pub model_provider_name: &'a str,
     pub status: BatchStatus,
     pub errors: Vec<Value>,
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 impl<'a> BatchRequestRow<'a> {
@@ -243,6 +250,7 @@ impl<'a> BatchRequestRow<'a> {
             model_provider_name,
             status,
             errors,
+            snapshot_hash,
         } = unparsed;
         let id = Uuid::now_v7();
         Self {
@@ -257,6 +265,7 @@ impl<'a> BatchRequestRow<'a> {
             model_provider_name: Cow::Borrowed(model_provider_name),
             status,
             errors,
+            snapshot_hash,
         }
     }
 }
@@ -550,7 +559,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
 
 pub struct BatchOutputSchemasWithSize(pub Option<BatchOutputSchemas>, pub usize);
 
-impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
+impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<JSONSchema>> {
     type Error = Error;
 
     fn try_from(
@@ -560,7 +569,7 @@ impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
             if schemas.len() == num_inferences {
                 Ok(schemas
                     .into_iter()
-                    .map(|schema| schema.map(DynamicJSONSchema::new))
+                    .map(|schema| schema.map(JSONSchema::compile_background))
                     .collect())
             } else {
                 Err(ErrorDetails::InvalidRequest {
@@ -794,13 +803,13 @@ mod tests {
     fn test_batch_output_schemas_with_size() {
         let batch_output_schemas_with_size = BatchOutputSchemasWithSize(None, 3);
         let batch_output_schemas =
-            Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
+            Vec::<Option<JSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
         assert_eq!(batch_output_schemas.len(), 3);
 
         let batch_output_schemas_with_size =
             BatchOutputSchemasWithSize(Some(vec![None, None, None]), 3);
         let batch_output_schemas =
-            Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
+            Vec::<Option<JSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
         assert_eq!(batch_output_schemas.len(), 3);
     }
 }

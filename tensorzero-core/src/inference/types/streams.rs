@@ -8,10 +8,10 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
     Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, RawUsageEntry, RequestMessage, Text, Thought,
+    ProviderInferenceResponseArgs, RawResponseEntry, RawUsageEntry, RequestMessage, Text, Thought,
     ThoughtSummaryBlock, ToolCall, Unknown, Usage,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::{ToolCallChunk, ToolCallConfig};
 use futures::Stream;
@@ -22,6 +22,7 @@ use serde_json::Value;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use super::InferenceResult;
@@ -39,8 +40,9 @@ pub struct ProviderInferenceResponseChunk {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
@@ -69,6 +71,10 @@ pub struct ThoughtChunk {
         skip_serializing_if = "Option::is_none"
     )]
     pub provider_type: Option<String>,
+    /// Provider-specific opaque data for multi-turn reasoning support.
+    /// See `Thought.extra_data`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_data: Option<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -81,41 +87,47 @@ pub struct UnknownChunk {
     pub provider_name: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ChatInferenceResultChunk {
     pub content: Vec<ContentBlockChunk>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw responses from previous model inferences (e.g., best-of-n candidates).
+    /// Used for artificial chunks emitted at stream start.
+    pub raw_response: Option<Vec<RawResponseEntry>>,
     /// Time elapsed between making the request to the model provider and receiving this chunk.
     /// Important: this is NOT latency from the start of the TensorZero request.
     /// None for artificial chunks created by TensorZero (e.g., usage/finish_reason chunks).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_latency: Option<Duration>,
-    pub raw_response: String,
+    /// Raw response string for the current chunk from the model provider.
+    /// Empty for fake streams (non-streaming converted to streaming).
+    pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct JsonInferenceResultChunk {
     pub raw: Option<String>,
-    pub thought: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Thought content from reasoning models (e.g., Claude's extended thinking).
+    /// Populated during streaming from `ContentBlockChunk::Thought` variants.
+    /// Used internally to collect the final `Thought` block; not streamed directly to clients.
+    pub thought_chunks: Vec<ThoughtChunk>,
     pub usage: Option<Usage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw responses from previous model inferences (e.g., best-of-n candidates).
+    /// Used for artificial chunks emitted at stream start.
+    pub raw_response: Option<Vec<RawResponseEntry>>,
     /// Time elapsed between making the request to the model provider and receiving this chunk.
     /// Important: this is NOT latency from the start of the TensorZero request.
     /// None for artificial chunks created by TensorZero (e.g., usage/finish_reason chunks).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_latency: Option<Duration>,
-    pub raw_response: String,
+    /// Raw response string for the current chunk from the model provider.
+    /// Empty for fake streams (non-streaming converted to streaming).
+    pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type")]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InferenceResultChunk {
     Chat(ChatInferenceResultChunk),
     Json(JsonInferenceResultChunk),
@@ -150,10 +162,17 @@ impl InferenceResultChunk {
         }
     }
 
-    pub fn raw_response(&self) -> &str {
+    pub fn raw_response(&self) -> Option<&Vec<RawResponseEntry>> {
         match self {
-            InferenceResultChunk::Chat(chunk) => &chunk.raw_response,
-            InferenceResultChunk::Json(chunk) => &chunk.raw_response,
+            InferenceResultChunk::Chat(chunk) => chunk.raw_response.as_ref(),
+            InferenceResultChunk::Json(chunk) => chunk.raw_response.as_ref(),
+        }
+    }
+
+    pub fn raw_chunk(&self) -> &str {
+        match self {
+            InferenceResultChunk::Chat(chunk) => &chunk.raw_chunk,
+            InferenceResultChunk::Json(chunk) => &chunk.raw_chunk,
         }
     }
 
@@ -185,9 +204,10 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
             content: chunk.content,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
+            raw_response: None, // Only populated via artificial chunks from TensorZero
             provider_latency: Some(chunk.provider_latency),
             finish_reason: chunk.finish_reason,
-            raw_response: chunk.raw_response,
+            raw_chunk: chunk.raw_response,
         }
     }
 }
@@ -199,15 +219,15 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
 impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     fn from(chunk: ProviderInferenceResponseChunk) -> Self {
         let mut raw = None;
-        let mut thought = None;
-        for content in &chunk.content {
+        let mut thought_chunks = Vec::new();
+        for content in chunk.content {
             match content {
                 ContentBlockChunk::ToolCall(tool_call) => {
                     raw = Some(tool_call.raw_arguments.to_owned());
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
-                    thought.clone_from(&thought_chunk.text);
+                    thought_chunks.push(thought_chunk);
                 }
                 ContentBlockChunk::Unknown(_) => {
                     // Unknown chunks are ignored for JSON functions
@@ -217,11 +237,12 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
         }
         Self {
             raw,
-            thought,
+            thought_chunks,
             usage: chunk.usage,
             raw_usage: chunk.raw_usage,
+            raw_response: None, // Only populated via artificial chunks from TensorZero
             provider_latency: Some(chunk.provider_latency),
-            raw_response: chunk.raw_response,
+            raw_chunk: chunk.raw_response,
             finish_reason: chunk.finish_reason,
         }
     }
@@ -246,7 +267,7 @@ pub struct CollectChunksArgs {
     pub input_messages: Vec<RequestMessage>,
     pub function_name: Arc<str>,
     pub variant_name: Arc<str>,
-    pub dynamic_output_schema: Option<Arc<DynamicJSONSchema>>,
+    pub dynamic_output_schema: Option<Arc<JSONSchema>>,
     pub templates: Arc<TemplateConfig<'static>>,
     pub tool_config: Option<Arc<ToolCallConfig>>,
     pub cached: bool,
@@ -302,11 +323,11 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     let mut blocks: IndexMap<(ContentBlockOutputType, String), ContentBlockOutput> =
         IndexMap::new();
     // If the variant gave us an explicit 'raw_response', use that.
-    // Otherwise, concatenate the raw_response from each chunk.
+    // Otherwise, concatenate the raw_chunk from each chunk.
     let raw_response = raw_response.unwrap_or_else(|| {
         value
             .iter()
-            .map(InferenceResultChunk::raw_response)
+            .map(InferenceResultChunk::raw_chunk)
             .filter(|s| !s.is_empty()) // remove artificial chunks (e.g. our final chunk with usage and finish reason)
             .collect::<Vec<&str>>()
             .join("\n")
@@ -368,6 +389,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 summary_id,
                                 summary_text,
                                 provider_type,
+                                extra_data,
                             } = thought;
                             // We check for both 'text' and 'signature', in case a provider produces
                             // both in the same chunk.
@@ -385,6 +407,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                             signature: None,
                                             summary: None,
                                             provider_type: provider_type.clone(),
+                                            extra_data: extra_data.clone(),
                                         })
                                     },
                                     |block, text| {
@@ -405,6 +428,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                             signature: Some(signature),
                                             summary: None,
                                             provider_type: provider_type.clone(),
+                                            extra_data: extra_data.clone(),
                                         })
                                     },
                                     |block, signature| {
@@ -455,6 +479,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                                 text: summary_text,
                                             }]),
                                             provider_type,
+                                            extra_data,
                                         })
                                     },
                                     |block, summary_text| {
@@ -555,26 +580,124 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                         }
                     }
                 }
-                if let Some(thought) = chunk.thought {
-                    match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
-                        // If there is already a thought block, append to it
-                        Some(ContentBlockOutput::Thought(existing_thought)) => {
-                            existing_thought
-                                .text
-                                .get_or_insert_default()
-                                .push_str(&thought);
+                for thought_chunk in chunk.thought_chunks {
+                    let ThoughtChunk {
+                        id: _,
+                        text,
+                        signature,
+                        summary_id,
+                        summary_text,
+                        provider_type,
+                        extra_data,
+                    } = thought_chunk;
+
+                    // Handle text if present
+                    if let Some(text) = text {
+                        match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
+                            Some(ContentBlockOutput::Thought(existing_thought)) => {
+                                existing_thought
+                                    .text
+                                    .get_or_insert_default()
+                                    .push_str(&text);
+                            }
+                            _ => {
+                                blocks.insert(
+                                    (ContentBlockOutputType::Thought, String::new()),
+                                    ContentBlockOutput::Thought(Thought {
+                                        text: Some(text),
+                                        summary: None,
+                                        signature: None,
+                                        provider_type: provider_type.clone(),
+                                        extra_data: extra_data.clone(),
+                                    }),
+                                );
+                            }
                         }
-                        // If there is no thought block, create one
-                        _ => {
-                            blocks.insert(
-                                (ContentBlockOutputType::Thought, String::new()),
-                                ContentBlockOutput::Thought(Thought {
-                                    text: Some(thought),
-                                    summary: None,
-                                    signature: None,
-                                    provider_type: None,
-                                }),
-                            );
+                    }
+
+                    // Handle signature if present
+                    if let Some(signature) = signature {
+                        match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
+                            Some(ContentBlockOutput::Thought(existing_thought)) => {
+                                match &mut existing_thought.signature {
+                                    Some(existing) => existing.push_str(&signature),
+                                    None => {
+                                        existing_thought.signature = Some(signature);
+                                    }
+                                }
+                            }
+                            _ => {
+                                blocks.insert(
+                                    (ContentBlockOutputType::Thought, String::new()),
+                                    ContentBlockOutput::Thought(Thought {
+                                        text: None,
+                                        summary: None,
+                                        signature: Some(signature),
+                                        provider_type: provider_type.clone(),
+                                        extra_data: extra_data.clone(),
+                                    }),
+                                );
+                            }
+                        }
+                    }
+
+                    // Handle summary if present (summary_id and summary_text both required)
+                    if summary_id.is_some() && summary_text.is_none() {
+                        tracing::error!(
+                            "Summary id is present but summary text is missing for JSON thought"
+                        );
+                    }
+                    if summary_id.is_none() && summary_text.is_some() {
+                        tracing::error!(
+                            "Summary text is present but summary id is missing for JSON thought"
+                        );
+                    }
+                    if let (Some(summary_id), Some(summary_text)) = (summary_id, summary_text) {
+                        // For JSON mode, we use a single thought block with id ""
+                        // so we track summary ids in thought_summaries with key ""
+                        let summary_set = thought_summaries.entry(String::new()).or_default();
+                        let (index, _) = summary_set.insert_full(summary_id);
+
+                        match blocks.get_mut(&(ContentBlockOutputType::Thought, String::new())) {
+                            Some(ContentBlockOutput::Thought(existing_thought)) => {
+                                match &mut existing_thought.summary {
+                                    Some(existing) => {
+                                        if index >= existing.len() {
+                                            existing.resize(
+                                                index + 1,
+                                                ThoughtSummaryBlock::SummaryText {
+                                                    text: String::new(),
+                                                },
+                                            );
+                                        }
+                                        match &mut existing[index] {
+                                            ThoughtSummaryBlock::SummaryText { text } => {
+                                                text.push_str(&summary_text);
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        existing_thought.summary =
+                                            Some(vec![ThoughtSummaryBlock::SummaryText {
+                                                text: summary_text,
+                                            }]);
+                                    }
+                                }
+                            }
+                            _ => {
+                                blocks.insert(
+                                    (ContentBlockOutputType::Thought, String::new()),
+                                    ContentBlockOutput::Thought(Thought {
+                                        text: None,
+                                        summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                                            text: summary_text,
+                                        }]),
+                                        signature: None,
+                                        provider_type,
+                                        extra_data,
+                                    }),
+                                );
+                            }
                         }
                     }
                 }
@@ -607,6 +730,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         raw_response,
         usage: model_inference_usage,
         raw_usage,
+        relay_raw_response: None,
         provider_latency,
         finish_reason,
         id: model_inference_id,
@@ -728,7 +852,7 @@ mod tests {
             ContentBlockChatOutput, ContentBlockOutputType, InferenceResult, Text, Thought,
             current_timestamp,
         },
-        jsonschema_util::StaticJSONSchema,
+        jsonschema_util::JSONSchema,
         tool::InferenceResponseToolCall,
     };
 
@@ -816,6 +940,7 @@ mod tests {
                     signature: None,
                     summary: None,
                     provider_type: None,
+                    extra_data: None,
                 })
             },
             |block, text| {
@@ -835,6 +960,7 @@ mod tests {
                 signature: _,
                 summary: _,
                 provider_type: _,
+                extra_data: _,
             }) => {
                 assert_eq!(text, &Some("Thinking...".to_string()));
             }
@@ -900,7 +1026,8 @@ mod tests {
                 content,
                 usage: None,
                 raw_usage: None,
-                raw_response: "{\"message\": \"Hello}".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"message\": \"Hello}".to_string(),
                 provider_latency,
                 finish_reason: None,
             }),
@@ -914,7 +1041,8 @@ mod tests {
                     output_tokens: Some(4),
                 }),
                 raw_usage: None,
-                raw_response: ", world!\"}".to_string(),
+                raw_response: None,
+                raw_chunk: ", world!\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -985,7 +1113,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1006,19 +1134,37 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some("Thought 1".to_string()),
+                thought_chunks: vec![ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 1".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                }],
                 usage: Some(usage1),
                 raw_usage: None,
-                raw_response: "{\"name\":".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some("Thought 2".to_string()),
+                thought_chunks: vec![ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 2".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                }],
                 usage: Some(usage2),
                 raw_usage: None,
-                raw_response: "\"John\",\"age\":30}".to_string(),
+                raw_response: None,
+                raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1093,19 +1239,29 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some("Thought 1".to_string()),
+                thought_chunks: vec![ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 1".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                }],
                 usage: Some(model_inference_usage),
                 raw_usage: None,
-                raw_response: "{\"name\":".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(100)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\"}".to_string()),
-                thought: None,
+                thought_chunks: vec![],
                 usage: None,
                 raw_usage: None,
-                raw_response: "\"John\"}".to_string(),
+                raw_response: None,
+                raw_chunk: "\"John\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(200)),
                 finish_reason: None,
             }),
@@ -1176,28 +1332,39 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":\"John\",".to_string()),
-                thought: None,
+                thought_chunks: vec![],
                 usage: Some(model_inference_usage),
                 raw_usage: None,
-                raw_response: "{\"name\":\"John\",".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"name\":\"John\",".to_string(),
                 provider_latency: Some(Duration::from_millis(100)),
                 finish_reason: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some(String::new()),
-                thought: Some("Thought 2".to_string()),
+                thought_chunks: vec![ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 2".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                }],
                 usage: None,
                 raw_usage: None,
-                raw_response: String::new(),
+                raw_response: None,
+                raw_chunk: String::new(),
                 provider_latency: Some(Duration::from_millis(200)),
                 finish_reason: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"age\":30}".to_string()),
-                thought: None,
+                thought_chunks: vec![],
                 usage: None,
                 raw_usage: None,
-                raw_response: "\"age\":30}".to_string(),
+                raw_response: None,
+                raw_chunk: "\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(300)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1251,6 +1418,7 @@ mod tests {
                             summary: None,
                             signature: None,
                             provider_type: None,
+                            extra_data: None,
                         }),
                     ]
                 );
@@ -1283,7 +1451,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1304,19 +1472,37 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some("Thought 1".to_string()),
+                thought_chunks: vec![ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 1".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                }],
                 usage: Some(usage1),
                 raw_usage: None,
-                raw_response: "{\"name\":".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some("Thought 2".to_string()),
+                thought_chunks: vec![ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 2".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                }],
                 usage: Some(usage2),
                 raw_usage: None,
-                raw_response: "\"John\",\"age\":30}".to_string(),
+                raw_response: None,
+                raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1390,7 +1576,7 @@ mod tests {
             "required": ["name"]
         });
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
-        let output_schema = StaticJSONSchema::from_value(static_output_schema).unwrap();
+        let output_schema = JSONSchema::from_value(static_output_schema).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1408,7 +1594,7 @@ mod tests {
             input_tokens: Some(5),
             output_tokens: Some(10),
         };
-        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+        let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
@@ -1420,20 +1606,38 @@ mod tests {
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("{\"name\":".to_string()),
-                thought: Some("Thought 1".to_string()),
+                thought_chunks: vec![ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 1".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                }],
                 usage: Some(usage1),
                 raw_usage: None,
+                raw_response: None,
                 finish_reason: Some(FinishReason::Stop),
-                raw_response: "{\"name\":".to_string(),
+                raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
-                thought: Some("Thought 2".to_string()),
+                thought_chunks: vec![ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("Thought 2".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                }],
                 usage: Some(usage2),
                 raw_usage: None,
+                raw_response: None,
                 finish_reason: Some(FinishReason::ToolCall),
-                raw_response: "\"John\",\"age\":30}".to_string(),
+                raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
             }),
         ];
@@ -1527,7 +1731,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "{\"message\": \"Hello}".to_string(),
+                raw_response: None,
+                raw_chunk: "{\"message\": \"Hello}".to_string(),
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1540,6 +1745,7 @@ mod tests {
                         summary_text: None,
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: Some("My other interleaved thought".to_string()),
@@ -1548,6 +1754,7 @@ mod tests {
                         summary_text: Some("Inline summary".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1556,6 +1763,7 @@ mod tests {
                         summary_text: Some("First summary".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1564,6 +1772,7 @@ mod tests {
                         summary_text: Some("Second summary".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1572,6 +1781,7 @@ mod tests {
                         summary_text: Some(" content.".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: None,
@@ -1580,11 +1790,13 @@ mod tests {
                         summary_text: Some(" message.".to_string()),
                         signature: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "my raw thought".to_string(),
+                raw_response: None,
+                raw_chunk: "my raw thought".to_string(),
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1598,7 +1810,8 @@ mod tests {
                     output_tokens: Some(4),
                 }),
                 raw_usage: None,
-                raw_response: ", world!\"}".to_string(),
+                raw_response: None,
+                raw_chunk: ", world!\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
             }),
@@ -1610,10 +1823,12 @@ mod tests {
                     summary_text: None,
                     signature: None,
                     provider_type: None,
+                    extra_data: None,
                 })],
                 usage: None,
                 raw_usage: None,
-                raw_response: "my other raw thought".to_string(),
+                raw_response: None,
+                raw_chunk: "my other raw thought".to_string(),
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1692,6 +1907,7 @@ mod tests {
                 ]),
                 signature: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("My other interleaved thought".to_string()),
@@ -1700,6 +1916,7 @@ mod tests {
                 }]),
                 signature: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         assert_eq!(chat_result.content, expected_content);
@@ -1735,7 +1952,8 @@ mod tests {
                 })],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1750,7 +1968,8 @@ mod tests {
                     output_tokens: Some(20),
                 }),
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1818,7 +2037,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1840,7 +2060,8 @@ mod tests {
                     output_tokens: Some(25),
                 }),
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1906,7 +2127,8 @@ mod tests {
                 })],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -1921,7 +2143,8 @@ mod tests {
                     output_tokens: Some(10),
                 }),
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -1985,7 +2208,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -2006,7 +2230,8 @@ mod tests {
                     output_tokens: Some(15),
                 }),
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -2076,7 +2301,8 @@ mod tests {
                 output_tokens: Some(5),
             }),
             raw_usage: None,
-            raw_response: "chunk1".to_string(),
+            raw_response: None,
+            raw_chunk: "chunk1".to_string(),
             provider_latency,
             finish_reason: Some(FinishReason::ToolCall),
         })];
@@ -2145,7 +2371,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk1".to_string(),
+                raw_chunk: "chunk1".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -2169,7 +2396,8 @@ mod tests {
                 ],
                 usage: None,
                 raw_usage: None,
-                raw_response: "chunk2".to_string(),
+                raw_chunk: "chunk2".to_string(),
+                raw_response: None,
                 provider_latency,
                 finish_reason: None,
             }),
@@ -2196,7 +2424,8 @@ mod tests {
                     output_tokens: Some(30),
                 }),
                 raw_usage: None,
-                raw_response: "chunk3".to_string(),
+                raw_response: None,
+                raw_chunk: "chunk3".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
             }),
@@ -2284,8 +2513,9 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(tool_chunk);
         assert_eq!(result.raw, Some("{\"key\": \"value\"}".to_string()));
-        assert_eq!(result.thought, None);
-        assert_eq!(result.raw_response, "raw response");
+        assert!(result.thought_chunks.is_empty());
+        assert_eq!(result.raw_response, None);
+        assert_eq!(result.raw_chunk, "raw response");
         assert_eq!(result.provider_latency, Some(Duration::from_secs(1)));
         assert_eq!(
             result.usage,
@@ -2310,7 +2540,7 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(text_chunk);
         assert_eq!(result.raw, Some("some text".to_string()));
-        assert_eq!(result.thought, None);
+        assert!(result.thought_chunks.is_empty());
 
         // Test case for Thought content
         let thought_chunk = ProviderInferenceResponseChunk {
@@ -2321,6 +2551,7 @@ mod tests {
                 summary_text: None,
                 signature: None,
                 provider_type: None,
+                extra_data: None,
             })],
             usage: None,
             raw_usage: None,
@@ -2331,7 +2562,18 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(thought_chunk);
         assert_eq!(result.raw, None);
-        assert_eq!(result.thought, Some("thinking...".to_string()));
+        assert_eq!(
+            result.thought_chunks,
+            vec![ThoughtChunk {
+                id: "123".to_string(),
+                text: Some("thinking...".to_string()),
+                summary_id: None,
+                summary_text: None,
+                signature: None,
+                provider_type: None,
+                extra_data: None,
+            }]
+        );
         assert_eq!(result.finish_reason, None);
         // Test case for multiple content blocks - should use last raw content
         let mixed_chunk = ProviderInferenceResponseChunk {
@@ -2352,6 +2594,7 @@ mod tests {
                     summary_text: None,
                     signature: None,
                     provider_type: None,
+                    extra_data: None,
                 }),
             ],
             usage: None,
@@ -2363,7 +2606,18 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(mixed_chunk);
         assert_eq!(result.raw, Some("final content".to_string()));
-        assert_eq!(result.thought, Some("final thought".to_string()));
+        assert_eq!(
+            result.thought_chunks,
+            vec![ThoughtChunk {
+                id: "789".to_string(),
+                text: Some("final thought".to_string()),
+                summary_id: None,
+                summary_text: None,
+                signature: None,
+                provider_type: None,
+                extra_data: None,
+            }]
+        );
 
         // Test case for empty content
         let empty_chunk = ProviderInferenceResponseChunk {
@@ -2377,7 +2631,41 @@ mod tests {
 
         let result = JsonInferenceResultChunk::from(empty_chunk);
         assert_eq!(result.raw, None);
-        assert_eq!(result.thought, None);
+        assert!(result.thought_chunks.is_empty());
         assert_eq!(result.finish_reason, None);
+
+        // Test case: ThoughtChunk with only summary_text (no text)
+        // This is the format OpenRouter uses for reasoning.summary type
+        let summary_chunk = ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Thought(ThoughtChunk {
+                id: "0".to_string(),
+                text: None,
+                summary_id: Some("0".to_string()),
+                summary_text: Some("This is a summary".to_string()),
+                signature: None,
+                provider_type: Some("openrouter".to_string()),
+                extra_data: None,
+            })],
+            usage: None,
+            raw_usage: None,
+            raw_response: "raw response".to_string(),
+            provider_latency: Duration::from_secs(1),
+            finish_reason: None,
+        };
+
+        let result = JsonInferenceResultChunk::from(summary_chunk);
+        assert_eq!(
+            result.thought_chunks,
+            vec![ThoughtChunk {
+                id: "0".to_string(),
+                text: None,
+                summary_id: Some("0".to_string()),
+                summary_text: Some("This is a summary".to_string()),
+                signature: None,
+                provider_type: Some("openrouter".to_string()),
+                extra_data: None,
+            }],
+            "ThoughtChunk should be preserved when text is None"
+        );
     }
 }

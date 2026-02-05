@@ -8,6 +8,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -16,7 +17,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input, InputExt};
-use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
+use crate::jsonschema_util::JSONSchema;
 use crate::tool::apply_dynamic_tool_params_update_to_tool_call_config;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -55,6 +56,9 @@ pub async fn update_datapoints_handler(
 /// and inserts the updated datapoints into ClickHouse.
 ///
 /// Returns an error if there are no datapoints, or if there are duplicate datapoint IDs.
+///
+/// TODO(#5691): implement update_datapints on DatasetQueries trait, make Clickhouse call get + insert,
+/// and make Postgres call update directly.
 pub async fn update_datapoints(
     app_state: &AppStateData,
     dataset_name: &str,
@@ -82,14 +86,18 @@ pub async fn update_datapoints(
         object_store_info: &app_state.config.object_store_info,
     };
 
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
     // Fetch all datapoints in a single batch query
     let datapoint_ids: Vec<Uuid> = request
         .datapoints
         .iter()
         .map(UpdateDatapointRequest::id)
         .collect();
-    let datapoints_vec = app_state
-        .clickhouse_connection_info
+    let datapoints_vec = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
@@ -167,10 +175,7 @@ pub async fn update_datapoints(
         }
     }
 
-    app_state
-        .clickhouse_connection_info
-        .insert_datapoints(&datapoints)
-        .await?;
+    database.insert_datapoints(&datapoints).await?;
     Ok(UpdateDatapointsResponse { ids: new_ids })
 }
 
@@ -305,25 +310,25 @@ async fn prepare_json_update(
 
     // Validate and update output_schema if provided
     let output_schema = if let Some(new_output_schema) = update.output_schema {
-        // Validate the new schema by converting it to DynamicJSONSchema
+        // Validate the new schema by converting it to JSONSchema
         let schema_str = serde_json::to_string(&new_output_schema).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize output_schema: {e}"),
             })
         })?;
-        let validated_schema = DynamicJSONSchema::parse_from_str(&schema_str)?;
+        let validated_schema = JSONSchema::parse_from_str(&schema_str)?;
         // Ensure the schema is valid by forcing compilation
         validated_schema.ensure_valid().await?;
         updated_datapoint.output_schema = new_output_schema;
         validated_schema
     } else {
-        // Use existing schema, convert it to DynamicJSONSchema
+        // Use existing schema, convert it to JSONSchema
         let schema_str = serde_json::to_string(&updated_datapoint.output_schema).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize existing output_schema: {e}"),
             })
         })?;
-        let schema = DynamicJSONSchema::parse_from_str(&schema_str)?;
+        let schema = JSONSchema::parse_from_str(&schema_str)?;
         // Ensure the schema is valid by forcing compilation
         schema.ensure_valid().await?;
         schema
@@ -332,11 +337,7 @@ async fn prepare_json_update(
     // Validate the output against the output schema. If the output is invalid, we only store the raw output.
     if let Some(new_output) = update.output {
         updated_datapoint.output = match new_output {
-            Some(output) => Some(
-                output
-                    .into_json_inference_output(JsonSchemaRef::Dynamic(&output_schema))
-                    .await,
-            ),
+            Some(output) => Some(output.into_json_inference_output(&output_schema).await),
             None => None,
         };
     }
@@ -364,7 +365,7 @@ async fn convert_input_to_stored_input(
     match input {
         None => Ok(None),
         Some(input) => {
-            function_config.validate_input(&input)?;
+            function_config.validate_input(&input).await?;
 
             // If the input file is already in ObjectStorage format, do not resolve; and directly skip into StoredInput.
             // Otherwise, if the file needs to be fetched (because it's new), fetch it and convert to StoredInput.
@@ -401,12 +402,13 @@ pub async fn update_datapoints_metadata_handler(
     Path(path_params): Path<UpdateDatapointsMetadataPathParams>,
     StructuredJson(request): StructuredJson<UpdateDatapointsMetadataRequest>,
 ) -> Result<Json<UpdateDatapointsResponse>, Error> {
-    let response = update_datapoints_metadata(
-        &app_state.clickhouse_connection_info,
-        &path_params.dataset_name,
-        request,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
+    let response =
+        update_datapoints_metadata(&database, &path_params.dataset_name, request).await?;
     Ok(Json(response))
 }
 
@@ -414,7 +416,7 @@ pub async fn update_datapoints_metadata_handler(
 /// This function only updates metadata fields (like name) without creating new datapoint IDs.
 /// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
 pub async fn update_datapoints_metadata(
-    clickhouse_handler: &impl DatasetQueries,
+    database: &impl DatasetQueries,
     dataset_name: &str,
     request: UpdateDatapointsMetadataRequest,
 ) -> Result<UpdateDatapointsResponse, Error> {
@@ -437,7 +439,7 @@ pub async fn update_datapoints_metadata(
 
     // Fetch all datapoints in a single batch query
     let datapoint_ids: Vec<Uuid> = request.datapoints.iter().map(|d| d.id).collect();
-    let datapoints_vec = clickhouse_handler
+    let datapoints_vec = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
@@ -502,7 +504,7 @@ pub async fn update_datapoints_metadata(
         }
     }
 
-    clickhouse_handler.insert_datapoints(&datapoints).await?;
+    database.insert_datapoints(&datapoints).await?;
 
     // Return the same IDs (not new ones, since we didn't create new datapoints)
     Ok(UpdateDatapointsResponse { ids: datapoint_ids })
@@ -526,7 +528,7 @@ mod tests {
         JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputMessage,
         StoredInputMessageContent, Text,
     };
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice};
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
@@ -821,7 +823,7 @@ mod tests {
                 Arc::new(FunctionConfig::Json(FunctionConfigJson {
                     variants: HashMap::new(),
                     schemas: SchemaData::default(),
-                    output_schema: StaticJSONSchema::from_value(json!({
+                    output_schema: JSONSchema::from_value(json!({
                         "type": "object",
                         "properties": {"value": {"type": "string"}},
                         "required": ["value"],

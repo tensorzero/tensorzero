@@ -1,4 +1,4 @@
-import { SendHorizontal, Loader2 } from "lucide-react";
+import { SendHorizontal, Loader2, StopCircle } from "lucide-react";
 import {
   useState,
   useRef,
@@ -31,8 +31,12 @@ type ChatInputProps = {
   ) => void;
   onMessageFailed?: (error: Error) => void;
   disabled?: boolean;
+  submitDisabled?: boolean;
   className?: string;
   isNewSession?: boolean;
+  isInterruptible?: boolean;
+  isInterrupting?: boolean;
+  onInterrupt?: () => void;
 };
 
 export function ChatInput({
@@ -40,14 +44,24 @@ export function ChatInput({
   onMessageSent,
   onMessageFailed,
   disabled = false,
+  submitDisabled = false,
   className,
   isNewSession = false,
+  isInterruptible = false,
+  isInterrupting = false,
+  onInterrupt,
 }: ChatInputProps) {
   const [text, setText] = useState("");
   const fetcher = useFetcher<MessageResponse>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
   const pendingTextRef = useRef<string>("");
+
+  // Store callbacks in refs to avoid re-triggering the effect when they change
+  const onMessageSentRef = useRef(onMessageSent);
+  const onMessageFailedRef = useRef(onMessageFailed);
+  onMessageSentRef.current = onMessageSent;
+  onMessageFailedRef.current = onMessageFailed;
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -56,12 +70,20 @@ export function ChatInput({
     previousUserMessageEventIdRef.current = undefined;
   }, [sessionId]);
 
+  // Auto-focus textarea when navigating to new session page
+  // Wait for disabled state to clear before focusing
+  useEffect(() => {
+    if (isNewSession && !disabled && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isNewSession, disabled]);
+
   // Sample a random placeholder for new sessions, default for existing sessions
   const placeholder = useMemo(
     () =>
       isNewSession
         ? PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)]
-        : "Type a message...",
+        : "Send a message...",
     [isNewSession],
   );
 
@@ -84,24 +106,45 @@ export function ChatInput({
     adjustTextareaHeight();
   }, [text, adjustTextareaHeight]);
 
+  // Debounced resize handler for window width changes
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const handleResize = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(adjustTextareaHeight, 100);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [adjustTextareaHeight]);
+
   // Handle fetcher response
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
       const data = fetcher.data;
       if ("error" in data) {
-        onMessageFailed?.(new Error(data.error));
+        onMessageFailedRef.current?.(new Error(data.error));
       } else {
-        // Success - update idempotency ref, clear text, call callback
         previousUserMessageEventIdRef.current = data.event_id;
         setText("");
-        onMessageSent?.(data, pendingTextRef.current);
+        onMessageSentRef.current?.(data, pendingTextRef.current);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+          });
+        });
       }
     }
-  }, [fetcher.state, fetcher.data, onMessageSent, onMessageFailed]);
+  }, [fetcher.state, fetcher.data]);
+
+  const canSend =
+    text.trim().length > 0 && !isSubmitting && !disabled && !submitDisabled;
 
   const handleSend = useCallback(() => {
     const trimmedText = text.trim();
-    if (!trimmedText || isSubmitting) return;
+    if (!trimmedText || isSubmitting || submitDisabled) return;
 
     pendingTextRef.current = trimmedText;
 
@@ -118,22 +161,22 @@ export function ChatInput({
         encType: "application/json",
       },
     );
-  }, [text, isSubmitting, sessionId, fetcher]);
+  }, [text, isSubmitting, submitDisabled, sessionId, fetcher]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSend();
+        if (canSend) {
+          handleSend();
+        }
       }
     },
-    [handleSend],
+    [canSend, handleSend],
   );
 
-  const canSend = text.trim().length > 0 && !isSubmitting && !disabled;
-
   return (
-    <div className={cn("flex items-end gap-2", className)}>
+    <div className={cn("relative", className)}>
       <Textarea
         ref={textareaRef}
         value={text}
@@ -141,28 +184,56 @@ export function ChatInput({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled || isSubmitting}
-        className="resize-none overflow-y-auto"
+        className={cn(
+          "bg-bg-secondary resize-none overflow-y-auto",
+          "rounded-md py-[11px] pr-14 pl-4 text-sm",
+          "focus-visible:border-fg-muted focus-visible:ring-0",
+        )}
         style={{ minHeight: MIN_HEIGHT, maxHeight: MAX_HEIGHT }}
         rows={1}
       />
-      <button
-        type="button"
-        onClick={handleSend}
-        disabled={!canSend}
-        className={cn(
-          "flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md",
-          "bg-fg-primary text-bg-primary hover:bg-fg-secondary",
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          "transition-colors",
-        )}
-        aria-label="Send message"
-      >
-        {isSubmitting ? (
-          <Loader2 className="h-5 w-5 animate-spin" />
-        ) : (
-          <SendHorizontal className="h-5 w-5" />
-        )}
-      </button>
+      {submitDisabled && isInterruptible ? (
+        <button
+          type="button"
+          onClick={onInterrupt}
+          disabled={isInterrupting}
+          className={cn(
+            "absolute right-2 bottom-1",
+            "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md",
+            "text-red-600 hover:text-red-700",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            "transition-colors",
+          )}
+          aria-label="Stop session"
+        >
+          {isInterrupting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <StopCircle className="h-4 w-4" />
+          )}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!canSend}
+          className={cn(
+            "absolute right-2 bottom-1",
+            "flex h-9 w-9 items-center justify-center rounded-md",
+            "text-fg-primary transition-colors",
+            canSend
+              ? "hover:text-fg-secondary cursor-pointer"
+              : "cursor-not-allowed opacity-50",
+          )}
+          aria-label="Send message"
+        >
+          {isSubmitting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <SendHorizontal className="h-4 w-4" />
+          )}
+        </button>
+      )}
     </div>
   );
 }

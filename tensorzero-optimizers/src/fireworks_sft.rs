@@ -9,7 +9,6 @@
 //!      we start a new serverless deployment. When deploy_after_training is false, we skip
 //!      deployment and return immediately with the model output.
 
-use async_trait::async_trait;
 use std::collections::HashMap;
 use std::io::Write;
 use std::time::Duration;
@@ -67,7 +66,6 @@ fn get_sft_config(
     })
 }
 
-#[async_trait]
 impl Optimizer for FireworksSFTConfig {
     type Handle = FireworksSFTJobHandle;
 
@@ -243,7 +241,6 @@ impl Optimizer for FireworksSFTConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for FireworksSFTJobHandle {
     async fn poll(
         &self,

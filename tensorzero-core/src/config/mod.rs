@@ -47,7 +47,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, ge
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::Usage;
 use crate::inference::types::storage::StorageKind;
-use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
+use crate::jsonschema_util::{JSONSchema, SchemaWithMetadata};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{
     CredentialLocationWithFallback, ModelConfig, ModelTable, UninitializedModelConfig,
@@ -122,8 +122,9 @@ pub struct Config {
     pub hash: SnapshotHash,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct NonStreamingTimeouts {
     #[serde(default)]
@@ -131,8 +132,9 @@ pub struct NonStreamingTimeouts {
     pub total_ms: Option<u64>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct StreamingTimeouts {
     #[serde(default)]
@@ -142,8 +144,9 @@ pub struct StreamingTimeouts {
 
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
     #[serde(default)]
@@ -483,8 +486,8 @@ pub enum OtlpTracesFormat {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
     pub optimize: MetricConfigOptimize,
@@ -497,8 +500,8 @@ pub struct MetricConfig {
 #[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum MetricConfigType {
     Boolean,
     Float,
@@ -511,12 +514,21 @@ impl MetricConfigType {
             MetricConfigType::Float => "FloatMetricFeedback",
         }
     }
+
+    /// Returns the Postgres table name for the given metric type.
+    pub fn postgres_table_name(&self) -> &'static str {
+        match self {
+            MetricConfigType::Boolean => "tensorzero.boolean_metric_feedback",
+            MetricConfigType::Float => "tensorzero.float_metric_feedback",
+        }
+    }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum MetricConfigOptimize {
     Min,
     Max,
@@ -525,8 +537,8 @@ pub enum MetricConfigOptimize {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
@@ -662,6 +674,12 @@ impl ConfigFileGlob {
             paths: glob_paths,
             _private: (),
         })
+    }
+
+    /// Returns the base path extracted from the glob pattern.
+    /// This is the longest literal path prefix before any glob metacharacters.
+    pub fn base_path(&self) -> PathBuf {
+        extract_base_path_from_glob(&self.glob)
     }
 }
 
@@ -944,7 +962,15 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-            } = original_snapshot.config.clone().into();
+            } = original_snapshot
+                .config
+                .clone()
+                .try_into()
+                .map_err(|e: &'static str| {
+                    Error::new(ErrorDetails::Config {
+                        message: e.to_string(),
+                    })
+                })?;
 
             // Reconstruct with overlaid values for snapshot hash computation
             let overlaid_config = UninitializedConfig {
@@ -1168,6 +1194,10 @@ impl Config {
     /// let config = unwritten_config.into_config(&clickhouse).await?;
     /// ```
     async fn load_from_toml(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
+        let is_config_snapshot = match &input {
+            ConfigInput::Snapshot { .. } => true,
+            ConfigInput::Fresh(_) => false,
+        };
         let mut templates = TemplateConfig::new();
         let ProcessedConfigInput {
             tools,
@@ -1201,8 +1231,8 @@ impl Config {
                     &name,
                     &provider_types,
                     &provider_type_default_credentials,
-                    http_client.clone(),
                     relay_mode,
+                    is_config_snapshot,
                 )
                 .await
                 .map(|c| (name, c))
@@ -1214,11 +1244,7 @@ impl Config {
         let loaded_embedding_models =
             try_join_all(embedding_models.into_iter().map(|(name, config)| async {
                 config
-                    .load(
-                        &provider_types,
-                        &provider_type_default_credentials,
-                        http_client.clone(),
-                    )
+                    .load(&provider_types, &provider_type_default_credentials)
                     .await
                     .map(|c| (name, c))
             }))
@@ -1735,22 +1761,70 @@ impl UninitializedConfig {
     }
 }
 
+/// TOML-specific version of `UninitializedConfig` that uses TOML shorthand for rate limiting
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TomlUninitializedConfig {
+    #[serde(default)]
+    gateway: UninitializedGatewayConfig,
+    #[serde(default)]
+    postgres: PostgresConfig,
+    #[serde(default)]
+    rate_limiting: rate_limiting::TomlUninitializedRateLimitingConfig,
+    object_storage: Option<StorageKind>,
+    #[serde(default)]
+    models: HashMap<Arc<str>, UninitializedModelConfig>,
+    #[serde(default)]
+    embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>,
+    #[serde(default)]
+    functions: HashMap<String, UninitializedFunctionConfig>,
+    #[serde(default)]
+    metrics: HashMap<String, MetricConfig>,
+    #[serde(default)]
+    tools: HashMap<String, UninitializedToolConfig>,
+    #[serde(default)]
+    evaluations: HashMap<String, UninitializedEvaluationConfig>,
+    #[serde(default)]
+    provider_types: ProviderTypesConfig,
+    #[serde(default)]
+    optimizers: HashMap<String, UninitializedOptimizerInfo>,
+}
+
+impl From<TomlUninitializedConfig> for UninitializedConfig {
+    fn from(toml_config: TomlUninitializedConfig) -> Self {
+        Self {
+            gateway: toml_config.gateway,
+            postgres: toml_config.postgres,
+            rate_limiting: toml_config.rate_limiting.into(),
+            object_storage: toml_config.object_storage,
+            models: toml_config.models,
+            embedding_models: toml_config.embedding_models,
+            functions: toml_config.functions,
+            metrics: toml_config.metrics,
+            tools: toml_config.tools,
+            evaluations: toml_config.evaluations,
+            provider_types: toml_config.provider_types,
+            optimizers: toml_config.optimizers,
+        }
+    }
+}
+
 /// Deserialize a TOML table into `UninitializedConfig`
 impl TryFrom<toml::Table> for UninitializedConfig {
     type Error = Error;
 
     fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
-        match serde_path_to_error::deserialize(table) {
-            Ok(config) => Ok(config),
-            Err(e) => {
+        // First deserialize into TOML-specific config, then convert to runtime config
+        let toml_config: TomlUninitializedConfig = serde_path_to_error::deserialize(table)
+            .map_err(|e| {
                 let path = e.path().clone();
-                Err(Error::new(ErrorDetails::Config {
+                Error::new(ErrorDetails::Config {
                     // Extract the underlying message from the toml error, as
                     // the path-tracking from the toml crate will be incorrect
                     message: format!("{}: {}", path, e.into_inner().message()),
-                }))
-            }
-        }
+                })
+            })?;
+        Ok(toml_config.into())
     }
 }
 
@@ -1813,8 +1887,9 @@ pub struct UninitializedFunctionConfigJson {
 
 /// Holds all of the schemas used by a chat completion function.
 /// These are used by variants to construct a `TemplateWithSchema`
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SchemaData {
     #[serde(flatten)]
     pub inner: HashMap<String, SchemaWithMetadata>,
@@ -1838,9 +1913,9 @@ impl SchemaData {
     }
 
     pub(super) fn load(
-        user_schema: Option<StaticJSONSchema>,
-        assistant_schema: Option<StaticJSONSchema>,
-        system_schema: Option<StaticJSONSchema>,
+        user_schema: Option<JSONSchema>,
+        assistant_schema: Option<JSONSchema>,
+        system_schema: Option<JSONSchema>,
         schemas: UninitializedSchemas,
         function_name: &str,
     ) -> Result<Self, Error> {
@@ -1877,7 +1952,7 @@ impl SchemaData {
                 .insert(
                     name.clone(),
                     SchemaWithMetadata {
-                        schema: StaticJSONSchema::from_path(schema.path)?,
+                        schema: JSONSchema::from_path(schema.path)?,
                         legacy_definition: false,
                     },
                 )
@@ -1987,17 +2062,14 @@ impl UninitializedFunctionConfig {
                 propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
 
                 let schema_data = SchemaData::load(
-                    params
-                        .user_schema
-                        .map(StaticJSONSchema::from_path)
-                        .transpose()?,
+                    params.user_schema.map(JSONSchema::from_path).transpose()?,
                     params
                         .assistant_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params
                         .system_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params.schemas,
                     function_name,
@@ -2052,24 +2124,21 @@ impl UninitializedFunctionConfig {
                 propagate_timeout_s_to_candidates(function_name, &mut params.variants)?;
 
                 let schema_data = SchemaData::load(
-                    params
-                        .user_schema
-                        .map(StaticJSONSchema::from_path)
-                        .transpose()?,
+                    params.user_schema.map(JSONSchema::from_path).transpose()?,
                     params
                         .assistant_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params
                         .system_schema
-                        .map(StaticJSONSchema::from_path)
+                        .map(JSONSchema::from_path)
                         .transpose()?,
                     params.schemas,
                     function_name,
                 )?;
                 let output_schema = match params.output_schema {
-                    Some(path) => StaticJSONSchema::from_path(path)?,
-                    None => StaticJSONSchema::default(),
+                    Some(path) => JSONSchema::from_path(path)?,
+                    None => JSONSchema::default(),
                 };
                 let json_mode_tool_call_config =
                     create_json_mode_tool_call_config(output_schema.clone());
@@ -2147,8 +2216,9 @@ impl UninitializedFunctionConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
 // since we use `#[serde(flatten)]` on the `inner` field.
@@ -2160,8 +2230,9 @@ pub struct UninitializedVariantInfo {
 }
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
-#[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -2237,7 +2308,7 @@ pub struct UninitializedToolConfig {
 
 impl UninitializedToolConfig {
     pub fn load(self, key: String) -> Result<StaticToolConfig, Error> {
-        let parameters = StaticJSONSchema::from_path(self.parameters)?;
+        let parameters = JSONSchema::from_path(self.parameters)?;
         Ok(StaticToolConfig {
             name: self.name.unwrap_or_else(|| key.clone()),
             key,
@@ -2248,10 +2319,11 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct PathWithContents {
-    #[cfg_attr(test, ts(type = "string"))]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     pub path: ResolvedTomlPathData,
     pub contents: String,
 }
@@ -2269,6 +2341,16 @@ pub struct PostgresConfig {
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
+    /// Retention period in days for inference tables (chat_inferences, json_inferences).
+    /// If set, old partitions beyond this age will be dropped by pg_cron.
+    /// If not set, partitions are retained indefinitely.
+    ///
+    /// TODO(#5764): Document clearly in user-facing docs:
+    /// - WARNING: When first set (or lowered), pg_cron will immediately start dropping
+    ///   partitions older than this value on its next daily run. This is irreversible.
+    /// - Clients are responsible for managing their own data backups before enabling retention.
+    /// - Recommend testing in non-production first and starting with a longer period.
+    pub inference_retention_days: Option<u32>,
 }
 
 fn default_connection_pool_size() -> u32 {
@@ -2280,6 +2362,7 @@ impl Default for PostgresConfig {
         Self {
             enabled: None,
             connection_pool_size: 20,
+            inference_retention_days: None,
         }
     }
 }

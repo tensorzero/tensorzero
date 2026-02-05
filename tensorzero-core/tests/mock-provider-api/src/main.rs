@@ -24,13 +24,14 @@ use axum::{
         sse::{Event, Sse},
     },
 };
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use error::Error;
 use futures::Stream;
 use mimalloc::MiMalloc;
 use rand::distr::{Alphanumeric, SampleString};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::process::ExitCode;
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -45,12 +46,39 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser)]
 #[command(about = "Mock inference provider for testing")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    #[command(flatten)]
+    args: Args,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Check if the status endpoint is responding (for container health checks)
+    HealthCheck {
+        /// Port to check
+        #[arg(long, default_value = "3030")]
+        port: u16,
+    },
+}
+
+#[derive(Parser)]
 struct Args {
     #[arg(help = "The address to bind to (default: 0.0.0.0:3030)")]
     address: Option<SocketAddr>,
 
     #[arg(long, help = "Delay in milliseconds to add to every request")]
     delay_ms: Option<u64>,
+}
+
+async fn run_health_check(port: u16) -> ExitCode {
+    let url = format!("http://127.0.0.1:{port}/status");
+    match reqwest::get(&url).await {
+        Ok(response) if response.status().is_success() => ExitCode::SUCCESS,
+        _ => ExitCode::FAILURE,
+    }
 }
 
 #[derive(Clone)]
@@ -113,9 +141,15 @@ pub async fn shutdown_signal() {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> ExitCode {
+    let cli = Cli::parse();
+
+    if let Some(Commands::HealthCheck { port }) = cli.command {
+        return run_health_check(port).await;
+    }
+
     tracing_subscriber::fmt::init();
-    let args = Args::parse();
+    let args = cli.args;
 
     let listener_address = args
         .address
@@ -137,6 +171,8 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
+
+    ExitCode::SUCCESS
 }
 
 fn make_router() -> axum::Router {
@@ -535,7 +571,7 @@ pub async fn status_handler() -> Json<serde_json::Value> {
 mod tests {
 
     use super::*;
-    use eventsource_stream::Eventsource;
+    use sse_stream::SseStream;
     use tokio_stream::StreamExt as _; // for `next`
     use tower::ServiceExt; // for `oneshot`
 
@@ -717,19 +753,22 @@ mod tests {
             "text/event-stream"
         );
 
-        let mut event_stream = response.bytes_stream().eventsource();
+        let mut event_stream = SseStream::from_byte_stream(response.bytes_stream());
 
         // Check we receive all client chunks correctly
         for _ in 0..10 {
-            let event_data: serde_json::Value =
-                serde_json::from_str(&event_stream.next().await.unwrap().unwrap().data).unwrap();
+            let data = event_stream.next().await.unwrap().unwrap().data.unwrap();
+            let event_data: serde_json::Value = serde_json::from_str(&data).unwrap();
 
             // Includes some OpenAI fields
             assert!(event_data.get("choices").is_some());
         }
 
         // Ensure we get the final chunk
-        assert_eq!(event_stream.next().await.unwrap().unwrap().data, "[DONE]");
+        assert_eq!(
+            event_stream.next().await.unwrap().unwrap().data.unwrap(),
+            "[DONE]"
+        );
 
         // Check we've exhausted the client stream
         assert!(event_stream.next().await.is_none());
@@ -777,19 +816,22 @@ mod tests {
             "text/event-stream"
         );
 
-        let mut event_stream = response.bytes_stream().eventsource();
+        let mut event_stream = SseStream::from_byte_stream(response.bytes_stream());
 
         // Check we receive all client chunks correctly
         for _ in 0..16 {
-            let event_data: serde_json::Value =
-                serde_json::from_str(&event_stream.next().await.unwrap().unwrap().data).unwrap();
+            let data = event_stream.next().await.unwrap().unwrap().data.unwrap();
+            let event_data: serde_json::Value = serde_json::from_str(&data).unwrap();
 
             // Includes some OpenAI fields
             assert!(event_data.get("choices").is_some());
         }
 
         // Ensure we get the final chunk
-        assert_eq!(event_stream.next().await.unwrap().unwrap().data, "[DONE]");
+        assert_eq!(
+            event_stream.next().await.unwrap().unwrap().data.unwrap(),
+            "[DONE]"
+        );
 
         // Check we've exhausted the client stream
         assert!(event_stream.next().await.is_none());
@@ -852,12 +894,12 @@ mod tests {
             "text/event-stream"
         );
 
-        let mut event_stream = response.bytes_stream().eventsource();
+        let mut event_stream = SseStream::from_byte_stream(response.bytes_stream());
 
         // Check we receive all client chunks correctly
         for _ in 0..6 {
-            let event_data: serde_json::Value =
-                serde_json::from_str(&event_stream.next().await.unwrap().unwrap().data).unwrap();
+            let data = event_stream.next().await.unwrap().unwrap().data.unwrap();
+            let event_data: serde_json::Value = serde_json::from_str(&data).unwrap();
 
             // Includes some OpenAI fields
             assert!(
@@ -866,12 +908,15 @@ mod tests {
             );
         }
         // this one will just have a finish reason
-        let event_data: serde_json::Value =
-            serde_json::from_str(&event_stream.next().await.unwrap().unwrap().data).unwrap();
+        let data = event_stream.next().await.unwrap().unwrap().data.unwrap();
+        let event_data: serde_json::Value = serde_json::from_str(&data).unwrap();
         assert!(event_data["choices"][0]["finish_reason"].is_string());
 
         // Ensure we get the final chunk
-        assert_eq!(event_stream.next().await.unwrap().unwrap().data, "[DONE]");
+        assert_eq!(
+            event_stream.next().await.unwrap().unwrap().data.unwrap(),
+            "[DONE]"
+        );
 
         // Check we've exhausted the client stream
         assert!(event_stream.next().await.is_none());

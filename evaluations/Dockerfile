@@ -1,6 +1,12 @@
+# Global build args
+ARG CARGO_BUILD_FLAGS=""
+ARG PROFILE="release"
+
 # ========== builder ==========
 
 FROM rust:1.88.0 AS builder
+ARG CARGO_BUILD_FLAGS
+ARG PROFILE
 
 WORKDIR /src
 
@@ -8,10 +14,8 @@ RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt
 
 COPY . .
 
-ARG CARGO_BUILD_FLAGS=""
-
-RUN cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
-    cp -r /src/target/release /release
+RUN cargo build --profile ${PROFILE} -p evaluations $CARGO_BUILD_FLAGS
+RUN if [ "${PROFILE}" = "dev" ]; then cp -r /src/target/debug /release; else cp -r /src/target/${PROFILE} /release; fi
 
 # ========== base ==========
 

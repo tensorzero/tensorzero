@@ -4,8 +4,10 @@ use std::{
     sync::Arc,
 };
 
-use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -92,8 +94,9 @@ fn check_duplicates_across_map(
     Ok(())
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
     Uniform(uniform::UniformConfig),
@@ -102,7 +105,7 @@ pub enum ExperimentationConfig {
     // (serde enums cannot be #[serde(flatten)])
     // we can write a custom deserializer for this if we want
     TrackAndStop(track_and_stop::TrackAndStopConfig),
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     #[cfg(test)]
     AlwaysFails(AlwaysFailsConfig),
 }
@@ -113,8 +116,11 @@ impl Default for ExperimentationConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform(uniform::UniformConfig),

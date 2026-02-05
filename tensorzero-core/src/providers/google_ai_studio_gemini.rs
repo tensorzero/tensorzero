@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use futures::{StreamExt, future::try_join_all};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -51,10 +51,15 @@ use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
+/// Dummy signature for cross-model inference compatibility with Gemini 3+.
+/// See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
+
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
     request_url: Url,
@@ -364,10 +369,7 @@ fn stream_google_ai_studio_gemini(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                        break;
-                    }
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -495,6 +497,7 @@ impl<'a> GeminiContent<'a> {
                         signature,
                         summary: _,
                         provider_type: _,
+                        extra_data: _,
                     },
                 ) => {
                     // Gemini never produces 'thought: true' at the moment, and there's no documentation
@@ -576,6 +579,31 @@ impl<'a> GeminiContent<'a> {
                 }
             }
         }
+
+        // Post-processing: If no FunctionCall has a real thought_signature (from a preceding Thought block),
+        // add a dummy signature to the first FunctionCall for cross-model inference compatibility with Gemini 3+.
+        // See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+        // We only check FunctionCall parts (not all parts) because signatures on non-FunctionCall parts
+        // don't indicate this is a Gemini-originated conversation with tool calls.
+        let has_function_call_with_signature = output.iter().any(|part| {
+            matches!(
+                part.data,
+                FlattenUnknown::Normal(GeminiPartData::FunctionCall { .. })
+            ) && part.thought_signature.is_some()
+        });
+
+        if !has_function_call_with_signature {
+            // Only add dummy signature to the first FunctionCall (matching how real signatures work)
+            if let Some(part) = output.iter_mut().find(|p| {
+                matches!(
+                    p.data,
+                    FlattenUnknown::Normal(GeminiPartData::FunctionCall { .. })
+                )
+            }) {
+                part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
+            }
+        }
+
         Ok(GeminiContent {
             role,
             parts: output,
@@ -770,7 +798,10 @@ enum GeminiResponseMimeType {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiThinkingConfig {
-    thinking_budget: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_level: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -822,26 +853,18 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
-    }
-
-    if let Some(budget_tokens) = thinking_budget_tokens {
+    if reasoning_effort.is_some() || thinking_budget_tokens.is_some() {
+        let thinking_config = GeminiThinkingConfig {
+            thinking_budget: *thinking_budget_tokens,
+            thinking_level: reasoning_effort.clone(),
+        };
         if let Some(gen_config) = &mut request.generation_config {
-            gen_config.thinking_config = Some(GeminiThinkingConfig {
-                thinking_budget: *budget_tokens,
-            });
+            gen_config.thinking_config = Some(thinking_config);
         } else {
             request.generation_config = Some(GeminiGenerationConfig {
                 stop_sequences: None,
                 temperature: None,
-                thinking_config: Some(GeminiThinkingConfig {
-                    thinking_budget: *budget_tokens,
-                }),
+                thinking_config: Some(thinking_config),
                 top_p: None,
                 presence_penalty: None,
                 frequency_penalty: None,
@@ -1015,6 +1038,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -1029,6 +1053,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             _ => {
@@ -1063,6 +1088,7 @@ fn content_part_to_tensorzero_chunk(
             summary_text: None,
             signature: Some(thought_signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 
@@ -1129,6 +1155,7 @@ fn convert_part_to_output(
                     text: Some(text),
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             // Handle 'thought' with no other fields
@@ -1140,6 +1167,7 @@ fn convert_part_to_output(
                     text: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             _ => {
@@ -1170,6 +1198,7 @@ fn convert_part_to_output(
             text: None,
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
     match part.data {
@@ -1259,13 +1288,25 @@ struct GeminiUsageMetadata {
     // Gemini doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thoughts_token_count: Option<u32>,
 }
 
 impl From<GeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GeminiUsageMetadata) -> Self {
+        // Sum candidates + thoughts tokens for output_tokens
+        let output_tokens = match (
+            usage_metadata.candidates_token_count,
+            usage_metadata.thoughts_token_count,
+        ) {
+            (Some(c), Some(t)) => Some(c + t),
+            (Some(c), None) => Some(c),
+            (None, Some(t)) => Some(t),
+            (None, None) => None,
+        };
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
+            output_tokens,
         }
     }
 }
@@ -1355,6 +1396,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: first_candidate.finish_reason.map(Into::into),
                 id: model_inference_id,
@@ -1537,6 +1579,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
 
@@ -1628,11 +1671,12 @@ mod tests {
                 }),
             }
         );
+        // FunctionCall part should have dummy thought_signature for cross-model inference
         assert_eq!(
             content.parts[1],
             GeminiContentPart {
                 thought: false,
-                thought_signature: None,
+                thought_signature: Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
                 data: FlattenUnknown::Normal(GeminiPartData::FunctionCall {
                     function_call: GeminiFunctionCall {
                         name: "get_temperature",
@@ -2053,6 +2097,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2156,6 +2201,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2291,6 +2337,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2600,6 +2647,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2666,6 +2714,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2736,6 +2785,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2796,6 +2846,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2853,6 +2904,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
+                thoughts_token_count: None,
             }),
         };
 
@@ -2901,6 +2953,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2981,6 +3034,7 @@ mod tests {
                 usage_metadata: Some(GeminiUsageMetadata {
                     prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
+                    thoughts_token_count: None,
                 }),
             };
 
@@ -3031,19 +3085,19 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "Google AI Studio Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
-
-        // Test that thinking_budget_tokens is applied correctly in generation_config
-        assert!(request.generation_config.is_some());
+        // Test that thinking_budget_tokens and reasoning_effort are applied correctly in generation_config
+        assert!(
+            request.generation_config.is_some(),
+            "generation_config should be set when thinking params are provided"
+        );
         let gen_config = request.generation_config.unwrap();
         assert_eq!(
             gen_config.thinking_config,
             Some(GeminiThinkingConfig {
-                thinking_budget: 1024,
-            })
+                thinking_budget: Some(1024),
+                thinking_level: Some("high".to_string()),
+            }),
+            "thinking_config should contain both thinking_budget and thinking_level"
         );
 
         // Test that verbosity warns

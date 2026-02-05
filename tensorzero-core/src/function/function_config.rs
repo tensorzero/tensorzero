@@ -31,7 +31,7 @@ use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, System,
 };
-use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
+use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{
@@ -42,8 +42,9 @@ use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
@@ -86,10 +87,27 @@ pub enum FunctionConfigType {
 }
 
 impl FunctionConfigType {
+    /// Returns the ClickHouse table name for the given function type.
     pub fn table_name(&self) -> &'static str {
         match self {
             FunctionConfigType::Chat => "ChatInference",
             FunctionConfigType::Json => "JsonInference",
+        }
+    }
+
+    /// Returns the Postgres table name for the given function type.
+    pub fn postgres_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_inferences",
+            FunctionConfigType::Json => "tensorzero.json_inferences",
+        }
+    }
+
+    /// Returns the ClickHouse datapoint table name for the given function type.
+    pub fn datapoint_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "ChatInferenceDatapoint",
+            FunctionConfigType::Json => "JsonInferenceDatapoint",
         }
     }
 }
@@ -102,8 +120,14 @@ impl FunctionConfig {
         }
     }
 
+    /// Returns the ClickHouse table name for the given function type.
     pub fn table_name(&self) -> &'static str {
         self.config_type().table_name()
+    }
+
+    /// Returns the Postgres table name for the given function type.
+    pub fn postgres_table_name(&self) -> &'static str {
+        self.config_type().postgres_table_name()
     }
 
     pub fn experimentation(&self) -> &ExperimentationConfig {
@@ -253,8 +277,9 @@ impl VariantsConfigPyClass {
     }
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -280,12 +305,13 @@ pub struct FunctionConfigChat {
     pub all_explicit_templates_names: HashSet<String>,
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
-    pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
+    pub output_schema: JSONSchema, // schema is mandatory for JSON functions
     pub json_mode_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
     pub experimentation: ExperimentationConfig,
@@ -302,7 +328,7 @@ impl FunctionConfig {
         }
     }
 
-    pub fn validate_inference_params(
+    pub async fn validate_inference_params(
         &self,
         params: &crate::endpoints::inference::Params,
     ) -> Result<(), Error> {
@@ -385,7 +411,7 @@ impl FunctionConfig {
                 .into());
             }
         }
-        self.validate_input(&params.input)
+        self.validate_input(&params.input).await
     }
     /// Validate the input against the function's input schemas.
     /// The validation is done based on the function's type:
@@ -393,21 +419,23 @@ impl FunctionConfig {
     /// - For a JSON function, the input is validated against the system, user, and assistant schemas.
     ///
     /// We do not validate ContentBlocks that are not text (tool calls and tool responses).
-    pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
+    pub async fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
                 validate_all_text_input(
                     &params.schemas,
                     input,
                     &params.all_explicit_templates_names,
-                )?;
+                )
+                .await?;
             }
             FunctionConfig::Json(params) => {
                 validate_all_text_input(
                     &params.schemas,
                     input,
                     &params.all_explicit_template_names,
-                )?;
+                )
+                .await?;
             }
         }
         Ok(())
@@ -532,9 +560,9 @@ impl FunctionConfig {
                         .ok()
                 });
 
-                let output_schema = match &inference_config.dynamic_output_schema {
-                    Some(schema) => JsonSchemaRef::Dynamic(schema),
-                    None => JsonSchemaRef::Static(&params.output_schema),
+                let output_schema: &JSONSchema = match &inference_config.dynamic_output_schema {
+                    Some(schema) => schema,
+                    None => &params.output_schema,
                 };
 
                 // If the parsed output fails validation, we log the error and set `parsed_output` to None
@@ -552,7 +580,7 @@ impl FunctionConfig {
                     json_block_index,
                     auxiliary_content,
                     model_inference_results,
-                    output_schema.value().clone(),
+                    output_schema.value.clone(),
                     inference_params,
                     original_response,
                 )))
@@ -567,7 +595,7 @@ impl FunctionConfig {
         }
     }
 
-    pub fn system_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn system_schema(&self) -> Option<&JSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params
                 .schemas
@@ -580,7 +608,7 @@ impl FunctionConfig {
         }
     }
 
-    pub fn user_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn user_schema(&self) -> Option<&JSONSchema> {
         match self {
             FunctionConfig::Chat(params) => {
                 params.schemas.get_implicit_user_schema().map(|s| &s.schema)
@@ -591,7 +619,7 @@ impl FunctionConfig {
         }
     }
 
-    pub fn assistant_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn assistant_schema(&self) -> Option<&JSONSchema> {
         match self {
             FunctionConfig::Chat(params) => params
                 .schemas
@@ -700,7 +728,7 @@ fn get_json_output_from_content_blocks(
 /// We first validate the system message (if it exists)
 /// Next we validate all messages containing text blocks.
 /// When we add support for `{"type": "template"}` input blocks, we'll need to validate those two
-fn validate_all_text_input(
+async fn validate_all_text_input(
     schemas: &SchemaData,
     input: &Input,
     all_templates_names: &HashSet<String>,
@@ -719,6 +747,7 @@ fn validate_all_text_input(
                 all_templates_names,
                 None,
             )
+            .await
         }
         // If there is no system message and no schema we accept
         (None, None) => Ok(()),
@@ -742,7 +771,8 @@ fn validate_all_text_input(
                         message.role.implicit_template_name(),
                         all_templates_names,
                         Some(index),
-                    )?;
+                    )
+                    .await?;
                 }
                 InputMessageContent::Template(template) => {
                     // TODO: figure out a way to avoid this clone
@@ -753,7 +783,8 @@ fn validate_all_text_input(
                         &template.name,
                         all_templates_names,
                         Some(index),
-                    )?;
+                    )
+                    .await?;
                 }
                 _ => {}
             }
@@ -766,15 +797,15 @@ fn validate_all_text_input(
 /// If there is no schema, we check that at least one
 /// variant has a matching template (as determined by `all_templates_names`)
 /// Otherwise, the message must contain JSON content that matches the schema
-fn validate_single_message(
+async fn validate_single_message(
     content: &Value,
-    schema: Option<&StaticJSONSchema>,
+    schema: Option<&JSONSchema>,
     template_name: &str,
     all_templates_names: &HashSet<String>,
     index: Option<usize>,
 ) -> Result<(), Error> {
     match schema {
-        Some(schema) => schema.validate(content)?,
+        Some(schema) => schema.validate(content).await?,
         None => {
             if !content.is_string() && !all_templates_names.contains(template_name) {
                 return Err(match index {
@@ -811,7 +842,7 @@ mod tests {
     use crate::inference::types::Text;
     use crate::inference::types::Thought;
     use crate::inference::types::Usage;
-    use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
     use serde_json::json;
@@ -819,7 +850,7 @@ mod tests {
     use std::time::Duration;
     use tempfile::NamedTempFile;
 
-    fn create_test_schema() -> StaticJSONSchema {
+    fn create_test_schema() -> JSONSchema {
         let schema = r#"
         {
             "type": "object",
@@ -834,7 +865,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+        JSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
@@ -845,8 +876,8 @@ mod tests {
         InputMessageContent::test_only_from_string(text.into())
     }
 
-    #[test]
-    fn test_validate_input_chat_no_schema() {
+    #[tokio::test]
+    async fn test_validate_input_chat_no_schema() {
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -871,7 +902,7 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
 
         let messages = vec![
             InputMessage {
@@ -898,7 +929,7 @@ mod tests {
 
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             Error::new(ErrorDetails::InvalidMessage {
                 message: "Message at index 1 has non-string content but there is no template `assistant` in any variant".to_string(),
             })
@@ -924,11 +955,11 @@ mod tests {
             messages,
         };
 
-        function_config.validate_input(&input).unwrap();
+        function_config.validate_input(&input).await.unwrap();
     }
 
-    #[test]
-    fn test_validate_input_chat_system_schema() {
+    #[tokio::test]
+    async fn test_validate_input_chat_system_schema() {
         let system_schema = create_test_schema();
         let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
@@ -963,7 +994,7 @@ mod tests {
 
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             Error::new(ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("system content")),
@@ -991,11 +1022,11 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
     }
 
-    #[test]
-    fn test_validate_input_chat_user_schema() {
+    #[tokio::test]
+    async fn test_validate_input_chat_user_schema() {
         let user_schema = create_test_schema();
         let user_value = user_schema.value.clone();
         let chat_config = FunctionConfigChat {
@@ -1029,7 +1060,7 @@ mod tests {
         };
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("user content")),
@@ -1059,11 +1090,11 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
     }
 
-    #[test]
-    fn test_validate_input_chat_assistant_schema() {
+    #[tokio::test]
+    async fn test_validate_input_chat_assistant_schema() {
         let assistant_schema = create_test_schema();
         let assistant_value = assistant_schema.value.clone();
         let chat_config = FunctionConfigChat {
@@ -1097,7 +1128,7 @@ mod tests {
         };
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("assistant content")),
@@ -1129,11 +1160,11 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
     }
 
-    #[test]
-    fn test_validate_input_chat_all_schemas() {
+    #[tokio::test]
+    async fn test_validate_input_chat_all_schemas() {
         let system_schema = create_test_schema();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
@@ -1177,7 +1208,7 @@ mod tests {
 
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("system content")),
@@ -1221,11 +1252,11 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
     }
 
-    #[test]
-    fn test_validate_input_raw_bypass_schemas() {
+    #[tokio::test]
+    async fn test_validate_input_raw_bypass_schemas() {
         let system_schema = create_test_schema();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
@@ -1275,12 +1306,12 @@ mod tests {
             messages,
         };
 
-        let validation_result = function_config.validate_input(&input);
+        let validation_result = function_config.validate_input(&input).await;
         assert!(validation_result.is_ok());
     }
 
-    #[test]
-    fn test_validate_input_chat_multiple_text_blocks() {
+    #[tokio::test]
+    async fn test_validate_input_chat_multiple_text_blocks() {
         // We test that we allow multiple text blocks in a message as long as they pass the schema if present
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
@@ -1315,7 +1346,7 @@ mod tests {
             messages,
         };
 
-        function_config.validate_input(&input).unwrap();
+        function_config.validate_input(&input).await.unwrap();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
@@ -1374,17 +1405,17 @@ mod tests {
             messages,
         };
 
-        function_config.validate_input(&input).unwrap();
+        function_config.validate_input(&input).await.unwrap();
     }
 
-    #[test]
-    fn test_validate_input_json_no_schema() {
+    #[tokio::test]
+    async fn test_validate_input_json_no_schema() {
         let output_schema = json!({});
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
+            output_schema: JSONSchema::from_value(json!({})).unwrap(),
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
@@ -1414,7 +1445,7 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
 
         let messages = vec![
             InputMessage {
@@ -1448,15 +1479,15 @@ mod tests {
 
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             ErrorDetails::InvalidMessage {
                 message: "Message at index 0 has non-string content but there is no template `user` in any variant".to_string()
             }.into()
         );
     }
 
-    #[test]
-    fn test_validate_input_json_system_schema() {
+    #[tokio::test]
+    async fn test_validate_input_json_system_schema() {
         let system_schema = create_test_schema();
         let system_value = system_schema.value.clone();
         let output_schema = json!({});
@@ -1471,7 +1502,7 @@ mod tests {
                 "test",
             )
             .unwrap(),
-            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
+            output_schema: JSONSchema::from_value(output_schema).unwrap(),
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
@@ -1497,7 +1528,7 @@ mod tests {
 
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("system content")),
@@ -1527,11 +1558,11 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
     }
 
-    #[test]
-    fn test_validate_input_json_user_schema() {
+    #[tokio::test]
+    async fn test_validate_input_json_user_schema() {
         let user_schema = create_test_schema();
         let user_value = user_schema.value.clone();
         let output_schema = json!({});
@@ -1546,7 +1577,7 @@ mod tests {
                 "test",
             )
             .unwrap(),
-            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
+            output_schema: JSONSchema::from_value(output_schema).unwrap(),
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
@@ -1572,7 +1603,7 @@ mod tests {
 
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("user content")),
@@ -1602,11 +1633,11 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
     }
 
-    #[test]
-    fn test_validate_input_json_assistant_schema() {
+    #[tokio::test]
+    async fn test_validate_input_json_assistant_schema() {
         let assistant_schema = create_test_schema();
         let assistant_value = assistant_schema.value.clone();
         let output_schema = json!({});
@@ -1621,7 +1652,7 @@ mod tests {
                 "test",
             )
             .unwrap(),
-            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
+            output_schema: JSONSchema::from_value(output_schema).unwrap(),
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
@@ -1646,7 +1677,7 @@ mod tests {
 
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("assistant content")),
@@ -1678,11 +1709,11 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
     }
 
-    #[test]
-    fn test_validate_input_json_all_schemas() {
+    #[tokio::test]
+    async fn test_validate_input_json_all_schemas() {
         let system_schema = create_test_schema();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
@@ -1699,7 +1730,7 @@ mod tests {
                 "test",
             )
             .unwrap(),
-            output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
+            output_schema: JSONSchema::from_value(output_schema).unwrap(),
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
@@ -1724,7 +1755,7 @@ mod tests {
 
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
-            validation_result.unwrap_err(),
+            validation_result.await.unwrap_err(),
             ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("system content")),
@@ -1768,7 +1799,7 @@ mod tests {
             messages,
         };
 
-        assert!(function_config.validate_input(&input).is_ok());
+        assert!(function_config.validate_input(&input).await.is_ok());
     }
 
     /// Tests the `sample_variant` function with a variety of test cases through Monte Carlo simulations.
@@ -1796,7 +1827,7 @@ mod tests {
         );
 
         // Test for JSON function with description
-        let output_schema = StaticJSONSchema::from_value(json!({})).unwrap();
+        let output_schema = JSONSchema::from_value(json!({})).unwrap();
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
         let json_config = FunctionConfigJson {
             variants: HashMap::new(),
@@ -1849,7 +1880,7 @@ mod tests {
           "additionalProperties": false
         });
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1885,6 +1916,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1952,6 +1984,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2005,6 +2038,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2060,6 +2094,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2113,6 +2148,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2166,6 +2202,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2190,7 +2227,7 @@ mod tests {
             InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
         }
 
-        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+        let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {
@@ -2238,6 +2275,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2285,6 +2323,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2339,6 +2378,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2391,6 +2431,7 @@ mod tests {
             },
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2417,7 +2458,7 @@ mod tests {
         // Test with an empty output schema
         let output_schema = json!({});
         let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
+        let output_schema = JSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -2450,6 +2491,7 @@ mod tests {
             latency,
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let response = function_config
             .prepare_response(
@@ -2505,12 +2547,14 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::Thought(Thought {
                 text: Some("still thinking".to_string()),
                 signature: Some("sig".to_string()),
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =
@@ -2526,6 +2570,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::Text(Text {
                 text: "Some text".to_string(),
@@ -2535,6 +2580,7 @@ mod tests {
                 signature: Some("sig2".to_string()),
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
             ContentBlockOutput::ToolCall(ToolCall {
                 id: "id2".to_string(),
@@ -2590,6 +2636,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         let (raw_output, auxiliary_content, json_block_index) =

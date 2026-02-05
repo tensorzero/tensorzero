@@ -33,11 +33,11 @@ impl ToolMetadata for UpdateDatapointsTool {
     type Output = UpdateDatapointsResponse;
     type LlmParams = UpdateDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("update_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Update existing datapoints in a dataset. \
              Can modify input, output, tags, and metadata. \
@@ -45,7 +45,11 @@ impl ToolMetadata for UpdateDatapointsTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // Datapoints have arbitrary input/output_schema objects
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Update existing datapoints in a dataset.",
@@ -88,11 +92,13 @@ impl ToolMetadata for UpdateDatapointsTool {
                                 "description": "New tags (optional)."
                             }
                         },
-                        "required": ["type", "id"]
+                        "required": ["type", "id"],
+                        "additionalProperties": false
                     }
                 }
             },
-            "required": ["dataset_name", "datapoints"]
+            "required": ["dataset_name", "datapoints"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

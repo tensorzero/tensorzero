@@ -150,6 +150,7 @@ impl TensorzeroRelay {
             tensorzero_dryrun: None,
             tensorzero_credentials: params.credentials,
             tensorzero_cache_options: None,
+            tensorzero_include_raw_response: params.include_raw_response,
         };
 
         let api_key = self
@@ -173,7 +174,12 @@ impl TensorzeroRelay {
                 })
             })?;
         match res.response {
-            OpenAIEmbeddingResponse::List { data, model, usage } => Ok(EmbeddingResponse {
+            OpenAIEmbeddingResponse::List {
+                data,
+                model,
+                usage,
+                tensorzero_raw_response,
+            } => Ok(EmbeddingResponse {
                 embeddings: data
                     .into_iter()
                     .map(|embedding| match embedding {
@@ -193,6 +199,7 @@ impl TensorzeroRelay {
                     })
                     .unwrap_or_default(),
                 model,
+                tensorzero_raw_response,
             }),
         }
     }
@@ -302,6 +309,8 @@ impl TensorzeroRelay {
         let finish_reason = non_streaming.finish_reason();
         // Extract raw_usage from downstream response for passthrough
         let raw_usage_entries = non_streaming.raw_usage().cloned();
+        // Extract relay_raw_response entries from downstream response for passthrough
+        let relay_raw_response = non_streaming.raw_response().cloned();
 
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
@@ -339,6 +348,7 @@ impl TensorzeroRelay {
                 raw_response: http_data.raw_response.unwrap_or_default(),
                 usage,
                 raw_usage: raw_usage_entries,
+                relay_raw_response,
                 provider_latency: latency,
                 finish_reason,
                 id: Uuid::now_v7(),
@@ -527,6 +537,7 @@ impl TensorzeroRelay {
             otlp_traces_extra_attributes: HashMap::new(),
             otlp_traces_extra_resources: HashMap::new(),
             include_original_response: false,
+            include_raw_response: clients.include_raw_response,
             include_raw_usage: clients.include_raw_usage,
             api_key,
         };

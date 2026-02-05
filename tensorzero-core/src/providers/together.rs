@@ -7,7 +7,7 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::providers::openai::OpenAIMessagesConfig;
 use futures::{StreamExt, future::try_join_all};
 use lazy_static::lazy_static;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -61,8 +61,9 @@ lazy_static! {
 pub const PROVIDER_NAME: &str = "Together";
 pub const PROVIDER_TYPE: &str = "together";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TogetherProvider {
     model_name: String,
     #[serde(skip)]
@@ -651,6 +652,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                     signature: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             if !clean_text.is_empty() {
@@ -681,6 +683,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: finish_reason.map(Into::into),
@@ -706,7 +709,7 @@ fn stream_together(
                 Err(e) => {
                     let message = e.to_string();
                     let mut raw_response = None;
-                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
+                    if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(_, resp) = *e {
                         raw_response = resp.text().await.ok();
                     }
                     yield Err(ErrorDetails::InferenceServer {
@@ -809,6 +812,7 @@ fn together_to_tensorzero_chunk(
                                 summary_text: None,
                                 id: thinking_state.get_id(),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             }));
                         }
                     }
@@ -1129,6 +1133,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })
         );
         assert_eq!(
@@ -1178,6 +1183,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })
         );
         assert_eq!(
@@ -1710,6 +1716,7 @@ mod tests {
                 summary_text: None,
                 id: "1".to_string(),
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })]
         );
         assert!(matches!(thinking_state, ThinkingState::Thinking));

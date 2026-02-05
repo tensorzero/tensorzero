@@ -43,7 +43,7 @@ type = "aws_sagemaker"
 model_name = "gemma3:1b"
 endpoint_name = "my-sagemaker-endpoint"
 region = "us-east-1"
-# ... or use `allow_auto_detect_region = true` to infer region with the AWS SDK
+# ... or use `region = "sdk"` to auto-detect region with the AWS SDK
 hosted_provider = "openai"  # Ollama is OpenAI-compatible
 
 [functions.my_function_name]
@@ -58,7 +58,14 @@ The `hosted_provider` field specifies the model provider that you deployed on AW
 For example, Ollama is OpenAI-compatible, so we use `openai` as the hosted provider.
 Alternatively, you can use `hosted_provider = "tgi"` if you had deployed TGI instead.
 
-You can specify the endpoint's `region` explicitly, or use `allow_auto_detect_region = true` to infer region with the AWS SDK.
+You can specify the endpoint's `region` explicitly, or use `region = "sdk"` to auto-detect region with the AWS SDK.
+
+<Note>
+
+If you're using AWS China regions (`cn-north-1`, `cn-northwest-1`) or AWS GovCloud, you must also specify the `endpoint_url` field since these partitions use different DNS suffixes.
+For example: `endpoint_url = "https://runtime.sagemaker.cn-north-1.amazonaws.com.cn"`
+
+</Note>
 
 See the [Configuration Reference](/gateway/configuration-reference/) for optional fields.
 The relevant fields will depend on the `hosted_provider`.

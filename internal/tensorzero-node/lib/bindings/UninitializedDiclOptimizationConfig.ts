@@ -12,6 +12,10 @@ export type UninitializedDiclOptimizationConfig = {
   batch_size: number;
   max_concurrency: number;
   k: number;
-  model: string;
+  /**
+   * The model to use for the DICL variant.
+   * This field will be required in a future release.
+   */
+  model: string | null;
   append_to_existing_variants: boolean;
 };

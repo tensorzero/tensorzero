@@ -4,6 +4,7 @@ name: Mocked Batch Tests (for Merge Queue)
 env:
   ANTHROPIC_API_KEY: "fake_anthropic_key"
   AWS_ACCESS_KEY_ID: "fake_aws_access_key"
+  AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
   AWS_REGION: "us-east-1"
   AWS_SECRET_ACCESS_KEY: "fake_aws_secret_key"
   AZURE_API_KEY: "fake_azure_openai_key"
@@ -47,7 +48,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Install Rust toolchain
         run: |

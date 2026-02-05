@@ -69,6 +69,8 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        reasoning_usage_inference: vec![],
+        cache_input_tokens_inference: vec![], // TGI doesn't handle inputs sufficiently large for this test (also no caching)
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],

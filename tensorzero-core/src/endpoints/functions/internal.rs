@@ -7,6 +7,7 @@ use tracing::instrument;
 
 use crate::config::{Config, MetricConfigType};
 use crate::db::TimeWindow;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{
     FeedbackQueries, GetVariantPerformanceParams, MetricType, MetricWithFeedback,
     VariantPerformanceRow,
@@ -23,8 +24,9 @@ pub struct MetricsQueryParams {
 }
 
 /// Response containing metrics with feedback statistics
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MetricsWithFeedbackResponse {
     /// Metrics with feedback statistics
     pub metrics: Vec<MetricWithFeedback>,
@@ -44,9 +46,13 @@ pub async fn get_function_metrics_handler(
     Path(function_name): Path<String>,
     Query(params): Query<MetricsQueryParams>,
 ) -> Result<Json<MetricsWithFeedbackResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_function_metrics(
         &app_state.config,
-        &app_state.clickhouse_connection_info,
+        &database,
         &function_name,
         params.variant_name.as_deref(),
     )
@@ -63,11 +69,10 @@ pub async fn get_function_metrics(
 ) -> Result<MetricsWithFeedbackResponse, Error> {
     // Get function config to determine the inference table
     let function_config = get_function(&config.functions, function_name)?;
-    let inference_table = function_config.table_name();
 
     // Query metrics with feedback
     let metrics = clickhouse
-        .query_metrics_with_feedback(function_name, inference_table, variant_name)
+        .query_metrics_with_feedback(function_name, &function_config, variant_name)
         .await?;
 
     // Enrich metric_type from config for metrics that don't have it set
@@ -103,8 +108,9 @@ pub struct VariantPerformancesQueryParams {
 }
 
 /// Response containing variant performance statistics
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantPerformancesResponse {
     /// Performance statistics for each (variant, time_period) combination
     pub performances: Vec<VariantPerformanceRow>,
@@ -125,9 +131,13 @@ pub async fn get_variant_performances_handler(
     Path(function_name): Path<String>,
     Query(params): Query<VariantPerformancesQueryParams>,
 ) -> Result<Json<VariantPerformancesResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_variant_performances(
         &app_state.config,
-        &app_state.clickhouse_connection_info,
+        &database,
         &function_name,
         &params.metric_name,
         params.time_window,

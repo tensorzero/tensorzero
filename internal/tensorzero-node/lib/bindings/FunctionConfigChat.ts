@@ -5,7 +5,7 @@ import type { ToolChoice } from "./ToolChoice";
 import type { VariantInfo } from "./VariantInfo";
 
 export type FunctionConfigChat = {
-  variants: { [key in string]?: VariantInfo };
+  variants: { [key in string]: VariantInfo };
   schemas: SchemaData;
   tools: Array<string>;
   tool_choice: ToolChoice;

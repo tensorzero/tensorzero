@@ -1,7 +1,7 @@
 use futures::future::try_join_all;
 use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -62,8 +62,9 @@ type PreparedToolsResult<'a> = (
     Option<bool>,
 );
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GroqProvider {
     model_name: String,
     #[serde(skip)]
@@ -345,7 +346,7 @@ pub fn stream_groq(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, None).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, None).await);
                         }
                     }
                 }
@@ -1357,6 +1358,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),

@@ -1,7 +1,7 @@
 use crate::common::get_gateway_endpoint;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -333,7 +333,6 @@ async fn embed_insert_example(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
-                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -346,6 +345,8 @@ async fn embed_insert_example(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
+    let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
+        Arc::new(Default::default());
     let clients = InferenceClients {
         http_client: client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
@@ -356,7 +357,10 @@ async fn embed_insert_example(
             enabled: CacheEnabledMode::On,
         },
         tags: Arc::new(Default::default()),
-        rate_limiting_config: Arc::new(Default::default()),
+        rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
+            rate_limiting_config,
+            Arc::new(PostgresConnectionInfo::Disabled),
+        )),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
         scope_info: ScopeInfo {
@@ -365,6 +369,7 @@ async fn embed_insert_example(
         },
         relay: None,
         include_raw_usage: false,
+        include_raw_response: false,
     };
 
     let response = provider_config
@@ -736,6 +741,7 @@ pub async fn test_dicl_inference_request_simple() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
     let mut chunks = vec![];
     let mut found_done_chunk = false;

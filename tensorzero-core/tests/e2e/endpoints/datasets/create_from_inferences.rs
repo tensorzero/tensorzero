@@ -1,14 +1,11 @@
 use reqwest::Client;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use tensorzero::ClientExt;
-use tensorzero_core::config::Config;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::query_builder::{
     InferenceFilter, TagComparisonOperator, TagFilter,
 };
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::inferences::{
     InferenceOutputSource, InferenceQueries, ListInferencesParams,
 };
@@ -20,26 +17,12 @@ use tensorzero_core::endpoints::stored_inferences::v1::types::ListInferencesRequ
 
 use crate::common::get_gateway_endpoint;
 
-lazy_static::lazy_static! {
-    static ref TEST_SETUP: tokio::sync::OnceCell<(ClickHouseConnectionInfo, Arc<Config>)> = tokio::sync::OnceCell::new();
-}
-
-async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
-    TEST_SETUP
-        .get_or_init(|| async {
-            let clickhouse: ClickHouseConnectionInfo = get_clickhouse().await;
-
-            let client = tensorzero::test_helpers::make_embedded_gateway().await;
-            let config = client.get_config().unwrap();
-            (clickhouse, config)
-        })
-        .await
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_ids_success() {
     let client = Client::new();
-    let (clickhouse, config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let embedded_client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let config = embedded_client.get_config().unwrap();
 
     // Get some existing inferences from the database
     let params = ListInferencesParams {
@@ -47,7 +30,7 @@ async fn test_create_from_inference_ids_success() {
         limit: 2,
         ..Default::default()
     };
-    let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
+    let inferences = database.list_inferences(&config, &params).await.unwrap();
     assert!(inferences.len() >= 2, "Need at least 2 inferences for test");
 
     let inference_id1 = inferences[0].id();
@@ -111,7 +94,9 @@ async fn test_create_from_inference_query_success() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_same_inference_multiple_times_succeeds() {
     let client = Client::new();
-    let (clickhouse, config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let embedded_client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let config = embedded_client.get_config().unwrap();
 
     // Get an existing inference from the database
     let params = ListInferencesParams {
@@ -119,7 +104,7 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
         limit: 1,
         ..Default::default()
     };
-    let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
+    let inferences = database.list_inferences(&config, &params).await.unwrap();
     assert!(!inferences.is_empty(), "Need at least 1 inference for test");
 
     let inference_id = inferences[0].id();
@@ -164,7 +149,9 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_missing_ids_error() {
     let client = Client::new();
-    let (clickhouse, config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let embedded_client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let config = embedded_client.get_config().unwrap();
 
     // Get one real inference
     let params = ListInferencesParams {
@@ -172,7 +159,7 @@ async fn test_create_from_inference_missing_ids_error() {
         limit: 1,
         ..Default::default()
     };
-    let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
+    let inferences = database.list_inferences(&config, &params).await.unwrap();
     assert!(!inferences.is_empty(), "Need at least 1 inference for test");
 
     let real_inference_id = inferences[0].id();

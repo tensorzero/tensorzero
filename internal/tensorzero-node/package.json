@@ -11,23 +11,20 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "napi": {
-    "name": "tensorzero-node",
-    "triples": {
-      "defaults": false,
-      "additional": [
-        "aarch64-apple-darwin",
-        "aarch64-unknown-linux-gnu",
-        "aarch64-unknown-linux-musl",
-        "x86_64-apple-darwin",
-        "x86_64-unknown-linux-gnu",
-        "x86_64-unknown-linux-musl"
-      ]
-    }
+    "binaryName": "tensorzero-node",
+    "targets": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ]
   },
   "license": "Apache-2.0",
   "devDependencies": {
     "@eslint/js": "^9.37.0",
-    "@napi-rs/cli": "^2.18.4",
+    "@napi-rs/cli": "^3.5.1",
     "@types/node": "^20.19.4",
     "eslint": "^9.37.0",
     "prettier": "^3.6.2",
@@ -54,7 +51,7 @@
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path .prettierignore",
     "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\" --ignore-pattern \"index.d.ts\"",
     "lint:check": "eslint . --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\" --ignore-pattern \"index.d.ts\"",
-    "universal": "napi universal",
+    "universal": "napi universalize",
     "version": "napi version"
   },
   "dependencies": {

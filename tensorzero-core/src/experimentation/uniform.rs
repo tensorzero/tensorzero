@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -63,8 +64,9 @@ pub(crate) fn sample_uniform(
     Err(ErrorDetails::NoFallbackVariantsRemaining.into())
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UniformConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     candidate_variants: Option<Vec<String>>,

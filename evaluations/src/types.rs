@@ -1,6 +1,7 @@
 //! Public API types used for the TensorZero evaluations crate.
 //! These types are constructed from tensorzero-optimizers, the Python client, and the Node client.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -106,6 +107,7 @@ impl EvaluationsInferenceExecutor for AppStateInferenceExecutor {
             self.app_state.clickhouse_connection_info.clone(),
             self.app_state.postgres_connection_info.clone(),
             self.app_state.deferred_tasks.clone(),
+            self.app_state.rate_limiting_manager.clone(),
             endpoint_params,
             None, // No API key for internal calls
         ))
@@ -196,6 +198,11 @@ pub struct EvaluationCoreArgs {
 
     /// Cache configuration for inference requests
     pub inference_cache: CacheEnabledMode,
+
+    /// Additional tags to apply to all inferences made during the evaluation.
+    /// These tags will be added to each inference, with internal evaluation tags
+    /// taking precedence in case of conflicts.
+    pub tags: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -248,5 +255,10 @@ pub struct RunEvaluationWithAppStateParams {
 
     /// Precision targets for adaptive stopping.
     /// Maps evaluator names to target confidence interval half-widths.
-    pub precision_targets: std::collections::HashMap<String, f32>,
+    pub precision_targets: HashMap<String, f32>,
+
+    /// Additional tags to apply to all inferences made during the evaluation.
+    /// These tags will be added to each inference, with internal evaluation tags
+    /// taking precedence in case of conflicts.
+    pub tags: HashMap<String, String>,
 }

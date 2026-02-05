@@ -15,7 +15,7 @@ use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
 use object_store::{ObjectStore, ObjectStoreExt, StaticCredentialProvider};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -77,6 +77,10 @@ pub const PROVIDER_TYPE: &str = "gcp_vertex_gemini";
 
 const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
 
+/// Dummy signature for cross-model inference compatibility with Gemini 3+.
+/// See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
+
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 ///
@@ -86,8 +90,9 @@ const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
 /// * In streaming mode, 'thought: true' parts with non-text content produce an error (since we don't have "unknown" blocks in streaming mode)
 ///
 /// In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GCPVertexGeminiProvider {
     api_v1_base_url: Url,
     request_url: String,
@@ -101,8 +106,9 @@ pub struct GCPVertexGeminiProvider {
     batch_config: Option<BatchConfig>,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 struct BatchConfig {
     input_uri_prefix: String,
     output_uri_prefix: String,
@@ -813,7 +819,7 @@ fn make_provider_batch_inference_output(
     })?;
     let usage = Usage {
         input_tokens: usage_metadata.prompt_token_count,
-        output_tokens: usage_metadata.candidates_token_count,
+        output_tokens: usage_metadata.output_tokens(),
     };
 
     let (output, finish_reason) = get_response_content(
@@ -1581,10 +1587,7 @@ fn stream_gcp_vertex_gemini(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                        break;
-                    }
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -1900,7 +1903,10 @@ enum GCPVertexGeminiResponseMimeType {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiThinkingConfig {
-    thinking_budget: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_level: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -1956,26 +1962,18 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
-    }
-
-    if let Some(budget_tokens) = thinking_budget_tokens {
+    if reasoning_effort.is_some() || thinking_budget_tokens.is_some() {
+        let thinking_config = GCPVertexGeminiThinkingConfig {
+            thinking_budget: *thinking_budget_tokens,
+            thinking_level: reasoning_effort.clone(),
+        };
         if let Some(gen_config) = &mut request.generation_config {
-            gen_config.thinking_config = Some(GCPVertexGeminiThinkingConfig {
-                thinking_budget: *budget_tokens,
-            });
+            gen_config.thinking_config = Some(thinking_config);
         } else {
             request.generation_config = Some(GCPVertexGeminiGenerationConfig {
                 stop_sequences: None,
                 temperature: None,
-                thinking_config: Some(GCPVertexGeminiThinkingConfig {
-                    thinking_budget: *budget_tokens,
-                }),
+                thinking_config: Some(thinking_config),
                 max_output_tokens: None,
                 top_p: None,
                 presence_penalty: None,
@@ -2534,6 +2532,30 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
         }
     }
 
+    // Post-processing: If no FunctionCall has a real thought_signature (from a preceding Thought block),
+    // add a dummy signature to the first FunctionCall for cross-model inference compatibility with Gemini 3+.
+    // See: https://ai.google.dev/gemini-api/docs/thought-signatures#faqs
+    // We only check FunctionCall parts (not all parts) because signatures on non-FunctionCall parts
+    // don't indicate this is a Gemini-originated conversation with tool calls.
+    let has_function_call_with_signature = model_content_blocks.iter().any(|part| {
+        matches!(
+            part.data,
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { .. })
+        ) && part.thought_signature.is_some()
+    });
+
+    if !has_function_call_with_signature {
+        // Only add dummy signature to the first FunctionCall (matching how real signatures work)
+        if let Some(part) = model_content_blocks.iter_mut().find(|p| {
+            matches!(
+                p.data,
+                FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { .. })
+            )
+        }) {
+            part.thought_signature = Some(DUMMY_THOUGHT_SIGNATURE.to_string());
+        }
+    }
+
     let message = GCPVertexGeminiContent {
         role,
         parts: model_content_blocks,
@@ -2618,6 +2640,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -2632,6 +2655,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             _ => {
@@ -2665,6 +2689,7 @@ fn content_part_to_tensorzero_chunk(
             summary_text: None,
             signature: Some(thought_signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 
@@ -2743,6 +2768,7 @@ fn convert_to_output(
                     text: Some(text),
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -2754,6 +2780,7 @@ fn convert_to_output(
                     text: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             _ => {
@@ -2784,6 +2811,7 @@ fn convert_to_output(
             text: None,
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 
@@ -2885,6 +2913,20 @@ struct GCPVertexGeminiUsageMetadata {
     // GCP doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thoughts_token_count: Option<u32>,
+}
+
+impl GCPVertexGeminiUsageMetadata {
+    /// Returns output_tokens by summing candidates + thoughts tokens
+    fn output_tokens(&self) -> Option<u32> {
+        match (self.candidates_token_count, self.thoughts_token_count) {
+            (Some(c), Some(t)) => Some(c + t),
+            (Some(c), None) => Some(c),
+            (None, Some(t)) => Some(t),
+            (None, None) => None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -2975,7 +3017,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         });
         let usage = Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
+            output_tokens: usage_metadata.output_tokens(),
         };
 
         let system = generic_request.system.clone();
@@ -2998,6 +3040,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 raw_response,
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason,
                 id: model_inference_id,
@@ -3063,10 +3106,11 @@ fn convert_stream_response_with_metadata_to_chunk(
         Some(metadata) => {
             let usage = if metadata.prompt_token_count.is_some()
                 || metadata.candidates_token_count.is_some()
+                || metadata.thoughts_token_count.is_some()
             {
                 Some(Usage {
                     input_tokens: metadata.prompt_token_count,
-                    output_tokens: metadata.candidates_token_count,
+                    output_tokens: metadata.output_tokens(),
                 })
             } else {
                 None
@@ -3134,7 +3178,7 @@ fn handle_gcp_vertex_gemini_error(
 mod tests {
     use super::*;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{StaticToolConfig, ToolCallConfig, ToolResult};
     use serde_json::json;
@@ -3687,6 +3731,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: None,
                 candidates_token_count: None,
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3787,6 +3832,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3924,6 +3970,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -4066,7 +4113,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.0-flash-lite").unwrap();
+            prepare_tools(&request_with_tools, "gemini-2.5-flash-lite").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4154,12 +4201,23 @@ mod tests {
         .unwrap();
         assert_eq!(gcp_content.role, GCPVertexGeminiRole::Model);
         assert_eq!(gcp_content.parts.len(), 2);
+        // Text part should not have thought_signature
+        assert_eq!(
+            gcp_content.parts[0].thought_signature, None,
+            "Text parts should not have thought_signature"
+        );
         match &gcp_content.parts[0].data {
             FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
                 assert_eq!(text, "Hello");
             }
             _ => panic!("Expected a text part"),
         }
+        // FunctionCall part should have dummy thought_signature for cross-model inference
+        assert_eq!(
+            gcp_content.parts[1].thought_signature,
+            Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
+            "FunctionCall parts should have dummy thought_signature for cross-model inference"
+        );
         match &gcp_content.parts[1].data {
             FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { function_call }) => {
                 assert_eq!(function_call.name, Cow::Borrowed("test_function"));
@@ -4463,7 +4521,7 @@ mod tests {
             "additionalProperties": false
         });
 
-        let tool_schema = StaticJSONSchema::from_value(tool_schema_value).unwrap();
+        let tool_schema = JSONSchema::from_value(tool_schema_value).unwrap();
 
         let static_tool = StaticToolConfig {
             name: "test_tool".to_string(),
@@ -4584,18 +4642,18 @@ mod tests {
             "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`"
         );
 
-        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001", "google").unwrap_err().to_string();
+        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.5-flash", "google").unwrap_err().to_string();
         assert_eq!(
             non_google_publisher,
-            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`"
+            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.5-flash`"
         );
 
-        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001", "google").unwrap();
+        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash", "google").unwrap();
         assert_eq!(
             valid_model_url,
             ShorthandUrl::Publisher {
                 location: "us-central1",
-                model_id: "gemini-2.0-flash-001"
+                model_id: "gemini-2.5-flash"
             }
         );
 
@@ -4635,6 +4693,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4697,6 +4756,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4747,6 +4807,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4915,6 +4976,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
         let mut last_tool_name = None;
@@ -5421,19 +5483,19 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
-
-        // Test that thinking_budget_tokens is applied correctly in generation_config
-        assert!(request.generation_config.is_some());
+        // Test that thinking_budget_tokens and reasoning_effort are applied correctly in generation_config
+        assert!(
+            request.generation_config.is_some(),
+            "generation_config should be set when thinking params are provided"
+        );
         let gen_config = request.generation_config.unwrap();
         assert_eq!(
             gen_config.thinking_config,
             Some(GCPVertexGeminiThinkingConfig {
-                thinking_budget: 1024,
-            })
+                thinking_budget: Some(1024),
+                thinking_level: Some("high".to_string()),
+            }),
+            "thinking_config should contain both thinking_budget and thinking_level"
         );
 
         // Test that verbosity warns

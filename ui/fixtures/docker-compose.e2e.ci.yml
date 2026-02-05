@@ -82,6 +82,7 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - TENSORZERO_SKIP_LARGE_FIXTURES=1
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
@@ -98,7 +99,7 @@ services:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_interval: 1s
       start_period: 300s # Give the script time to start
 
@@ -110,7 +111,7 @@ services:
     environment:
       TENSORZERO_GATEWAY_URL: ${TENSORZERO_GATEWAY_URL:-http://gateway:3000}
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
-      VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
+      TENSORZERO_UI_FORCE_CACHE_ON: ${TENSORZERO_UI_FORCE_CACHE_ON:-1}
     env_file:
       - .env
     ports:
@@ -152,7 +153,7 @@ services:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       # Force cache on for tests
-      VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
+      TENSORZERO_UI_FORCE_CACHE_ON: ${TENSORZERO_UI_FORCE_CACHE_ON:-1}
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro

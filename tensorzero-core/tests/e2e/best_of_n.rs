@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::{
     inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text, Unknown},
@@ -15,22 +15,22 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 
 #[tokio::test]
-async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_non_stream() {
+async fn test_best_of_n_dummy_candidates_dummy_judge_non_stream() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
+    test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
+    test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
 }
 
 #[tokio::test]
-async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_streaming() {
+async fn test_best_of_n_dummy_candidates_dummy_judge_streaming() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
-    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
+    test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
+    test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
 }
 
-async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
+async fn test_best_of_n_dummy_candidates_dummy_judge_inner(
     random_input: Uuid,
     should_be_cached: bool,
     stream: bool,
@@ -60,7 +60,7 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
         .json(&payload);
 
     let inference_id = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         while let Some(chunk) = chunks.next().await {
             println!("chunk: {chunk:?}");
@@ -191,7 +191,7 @@ async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]
-async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
+async fn test_best_of_n_dummy_candidates_real_judge() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -206,7 +206,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about Megumin making an explosion."},
                         {"type": "unknown", "model_name": "json", "provider_name": "json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_name": "gemini-2.0-flash-001", "provider_name": "gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_name": "gcp-gemini-2.5-flash", "provider_name": "gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]},
@@ -265,7 +265,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about Megumin making an explosion."},
                         {"type": "unknown", "model_name": "json", "provider_name": "json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_name": "gemini-2.0-flash-001", "provider_name": "gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_name": "gcp-gemini-2.5-flash", "provider_name": "gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]
@@ -319,7 +319,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
         assert!(result.get("ttft_ms").is_some());
 
         // For the judge model we want to check that the `raw_request` is correct
-        if model_name == "gemini-2.0-flash-001" {
+        if model_name == "gcp-gemini-2.5-flash" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
@@ -388,7 +388,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                                 .to_string()
                         }),
                         StoredContentBlock::Unknown(Unknown {
-                            model_name: Some("gemini-2.0-flash-001".into()),
+                            model_name: Some("gcp-gemini-2.5-flash".into()),
                             provider_name: Some("gcp_vertex_gemini".into()),
                             data: serde_json::json!({"text": "My extra gemini text"})
                         })
@@ -498,7 +498,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
 
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> =
-        ["test", "json", "gemini-2.0-flash-001"]
+        ["test", "json", "gcp-gemini-2.5-flash"]
             .iter()
             .map(std::string::ToString::to_string)
             .collect();
@@ -511,7 +511,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]
-async fn e2e_test_best_of_n_json_real_judge() {
+async fn test_best_of_n_json_real_judge() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -723,7 +723,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
             }
         }
         // For the judge model we want to check that the `raw_request` is correct
-        if model_name == "gemini-2.0-flash-001" {
+        if model_name == "gcp-gemini-2.5-flash" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
@@ -771,7 +771,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
 
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> =
-        ["test", "json", "json_goodbye", "gemini-2.0-flash-001"]
+        ["test", "json", "json_goodbye", "gcp-gemini-2.5-flash"]
             .iter()
             .map(std::string::ToString::to_string)
             .collect();
@@ -785,7 +785,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
 /// but they get stored to the ModelInference table.
 /// This test uses `json_mode="tool"` in the evaluator, so we also check that there was actually a tool call made under the hood.
 #[tokio::test]
-async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
+async fn test_best_of_n_json_real_judge_implicit_tool() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -993,11 +993,11 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
             }
         }
         // For the judge model we want to check that the `raw_request` is correct
-        if model_name == "claude-3-haiku-20240307-anthropic" {
+        if model_name == "claude-haiku-4-5-anthropic" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
-                "model": "claude-3-haiku-20240307",
+                "model": "claude-haiku-4-5",
                 "messages": [
                     {
                         "role": "user",
@@ -1018,7 +1018,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         ]
                     }
                 ],
-                "max_tokens": 4096,
+                "max_tokens": 64000,
                 "stream": false,
                 "system": [
                     {
@@ -1042,8 +1042,9 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                                 "answer_choice": {"type": "integer"}
                             },
                             "required": ["thinking", "answer_choice"],
-                            "additionalProperties": false
-                        }
+                            "additionalProperties": false,
+                        },
+                        "strict": false
                     }
                 ]
             });
@@ -1052,20 +1053,16 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
     }
 
     // Check that all expected model names are present
-    let expected_model_names: std::collections::HashSet<String> = [
-        "test",
-        "json",
-        "json_goodbye",
-        "claude-3-haiku-20240307-anthropic",
-    ]
-    .iter()
-    .map(std::string::ToString::to_string)
-    .collect();
+    let expected_model_names: std::collections::HashSet<String> =
+        ["test", "json", "json_goodbye", "claude-haiku-4-5-anthropic"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
     assert_eq!(model_names, expected_model_names);
 }
 
 #[tokio::test]
-async fn e2e_test_best_of_n_judge_extra_body() {
+async fn test_best_of_n_judge_extra_body() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1145,7 +1142,7 @@ async fn e2e_test_best_of_n_judge_extra_body() {
         assert!(result.get("ttft_ms").is_some());
 
         // For the judge model we want to check that the `raw_request` is correct
-        if model_name == "gemini-2.0-flash-001" {
+        if model_name == "gcp-gemini-2.5-flash" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({

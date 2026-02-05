@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use sqlx::postgres::types::PgInterval;
 
 use crate::{
@@ -6,7 +7,7 @@ use crate::{
         ReturnTicketsRequest,
     },
     error::{Error, ErrorDetails},
-    rate_limiting::ActiveRateLimitKey,
+    rate_limiting::{ActiveRateLimitKey, RateLimitInterval},
 };
 
 use super::PostgresConnectionInfo;
@@ -19,6 +20,7 @@ pub struct BucketInfo {
     pub interval: PgInterval,
 }
 
+#[async_trait]
 impl RateLimitQueries for PostgresConnectionInfo {
     async fn consume_tickets(
         &self,
@@ -27,10 +29,10 @@ impl RateLimitQueries for PostgresConnectionInfo {
         if requests.is_empty() {
             return Ok(vec![]);
         }
+
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
                 message: "Failed to consume tickets for rate limiting: PostgreSQL connection is disabled.".to_string(),
-                function_name: None,
             })
         })?;
 
@@ -38,8 +40,10 @@ impl RateLimitQueries for PostgresConnectionInfo {
         let requested_amounts: Vec<i64> = requests.iter().map(|r| r.requested as i64).collect();
         let capacities: Vec<i64> = requests.iter().map(|r| r.capacity as i64).collect();
         let refill_amounts: Vec<i64> = requests.iter().map(|r| r.refill_amount as i64).collect();
-        let refill_intervals: Vec<PgInterval> =
-            requests.iter().map(|r| r.refill_interval).collect();
+        let refill_intervals: Vec<PgInterval> = requests
+            .iter()
+            .map(|r| r.refill_interval.to_pg_interval())
+            .collect();
 
         let responses = sqlx::query_as!(
             ConsumeTicketsResponse,
@@ -69,10 +73,10 @@ impl RateLimitQueries for PostgresConnectionInfo {
         if requests.is_empty() {
             return Ok(vec![]);
         }
+
         let pool = self.get_pool().ok_or_else(|| {
-            Error::new(ErrorDetails::PostgresQuery {
+            Error::new(ErrorDetails::PostgresConnection {
                 message: "PostgreSQL connection is disabled".to_string(),
-                function_name: None,
             })
         })?;
 
@@ -81,8 +85,10 @@ impl RateLimitQueries for PostgresConnectionInfo {
         let amounts: Vec<i64> = requests.iter().map(|r| r.returned as i64).collect();
         let capacities: Vec<i64> = requests.iter().map(|r| r.capacity as i64).collect();
         let refill_amounts: Vec<i64> = requests.iter().map(|r| r.refill_amount as i64).collect();
-        let refill_intervals: Vec<PgInterval> =
-            requests.iter().map(|r| r.refill_interval).collect();
+        let refill_intervals: Vec<PgInterval> = requests
+            .iter()
+            .map(|r| r.refill_interval.to_pg_interval())
+            .collect();
 
         let responses = sqlx::query_as!(
             ReturnTicketsResponse,
@@ -98,8 +104,9 @@ impl RateLimitQueries for PostgresConnectionInfo {
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::PostgresQuery {
-                message: format!("Database query failed: {e}"),
-                function_name: Some("return_multiple_resource_tickets".to_string()),
+                message: format!(
+                    "Database query failed in function return_multiple_resource_tickets: {e}"
+                ),
             })
         })?;
 
@@ -116,12 +123,11 @@ impl RateLimitQueries for PostgresConnectionInfo {
         key: &str,
         capacity: u64,
         refill_amount: u64,
-        refill_interval: PgInterval,
+        refill_interval: RateLimitInterval,
     ) -> Result<u64, Error> {
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
                 message: "PostgreSQL connection is disabled".to_string(),
-                function_name: None,
             })
         })?;
 
@@ -130,14 +136,15 @@ impl RateLimitQueries for PostgresConnectionInfo {
             key,
             capacity as i64,
             refill_amount as i64,
-            refill_interval
+            refill_interval.to_pg_interval()
         )
         .fetch_one(pool)
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::PostgresQuery {
-                message: format!("Database query failed: {e}"),
-                function_name: Some("get_resource_bucket_balance".to_string()),
+                message: format!(
+                    "Database query failed in function get_resource_bucket_balance: {e}"
+                ),
             })
         })?;
 

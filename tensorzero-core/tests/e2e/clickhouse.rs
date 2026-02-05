@@ -1,6 +1,7 @@
 #![expect(clippy::print_stdout, clippy::print_stderr)]
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -57,14 +58,18 @@ impl Drop for DeleteDbOnDrop {
             Handle::current().block_on(async move {
                 if allow_db_missing {
                     client
-                        .run_query_synchronous_no_params(format!(
-                            "DROP DATABASE IF EXISTS {database} SYNC"
-                        ))
+                        .run_query_synchronous(
+                            "DROP DATABASE IF EXISTS {db_name:Identifier} SYNC".to_string(),
+                            &HashMap::from([("db_name", database.as_str())]),
+                        )
                         .await
                         .unwrap();
                 } else {
                     client
-                        .run_query_synchronous_no_params(format!("DROP DATABASE {database} SYNC"))
+                        .run_query_synchronous(
+                            "DROP DATABASE {db_name:Identifier} SYNC".to_string(),
+                            &HashMap::from([("db_name", database.as_str())]),
+                        )
                         .await
                         .unwrap();
                 }
@@ -149,9 +154,9 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
 
 async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // Insert data so that we test the migration re-creates the tables properly.
-    let s3_fixtures_path = std::env::var("TENSORZERO_S3_FIXTURES_PATH")
-        .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
-    let s3_fixtures_path = &s3_fixtures_path;
+    let large_fixtures_path = std::env::var("TENSORZERO_LARGE_FIXTURES_PATH")
+        .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/large-fixtures"));
+    let large_fixtures_path = &large_fixtures_path;
 
     let database_url = clickhouse.database_url();
     let database = clickhouse.database();
@@ -228,7 +233,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "run",
                     "--add-host=host.docker.internal:host-gateway",
                     "-v",
-                    &format!("{s3_fixtures_path}:/s3-fixtures"),
+                    &format!("{large_fixtures_path}:/large-fixtures"),
                     "clickhouse:25.4",
                     "clickhouse-client",
                     "--host",
@@ -242,7 +247,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "--query",
                     &format!(
                         r"
-        INSERT INTO {table} FROM INFILE '/s3-fixtures/{file}' FORMAT Parquet
+        INSERT INTO {table} FROM INFILE '/large-fixtures/{file}' FORMAT Parquet
     "
                     ),
                 ]);

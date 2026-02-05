@@ -11,14 +11,12 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
-use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler;
-use tensorzero_core::{
-    db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-        select_model_inference_clickhouse,
-    },
-    utils::gateway::StructuredJson,
+use tensorzero_core::db::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+    select_model_inference_clickhouse,
 };
+use tensorzero_core::endpoints::openai_compatible::OpenAIStructuredJson;
+use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_route_new_format() {
@@ -36,7 +34,7 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
     let response = chat_completions_handler(
         State(state),
         None,
-        StructuredJson(
+        OpenAIStructuredJson(
             serde_json::from_value(serde_json::json!({
                 "model": model,
                 "messages": [
@@ -471,10 +469,17 @@ async fn test_openai_compatible_route_bad_model_name() {
     assert_eq!(
         response_json,
         json!({
-            "error": "Invalid inference target: Invalid model name: Model name 'my_missing_model' not found in model table",
-            "error_json": {
-                "InvalidInferenceTarget": {
-                    "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
+            "error": {
+                "message": "Invalid inference target: Invalid model name: Model name 'my_missing_model' not found in model table",
+                "error_json": {
+                    "InvalidInferenceTarget": {
+                        "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
+                    }
+                },
+                "tensorzero_error_json": {
+                    "InvalidInferenceTarget": {
+                        "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
+                    }
                 }
             }
         })
@@ -761,7 +766,7 @@ async fn test_openai_compatible_route_with_json_schema() {
 #[tokio::test]
 async fn test_openai_compatible_streaming_tool_call() {
     use futures::StreamExt;
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::{Event, RequestBuilderExt};
 
     let client = Client::new();
     let episode_id = Uuid::now_v7();
@@ -809,6 +814,7 @@ async fn test_openai_compatible_streaming_tool_call() {
         .header("Content-Type", "application/json")
         .json(&body)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -857,16 +863,12 @@ async fn test_openai_compatible_streaming_tool_call() {
                 assert_eq!(index, 0);
             }
         }
-        if let Some(finish_reason) = parsed_chunk["choices"][0]["delta"]["finish_reason"].as_str() {
+        if let Some(finish_reason) = parsed_chunk["choices"][0]["finish_reason"].as_str() {
             assert_eq!(finish_reason, "tool_calls");
-            assert_eq!(i, chunks.len() - 2);
-        }
-        if i == chunks.len() - 2 {
-            assert!(parsed_chunk["choices"][0]["delta"].get("content").is_none());
-            assert!(
-                parsed_chunk["choices"][0]["delta"]
-                    .get("tool_calls")
-                    .is_none()
+            assert_eq!(
+                i,
+                chunks.len() - 1,
+                "finish_reason should be on final chunk"
             );
         }
         if i == chunks.len() - 1 {
@@ -887,7 +889,7 @@ async fn test_openai_compatible_warn_unknown_fields() {
     chat_completions_handler(
         State(state),
         None,
-        StructuredJson(
+        OpenAIStructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
                 "model": "tensorzero::model_name::dummy::good",
@@ -911,7 +913,7 @@ async fn test_openai_compatible_deny_unknown_fields() {
     let err = chat_completions_handler(
         State(state),
         None,
-        StructuredJson(
+        OpenAIStructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
                 "model": "tensorzero::model_name::dummy::good",
@@ -933,7 +935,7 @@ async fn test_openai_compatible_deny_unknown_fields() {
 #[tokio::test]
 async fn test_openai_compatible_streaming() {
     use futures::StreamExt;
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::{Event, RequestBuilderExt};
 
     let client = Client::new();
     let episode_id = Uuid::now_v7();
@@ -954,6 +956,7 @@ async fn test_openai_compatible_streaming() {
         .header("Content-Type", "application/json")
         .json(&body)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -1019,7 +1022,7 @@ async fn test_openai_compatible_stop_sequence() {
     let client = Client::new();
 
     let payload = json!({
-        "model": "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929",
+        "model": "tensorzero::model_name::anthropic::claude-sonnet-4-5",
         "messages": [
             {
                 "role": "user",
@@ -1065,7 +1068,7 @@ async fn test_openai_compatible_file_with_custom_filename() {
     let response = chat_completions_handler(
         State(state),
         None,
-        StructuredJson(
+        OpenAIStructuredJson(
             serde_json::from_value(serde_json::json!({
                 "model": "tensorzero::function_name::basic_test_no_system_schema",
                 "messages": [

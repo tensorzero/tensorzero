@@ -26,6 +26,7 @@ use crate::ToolResult;
 ///     query: String,
 /// }
 ///
+/// #[derive(Default)]
 /// struct MyTool;
 ///
 /// impl ToolMetadata for MyTool {
@@ -33,11 +34,11 @@ use crate::ToolResult;
 ///     type Output = String;
 ///     type LlmParams = MyToolParams;
 ///
-///     fn name() -> Cow<'static, str> {
+///     fn name(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("my_tool")
 ///     }
 ///
-///     fn description() -> Cow<'static, str> {
+///     fn description(&self) -> Cow<'static, str> {
 ///         Cow::Borrowed("A tool that does something")
 ///     }
 ///     // parameters_schema() is automatically derived from LlmParams
@@ -51,15 +52,6 @@ pub trait ToolMetadata: Send + Sync + 'static {
 
     /// The output type for this tool (must be JSON-serializable).
     type Output: Serialize + DeserializeOwned + Send + Sync + 'static;
-    /// Unique name for this tool.
-    ///
-    /// This is used for registration, invocation, and as an identifier in the LLM.
-    fn name() -> Cow<'static, str>;
-
-    /// Human-readable description of what this tool does.
-    ///
-    /// Used for generating LLM function definitions.
-    fn description() -> Cow<'static, str>;
 
     /// The LLM-visible parameter type.
     ///
@@ -71,18 +63,38 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// - `Send + Sync + 'static` for thread-safety
     type LlmParams: Serialize + DeserializeOwned + JsonSchema + Send + Sync + 'static;
 
+    /// Unique name for this tool.
+    ///
+    /// This is used for registration, invocation, and as an identifier in the LLM.
+    fn name(&self) -> Cow<'static, str>;
+
+    /// Human-readable description of what this tool does.
+    ///
+    /// Used for generating LLM function definitions.
+    fn description(&self) -> Cow<'static, str>;
+
     /// JSON Schema for the tool's LLM-visible parameters.
     ///
     /// By default, this is derived from the `LlmParams` type using `schemars`.
     /// Override this if you need custom schema generation.
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         Ok(SchemaGenerator::default().into_root_schema_for::<Self::LlmParams>())
     }
 
     /// Execution timeout for this tool.
     ///
     /// Defaults to 60 seconds. Override this for tools with different requirements.
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(60)
+    }
+
+    /// Whether or not to use 'strict mode' when providing our tool schema to LLMs
+    ///
+    /// Defaults to `true`. Override this for tools with schemas that are incompatible with strict mode
+    /// for providers that we wan too use (e.g. an 'object' parameter with arbitrary keys,
+    /// which is incompatible with the `'additionalProperties': false` requirement for providers
+    /// like Anthropic)
+    fn strict(&self) -> bool {
+        true
     }
 }

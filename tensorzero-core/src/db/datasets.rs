@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,8 +13,12 @@ use crate::db::stored_datapoint::StoredDatapoint;
 use crate::endpoints::datasets::v1::types::DatapointOrderBy;
 use crate::error::Error;
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+/// Default value for `allow_stale` in `get_datapoint` when not specified.
+pub const DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT: bool = false;
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MetricFilter {
     pub metric: String,
     pub metric_type: MetricConfigType,
@@ -21,9 +27,10 @@ pub struct MetricFilter {
     pub join_on: MetricConfigLevel,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum DatasetOutputSource {
     // When generating a dataset, don't include any output.
     None,
@@ -53,8 +60,9 @@ pub struct DatasetMetadata {
     pub last_updated: String,
 }
 
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 /// Legacy struct for old get_datapoint clickhouse query. To be deprecated.
 pub struct GetDatapointParams {
     pub dataset_name: String,
@@ -146,4 +154,20 @@ pub trait DatasetQueries {
         dataset_name: &str,
         datapoint_ids: Option<&[Uuid]>,
     ) -> Result<u64, Error>;
+
+    /// Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
+    ///
+    /// The `id_mappings` parameter provides a mapping from source datapoint IDs to their
+    /// corresponding new IDs. This ensures consistent IDs when writing to multiple databases.
+    /// The `source_datapoint_ids` parameter determines the order of results.
+    ///
+    /// Returns a Vec with the same length as `source_datapoint_ids`, where each element is:
+    /// - `Some(new_id)` if the source datapoint was found and cloned successfully
+    /// - `None` if the source datapoint doesn't exist
+    async fn clone_datapoints(
+        &self,
+        target_dataset_name: &str,
+        source_datapoint_ids: &[Uuid],
+        id_mappings: &HashMap<Uuid, Uuid>,
+    ) -> Result<Vec<Option<Uuid>>, Error>;
 }

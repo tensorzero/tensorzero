@@ -1,11 +1,21 @@
 # cargo-deny
 
 [sources]
-allow-git = ["https://github.com/hyperium/mime", "https://github.com/tensorzero/durable"]
+allow-git = [
+    "https://github.com/hyperium/mime",
+    "https://github.com/tensorzero/durable",
+]
 unknown-git = "deny"
 
 [bans]
-deny = [{ name = "native-tls" }, { name = "openssl" }, { name = "openssl-sys" }]
+deny = [
+    { name = "native-tls" },
+    { name = "openssl" },
+    { name = "openssl-sys" },
+    { name = "reqwest-eventsource", reason = "Use reqwest-sse-stream instead" },
+    { name = "reqwest_eventsource", reason = "Use reqwest-sse-stream instead" },
+    { name = "eventsource-stream", reason = "Use sse-stream instead" }
+]
 # We have lots of transitive dependencies with multiple versions,
 # so this check isn't useful for us.
 multiple-versions = "allow"
@@ -13,9 +23,6 @@ multiple-versions = "allow"
 [advisories]
 ignore = [
     "RUSTSEC-2024-0436", # We don't care that 'paste' is unmaintained
-    "RUSTSEC-2025-0057", # fxhash is unmaintained, used by rlt crate
-    "RUSTSEC-2024-0370", # proc-macro-error is unmaintained, used by rlt crate
-    "RUSTSEC-2025-0134", # rustls-pemfile is unmaintained, used by google-cloud-auth crate
 ]
 
 [licenses]
@@ -24,6 +31,7 @@ allow = [
     "Unicode-3.0",
     "Apache-2.0",
     "MIT",
+    "BSL-1.0",
     "CDLA-Permissive-2.0",
     "ISC",
     "CC0-1.0",

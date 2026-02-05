@@ -4,7 +4,7 @@ use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest::multipart::{Form, Part};
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use responses::stream_openai_responses;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
@@ -14,6 +14,7 @@ use std::borrow::{Cow, ToOwned};
 use std::io::Write;
 use std::pin::Pin;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use tracing::instrument;
 use url::Url;
@@ -51,7 +52,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Unknown, Usage,
+    TextChunk, Thought, Unknown, Usage,
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
 };
 use crate::model::{Credential, ModelProvider};
@@ -95,16 +96,17 @@ type PreparedOpenAIToolsResult<'a> = (
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum OpenAIAPIType {
     #[default]
     ChatCompletions,
     Responses,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenAIProvider {
     model_name: String,
     api_base: Option<Url>,
@@ -158,6 +160,16 @@ impl OpenAIProvider {
 
     pub fn api_type(&self) -> OpenAIAPIType {
         self.api_type
+    }
+
+    /// Returns whether this OpenAI provider supports provider tools.
+    /// Only the Responses API supports provider tools.
+    pub fn supports_provider_tools(&self) -> bool {
+        matches!(self.api_type, OpenAIAPIType::Responses)
+    }
+
+    pub fn provider_tools(&self) -> &[Value] {
+        &self.provider_tools
     }
 }
 
@@ -549,12 +561,11 @@ impl InferenceProvider for OpenAIProvider {
                 let request_url =
                     get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
 
-                // TODO - support encrypted reasoning in streaming
                 let request_body = serde_json::to_value(
                     OpenAIResponsesRequest::new(
                         &self.model_name,
                         request,
-                        false,
+                        self.include_encrypted_reasoning,
                         &self.provider_tools,
                         model_name,
                         provider_name,
@@ -1044,7 +1055,7 @@ pub fn stream_openai(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e, request_id_for_error.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -1226,11 +1237,11 @@ fn extract_request_id(headers: &reqwest::header::HeaderMap) -> Option<String> {
 }
 
 pub(super) fn request_id_from_event_source_error(
-    error: &reqwest_eventsource::Error,
+    error: &reqwest_sse_stream::ReqwestSseStreamError,
 ) -> Option<String> {
     match error {
-        reqwest_eventsource::Error::InvalidStatusCode(_, resp)
-        | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+        reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(_, resp)
+        | reqwest_sse_stream::ReqwestSseStreamError::InvalidContentType(_, resp) => {
             extract_request_id(resp.headers())
         }
         _ => None,
@@ -2559,6 +2570,15 @@ impl From<OpenAIUsage> for Usage {
     }
 }
 
+impl From<Option<OpenAIUsage>> for Usage {
+    fn from(usage: Option<OpenAIUsage>) -> Self {
+        match usage {
+            Some(u) => u.into(),
+            None => Usage::default(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenAIEmbeddingUsage {
     pub prompt_tokens: Option<u32>,
@@ -2585,8 +2605,9 @@ pub(super) struct OpenAIResponseCustomCall {
     input: String,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub(super) enum OpenAIResponseToolCall {
     Function {
         id: String,
@@ -2664,7 +2685,8 @@ pub(super) struct OpenAIResponseChoice {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIResponse {
     pub(super) choices: Vec<OpenAIResponseChoice>,
-    pub(super) usage: OpenAIUsage,
+    #[serde(default)]
+    pub(super) usage: Option<OpenAIUsage>,
 }
 
 struct OpenAIResponseWithMetadata<'a> {
@@ -2713,6 +2735,15 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -2740,6 +2771,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
@@ -2860,6 +2892,7 @@ fn openai_to_tensorzero_chunk(
                 id: "1".to_string(),
                 summary_id: None,
                 summary_text: None,
+                extra_data: None,
             }));
         }
         if let Some(text) = choice.delta.content {
@@ -3621,10 +3654,10 @@ mod tests {
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
-            },
+            }),
         };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -3714,10 +3747,10 @@ mod tests {
                     }]),
                 },
             }],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(15),
                 completion_tokens: Some(25),
-            },
+            }),
         };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -3799,10 +3832,10 @@ mod tests {
         // Test case 3: Invalid response with no choices
         let invalid_response_no_choices = OpenAIResponse {
             choices: vec![],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(0),
-            },
+            }),
         };
         let request_body = OpenAIRequest {
             messages: vec![],
@@ -3853,10 +3886,10 @@ mod tests {
                     },
                 },
             ],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(10),
-            },
+            }),
         };
 
         let request_body = OpenAIRequest {
@@ -5691,5 +5724,83 @@ mod tests {
         } else {
             panic!("Expected InvalidRequest");
         }
+    }
+
+    #[test]
+    fn test_openai_response_with_null_usage() {
+        let json = r#"{
+            "choices": [{
+                "index": 0,
+                "message": {"content": "Hello"},
+                "finish_reason": "stop"
+            }],
+            "usage": null
+        }"#;
+        let response: OpenAIResponse =
+            serde_json::from_str(json).expect("Should deserialize response with null usage");
+        assert!(
+            response.usage.is_none(),
+            "usage should be None when JSON has null"
+        );
+    }
+
+    #[test]
+    fn test_openai_response_with_missing_usage() {
+        let json = r#"{
+            "choices": [{
+                "index": 0,
+                "message": {"content": "Hello"},
+                "finish_reason": "stop"
+            }]
+        }"#;
+        let response: OpenAIResponse = serde_json::from_str(json)
+            .expect("Should deserialize response with missing usage field");
+        assert!(
+            response.usage.is_none(),
+            "usage should be None when field is missing"
+        );
+    }
+
+    #[test]
+    fn test_usage_from_none_openai_usage() {
+        let usage: Usage = None::<OpenAIUsage>.into();
+        assert_eq!(usage.input_tokens, None, "input_tokens should be None");
+        assert_eq!(usage.output_tokens, None, "output_tokens should be None");
+    }
+
+    #[test]
+    fn test_usage_from_some_openai_usage() {
+        let openai_usage = Some(OpenAIUsage {
+            prompt_tokens: Some(10),
+            completion_tokens: Some(20),
+        });
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.input_tokens, Some(10), "input_tokens should be 10");
+        assert_eq!(usage.output_tokens, Some(20), "output_tokens should be 20");
+    }
+
+    #[test]
+    fn test_openai_response_with_partial_null_usage() {
+        let json = r#"{
+            "choices": [{
+                "index": 0,
+                "message": {"content": "Hello"},
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": null,
+                "completion_tokens": 50
+            }
+        }"#;
+        let response: OpenAIResponse = serde_json::from_str(json)
+            .expect("Should deserialize response with partial null usage");
+        assert!(response.usage.is_some(), "usage should be Some");
+        let usage = response.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, None, "prompt_tokens should be None");
+        assert_eq!(
+            usage.completion_tokens,
+            Some(50),
+            "completion_tokens should be 50"
+        );
     }
 }

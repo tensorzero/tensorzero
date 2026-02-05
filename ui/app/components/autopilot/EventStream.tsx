@@ -1,18 +1,37 @@
-import { AlertTriangle, ChevronRight } from "lucide-react";
-import { type RefObject, useState } from "react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  BarChart3,
+  ChevronRight,
+  RotateCcw,
+} from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { Component, type RefObject, useState } from "react";
+import {
+  AnimatedEllipsis,
+  EllipsisMode,
+} from "~/components/ui/AnimatedEllipsis";
+import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Skeleton } from "~/components/ui/skeleton";
+import { logger } from "~/utils/logger";
+import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
-  Event,
-  EventPayload,
-  InputMessageContent,
+  AutopilotStatus,
+  EventPayloadMessageContent,
+  GatewayEvent,
+  GatewayEventPayload,
+  TopKEvaluationVisualization,
+  VisualizationType,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
+import TopKEvaluationViz from "./TopKEvaluationViz";
 
 /**
  * Optimistic messages are shown after the API confirms receipt but before
@@ -38,15 +57,18 @@ type EventSummary = {
 };
 
 type EventStreamProps = {
-  events: Event[];
+  events: GatewayEvent[];
   className?: string;
   isLoadingOlder?: boolean;
   hasReachedStart?: boolean;
+  loadError?: string | null;
+  onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
   authLoadingStates?: Map<string, "approving" | "rejecting">;
   onAuthorize?: (eventId: string, approved: boolean) => Promise<void>;
   optimisticMessages?: OptimisticMessage[];
+  status?: AutopilotStatus;
 };
 
 export function ToolEventId({ id }: { id: string }) {
@@ -74,55 +96,108 @@ export function ToolEventId({ id }: { id: string }) {
  * Tool event payload types - events related to tool calls.
  */
 export type ToolEventPayload = Extract<
-  EventPayload,
-  { type: "tool_call" | "tool_call_authorization" | "tool_result" }
+  GatewayEventPayload,
+  {
+    type:
+      | "tool_call"
+      | "tool_call_authorization"
+      | "tool_result"
+      | "visualization";
+  }
 >;
 
 /**
  * An event with a tool-related payload.
  */
-export type ToolEvent = Event & { payload: ToolEventPayload };
+export type ToolEvent = GatewayEvent & { payload: ToolEventPayload };
 
 /**
  * Type guard to check if an event is a tool event.
  */
-export function isToolEvent(event: Event): event is ToolEvent {
+export function isToolEvent(event: GatewayEvent): event is ToolEvent {
   return (
     event.payload.type === "tool_call" ||
     event.payload.type === "tool_call_authorization" ||
-    event.payload.type === "tool_result"
+    event.payload.type === "tool_result" ||
+    event.payload.type === "visualization"
   );
 }
 
 /**
- * Extracts the tool_call_event_id from a tool event.
+ * Extracts the tool execution ID from a tool event.
  * For tool_call events, this is in side_info.tool_call_event_id.
- * For tool_call_authorization and tool_result events, this is directly on the payload.
+ * For tool_call_authorization and tool_result events, this is tool_call_event_id on the payload.
+ * For visualization events, this is tool_execution_id on the payload.
  */
 export function getToolCallEventId(event: ToolEvent): string {
   const { payload } = event;
   if (payload.type === "tool_call") {
     return payload.side_info.tool_call_event_id;
   }
+  if (payload.type === "visualization") {
+    return payload.tool_execution_id;
+  }
   return payload.tool_call_event_id;
 }
 
-function getMessageText(content: InputMessageContent[]) {
-  const textBlock = content.find(
-    (block) => block.type === "text" && "text" in block,
-  );
-  if (textBlock && "text" in textBlock) {
-    return textBlock.text;
+function getMessageText(content: EventPayloadMessageContent[]) {
+  return content.map((cb) => cb.text).join("\n\n");
+}
+
+/**
+ * Get the title for a visualization based on its type.
+ */
+function getVisualizationTitle(visualization: VisualizationType): string {
+  if (typeof visualization !== "object" || visualization === null) {
+    return "Visualization";
+  }
+  if ("type" in visualization) {
+    if (visualization.type === "top_k_evaluation") {
+      return "Top-K Evaluation Results";
+    }
+    // Unknown visualization type with a type field
+    return `Visualization (${String(visualization.type)})`;
+  }
+  return "Visualization";
+}
+
+/**
+ * Renders the appropriate visualization component based on the type.
+ */
+function VisualizationRenderer({
+  visualization,
+}: {
+  visualization: VisualizationType;
+}) {
+  // Check for known visualization types
+  if (
+    typeof visualization === "object" &&
+    visualization !== null &&
+    "type" in visualization &&
+    visualization.type === "top_k_evaluation"
+  ) {
+    // Type assertion needed because TypeScript can't narrow through the untagged union
+    return (
+      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
+    );
   }
 
-  const rawTextBlock = content.find(
-    (block) => block.type === "raw_text" && "value" in block,
+  // Unknown or malformed visualization - show raw JSON with a warning
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-fg-muted flex items-center gap-2 text-sm">
+        <AlertTriangle className="h-4 w-4 text-yellow-600" />
+        <span>
+          Unknown visualization type. Your TensorZero deployment may be
+          outdated.
+        </span>
+      </div>
+      <ReadOnlyCodeBlock
+        code={JSON.stringify(visualization, null, 2)}
+        language="json"
+      />
+    </div>
   );
-  if (rawTextBlock && "value" in rawTextBlock) {
-    return rawTextBlock.value;
-  }
-
-  return "Message content";
 }
 
 /**
@@ -141,7 +216,7 @@ function formatToolError(error: unknown): string {
   return JSON.stringify(error);
 }
 
-function summarizeEvent(event: Event): EventSummary {
+function summarizeEvent(event: GatewayEvent): EventSummary {
   const { payload } = event;
 
   switch (payload.type) {
@@ -153,10 +228,9 @@ function summarizeEvent(event: Event): EventSummary {
       return {
         description: payload.status_update.text,
       };
-    case "tool_call":
-      return {
-        description: JSON.stringify(payload.arguments, null, 2),
-      };
+    case "tool_call": {
+      return { description: JSON.stringify(payload.arguments, null, 2) };
+    }
     case "tool_call_authorization":
       return {
         description:
@@ -177,16 +251,20 @@ function summarizeEvent(event: Event): EventSummary {
       }
       return {};
     case "error":
-      // TODO: handle errors
+      return {
+        description: payload.message,
+      };
+    case "visualization":
+      // Visualization events render their own content, no text description needed
       return {};
-    case "other":
+    case "unknown":
       return {};
     default:
       return {};
   }
 }
 
-function renderEventTitle(event: Event) {
+function renderEventTitle(event: GatewayEvent) {
   const { payload } = event;
 
   switch (payload.type) {
@@ -197,23 +275,36 @@ function renderEventTitle(event: Event) {
           : payload.role === "assistant"
             ? "Assistant"
             : "Message";
-      return `${roleLabel} Message`;
+      return roleLabel;
     }
     case "status_update":
       return "Status Update";
     case "tool_call":
       return (
-        <>
-          Tool Call &middot;{" "}
+        <span className="inline-flex items-center gap-2">
+          Tool Call
+          <DotSeparator />
           <span className="font-mono font-medium">{payload.name}</span>
-        </>
+        </span>
       );
     case "tool_call_authorization":
       switch (payload.status.type) {
         case "approved":
-          return <>Tool Call Authorization &middot; Approved</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Call Authorization
+              <DotSeparator />
+              Approved
+            </span>
+          );
         case "rejected":
-          return <>Tool Call Authorization &middot; Rejected</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Call Authorization
+              <DotSeparator />
+              Rejected
+            </span>
+          );
         default:
           // This branch should never be reached but we need it to keep ESLint happy...
           {
@@ -227,15 +318,51 @@ function renderEventTitle(event: Event) {
       switch (payload.outcome.type) {
         case "success":
           // TODO: need tool name
-          return <>Tool Result &middot; Success</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Success
+            </span>
+          );
         case "failure":
           // TODO: need tool name
-          return <>Tool Result &middot; Failure</>;
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Failure
+            </span>
+          );
+        case "rejected":
+          // TODO: need tool name
+          return (
+            <span className="inline-flex items-center gap-2">
+              Tool Result
+              <DotSeparator />
+              Rejected
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex cursor-help items-center text-yellow-600"
+                    aria-label="Tool rejected"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  {payload.outcome.reason}
+                </TooltipContent>
+              </Tooltip>
+            </span>
+          );
         case "missing":
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Missing Tool</span>
+              Tool Result
+              <DotSeparator />
+              Missing Tool
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -251,11 +378,13 @@ function renderEventTitle(event: Event) {
               </Tooltip>
             </span>
           );
-        case "other":
+        case "unknown":
           // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
-              <span>Tool Result &middot; Unknown</span>
+              Tool Result
+              <DotSeparator />
+              Unknown
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -284,7 +413,14 @@ function renderEventTitle(event: Event) {
     case "error":
       // TODO: handle errors better
       return "Error";
-    case "other":
+    case "visualization":
+      return (
+        <span className="inline-flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          <span>{getVisualizationTitle(payload.visualization)}</span>
+        </span>
+      );
+    case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
           <span>Unknown Event</span>
@@ -309,18 +445,73 @@ function renderEventTitle(event: Event) {
   }
 }
 
+/**
+ * Error boundary for individual event items.
+ * Prevents a single malformed event from crashing the entire chat.
+ */
+interface EventErrorBoundaryState {
+  hasError: boolean;
+}
+
+interface EventErrorBoundaryProps {
+  eventId: string;
+  children: React.ReactNode;
+}
+
+class EventErrorBoundary extends Component<
+  EventErrorBoundaryProps,
+  EventErrorBoundaryState
+> {
+  constructor(props: EventErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): EventErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    logger.error(
+      `Event ${this.props.eventId} failed to render:`,
+      error,
+      errorInfo,
+    );
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="border-border bg-bg-secondary rounded-md border px-4 py-3">
+          <div className="flex items-center gap-2 text-sm">
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+            <span className="text-fg-muted">
+              Failed to display event. The event data may be corrupted.
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function EventItem({
   event,
   isPending = false,
 }: {
-  event: Event;
+  event: GatewayEvent;
   isPending?: boolean;
 }) {
+  const { yoloMode } = useAutopilotSession();
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
   const isExpandable =
     event.payload.type === "tool_call" ||
+    event.payload.type === "error" ||
+    event.payload.type === "visualization" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -352,7 +543,7 @@ function EventItem({
             >
               <ChevronRight className="h-4 w-4" />
             </span>
-            {isPending && (
+            {isPending && !yoloMode && (
               <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                 Action Required
               </span>
@@ -365,24 +556,35 @@ function EventItem({
           {eventIsToolEvent && (
             <>
               <ToolEventId id={getToolCallEventId(event)} />
-              <span aria-hidden="true">&middot;</span>
+              <DotSeparator />
             </>
           )}
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
       {shouldShowDetails && summary.description && (
-        <p
-          className={cn(
-            "text-fg-secondary whitespace-pre-wrap",
-            event.payload.type === "tool_call" ||
-              event.payload.type === "tool_result"
-              ? "font-mono text-sm"
-              : "text-sm",
+        <>
+          {event.payload.type === "message" &&
+          event.payload.role === "assistant" ? (
+            <Markdown>{summary.description}</Markdown>
+          ) : event.payload.type === "tool_call" ? (
+            <ReadOnlyCodeBlock code={summary.description} language="json" />
+          ) : (
+            <p
+              className={cn(
+                "text-fg-secondary text-sm whitespace-pre-wrap",
+                (event.payload.type === "tool_result" ||
+                  event.payload.type === "error") &&
+                  "font-mono",
+              )}
+            >
+              {summary.description}
+            </p>
           )}
-        >
-          {summary.description}
-        </p>
+        </>
+      )}
+      {shouldShowDetails && event.payload.type === "visualization" && (
+        <VisualizationRenderer visualization={event.payload.visualization} />
       )}
     </div>
   );
@@ -407,14 +609,18 @@ function EventSkeletons({ count = 3 }: { count?: number }) {
   );
 }
 
-function SessionStartedDivider() {
+function Divider({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-4 py-2">
+    <div className="flex items-center gap-5 py-2">
       <div className="border-border flex-1 border-t" />
-      <span className="text-fg-muted text-xs">Session Started</span>
+      <span className="text-fg-muted relative text-xs">{children}</span>
       <div className="border-border flex-1 border-t" />
     </div>
   );
+}
+
+function SessionStartDivider() {
+  return <Divider>Start</Divider>;
 }
 
 function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
@@ -423,7 +629,7 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
   return (
     <div className="border-border bg-bg-secondary flex flex-col gap-2 rounded-md border px-4 py-3">
       <div className="flex items-center justify-between gap-4">
-        <span className="text-sm font-medium">User Message</span>
+        <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
       <p className="text-fg-secondary text-sm whitespace-pre-wrap">
@@ -433,40 +639,114 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
   );
 }
 
+function getStatusLabel(status: AutopilotStatus): {
+  text: string;
+  showEllipsis: boolean;
+} {
+  switch (status.status) {
+    case "idle":
+      return { text: "Ready", showEllipsis: false };
+    case "server_side_processing":
+      return { text: "Thinking", showEllipsis: true };
+    case "waiting_for_tool_call_authorization":
+      return { text: "Waiting", showEllipsis: false };
+    case "waiting_for_tool_execution":
+      return { text: "Executing tool", showEllipsis: true };
+    case "waiting_for_retry":
+      return { text: "Something went wrong. Retrying", showEllipsis: true };
+    case "failed":
+      return {
+        text: "Something went wrong. Please try again.",
+        showEllipsis: false,
+      };
+  }
+}
+
+function StatusIndicator({ status }: { status: AutopilotStatus }) {
+  const { text, showEllipsis } = getStatusLabel(status);
+  return (
+    <Divider>
+      {text}
+      {showEllipsis && <AnimatedEllipsis mode={EllipsisMode.Absolute} />}
+    </Divider>
+  );
+}
+
+function LoadErrorNotice({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-2 text-sm text-amber-600">
+      <span>Failed to load older messages</span>
+      {onRetry && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRetry}
+          className="h-6 gap-1 px-2 text-amber-600 hover:text-amber-700"
+        >
+          <RotateCcw className="h-3 w-3" />
+          Retry
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function EventStream({
   events,
   className,
   isLoadingOlder = false,
   hasReachedStart = false,
+  loadError,
+  onRetryLoad,
   topSentinelRef,
   pendingToolCallIds,
   optimisticMessages = [],
+  status,
 }: EventStreamProps) {
+  // Determine what to show at the top: sentinel, error, or session start
+  // Only show session start when there's content to display (events or optimistic messages)
+  const showSessionStart =
+    (hasReachedStart || optimisticMessages.length > 0) &&
+    !isLoadingOlder &&
+    !loadError &&
+    (events.length > 0 || optimisticMessages.length > 0);
+
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {/* Session started indicator, or sentinel for loading more */}
-      {/* Show divider when we've reached the start OR when there are optimistic messages (new session) */}
-      {(hasReachedStart || optimisticMessages.length > 0) && !isLoadingOlder ? (
-        <SessionStartedDivider />
-      ) : (
+      {/* Sentinel for loading more - always present unless showing session start */}
+      {/* Must stay in DOM during loading/error so IntersectionObserver keeps working */}
+      {!showSessionStart && (
         <div ref={topSentinelRef} className="h-1" aria-hidden="true" />
       )}
 
-      {/* Loading skeletons at the top */}
-      {isLoadingOlder && <EventSkeletons count={3} />}
+      {/* Error state - show retry notice (after sentinel so it appears below) */}
+      {loadError && <LoadErrorNotice onRetry={onRetryLoad} />}
+
+      {/* Session start indicator */}
+      {showSessionStart && <SessionStartDivider />}
+
+      {/* Show skeletons when more content exists above (not yet loaded) */}
+      {/* This prevents layout jump when loading starts */}
+      {!showSessionStart && !hasReachedStart && !loadError && (
+        <EventSkeletons count={3} />
+      )}
 
       {events.map((event) => (
-        <EventItem
-          key={event.id}
-          event={event}
-          isPending={pendingToolCallIds?.has(event.id)}
-        />
+        <EventErrorBoundary key={event.id} eventId={event.id}>
+          <EventItem
+            event={event}
+            isPending={pendingToolCallIds?.has(event.id)}
+          />
+        </EventErrorBoundary>
       ))}
 
       {/* Optimistic messages at the end */}
       {optimisticMessages.map((message) => (
         <OptimisticMessageItem key={message.tempId} message={message} />
       ))}
+
+      {/* Status indicator at the bottom */}
+      {status && <StatusIndicator status={status} />}
     </div>
   );
 }

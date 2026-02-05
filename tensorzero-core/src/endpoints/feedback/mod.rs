@@ -9,6 +9,7 @@ use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::{time::Instant, try_join};
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
@@ -16,17 +17,19 @@ use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
-use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::feedback::{
+    BooleanMetricFeedbackInsert, CommentFeedbackInsert, CommentTargetType,
+    DemonstrationFeedbackInsert, FeedbackQueries, FloatMetricFeedbackInsert,
+};
+use crate::db::inferences::{FunctionInfo, InferenceQueries};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text, parse_chat_output,
+    ContentBlockChatOutput, ContentBlockOutput, Text, parse_chat_output,
 };
-use crate::jsonschema_util::StaticJSONSchema;
-use crate::tool::{
-    StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
-    deserialize_optional_tool_info,
-};
+use crate::jsonschema_util::JSONSchema;
+use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
 use tensorzero_auth::middleware::RequestApiKeyExtension;
@@ -52,7 +55,7 @@ const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
 /// We also poll in the intermediate time so that we can return as soon as we find a target entry.
 const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
-/// The expected payload is a JSON object with the following fields:
+// TODO(shuyangli): rename this to CreateFeedbackRequest and export
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
@@ -91,6 +94,7 @@ impl From<&MetricConfigType> for FeedbackType {
     }
 }
 
+// TODO(shuyangli): rename this to CreateFeedbackResponse and export
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeedbackResponse {
     pub feedback_id: Uuid,
@@ -120,6 +124,7 @@ pub async fn feedback(
     AppStateData {
         config,
         clickhouse_connection_info,
+        postgres_connection_info,
         deferred_tasks,
         ..
     }: AppStateData,
@@ -174,10 +179,23 @@ pub async fn feedback(
         .increment(1);
     }
 
+    // Note: InferenceQueries is only implemented for ClickHouse currently.
+    // When Postgres implements InferenceQueries, we can use ENABLE_POSTGRES_READ to select.
+    //
+    // TODO(shuyangli): Also implement InferenceQueries for DelegatingDatabaseConnection and only pass one in
+    let read_database: Arc<dyn InferenceQueries + Send + Sync> =
+        Arc::new(clickhouse_connection_info.clone());
+    let write_database: Arc<dyn FeedbackQueries + Send + Sync> =
+        Arc::new(DelegatingDatabaseConnection::new(
+            clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
+        ));
+
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
-                clickhouse_connection_info,
+                read_database,
+                write_database,
                 &deferred_tasks,
                 &params,
                 feedback_metadata.target_id,
@@ -191,7 +209,8 @@ pub async fn feedback(
         }
         FeedbackType::Demonstration => {
             write_demonstration(
-                clickhouse_connection_info,
+                read_database,
+                write_database,
                 &deferred_tasks,
                 &config,
                 &params,
@@ -203,7 +222,8 @@ pub async fn feedback(
         }
         FeedbackType::Float => {
             write_float(
-                clickhouse_connection_info,
+                read_database,
+                write_database,
                 &deferred_tasks,
                 &config,
                 params,
@@ -216,7 +236,8 @@ pub async fn feedback(
         }
         FeedbackType::Boolean => {
             write_boolean(
-                clickhouse_connection_info,
+                read_database,
+                write_database,
                 &deferred_tasks,
                 &config,
                 params,
@@ -295,7 +316,8 @@ fn get_feedback_metadata<'a>(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_comment(
-    connection_info: ClickHouseConnectionInfo,
+    read_database: Arc<dyn InferenceQueries + Send + Sync>,
+    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     params: &Params,
     target_id: Uuid,
@@ -308,31 +330,36 @@ async fn write_comment(
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
     if !disable_validation {
-        let _ = throttled_get_function_info(&connection_info, level, &target_id).await?;
+        let _ = throttled_get_function_info(read_database.as_ref(), level, &target_id).await?;
     }
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
-    let payload = json!({
-        "target_type": level,
-        "target_id": target_id,
-        "value": value,
-        "id": feedback_id,
-        "tags": tags,
-        "snapshot_hash": snapshot_hash,
-    });
+    let target_type = match level {
+        MetricConfigLevel::Inference => CommentTargetType::Inference,
+        MetricConfigLevel::Episode => CommentTargetType::Episode,
+    };
+    let insert = CommentFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        target_type,
+        value: value.to_string(),
+        tags: tags.clone(),
+        snapshot_hash,
+    };
+
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = connection_info
-                .write_batched(&[payload], TableName::CommentFeedback)
-                .await;
+            let _ = write_database.insert_comment_feedback(&insert).await;
         });
     }
     Ok(())
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn write_demonstration(
-    connection_info: ClickHouseConnectionInfo,
+    read_database: Arc<dyn InferenceQueries + Send + Sync>,
+    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: &Params,
@@ -342,16 +369,16 @@ async fn write_demonstration(
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     let function_info = throttled_get_function_info(
-        &connection_info,
+        read_database.as_ref(),
         &MetricConfigLevel::Inference,
         &inference_id,
     )
     .await?;
-    let function_config = config.get_function(&function_info.name)?;
+    let function_config = config.get_function(&function_info.function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
-        &connection_info,
+        read_database.as_ref(),
         inference_id,
-        &function_info.name,
+        &function_info.function_name,
         &function_config,
         &config.tools,
     )
@@ -363,12 +390,17 @@ async fn write_demonstration(
             message: format!("Failed to serialize parsed value to json: {e}"),
         })
     })?;
-    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
+    let insert = DemonstrationFeedbackInsert {
+        id: feedback_id,
+        inference_id,
+        value: string_value,
+        tags: tags.clone(),
+        snapshot_hash: config.hash.clone(),
+    };
+
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = connection_info
-                .write_batched(&[payload], TableName::DemonstrationFeedback)
-                .await;
+            let _ = write_database.insert_demonstration_feedback(&insert).await;
         });
     }
     Ok(())
@@ -376,7 +408,8 @@ async fn write_demonstration(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_float(
-    connection_info: ClickHouseConnectionInfo,
+    read_database: Arc<dyn InferenceQueries + Send + Sync>,
+    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
@@ -396,23 +429,32 @@ async fn write_float(
         None
     } else {
         // This will also throw if the function does not exist.
-        Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
+        Some(
+            throttled_get_function_info(read_database.as_ref(), &metric_config.level, &target_id)
+                .await?,
+        )
     };
 
-    value.as_f64().ok_or_else(|| {
+    let float_value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
+    let insert = FloatMetricFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        metric_name: metric_name.clone(),
+        value: float_value,
+        tags: tags.clone(),
+        snapshot_hash: config.hash.clone(),
+    };
+
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let payload = payload;
-            let payload_array = [payload];
-            let clickhouse = connection_info;
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
-                    &clickhouse,
+                    read_database.as_ref(),
+                    write_database.as_ref(),
                     maybe_function_info,
                     &metric_name,
                     &tags,
@@ -420,7 +462,7 @@ async fn write_float(
                     &value,
                     target_id
                 ),
-                clickhouse.write_batched(&payload_array, TableName::FloatMetricFeedback)
+                write_database.insert_float_feedback(&insert)
             );
         });
     }
@@ -429,7 +471,8 @@ async fn write_float(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_boolean(
-    connection_info: ClickHouseConnectionInfo,
+    read_database: Arc<dyn InferenceQueries + Send + Sync>,
+    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
@@ -449,21 +492,31 @@ async fn write_boolean(
         None
     } else {
         // This will also throw if the function does not exist.
-        Some(throttled_get_function_info(&connection_info, &metric_config.level, &target_id).await?)
+        Some(
+            throttled_get_function_info(read_database.as_ref(), &metric_config.level, &target_id)
+                .await?,
+        )
     };
-    value.as_bool().ok_or_else(|| {
+    let bool_value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
         })
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags, "snapshot_hash": config.hash});
+    let insert = BooleanMetricFeedbackInsert {
+        id: feedback_id,
+        target_id,
+        metric_name: metric_name.clone(),
+        value: bool_value,
+        tags: tags.clone(),
+        snapshot_hash: config.hash.clone(),
+    };
+
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let payload_array = [payload];
-            let clickhouse = connection_info;
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
-                    &clickhouse,
+                    read_database.as_ref(),
+                    write_database.as_ref(),
                     maybe_function_info,
                     &metric_name,
                     &tags,
@@ -471,7 +524,7 @@ async fn write_boolean(
                     &value,
                     target_id
                 ),
-                clickhouse.write_batched(&payload_array, TableName::BooleanMetricFeedback)
+                write_database.insert_boolean_feedback(&insert)
             );
         });
     }
@@ -486,7 +539,7 @@ async fn write_boolean(
 /// We then poll every 500ms until that time has passed.
 /// If the time has passed and the id is still not found, we return an error.
 async fn throttled_get_function_info(
-    connection_info: &ClickHouseConnectionInfo,
+    db_client: &(dyn InferenceQueries + Sync),
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
 ) -> Result<FunctionInfo, Error> {
@@ -516,8 +569,11 @@ async fn throttled_get_function_info(
     // Poll every 500ms until the deadline is reached.
     loop {
         // If an error occurs during lookup (distinct from the target_id not existing), we bail out immediately.
-        match get_function_info(connection_info, metric_config_level, target_id).await? {
-            Some(identifier) => return Ok(identifier),
+        let feedback_target_info = db_client
+            .get_function_info(target_id, metric_config_level.clone())
+            .await?;
+        match feedback_target_info {
+            Some(feedback_target_info) => return Ok(feedback_target_info),
             None => {
                 if Instant::now() >= deadline {
                     let identifier_type = match metric_config_level {
@@ -538,67 +594,6 @@ async fn throttled_get_function_info(
         }
         tokio::time::sleep(FEEDBACK_TARGET_POLL_INTERVAL).await;
     }
-}
-
-/// Retrieves the function name associated with a given `target_id` of the inference or episode.
-///
-/// # Arguments
-///
-/// * `connection_info` - Connection details for the ClickHouse database.
-/// * `metric_config_level` - The level of metric configuration, either `Inference` or `Episode`.
-/// * `target_id` - The UUID of the target to be validated and retrieved.
-///
-/// # Returns
-///
-/// * On success:
-///   - Returns a `FunctionInfo` containing the function name and type.
-///   - Returns `None` if the `target_id` does not exist.
-/// * On failure:
-///   - Returns an `Error` if the `target_id` exists, but is invalid
-async fn get_function_info(
-    connection_info: &ClickHouseConnectionInfo,
-    metric_config_level: &MetricConfigLevel,
-    target_id: &Uuid,
-) -> Result<Option<FunctionInfo>, Error> {
-    let query = match metric_config_level {
-        MetricConfigLevel::Inference => format!(
-            "SELECT function_name as name, function_type, variant_name, episode_id
-            FROM InferenceById
-            WHERE id_uint = toUInt128(toUUID('{target_id}'))
-            LIMIT 1
-            FORMAT JSONEachRow
-            SETTINGS max_threads=1"
-        ),
-        MetricConfigLevel::Episode => format!(
-            "SELECT function_name as name, function_type, variant_name, uint_to_uuid(episode_id_uint) as episode_id
-            FROM InferenceByEpisodeId
-            WHERE episode_id_uint = toUInt128(toUUID('{target_id}'))
-            LIMIT 1
-            FORMAT JSONEachRow
-            SETTINGS max_threads=1"
-        ),
-    };
-    let response = connection_info
-        .run_query_synchronous_no_params(query)
-        .await?;
-    if response.response.is_empty() {
-        return Ok(None);
-    };
-    Ok(Some(serde_json::from_str(&response.response).map_err(
-        |e| {
-            Error::new(ErrorDetails::ClickHouseDeserialization {
-                message: e.to_string(),
-            })
-        },
-    )?))
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-struct FunctionInfo {
-    name: String,
-    function_type: FunctionType,
-    variant_name: String,
-    episode_id: Uuid,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -624,8 +619,9 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, PartialEq, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 enum DemonstrationContentBlock {
     Text(Text),
     ToolCall(DemonstrationToolCall),
@@ -714,8 +710,9 @@ pub async fn validate_parse_demonstration(
         }
         (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
-            StaticJSONSchema::from_value(output_schema)?
+            JSONSchema::from_value(output_schema)?
                 .validate(value)
+                .await
                 .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
@@ -742,12 +739,6 @@ pub enum DynamicDemonstrationInfo {
     Json(Value),
 }
 
-#[derive(Debug, Deserialize)]
-struct ToolParamsResult {
-    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
-    tool_params: Option<ToolCallConfigDatabaseInsert>,
-}
-
 /// In order to properly validate demonstration data we need to fetch the information that was
 /// passed to the inference at runtime.
 /// If we don't do this then we might allow some e.g. tool calls or output schemas that would not
@@ -756,7 +747,7 @@ struct ToolParamsResult {
 /// This function grabs either the tool call or output schema information that was used at the
 /// time of the actual inference in order to validate the demonstration data.
 async fn get_dynamic_demonstration_info(
-    clickhouse_client: &ClickHouseConnectionInfo,
+    db_client: &(dyn InferenceQueries + Sync),
     inference_id: Uuid,
     function_name: &str,
     function_config: &FunctionConfig,
@@ -764,52 +755,22 @@ async fn get_dynamic_demonstration_info(
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
-            let parameterized_query = "SELECT tool_params, dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
-            let result = clickhouse_client
-                .run_query_synchronous(
-                    parameterized_query,
-                    &HashMap::from([
-                        ("function_name", function_name),
-                        ("inference_id", &inference_id.to_string()),
-                    ]),
-                )
+            let tool_params = db_client
+                .get_chat_inference_tool_params(function_name, inference_id)
                 .await?;
-
-            let tool_params_result = serde_json::from_str::<ToolParamsResult>(&result.response)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse demonstration result: {e}"),
-                    })
-                })?;
 
             Ok(DynamicDemonstrationInfo::Chat(
                 // If the tool params are not present in the database, we use the default tool params (empty tools).
                 // This is consistent with how they are serialized at inference time.
-                tool_params_result
-                    .tool_params
+                tool_params
                     .unwrap_or_default()
                     .into_tool_call_config(function_config, static_tools)?,
             ))
         }
         FunctionConfig::Json(..) => {
-            let parameterized_query = "SELECT output_schema FROM JsonInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
-            let result = clickhouse_client
-                .run_query_synchronous(
-                    parameterized_query,
-                    &HashMap::from([
-                        ("function_name", function_name),
-                        ("inference_id", &inference_id.to_string()),
-                    ]),
-                )
-                .await?;
-            let result_value = serde_json::from_str::<Value>(&result.response).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
-                    message: format!("Failed to parse demonstration result: {e}"),
-                })
-            })?;
-            let output_schema_str = result_value
-                .get("output_schema")
-                .and_then(|v| v.as_str())
+            let output_schema = db_client
+                .get_json_inference_output_schema(function_name, inference_id)
+                .await?
                 .ok_or_else(|| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: "Failed to get output schema from demonstration result"
@@ -817,15 +778,11 @@ async fn get_dynamic_demonstration_info(
                     })
                 })?;
 
-            let mut output_schema =
-                serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse output schema: {e}"),
-                    })
-                })?;
-            if function_name.starts_with("tensorzero::llm_judge") {
-                output_schema = handle_llm_judge_output_schema(output_schema);
-            }
+            let output_schema = if function_name.starts_with("tensorzero::llm_judge") {
+                handle_llm_judge_output_schema(output_schema)
+            } else {
+                output_schema
+            };
             Ok(DynamicDemonstrationInfo::Json(output_schema))
         }
     }
@@ -939,7 +896,7 @@ mod tests {
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
     use crate::tool::{
         FunctionToolConfig, InferenceResponseToolCall, StaticToolConfig, ToolChoice,
@@ -1340,7 +1297,7 @@ mod tests {
             name: "get_temperature".to_string(),
             key: "get_temperature".to_string(),
             description: "Get the current temperature in a given location".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({
+            parameters: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "location": {"type": "string"},
@@ -1505,7 +1462,7 @@ mod tests {
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(output_schema.clone()).unwrap(),
+            output_schema: JSONSchema::from_value(output_schema.clone()).unwrap(),
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),

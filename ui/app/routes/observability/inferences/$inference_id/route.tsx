@@ -5,19 +5,15 @@ import {
   loadFileDataForStoredInput,
 } from "~/utils/resolve.server";
 import type { Route } from "./+types/route";
-import {
-  data,
-  isRouteErrorResponse,
-  Link,
-  useNavigate,
-  type RouteHandle,
-} from "react-router";
+import { data, useNavigate, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import { useEffect } from "react";
-import type { ReactNode } from "react";
-import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
+import {
+  PageHeader,
+  PageLayout,
+  Breadcrumbs,
+} from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   InferenceDetailContent,
@@ -242,74 +238,21 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           />
         }
         renderHeader={({ basicInfo, actionBar }) => (
-          <PageHeader label="Inference" name={inference.inference_id}>
+          <PageHeader
+            eyebrow={
+              <Breadcrumbs
+                segments={[
+                  { label: "Inferences", href: "/observability/inferences" },
+                ]}
+              />
+            }
+            name={inference.inference_id}
+          >
             {basicInfo}
             {actionBar}
           </PageHeader>
         )}
       />
     </PageLayout>
-  );
-}
-
-function getUserFacingError(error: unknown): {
-  heading: string;
-  message: ReactNode;
-} {
-  if (isRouteErrorResponse(error)) {
-    switch (error.status) {
-      case 400:
-        return {
-          heading: `${error.status}: Bad Request`,
-          message: "Please try again later.",
-        };
-      case 401:
-        return {
-          heading: `${error.status}: Unauthorized`,
-          message: "You do not have permission to access this resource.",
-        };
-      case 403:
-        return {
-          heading: `${error.status}: Forbidden`,
-          message: "You do not have permission to access this resource.",
-        };
-      case 404:
-        return {
-          heading: `${error.status}: Not Found`,
-          message:
-            "The requested resource was not found. Please check the URL and try again.",
-        };
-      case 500:
-      default:
-        return {
-          heading: "An unknown error occurred",
-          message: "Please try again later.",
-        };
-    }
-  }
-  return {
-    heading: "An unknown error occurred",
-    message: "Please try again later.",
-  };
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  useEffect(() => {
-    logger.error(error);
-  }, [error]);
-  const { heading, message } = getUserFacingError(error);
-  return (
-    <div className="flex flex-col items-center justify-center md:h-full">
-      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
-        <h1 className="text-2xl font-bold">{heading}</h1>
-        {typeof message === "string" ? <p>{message}</p> : message}
-        <Link
-          to={`/observability/inferences`}
-          className="font-bold text-red-800 hover:text-red-600"
-        >
-          Go back &rarr;
-        </Link>
-      </div>
-    </div>
   );
 }

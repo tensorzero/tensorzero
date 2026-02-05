@@ -18,6 +18,7 @@ services:
       - "3030:3030"
 
   fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
       context: ../../..
@@ -29,6 +30,7 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - TENSORZERO_SKIP_LARGE_FIXTURES
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
@@ -36,10 +38,6 @@ services:
       clickhouse:
         condition: service_healthy
       gateway-clickhouse-migrations:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      gateway-postgres-migrations:
         condition: service_healthy
     # Keep this running to make `check-docker-compose.sh` detect that all containers are healthy
     command:
@@ -52,5 +50,37 @@ services:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
+      start_period: 5s # Give the script time to start
+
+  # fixtures-postgres and fixtures have exactly the same build context, so the fixture is downloaded only once and shared.
+  fixtures-postgres:
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
+    build:
+      dockerfile: ui/fixtures/Dockerfile
+      context: ../../..
+    volumes:
+      - ../../../ui/fixtures:/fixtures
+      - ~/.aws:/root/.aws
+    environment:
+      - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
+    command:
+      [
+        "bash",
+        "-c",
+        "cd /fixtures && ./load_fixtures_postgres.sh && touch /load_complete_postgres.marker && sleep infinity",
+      ]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/load_complete_postgres.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s # Give the script time to start

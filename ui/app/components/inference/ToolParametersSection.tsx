@@ -1,3 +1,4 @@
+import { useState, useMemo, useCallback } from "react";
 import type {
   Tool,
   ToolChoice,
@@ -7,10 +8,11 @@ import type {
 import {
   SnippetLayout,
   SnippetContent,
-  SnippetTabs,
 } from "~/components/layout/SnippetLayout";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { Badge } from "~/components/ui/badge";
+import { Combobox } from "~/components/ui/combobox";
+import type { ComboboxItem } from "~/components/ui/combobox";
 
 export function ToolParametersSection({
   allowed_tools,
@@ -98,7 +100,7 @@ export function ToolParametersSection({
               </span>
               <ToolsList
                 tools={additional_tools}
-                getLabel={(tool) => getToolName(tool)}
+                getLabel={getToolName}
                 renderCard={(tool) => <ToolCard tool={tool} />}
               />
             </div>
@@ -143,26 +145,48 @@ interface ToolsListProps<T> {
 }
 
 function ToolsList<T>({ tools, getLabel, renderCard }: ToolsListProps<T>) {
-  if (tools.length === 1) {
-    return <>{renderCard(tools[0])}</>;
-  }
+  const [selectedValue, setSelectedValue] = useState<string>("0");
 
-  const tabs = tools.map((tool, index) => ({
-    id: String(index),
-    label: getLabel(tool, index),
-    content: renderCard(tool),
-  }));
+  // Build items with unique values (indices) and display labels
+  const items: ComboboxItem[] = useMemo(
+    () =>
+      tools.map((tool, index) => ({
+        value: String(index),
+        label: getLabel(tool, index),
+      })),
+    [tools, getLabel],
+  );
 
-  return <SnippetTabs tabs={tabs} />;
+  const handleSelect = useCallback((value: string) => {
+    setSelectedValue(value);
+  }, []);
+
+  // Clamp selection to valid range (handles tools array changes)
+  const safeIndex =
+    tools.length > 0
+      ? Math.min(parseInt(selectedValue, 10) || 0, tools.length - 1)
+      : 0;
+  const safeValue = String(safeIndex);
+  const selectedTool = tools[safeIndex];
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="max-w-xs">
+        <Combobox
+          selected={safeValue}
+          onSelect={handleSelect}
+          items={items}
+          placeholder="Select tool"
+          emptyMessage="No tools found"
+        />
+      </div>
+      {selectedTool && renderCard(selectedTool)}
+    </div>
+  );
 }
 
-function getToolName(tool: Tool): string {
-  if (tool.type === "function") {
-    return tool.name;
-  } else if (tool.type === "openai_custom") {
-    return tool.name;
-  }
-  return "Unknown Tool";
+function getToolName(tool: Tool, _index: number): string {
+  return tool.name;
 }
 
 function ToolCard({ tool }: { tool: Tool }) {
@@ -173,17 +197,16 @@ function ToolCard({ tool }: { tool: Tool }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
+        {tool.description && (
+          <span className="text-fg-muted text-sm">{tool.description}</span>
+        )}
         <Badge variant="secondary">{tool.type}</Badge>
-        <span className="font-mono text-sm font-medium">{tool.name}</span>
         {isFunctionTool && tool.strict && (
           <Badge variant="outline" className="text-xs">
             strict
           </Badge>
         )}
       </div>
-      {tool.description && (
-        <p className="text-fg-muted text-sm">{tool.description}</p>
-      )}
       {schemaData && (
         <div className="mt-1">
           <span className="text-fg-muted mb-1 block text-xs font-medium uppercase">

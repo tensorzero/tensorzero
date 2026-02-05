@@ -10,13 +10,24 @@ import { ComboboxHint } from "./ComboboxHint";
 import { ComboboxMenuItems } from "./ComboboxMenuItems";
 import { useCombobox } from "./use-combobox";
 
+export type ComboboxItem = string | { value: string; label: string };
+
+export type NormalizedComboboxItem = { value: string; label: string };
+
+export function normalizeItem(item: ComboboxItem): NormalizedComboboxItem {
+  if (typeof item === "string") {
+    return { value: item, label: item };
+  }
+  return item;
+}
+
 type ComboboxProps = {
   selected: string | null;
   onSelect: (value: string, isNew: boolean) => void;
-  items: string[];
-  getPrefix?: (item: string | null, isSelected: boolean) => React.ReactNode;
-  getSuffix?: (item: string | null) => React.ReactNode;
-  getItemDataAttributes?: (item: string) => Record<string, string>;
+  items: ComboboxItem[];
+  getPrefix?: (value: string | null, isSelected: boolean) => React.ReactNode;
+  getSuffix?: (value: string | null) => React.ReactNode;
+  getItemDataAttributes?: (value: string) => Record<string, string>;
   placeholder: string;
   emptyMessage: string;
   disabled?: boolean;
@@ -54,6 +65,7 @@ export function Combobox({
   const {
     open,
     searchValue,
+    isEditing,
     commandRef,
     getInputValue,
     closeDropdown,
@@ -63,15 +75,28 @@ export function Combobox({
     handleClick,
   } = useCombobox();
 
+  // Normalize items to { value, label } format
+  const normalizedItems = useMemo(() => items.map(normalizeItem), [items]);
+
+  // Find the label for the currently selected value
+  // Fall back to selected value itself for created items not in list
+  const selectedLabel = useMemo(() => {
+    if (!selected) return null;
+    const item = normalizedItems.find((item) => item.value === selected);
+    return item?.label ?? selected;
+  }, [selected, normalizedItems]);
+
   const filteredItems = useMemo(() => {
     const query = searchValue.toLowerCase();
-    if (!query) return items;
-    return items.filter((item) => item.toLowerCase().includes(query));
-  }, [items, searchValue]);
+    if (!query) return normalizedItems;
+    return normalizedItems.filter((item) =>
+      item.label.toLowerCase().includes(query),
+    );
+  }, [normalizedItems, searchValue]);
 
   const handleSelectItem = useCallback(
-    (item: string, isNew: boolean) => {
-      onSelect(item, isNew);
+    (value: string, isNew: boolean) => {
+      onSelect(value, isNew);
       closeDropdown();
     },
     [onSelect, closeDropdown],
@@ -80,19 +105,19 @@ export function Combobox({
   const showCreateOption =
     allowCreation &&
     Boolean(searchValue.trim()) &&
-    !items.some(
-      (item) => item.toLowerCase() === searchValue.trim().toLowerCase(),
+    !normalizedItems.some(
+      (item) => item.label.toLowerCase() === searchValue.trim().toLowerCase(),
     );
 
   const inputPrefix = useMemo(() => {
-    const item = selected && !searchValue ? selected : null;
+    const value = selected && !searchValue ? selected : null;
     const isSelected = Boolean(selected && !searchValue);
-    return getPrefix?.(item, isSelected);
+    return getPrefix?.(value, isSelected);
   }, [selected, searchValue, getPrefix]);
 
   const inputSuffix = useMemo(() => {
-    const item = selected && !searchValue ? selected : null;
-    return getSuffix?.(item);
+    const value = selected && !searchValue ? selected : null;
+    return getSuffix?.(value);
   }, [selected, searchValue, getSuffix]);
 
   return (
@@ -101,7 +126,7 @@ export function Combobox({
       <Popover open={open}>
         <PopoverAnchor asChild>
           <ComboboxInput
-            value={getInputValue(selected)}
+            value={getInputValue(selectedLabel)}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onClick={handleClick}
@@ -109,6 +134,7 @@ export function Combobox({
             placeholder={placeholder}
             disabled={disabled}
             open={open}
+            isEditing={isEditing}
             prefix={inputPrefix}
             suffix={inputSuffix}
             ariaLabel={ariaLabel}
@@ -137,7 +163,7 @@ export function Combobox({
             ) : (
               <ComboboxMenuItems
                 items={filteredItems}
-                selected={selected}
+                selectedValue={selected}
                 searchValue={searchValue}
                 onSelectItem={handleSelectItem}
                 showCreateOption={showCreateOption}

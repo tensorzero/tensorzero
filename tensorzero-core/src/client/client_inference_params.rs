@@ -19,8 +19,9 @@ use uuid::Uuid;
 // This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
-#[derive(Clone, Debug, Deserialize, Serialize, Default, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ClientInferenceParams {
     // The function name. Exactly one of `function_name` or `model_name` must be provided.
     pub function_name: Option<String>,
@@ -60,14 +61,20 @@ pub struct ClientInferenceParams {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     pub output_schema: Option<Value>,
-    #[ts(type = "Map<string, string>")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Map<string, string>"))]
     pub credentials: HashMap<String, ClientSecretString>,
     pub cache_options: CacheParamsOptions,
+    /// DEPRECATED (#5697 / 2026.4+): Use `include_raw_response` instead.
     /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
     /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
-    /// if the fuser/judge model failed
+    /// if the fuser/judge model failed.
     #[serde(default)]
     pub include_original_response: bool,
+    /// If `true`, add a `raw_response` field to the response, containing the raw string response from the model.
+    /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `raw_response`
+    /// if the fuser/judge model failed.
+    #[serde(default)]
+    pub include_raw_response: bool,
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
@@ -80,10 +87,10 @@ pub struct ClientInferenceParams {
     //
     // Not sure if this is solvable with the existing crate.
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 
@@ -92,24 +99,24 @@ pub struct ClientInferenceParams {
     /// forwarded to the OTLP exporter. This field is not serialized into the request body.
     #[serde(skip)]
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub otlp_traces_extra_headers: HashMap<String, String>,
 
     #[serde(skip)]
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub otlp_traces_extra_attributes: HashMap<String, String>,
 
     #[serde(skip)]
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub otlp_traces_extra_resources: HashMap<String, String>,
 
     /// Tensorzero API key to set in the `Authorization` header when making the HTTP request to the TensorZero Gateway.
     /// This field is not serialized into the request body.
     #[serde(skip)]
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub api_key: Option<SecretString>,
 }
 
@@ -137,6 +144,7 @@ impl TryFrom<ClientInferenceParams> for Params {
                 .collect(),
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
+            include_raw_response: this.include_raw_response,
             include_raw_usage: this.include_raw_usage,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
@@ -166,6 +174,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials,
         cache_options,
         include_original_response,
+        include_raw_response,
         include_raw_usage,
         extra_body,
         extra_headers,
@@ -191,6 +200,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
         cache_options,
         include_original_response,
+        include_raw_response,
         include_raw_usage,
         extra_body,
         extra_headers,

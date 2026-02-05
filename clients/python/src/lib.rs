@@ -167,12 +167,13 @@ impl LocalHttpGateway {
 }
 
 #[pyfunction]
-#[pyo3(signature = (*, config_file, clickhouse_url, postgres_url, async_setup))]
+#[pyo3(signature = (*, config_file, clickhouse_url, postgres_url, valkey_url, async_setup))]
 fn _start_http_gateway(
     py: Python<'_>,
     config_file: Option<String>,
     clickhouse_url: Option<String>,
     postgres_url: Option<String>,
+    valkey_url: Option<String>,
     async_setup: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
     warn_no_config(py, config_file.as_deref())?;
@@ -181,6 +182,7 @@ fn _start_http_gateway(
             config_file,
             clickhouse_url,
             postgres_url,
+            valkey_url,
         )
         .await?;
         Ok(LocalHttpGateway {
@@ -307,7 +309,7 @@ const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -332,6 +334,7 @@ impl BaseTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
@@ -361,6 +364,7 @@ impl BaseTensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
@@ -437,6 +441,7 @@ impl BaseTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: bool,
+        include_raw_response: bool,
         include_raw_usage: bool,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
@@ -547,6 +552,7 @@ impl BaseTensorZeroGateway {
             cache_options: cache_options.unwrap_or_default(),
             output_schema,
             include_original_response,
+            include_raw_response,
             include_raw_usage,
             extra_body,
             extra_headers,
@@ -655,12 +661,14 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, timeout=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, valkey_url=None, timeout=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
+    /// :param postgres_url: The URL of the PostgreSQL instance to use for rate limiting.
+    /// :param valkey_url: The URL of the Valkey instance to use for rate limiting.
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded(
@@ -668,6 +676,7 @@ impl TensorZeroGateway {
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
+        valkey_url: Option<String>,
         timeout: Option<f64>,
     ) -> PyResult<Py<TensorZeroGateway>> {
         warn_no_config(cls.py(), config_file)?;
@@ -679,6 +688,7 @@ impl TensorZeroGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
             postgres_config: postgres_url.map(PostgresConfig::Url),
+            valkey_url,
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -749,7 +759,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -818,6 +828,7 @@ impl TensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
@@ -848,6 +859,7 @@ impl TensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
@@ -1503,6 +1515,7 @@ impl TensorZeroGateway {
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
+            tags: HashMap::new(), // No external tags for Python client evaluations
         };
 
         let result = tokio_block_on_without_gil(
@@ -1860,12 +1873,14 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, timeout=None, async_setup=true))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, postgres_url=None, valkey_url=None, timeout=None, async_setup=true))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
+    /// :param postgres_url: The URL of the PostgreSQL instance to use for rate limiting.
+    /// :param valkey_url: The URL of the Valkey instance to use for rate limiting.
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :param async_setup: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
     /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway (or an `AsyncTensorZeroGateway` if `async_setup=False`).
@@ -1875,6 +1890,7 @@ impl AsyncTensorZeroGateway {
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
+        valkey_url: Option<String>,
         timeout: Option<f64>,
         async_setup: bool,
     ) -> PyResult<Py<PyAny>> {
@@ -1887,6 +1903,7 @@ impl AsyncTensorZeroGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
             postgres_config: postgres_url.map(PostgresConfig::Url),
+            valkey_url,
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -1925,7 +1942,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1988,6 +2005,7 @@ impl AsyncTensorZeroGateway {
         extra_body: Option<&Bound<'_, PyList>>,
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
+        include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
@@ -2017,6 +2035,7 @@ impl AsyncTensorZeroGateway {
             extra_body,
             extra_headers,
             include_original_response.unwrap_or(false),
+            include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
@@ -2762,6 +2781,7 @@ impl AsyncTensorZeroGateway {
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
+                tags: HashMap::new(), // No external tags for Python client evaluations
             };
 
             let result =

@@ -29,12 +29,12 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.gemini_2_0_flash]
+[models.gemini_2_5_flash]
 routing = ["gcp_vertex_gemini"]
 
-[models.gemini_2_0_flash.providers.gcp_vertex_gemini]
+[models.gemini_2_5_flash.providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
-model_id = "gemini-2.0-flash"  # or endpoint_id = "..." for fine-tuned models and custom endpoints
+model_id = "gemini-2.5-flash"  # or endpoint_id = "..." for fine-tuned models and custom endpoints
 location = "us-central1"
 project_id = "your-project-id"  # change this
 
@@ -43,7 +43,7 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gemini_2_0_flash"
+model = "gemini_2_5_flash"
 ```
 
 See the [list of models available on GCP Vertex AI Gemini](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions).
@@ -113,3 +113,10 @@ curl -X POST http://localhost:3000/inference \
     }
   }'
 ```
+
+## Thinking Parameters
+
+Gemini supports two thinking parameters:
+
+- `reasoning_effort` maps to `thinkingConfig.thinkingLevel`
+- `thinking_budget_tokens` maps to `thinkingConfig.thinkingBudget` (legacy)
