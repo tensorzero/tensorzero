@@ -12,7 +12,7 @@ set -euo pipefail
 # - "json_inference_datapoint_examples.jsonl" (Done)
 # - "chat_inference_datapoint_examples.jsonl" (Done)
 # - "comment_feedback_examples.jsonl" (Done)
-# - "model_inference_examples.jsonl"
+# - "model_inference_examples.jsonl" (Done)
 # - "model_inference_cache_e2e.jsonl"
 # - "jaro_winkler_similarity_feedback.jsonl"
 # - "dynamic_evaluation_run_examples.jsonl"
@@ -71,6 +71,7 @@ else
 -- Inference tables (Step 1)
 TRUNCATE TABLE tensorzero.chat_inferences CASCADE;
 TRUNCATE TABLE tensorzero.json_inferences CASCADE;
+TRUNCATE TABLE tensorzero.model_inferences CASCADE;
 -- Feedback tables (Step 2)
 TRUNCATE TABLE tensorzero.boolean_metric_feedback CASCADE;
 TRUNCATE TABLE tensorzero.float_metric_feedback CASCADE;
@@ -87,7 +88,8 @@ fi
 if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_examples.jsonl" ] || \
    [ ! -f "small-fixtures/boolean_metric_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/float_metric_feedback_examples.jsonl" ] || \
    [ ! -f "small-fixtures/comment_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/demonstration_feedback_examples.jsonl" ] || \
-   [ ! -f "small-fixtures/chat_inference_datapoint_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_datapoint_examples.jsonl" ]; then
+   [ ! -f "small-fixtures/chat_inference_datapoint_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_datapoint_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/model_inference_examples.jsonl" ]; then
     echo "Downloading small fixtures..."
     if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
         uv run ./download-small-fixtures-http.py
@@ -156,6 +158,39 @@ SELECT
     COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
     COALESCE(NULLIF(j->>'extra_body', '')::jsonb, '[]'),
     COALESCE(NULLIF(j->>'auxiliary_content', '')::jsonb, '{}'),
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# Model Inferences
+# Note: input_messages, output are JSONB in our schema
+# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
+load_jsonl "small-fixtures/model_inference_examples.jsonl" "tensorzero.model_inferences" "
+INSERT INTO tensorzero.model_inferences (
+    id, inference_id, raw_request, raw_response, system,
+    input_messages, output, input_tokens, output_tokens,
+    response_time_ms, model_name, model_provider_name,
+    ttft_ms, cached, finish_reason, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    (j->>'inference_id')::uuid,
+    j->>'raw_request',
+    j->>'raw_response',
+    j->>'system',
+    COALESCE(NULLIF(j->>'input_messages', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'output', '')::jsonb, '[]'),
+    (j->>'input_tokens')::integer,
+    (j->>'output_tokens')::integer,
+    (j->>'response_time_ms')::integer,
+    j->>'model_name',
+    j->>'model_provider_name',
+    (j->>'ttft_ms')::integer,
+    COALESCE((j->>'cached')::boolean, false),
+    j->>'finish_reason',
     tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
@@ -323,6 +358,17 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id) DO NOTHING;
 "
 
+echo "Refreshing materialized views..."
+psql -q "$POSTGRES_URL" <<EOF
+REFRESH MATERIALIZED VIEW tensorzero.model_provider_statistics;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_hour;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_day;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_week;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_month;
+EOF
+
+
 echo ""
 echo "All fixtures loaded successfully!"
 
@@ -333,6 +379,8 @@ psql -q "$POSTGRES_URL" <<EOF
 SELECT 'chat_inferences' as table_name, count(*) as count FROM tensorzero.chat_inferences
 UNION ALL
 SELECT 'json_inferences', count(*) FROM tensorzero.json_inferences
+UNION ALL
+SELECT 'model_inferences', count(*) FROM tensorzero.model_inferences
 UNION ALL
 SELECT 'boolean_metric_feedback', count(*) FROM tensorzero.boolean_metric_feedback
 UNION ALL

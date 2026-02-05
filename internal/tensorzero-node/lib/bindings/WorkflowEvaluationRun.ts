@@ -6,8 +6,8 @@
 export type WorkflowEvaluationRun = {
   name?: string;
   id: string;
-  variant_pins: { [key in string]?: string };
-  tags: { [key in string]?: string };
+  variant_pins: { [key in string]: string };
+  tags: { [key in string]: string };
   project_name?: string;
   timestamp: string;
 };

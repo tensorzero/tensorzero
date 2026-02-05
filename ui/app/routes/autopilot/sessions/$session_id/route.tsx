@@ -670,20 +670,20 @@ function AutopilotSessionEventsPageContent({
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const target = e.currentTarget;
-      setShowTopFade(target.scrollTop > 20 || !hasReachedStart);
+      setShowTopFade(target.scrollTop > 0 || !hasReachedStart);
       const distanceFromBottom =
         target.scrollHeight - target.scrollTop - target.clientHeight;
-      setShowBottomFade(distanceFromBottom > 20);
+      setShowBottomFade(distanceFromBottom > 0);
     },
     [hasReachedStart],
   );
 
-  // Update top fade when hasReachedStart changes (not just on scroll)
-  // Without this, fade lingers if user is near top when reaching start
+  // Hide top fade when hasReachedStart becomes true and user is already at top
+  // (scroll handler won't fire if user hasn't scrolled)
   useEffect(() => {
     if (hasReachedStart) {
       const container = scrollContainerRef.current;
-      if (container && container.scrollTop <= 20) {
+      if (container && container.scrollTop === 0) {
         setShowTopFade(false);
       }
     }
@@ -776,6 +776,7 @@ function AutopilotSessionEventsPageContent({
             direction={FadeDirection.Top}
             visible={showTopFade}
             className="-mx-2"
+            data-testid="scroll-fade-top"
           />
         </div>
       </div>
@@ -824,6 +825,7 @@ function AutopilotSessionEventsPageContent({
             direction={FadeDirection.Bottom}
             visible={showBottomFade}
             className="-mx-2"
+            data-testid="scroll-fade-bottom"
           />
           {/* Footer background - matches message width with slight outset */}
           <div ref={footerRef} className="bg-bg-secondary -mx-2 px-2">

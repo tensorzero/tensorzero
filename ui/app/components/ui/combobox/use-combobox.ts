@@ -74,6 +74,7 @@ export function useCombobox() {
   return {
     open,
     searchValue,
+    isEditing,
     commandRef,
     getInputValue,
     closeDropdown,

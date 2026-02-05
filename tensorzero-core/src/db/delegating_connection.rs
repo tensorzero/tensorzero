@@ -31,13 +31,17 @@ use crate::db::inferences::{
     GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceQueries,
     ListInferenceMetadataParams, ListInferencesParams, VariantThroughput,
 };
+use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::stored_datapoint::StoredDatapoint;
+use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint};
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
-use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
+use crate::inference::types::{
+    ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
+};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::tool::ToolCallConfigDatabaseInsert;
 
@@ -64,7 +68,7 @@ pub struct DelegatingDatabaseConnection {
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
 pub trait DelegatingDatabaseQueries:
-    FeedbackQueries + InferenceQueries + DatasetQueries + BatchInferenceQueries
+    FeedbackQueries + InferenceQueries + DatasetQueries + BatchInferenceQueries + ModelInferenceQueries
 {
 }
 impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
@@ -506,7 +510,6 @@ impl DatasetQueries for DelegatingDatabaseConnection {
         Ok(results)
     }
 }
-
 #[async_trait]
 impl BatchInferenceQueries for DelegatingDatabaseConnection {
     // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
@@ -592,5 +595,102 @@ impl BatchInferenceQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl ModelInferenceQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn get_model_inferences_by_inference_id(
+        &self,
+        inference_id: Uuid,
+    ) -> Result<Vec<StoredModelInference>, Error> {
+        self.get_read_database()
+            .get_model_inferences_by_inference_id(inference_id)
+            .await
+    }
+
+    async fn count_distinct_models_used(&self) -> Result<u32, Error> {
+        self.get_read_database().count_distinct_models_used().await
+    }
+
+    async fn get_model_usage_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<ModelUsageTimePoint>, Error> {
+        self.get_read_database()
+            .get_model_usage_timeseries(time_window, max_periods)
+            .await
+    }
+
+    async fn get_model_latency_quantiles(
+        &self,
+        time_window: TimeWindow,
+    ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
+        self.get_read_database()
+            .get_model_latency_quantiles(time_window)
+            .await
+    }
+
+    fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
+        self.get_read_database()
+            .get_model_latency_quantile_function_inputs()
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+
+        self.clickhouse.insert_model_inferences(rows).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_model_inferences(rows).await
+        {
+            tracing::error!("Error writing model inferences to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+mod test_helpers_impl {
+    use super::DelegatingDatabaseConnection;
+    use crate::db::clickhouse::test_helpers::get_clickhouse;
+    use crate::db::postgres::test_helpers::get_postgres;
+    use crate::db::test_helpers::TestDatabaseHelpers;
+    use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
+    use async_trait::async_trait;
+
+    impl DelegatingDatabaseConnection {
+        pub async fn new_for_e2e_test() -> Self {
+            let clickhouse = get_clickhouse().await;
+            let postgres = get_postgres().await;
+            Self::new(clickhouse, postgres)
+        }
+    }
+
+    #[async_trait]
+    impl TestDatabaseHelpers for DelegatingDatabaseConnection {
+        async fn flush_pending_writes(&self) {
+            if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
+                self.postgres.flush_pending_writes().await;
+            } else {
+                self.clickhouse.flush_pending_writes().await;
+            }
+        }
+
+        async fn sleep_for_writes_to_be_visible(&self) {
+            if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
+                self.postgres.sleep_for_writes_to_be_visible().await;
+            } else {
+                self.clickhouse.sleep_for_writes_to_be_visible().await;
+            }
+        }
     }
 }

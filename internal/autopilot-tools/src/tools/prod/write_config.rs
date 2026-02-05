@@ -5,20 +5,21 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
-use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{WriteConfigRequest, WriteConfigResponse};
-use tensorzero_core::{
-    config::{UninitializedConfig, UninitializedVariantInfo},
-    evaluations::{UninitializedEvaluationConfig, UninitializedEvaluatorConfig},
-    experimentation::UninitializedExperimentationConfig,
-};
+use tensorzero_core::config::UninitializedConfig;
 
 use autopilot_client::AutopilotSideInfo;
+
+// Re-export EditPayload types from tensorzero-config-writer
+pub use config_writer::{
+    EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
+    UpsertVariantPayload,
+};
 
 /// Parameters for the write_config tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -31,42 +32,6 @@ pub struct WriteConfigToolParams {
     /// We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
     /// Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
     pub edit: Option<Vec<EditPayload>>,
-}
-
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
-#[serde(tag = "operation")]
-#[serde(rename_all = "snake_case")]
-pub enum EditPayload {
-    UpsertVariant(Box<UpsertVariantPayload>),
-    UpsertExperimentation(UpsertExperimentationPayload),
-    UpsertEvaluation(UpsertEvaluationPayload),
-    UpsertEvaluator(UpsertEvaluatorPayload),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
-pub struct UpsertVariantPayload {
-    pub function_name: String,
-    pub variant_name: String,
-    pub variant: UninitializedVariantInfo, // Re-exported from tensorzero-core
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
-pub struct UpsertExperimentationPayload {
-    pub function_name: String,
-    pub experimentation: UninitializedExperimentationConfig,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
-pub struct UpsertEvaluationPayload {
-    pub evaluation_name: String,
-    pub evaluation: UninitializedEvaluationConfig,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
-pub struct UpsertEvaluatorPayload {
-    pub evaluation_name: String,
-    pub evaluator_name: String,
-    pub evaluator: UninitializedEvaluatorConfig,
 }
 
 /// Tool for writing config snapshots.
@@ -157,7 +122,8 @@ impl ToolMetadata for WriteConfigTool {
                     "additionalProperties": { "type": "string" }
                 }
             },
-            "required": ["config"]
+            "required": ["config"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

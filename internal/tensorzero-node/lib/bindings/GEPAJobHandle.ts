@@ -14,6 +14,6 @@ export type GEPAJobHandle = {
    * configurations (the Pareto frontier) or an error message
    */
   result:
-    | { Ok: { [key in string]?: UninitializedChatCompletionConfig } }
+    | { Ok: { [key in string]: UninitializedChatCompletionConfig } }
     | { Err: string };
 };

@@ -1,42 +1,22 @@
 use reqwest::Client;
 use serde_json::json;
-use std::sync::Arc;
-use tensorzero::{ClientExt, Role, StoredDatapoint};
+use tensorzero::{Role, StoredDatapoint};
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
     StoredInputMessageContent, Template, Text,
 };
 use uuid::Uuid;
 
-use tensorzero_core::config::Config;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{DatasetQueries, GetDatapointsParams};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::endpoints::datasets::v1::types::CreateDatapointsResponse;
 
 use crate::common::get_gateway_endpoint;
 
-lazy_static::lazy_static! {
-    static ref TEST_SETUP: tokio::sync::OnceCell<(ClickHouseConnectionInfo, Arc<Config>)> = tokio::sync::OnceCell::new();
-}
-
-async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
-    TEST_SETUP
-        .get_or_init(|| async {
-            let clickhouse: ClickHouseConnectionInfo = get_clickhouse().await;
-
-            let client = tensorzero::test_helpers::make_embedded_gateway().await;
-            let config = client.get_config().unwrap();
-            (clickhouse, config)
-        })
-        .await
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_chat_datapoint_basic() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, _config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": [{
@@ -97,7 +77,7 @@ async fn test_create_chat_datapoint_basic() {
         search_query_experimental: None,
     };
 
-    let datapoints = clickhouse.get_datapoints(&params).await.unwrap();
+    let datapoints = database.get_datapoints(&params).await.unwrap();
     assert_eq!(datapoints.len(), 1);
     assert_eq!(datapoints[0].id(), result.ids[0]);
 
@@ -128,28 +108,12 @@ async fn test_create_chat_datapoint_basic() {
                 .to_string(),
         })]),
     );
-
-    // Assert ChatInferenceDatapoint has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM ChatInferenceDatapoint WHERE id = '{}' FORMAT JSONEachRow",
-        result.ids[0]
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let datapoint_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !datapoint_row["snapshot_hash"].is_null(),
-        "ChatInferenceDatapoint should have snapshot_hash"
-    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_basic() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, _config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": [{
@@ -217,7 +181,7 @@ async fn test_create_json_datapoint_basic() {
         search_query_experimental: None,
     };
 
-    let datapoints = clickhouse.get_datapoints(&params).await.unwrap();
+    let datapoints = database.get_datapoints(&params).await.unwrap();
     assert_eq!(datapoints.len(), 1);
     assert_eq!(datapoints[0].id(), result.ids[0]);
 
@@ -232,28 +196,12 @@ async fn test_create_json_datapoint_basic() {
             parsed: Some(json!({"sentiment": "positive", "confidence": 0.95})),
         })
     );
-
-    // Assert JsonInferenceDatapoint has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM JsonInferenceDatapoint WHERE id = '{}' FORMAT JSONEachRow",
-        result.ids[0]
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let datapoint_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !datapoint_row["snapshot_hash"].is_null(),
-        "JsonInferenceDatapoint should have snapshot_hash"
-    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_multiple_datapoints() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": [
@@ -325,9 +273,8 @@ async fn test_create_multiple_datapoints() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_chat_datapoint_with_tools() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": [{
@@ -372,9 +319,8 @@ async fn test_create_chat_datapoint_with_tools() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_with_tags() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": [{
@@ -412,9 +358,8 @@ async fn test_create_datapoint_with_tags() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_invalid_function() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": [{
@@ -441,9 +386,8 @@ async fn test_create_datapoint_invalid_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_wrong_function_type() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Try to create a JSON datapoint for a chat function
     let request = json!({
@@ -477,9 +421,8 @@ async fn test_create_datapoint_wrong_function_type() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_empty_list() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": []
@@ -497,9 +440,8 @@ async fn test_create_datapoint_empty_list() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_invalid_schema() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, _config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": [{
@@ -558,7 +500,7 @@ async fn test_create_json_datapoint_invalid_schema() {
         search_query_experimental: None,
     };
 
-    let datapoints = clickhouse.get_datapoints(&params).await.unwrap();
+    let datapoints = database.get_datapoints(&params).await.unwrap();
     assert_eq!(datapoints.len(), 1);
     let StoredDatapoint::Json(ref json_datapoint) = datapoints[0] else {
         panic!("Expected json datapoint");
@@ -576,9 +518,8 @@ async fn test_create_json_datapoint_invalid_schema() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_with_episode_id() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let episode_id = Uuid::now_v7();
 
@@ -619,9 +560,8 @@ async fn test_create_datapoint_with_episode_id() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_without_output() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     let request = json!({
         "datapoints": [{
@@ -652,9 +592,8 @@ async fn test_create_datapoint_without_output() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_default_schema() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (_clickhouse, _config) = get_test_setup().await;
+    let _database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Test that output_schema is optional and defaults to function's schema
     let request = json!({

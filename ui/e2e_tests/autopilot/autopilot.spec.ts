@@ -211,6 +211,24 @@ test.describe("Autopilot New Session Button", () => {
   });
 });
 
+test.describe("Scroll blur overlays", () => {
+  test("top fade is hidden on new session at rest", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const topFade = page.getByTestId("scroll-fade-top");
+    await expect(topFade).toHaveCSS("opacity", "0");
+  });
+
+  test("bottom fade is hidden on new session at rest", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const bottomFade = page.getByTestId("scroll-fade-bottom");
+    await expect(bottomFade).toHaveCSS("opacity", "0");
+  });
+});
+
 test.describe("YOLO mode", () => {
   test("toggle is visible and defaults to off", async ({ page }) => {
     await page.goto("/autopilot/sessions/new");
