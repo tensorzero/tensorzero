@@ -9,7 +9,7 @@ import { WorkflowEvalRunSelector } from "~/routes/workflow-evaluations/projects/
 import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
-import { useNavigate, type RouteHandle } from "react-router";
+import { useNavigate, useSearchParams, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
@@ -20,6 +20,44 @@ export const handle: RouteHandle = {
   ],
 };
 
+async function fetchResultsData(
+  runIds: string[],
+  projectName: string,
+  limit: number,
+  offset: number,
+) {
+  const client = getTensorZeroClient();
+  const statsPromises = runIds.map((runId) =>
+    client
+      .getWorkflowEvaluationRunStatistics(runId)
+      .then((response) => response.statistics),
+  );
+  const runInfosPromise = client
+    .getWorkflowEvaluationRuns(runIds, projectName)
+    .then((response) => response.runs);
+  const episodeInfoPromise = client
+    .listWorkflowEvaluationRunEpisodesByTaskName(runIds, limit, offset)
+    .then((response) => response.episodes);
+  const countPromise =
+    client.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
+
+  const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
+    Promise.all(statsPromises),
+    runInfosPromise,
+    episodeInfoPromise,
+    countPromise,
+  ]);
+
+  const runStats: Record<string, WorkflowEvaluationRunStatistics[]> = {};
+  runIds.forEach((runId, index) => {
+    runStats[runId] = statsResults[index];
+  });
+  // Sort runInfos by the same order as the url params
+  runInfos.sort((a, b) => runIds.indexOf(a.id) - runIds.indexOf(b.id));
+
+  return { runInfos, runStats, episodeInfo, count };
+}
+
 export async function loader({ request, params }: Route.LoaderArgs) {
   const projectName = params.project_name;
   const url = new URL(request.url);
@@ -28,41 +66,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const runIds = searchParams.get("run_ids")?.split(",") || [];
 
-  const runStats: Record<string, WorkflowEvaluationRunStatistics[]> = {};
-
-  const tensorZeroClient = getTensorZeroClient();
   if (runIds.length > 0) {
-    // Create promises for fetching statistics for each runId
-    const statsPromises = runIds.map((runId) =>
-      tensorZeroClient
-        .getWorkflowEvaluationRunStatistics(runId)
-        .then((response) => response.statistics),
+    const { runInfos, runStats, episodeInfo, count } = await fetchResultsData(
+      runIds,
+      projectName,
+      limit,
+      offset,
     );
-
-    // Create promise for fetching run info
-    const runInfosPromise = tensorZeroClient
-      .getWorkflowEvaluationRuns(runIds, projectName)
-      .then((response) => response.runs);
-
-    const client = getTensorZeroClient();
-    const episodeInfoPromise = client
-      .listWorkflowEvaluationRunEpisodesByTaskName(runIds, limit, offset)
-      .then((response) => response.episodes);
-    const countPromise =
-      client.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
-    // Run all promises concurrently
-    const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
-      Promise.all(statsPromises),
-      runInfosPromise,
-      episodeInfoPromise,
-      countPromise,
-    ]);
-
-    runIds.forEach((runId, index) => {
-      runStats[runId] = statsResults[index];
-    });
-    // Sort runInfos by the same order as the url params
-    runInfos.sort((a, b) => runIds.indexOf(a.id) - runIds.indexOf(b.id));
 
     return {
       projectName,
@@ -86,23 +96,60 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 }
 
+function ResultsContent({
+  runInfos,
+  runStats,
+  episodeInfo,
+  count,
+  limit,
+  offset,
+}: {
+  runInfos: Awaited<ReturnType<typeof fetchResultsData>>["runInfos"];
+  runStats: Awaited<ReturnType<typeof fetchResultsData>>["runStats"];
+  episodeInfo: Awaited<ReturnType<typeof fetchResultsData>>["episodeInfo"];
+  count: number;
+  limit: number;
+  offset: number;
+}) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const handleNextPage = () => {
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("offset", String(offset + limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handlePreviousPage = () => {
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set("offset", String(offset - limit));
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  return (
+    <>
+      <WorkflowEvaluationProjectResultsTable
+        selected_run_infos={runInfos}
+        evaluation_results={episodeInfo}
+        evaluation_statistics={runStats}
+      />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={offset <= 0}
+        disableNext={offset + limit >= count}
+      />
+    </>
+  );
+}
+
 export default function WorkflowEvaluationProjectPage({
   loaderData,
 }: Route.ComponentProps) {
   const { projectName, runInfos, runStats, episodeInfo, count, limit, offset } =
     loaderData;
-  const navigate = useNavigate();
   const selectedRunIds = runInfos.map((run) => run.id);
-  const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
+
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
@@ -125,16 +172,13 @@ export default function WorkflowEvaluationProjectPage({
             projectName={projectName}
             selectedRunInfos={runInfos}
           />
-          <WorkflowEvaluationProjectResultsTable
-            selected_run_infos={runInfos}
-            evaluation_results={episodeInfo}
-            evaluation_statistics={runStats}
-          />
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={offset <= 0}
-            disableNext={offset + limit >= count}
+          <ResultsContent
+            runInfos={runInfos}
+            runStats={runStats}
+            episodeInfo={episodeInfo}
+            count={count}
+            limit={limit}
+            offset={offset}
           />
         </SectionLayout>
       </PageLayout>
