@@ -1,0 +1,61 @@
+name: Build Live Tests Container
+
+on:
+  workflow_call:
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
+
+jobs:
+  build-live-tests-container:
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Configure Namespace-powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+        with:
+          wait-for-builder: true
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Build `live-tests` container
+        run: |
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/e2e/Dockerfile.live . -t tensorzero/live-tests:sha-${{ github.sha }}
+
+      - name: Save `live-tests` container
+        run: docker save tensorzero/live-tests:sha-${{ github.sha }} > live-tests-container.tar
+
+      - name: Upload `live-tests` container as an artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: build-live-tests-container
+          path: live-tests-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+
+      - name: Push `live-tests` container to DockerHub
+        run: docker push tensorzero/live-tests:sha-${{ github.sha }}
