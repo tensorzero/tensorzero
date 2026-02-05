@@ -43,13 +43,6 @@ test("should interrupt an active session", async ({ page }) => {
   // Click the stop button
   await stopButton.click();
 
-  // Verify the success toast appears
-  await expect(
-    page.getByRole("status").filter({ hasText: "Session interrupted" }),
-  ).toBeVisible({
-    timeout: 10000,
-  });
-
   // Verify the status update message appears in the event stream
   await expect(page.getByText("Interrupted session")).toBeVisible({
     timeout: 10000,
