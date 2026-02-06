@@ -1,7 +1,6 @@
 import asyncio
 import os
 import random
-import time
 
 import toml
 from ner import Row, compute_exact_match, compute_jaccard_similarity, load_dataset
@@ -166,7 +165,7 @@ async def main():
     # For long-running jobs, you may want to poll periodically:
     while job_info.status == OptimizationJobStatus.Pending:
         print(f"  Status: {job_info.status}")
-        time.sleep(60)  # wait 1 minute between polls
+        await asyncio.sleep(60)  # wait 1 minute between polls
         job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
 
     print("\n" + "=" * 60)

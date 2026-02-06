@@ -314,7 +314,7 @@ SFT jobs run asynchronously on the provider's infrastructure.
 Poll for completion:
 
 ```python
-import time
+import asyncio
 from tensorzero import OptimizationJobStatus
 
 job_info = t0.experimental_poll_optimization(job_handle=job_handle)
@@ -322,7 +322,7 @@ job_info = t0.experimental_poll_optimization(job_handle=job_handle)
 # For long-running jobs, poll periodically:
 while job_info.status == OptimizationJobStatus.Pending:
     print(f"Job status: {job_info.status}")
-    time.sleep(60)  # wait 1 minute between polls
+    await asyncio.sleep(60)  # wait 1 minute between polls
     job_info = t0.experimental_poll_optimization(job_handle=job_handle)
 
 if job_info.status == OptimizationJobStatus.Completed:
