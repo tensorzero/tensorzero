@@ -537,7 +537,7 @@ pub struct TopKEvaluationVisualization {
     #[serde(default)]
     pub confident_top_k_sizes: Vec<usize>,
     /// Explanation of the results for the user.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub summary_text: Option<String>,
 }
