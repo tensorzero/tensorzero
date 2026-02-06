@@ -33,9 +33,7 @@ export function RunsSection({
     <SectionLayout>
       <Suspense key={`runs-${locationKey}`} fallback={<RunsSkeleton />}>
         <Await resolve={promise} errorElement={<RunsError />}>
-          {(data) => (
-            <RunsContent data={data} offset={offset} limit={limit} />
-          )}
+          {(data) => <RunsContent data={data} offset={offset} limit={limit} />}
         </Await>
       </Suspense>
     </SectionLayout>

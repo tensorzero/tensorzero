@@ -31,10 +31,7 @@ export function ProjectsSection({
 }: ProjectsSectionProps) {
   return (
     <SectionLayout>
-      <Suspense
-        key={`projects-${locationKey}`}
-        fallback={<ProjectsSkeleton />}
-      >
+      <Suspense key={`projects-${locationKey}`} fallback={<ProjectsSkeleton />}>
         <Await resolve={promise} errorElement={<ProjectsError />}>
           {(data) => (
             <ProjectsContent data={data} offset={offset} limit={limit} />
