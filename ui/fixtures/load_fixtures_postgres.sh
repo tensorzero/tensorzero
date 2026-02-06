@@ -2,7 +2,21 @@
 set -euo pipefail
 
 # Load small fixtures into Postgres tables.
-# Loads inference tables (Step 1), feedback tables (Step 2), and datapoint tables.
+# 
+# Table loading status:
+# - "chat_inference_examples.jsonl" (Done)
+# - "json_inference_examples.jsonl" (Done)
+# - "boolean_metric_feedback_examples.jsonl" (Done)
+# - "float_metric_feedback_examples.jsonl" (Done)
+# - "demonstration_feedback_examples.jsonl" (Done)
+# - "json_inference_datapoint_examples.jsonl" (Done)
+# - "chat_inference_datapoint_examples.jsonl" (Done)
+# - "comment_feedback_examples.jsonl" (Done)
+# - "model_inference_examples.jsonl" (Done)
+# - "model_inference_cache_e2e.jsonl"
+# - "jaro_winkler_similarity_feedback.jsonl"
+# - "dynamic_evaluation_run_examples.jsonl" (Done)
+# - "dynamic_evaluation_run_episode_examples.jsonl" (Done)
 #
 # Usage:
 #   ./ui/fixtures/load_fixtures_postgres.sh
@@ -57,6 +71,7 @@ else
 -- Inference tables (Step 1)
 TRUNCATE TABLE tensorzero.chat_inferences CASCADE;
 TRUNCATE TABLE tensorzero.json_inferences CASCADE;
+TRUNCATE TABLE tensorzero.model_inferences CASCADE;
 -- Feedback tables (Step 2)
 TRUNCATE TABLE tensorzero.boolean_metric_feedback CASCADE;
 TRUNCATE TABLE tensorzero.float_metric_feedback CASCADE;
@@ -65,6 +80,9 @@ TRUNCATE TABLE tensorzero.demonstration_feedback CASCADE;
 -- Datapoint tables
 TRUNCATE TABLE tensorzero.chat_datapoints CASCADE;
 TRUNCATE TABLE tensorzero.json_datapoints CASCADE;
+-- Workflow evaluation tables (Step 5)
+TRUNCATE TABLE tensorzero.workflow_evaluation_run_episodes CASCADE;
+TRUNCATE TABLE tensorzero.workflow_evaluation_runs CASCADE;
 EOF
     echo "  Done"
 fi
@@ -73,7 +91,10 @@ fi
 if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_examples.jsonl" ] || \
    [ ! -f "small-fixtures/boolean_metric_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/float_metric_feedback_examples.jsonl" ] || \
    [ ! -f "small-fixtures/comment_feedback_examples.jsonl" ] || [ ! -f "small-fixtures/demonstration_feedback_examples.jsonl" ] || \
-   [ ! -f "small-fixtures/chat_inference_datapoint_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_datapoint_examples.jsonl" ]; then
+   [ ! -f "small-fixtures/chat_inference_datapoint_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_datapoint_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/model_inference_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/dynamic_evaluation_run_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/dynamic_evaluation_run_episode_examples.jsonl" ]; then
     echo "Downloading small fixtures..."
     if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
         uv run ./download-small-fixtures-http.py
@@ -142,6 +163,39 @@ SELECT
     COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
     COALESCE(NULLIF(j->>'extra_body', '')::jsonb, '[]'),
     COALESCE(NULLIF(j->>'auxiliary_content', '')::jsonb, '{}'),
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# Model Inferences
+# Note: input_messages, output are JSONB in our schema
+# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
+# created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
+load_jsonl "small-fixtures/model_inference_examples.jsonl" "tensorzero.model_inferences" "
+INSERT INTO tensorzero.model_inferences (
+    id, inference_id, raw_request, raw_response, system,
+    input_messages, output, input_tokens, output_tokens,
+    response_time_ms, model_name, model_provider_name,
+    ttft_ms, cached, finish_reason, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    (j->>'inference_id')::uuid,
+    j->>'raw_request',
+    j->>'raw_response',
+    j->>'system',
+    COALESCE(NULLIF(j->>'input_messages', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'output', '')::jsonb, '[]'),
+    (j->>'input_tokens')::integer,
+    (j->>'output_tokens')::integer,
+    (j->>'response_time_ms')::integer,
+    j->>'model_name',
+    j->>'model_provider_name',
+    (j->>'ttft_ms')::integer,
+    COALESCE((j->>'cached')::boolean, false),
+    j->>'finish_reason',
     tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
@@ -309,6 +363,67 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id) DO NOTHING;
 "
 
+# =====================================================================
+# Workflow Evaluation Tables (Step 5)
+# =====================================================================
+
+# Workflow Evaluation Runs
+# Note: run_id_uint is a decimal string representation of UInt128 which needs to be converted to UUID
+# We use tensorzero.uint128_to_uuid() to convert the UInt128 to UUID format
+# is_deleted maps to staled_at (if true, use updated_at as staled_at)
+# created_at is derived from the run_id UUID using tensorzero.uuid_v7_to_timestamp()
+load_jsonl "small-fixtures/dynamic_evaluation_run_examples.jsonl" "tensorzero.workflow_evaluation_runs" "
+INSERT INTO tensorzero.workflow_evaluation_runs (
+    run_id, project_name, run_display_name, variant_pins, tags,
+    staled_at, created_at, updated_at
+)
+SELECT
+    tensorzero.uint128_to_uuid((j->>'run_id_uint')::NUMERIC),
+    j->>'project_name',
+    j->>'run_display_name',
+    COALESCE(j->'variant_pins', '{}')::jsonb,
+    COALESCE(j->'tags', '{}')::jsonb,
+    CASE WHEN (j->>'is_deleted')::boolean THEN (j->>'updated_at')::timestamptz ELSE NULL END,
+    tensorzero.uuid_v7_to_timestamp(tensorzero.uint128_to_uuid((j->>'run_id_uint')::NUMERIC)),
+    (j->>'updated_at')::timestamptz
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (run_id) DO NOTHING;
+"
+
+# Workflow Evaluation Run Episodes
+# Note: episode_id_uint is a decimal string representation of UInt128 which needs to be converted to UUID
+# run_id is already a UUID string in the fixture
+# is_deleted maps to staled_at (if true, use updated_at as staled_at)
+# created_at is derived from the episode_id UUID using tensorzero.uuid_v7_to_timestamp()
+load_jsonl "small-fixtures/dynamic_evaluation_run_episode_examples.jsonl" "tensorzero.workflow_evaluation_run_episodes" "
+INSERT INTO tensorzero.workflow_evaluation_run_episodes (
+    episode_id, run_id, variant_pins, task_name, tags,
+    staled_at, created_at, updated_at
+)
+SELECT
+    tensorzero.uint128_to_uuid((j->>'episode_id_uint')::NUMERIC),
+    (j->>'run_id')::uuid,
+    COALESCE(j->'variant_pins', '{}')::jsonb,
+    j->>'datapoint_name',
+    COALESCE(j->'tags', '{}')::jsonb,
+    CASE WHEN (j->>'is_deleted')::boolean THEN (j->>'updated_at')::timestamptz ELSE NULL END,
+    tensorzero.uuid_v7_to_timestamp(tensorzero.uint128_to_uuid((j->>'episode_id_uint')::NUMERIC)),
+    (j->>'updated_at')::timestamptz
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (episode_id) DO NOTHING;
+"
+
+echo "Refreshing materialized views..."
+psql -q "$POSTGRES_URL" <<EOF
+REFRESH MATERIALIZED VIEW tensorzero.model_provider_statistics;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_hour;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_day;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_week;
+REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_month;
+EOF
+
+
 echo ""
 echo "All fixtures loaded successfully!"
 
@@ -319,6 +434,8 @@ psql -q "$POSTGRES_URL" <<EOF
 SELECT 'chat_inferences' as table_name, count(*) as count FROM tensorzero.chat_inferences
 UNION ALL
 SELECT 'json_inferences', count(*) FROM tensorzero.json_inferences
+UNION ALL
+SELECT 'model_inferences', count(*) FROM tensorzero.model_inferences
 UNION ALL
 SELECT 'boolean_metric_feedback', count(*) FROM tensorzero.boolean_metric_feedback
 UNION ALL
@@ -331,5 +448,9 @@ UNION ALL
 SELECT 'chat_datapoints', count(*) FROM tensorzero.chat_datapoints
 UNION ALL
 SELECT 'json_datapoints', count(*) FROM tensorzero.json_datapoints
+UNION ALL
+SELECT 'workflow_evaluation_runs', count(*) FROM tensorzero.workflow_evaluation_runs
+UNION ALL
+SELECT 'workflow_evaluation_run_episodes', count(*) FROM tensorzero.workflow_evaluation_run_episodes
 ORDER BY table_name;
 EOF

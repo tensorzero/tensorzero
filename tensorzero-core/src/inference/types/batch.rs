@@ -22,8 +22,9 @@ use crate::{
     utils::uuid::validate_tensorzero_uuid,
 };
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
 pub enum BatchStatus {
     Pending,
     Completed,
@@ -161,7 +162,7 @@ pub struct BatchRequestRow<'a> {
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
     pub errors: Vec<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<SnapshotHash>,
 }
 
@@ -218,6 +219,8 @@ pub struct BatchModelInferenceRow<'a> {
     pub model_name: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
     pub tags: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 pub struct UnparsedBatchRequestRow<'a> {

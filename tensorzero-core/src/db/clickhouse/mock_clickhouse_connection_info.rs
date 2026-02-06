@@ -17,7 +17,9 @@ use crate::db::inferences::{
 };
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
 use crate::db::stored_datapoint::StoredDatapoint;
-use crate::db::{ConfigQueries, MockConfigQueries};
+use crate::db::{
+    ConfigQueries, MockConfigQueries, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow,
+};
 use crate::error::Error;
 use crate::inference::types::StoredModelInference;
 use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
@@ -246,5 +248,41 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
         self.model_inference_queries
             .get_model_inferences_by_inference_id(inference_id)
             .await
+    }
+
+    async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
+        self.model_inference_queries
+            .insert_model_inferences(rows)
+            .await
+    }
+
+    async fn count_distinct_models_used(&self) -> Result<u32, Error> {
+        self.model_inference_queries
+            .count_distinct_models_used()
+            .await
+    }
+
+    async fn get_model_usage_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<ModelUsageTimePoint>, Error> {
+        self.model_inference_queries
+            .get_model_usage_timeseries(time_window, max_periods)
+            .await
+    }
+
+    async fn get_model_latency_quantiles(
+        &self,
+        time_window: TimeWindow,
+    ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
+        self.model_inference_queries
+            .get_model_latency_quantiles(time_window)
+            .await
+    }
+
+    fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
+        self.model_inference_queries
+            .get_model_latency_quantile_function_inputs()
     }
 }

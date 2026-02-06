@@ -214,6 +214,14 @@ Separately, you can run headless tests with `pnpm ui:test` and Playwright tests 
 
 We also maintain a Docker Compose for e2e tests `ui/fixtures/docker-compose.e2e.yml` that is used in CI for the Playwright tests. This file uses a different configuration that mandates credentials for image fetching.
 
+##### Autopilot Tests (Internal Only)
+
+> [!NOTE]
+>
+> The Autopilot feature depends on a closed-source internal API. The tests in `ui/e2e_tests/autopilot/` require access to the private `autopilot` repository and cannot be run by external contributors. These tests are excluded by default and run in CI via repository dispatch from the autopilot repo.
+
+For internal contributors with access to the autopilot repository, see `ui/AGENTS.md` for detailed instructions on running the autopilot development environment and tests.
+
 ### Advanced
 
 - To test batch and optimization workflows without real provider APIs, spin up the `mock-provider-api` and set `TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://localhost:3030` when running the gateway.

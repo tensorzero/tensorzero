@@ -83,7 +83,7 @@ impl ToolMetadata for InferenceTool {
                     "properties": {
                         "system": {
                             "description": "System prompt (string or array of content blocks)",
-                            "oneOf": [
+                            "anyOf": [
                                 { "type": "string" },
                                 { "type": "array", "items": { "type": "object" } }
                             ]
@@ -97,17 +97,19 @@ impl ToolMetadata for InferenceTool {
                                     "role": { "type": "string", "enum": ["user", "assistant"] },
                                     "content": {
                                         "description": "Message content (string or array of content blocks)",
-                                        "oneOf": [
+                                        "anyOf": [
                                             { "type": "string" },
                                             { "type": "array", "items": { "type": "object" } }
                                         ]
                                     }
                                 },
-                                "required": ["role", "content"]
+                                "required": ["role", "content"],
+                                "additionalProperties": false
                             }
                         }
                     },
-                    "required": ["messages"]
+                    "required": ["messages"],
+                    "additionalProperties": false
                 },
                 "params": {
                     "type": "object",
@@ -119,9 +121,11 @@ impl ToolMetadata for InferenceTool {
                                 "temperature": { "type": "number", "description": "Sampling temperature (0.0-2.0)" },
                                 "max_tokens": { "type": "integer", "description": "Maximum tokens to generate" },
                                 "seed": { "type": "integer", "description": "Random seed for reproducibility" }
-                            }
+                            },
+                            "additionalProperties": false
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 },
                 "variant_name": {
                     "type": "string",
@@ -132,7 +136,8 @@ impl ToolMetadata for InferenceTool {
                     "description": "Output schema override for JSON functions (optional)"
                 }
             },
-            "required": ["input"]
+            "required": ["input"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -141,6 +146,10 @@ impl ToolMetadata for InferenceTool {
             }
             .into()
         })
+    }
+
+    fn strict(&self) -> bool {
+        false // We need an arbitrary object for 'output_schema'
     }
 
     fn timeout(&self) -> Duration {

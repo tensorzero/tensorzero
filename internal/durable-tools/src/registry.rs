@@ -23,7 +23,7 @@ impl TryFrom<&dyn ErasedTool> for Tool {
             name: tool.name().to_string(),
             description: tool.description().to_string(),
             parameters: serde_json::to_value(tool.parameters_schema()?)?,
-            strict: true,
+            strict: tool.strict(),
         }))
     }
 }
@@ -40,6 +40,9 @@ pub trait ErasedTool: Send + Sync {
 
     /// Get the JSON Schema for the tool's parameters.
     fn parameters_schema(&self) -> ToolResult<Schema>;
+
+    /// Whether or not to use 'strict mode' when providing our tool schema to LLMs
+    fn strict(&self) -> bool;
 
     /// Get the tool's execution timeout.
     fn timeout(&self) -> Duration;
@@ -102,6 +105,10 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
         self.0.timeout()
     }
 
+    fn strict(&self) -> bool {
+        self.0.strict()
+    }
+
     fn is_durable(&self) -> bool {
         true
     }
@@ -136,6 +143,10 @@ impl<T: SimpleTool> ErasedTool for T {
 
     fn timeout(&self) -> Duration {
         ToolMetadata::timeout(self)
+    }
+
+    fn strict(&self) -> bool {
+        ToolMetadata::strict(self)
     }
 
     fn is_durable(&self) -> bool {

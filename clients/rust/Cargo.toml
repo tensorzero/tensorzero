@@ -24,7 +24,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 git2 = { workspace = true }
 mime = { workspace = true }
-tempfile = { version = "3.21.0" }
+tempfile = { workspace = true }
 paste = { version = "1.0.15", optional = true }
 lazy_static = { workspace = true }
 

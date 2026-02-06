@@ -27,6 +27,7 @@ anyhow.workspace = true
 uuid = { workspace = true }
 object_store = { workspace = true }
 bytes = "1.10.1"
+reqwest = { workspace = true }
 
 [dev-dependencies]
 sse-stream = { workspace = true }

@@ -7,6 +7,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use super::types::{ListWorkflowEvaluationRunsResponse, WorkflowEvaluationRunWithEpisodeCount};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -32,8 +33,12 @@ pub async fn list_workflow_evaluation_runs_handler(
     State(app_state): AppState,
     Query(params): Query<ListWorkflowEvaluationRunsParams>,
 ) -> Result<Json<ListWorkflowEvaluationRunsResponse>, Error> {
+    let db = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info,
+        app_state.postgres_connection_info,
+    );
     let response = list_workflow_evaluation_runs(
-        &app_state.clickhouse_connection_info,
+        &db,
         params
             .limit
             .unwrap_or(DEFAULT_LIST_WORKFLOW_EVALUATION_RUNS_LIMIT),

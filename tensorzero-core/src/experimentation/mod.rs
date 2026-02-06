@@ -119,6 +119,8 @@ impl Default for ExperimentationConfig {
 #[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform(uniform::UniformConfig),
