@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Load small fixtures into Postgres tables.
-# 
+#
 # Table loading status:
 # - "chat_inference_examples.jsonl" (Done)
 # - "json_inference_examples.jsonl" (Done)
@@ -59,7 +59,7 @@ EOF
     echo "  Done"
 }
 
-echo "Loading fixtures into PostgreSQL..."
+echo "Loading fixtures into Postgres..."
 echo "  URL: $POSTGRES_URL"
 
 # Truncate tables first (unless skipped)
