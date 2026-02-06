@@ -275,11 +275,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 function SectionsContent({
   data,
-  functionName,
   functionConfig,
 }: {
   data: FunctionDetailData;
-  functionName: string;
   functionConfig: FunctionConfig;
 }) {
   const {
@@ -417,11 +415,7 @@ export default function FunctionDetailPage({
             errorElement={<SectionsErrorState />}
           >
             {(data) => (
-              <SectionsContent
-                data={data}
-                functionName={function_name}
-                functionConfig={function_config}
-              />
+              <SectionsContent data={data} functionConfig={function_config} />
             )}
           </Await>
         </Suspense>
