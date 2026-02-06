@@ -7,7 +7,7 @@
 use axum::response::sse::Event;
 use futures::Stream;
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use tokio_stream::StreamExt;
 
 use crate::error::{Error, ErrorDetails};
@@ -18,9 +18,9 @@ use crate::inference::types::{ContentBlockChunk, FinishReason, current_timestamp
 use crate::endpoints::inference::{InferenceResponseChunk, InferenceStream};
 
 use super::chat_completions::OpenAICompatibleFinishReason;
-use super::is_none_or_empty;
 use super::tool::{OpenAICompatibleToolCallChunk, OpenAICompatibleToolCallDelta};
 use super::usage::OpenAICompatibleUsage;
+use crate::serde_util::is_none_or_empty;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OpenAICompatibleResponseChunk {
@@ -255,7 +255,6 @@ pub fn process_chat_content_chunk(
                 }
             }
             ContentBlockChunk::ToolCall(tool_call) => {
-                use std::collections::hash_map::Entry;
                 let next_tool_index = state.tool_id_to_index.len();
                 let (index, is_new) = match state.tool_id_to_index.entry(tool_call.id.clone()) {
                     Entry::Occupied(e) => (*e.get(), false),
@@ -277,7 +276,6 @@ pub fn process_chat_content_chunk(
                 });
             }
             ContentBlockChunk::Thought(chunk) => {
-                use std::collections::hash_map::Entry;
                 let insert_index = match state.extra_id_to_index.entry(chunk.id.clone()) {
                     Entry::Occupied(e) => *e.get(),
                     Entry::Vacant(e) => {
@@ -294,7 +292,6 @@ pub fn process_chat_content_chunk(
                 });
             }
             ContentBlockChunk::Unknown(chunk) => {
-                use std::collections::hash_map::Entry;
                 let insert_index = match state.extra_id_to_index.entry(chunk.id.clone()) {
                     Entry::Occupied(e) => *e.get(),
                     Entry::Vacant(e) => {

@@ -22,7 +22,6 @@ use crate::endpoints::openai_compatible::types::input_files::{
     OpenAICompatibleFile, OpenAICompatibleImageUrl, OpenAICompatibleInputAudio,
     convert_file_to_base64, convert_image_url_to_file, convert_input_audio_to_file,
 };
-use crate::endpoints::openai_compatible::types::is_none_or_empty;
 use crate::endpoints::openai_compatible::types::tool::{
     ChatCompletionToolChoiceOption, OpenAICompatibleTool, OpenAICompatibleToolCall,
     OpenAICompatibleToolChoiceParams, OpenAICompatibleToolMessage,
@@ -37,6 +36,7 @@ use crate::inference::types::{
     Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage, InputMessageContent,
     RawText, Role, System, Template, Text, Thought, Unknown, current_timestamp,
 };
+use crate::serde_util::is_none_or_empty;
 use crate::tool::{DynamicToolParams, ProviderTool, ToolResult};
 use crate::variant::JsonMode;
 
@@ -579,33 +579,27 @@ pub fn openai_messages_to_input(
                 }
                 // Process extra content with index-based insertion
                 if let Some(extra_content) = msg.tensorzero_extra_content {
-                    // First pass: items with insert_index (in input order)
-                    for block in &extra_content {
-                        match block {
+                    // First pass: collect items with insert_index, sort by index, then insert
+                    // Sorting ensures that lower indices are processed first, so that each
+                    // insert shifts subsequent positions correctly.
+                    let mut indexed_blocks: Vec<(usize, InputMessageContent)> = extra_content
+                        .iter()
+                        .filter_map(|block| match block {
                             ExtraContentBlock::Thought {
                                 insert_index: Some(idx),
                                 thought,
-                            } => {
-                                let idx = (*idx).min(message_content.len());
-                                message_content
-                                    .insert(idx, InputMessageContent::Thought(thought.clone()));
-                            }
+                            } => Some((*idx, InputMessageContent::Thought(thought.clone()))),
                             ExtraContentBlock::Unknown {
                                 insert_index: Some(idx),
                                 unknown,
-                            } => {
-                                let idx = (*idx).min(message_content.len());
-                                message_content
-                                    .insert(idx, InputMessageContent::Unknown(unknown.clone()));
-                            }
-                            // Items without insert_index are handled in the second pass
-                            ExtraContentBlock::Thought {
-                                insert_index: None, ..
-                            }
-                            | ExtraContentBlock::Unknown {
-                                insert_index: None, ..
-                            } => {}
-                        }
+                            } => Some((*idx, InputMessageContent::Unknown(unknown.clone()))),
+                            _ => None,
+                        })
+                        .collect();
+                    indexed_blocks.sort_by_key(|(idx, _)| *idx);
+                    for (idx, content_block) in indexed_blocks {
+                        let idx = idx.min(message_content.len());
+                        message_content.insert(idx, content_block);
                     }
 
                     // Second pass: items without insert_index (prepend to beginning)
@@ -1870,9 +1864,9 @@ mod tests {
 
         // Expected order based on the algorithm:
         // 1. Start with text content: ["Response text"]
-        // 2. First pass - items with insert_index (in input order):
-        //    - "Indexed thought at 2" insert at min(2, 1)=1: ["Response text", "Indexed at 2"]
-        //    - "Indexed thought at 0" insert at min(0, 2)=0: ["Indexed at 0", "Response text", "Indexed at 2"]
+        // 2. First pass - items with insert_index (sorted by index):
+        //    - "Indexed thought at 0" insert at min(0, 1)=0: ["Indexed at 0", "Response text"]
+        //    - "Indexed thought at 2" insert at min(2, 2)=2: ["Indexed at 0", "Response text", "Indexed at 2"]
         // 3. Second pass - items without insert_index (prepend to beginning, in reverse order):
         //    - Insert Unknown at 0: [Unknown, "Indexed at 0", "Response text", "Indexed at 2"]
         //    - Insert "Unindexed thought 1" at 0: ["Unindexed 1", Unknown, "Indexed at 0", "Response text", "Indexed at 2"]
@@ -2472,5 +2466,96 @@ mod tests {
             matches!(&content[2], InputMessageContent::ToolCall(_)),
             "ToolCall should be third"
         );
+    }
+
+    #[test]
+    fn test_insert_index_out_of_order_sorted() {
+        // Regression test: out-of-order insert_index values should produce correct results
+        // because they are sorted before insertion.
+        //
+        // Start: ["text0", "text4", "text5"]
+        // Extras: [Thought(idx=3), Thought(idx=1)]
+        //
+        // Without sorting (bug): insert at 3→["text0","text4","text5",T3], insert at 1→["text0",T1,"text4","text5",T3] — wrong
+        // With sorting (fix):    insert at 1→["text0",T1,"text4","text5"], insert at 3→["text0",T1,"text4",T3,"text5"] — correct
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: Some(Value::Array(vec![
+                    json!({"type": "text", "text": "text0"}),
+                    json!({"type": "text", "text": "text4"}),
+                    json!({"type": "text", "text": "text5"}),
+                ])),
+                tool_calls: None,
+                tensorzero_extra_content: Some(vec![
+                    ExtraContentBlock::Thought {
+                        insert_index: Some(3),
+                        thought: Thought {
+                            text: Some("T3".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                    ExtraContentBlock::Thought {
+                        insert_index: Some(1),
+                        thought: Thought {
+                            text: Some("T1".to_string()),
+                            signature: None,
+                            summary: None,
+                            provider_type: None,
+                            extra_data: None,
+                        },
+                    },
+                ]),
+            },
+        )];
+        let input = openai_messages_to_input(messages).unwrap();
+        let content = &input.messages[0].content;
+
+        // Expected: ["text0", T1, "text4", T3, "text5"]
+        assert_eq!(
+            content.len(),
+            5,
+            "Should have 5 content blocks (3 text + 2 thoughts)"
+        );
+        match &content[0] {
+            InputMessageContent::Text(t) => {
+                assert_eq!(t.text, "text0", "First should be text0");
+            }
+            _ => panic!("Expected Text at position 0"),
+        }
+        match &content[1] {
+            InputMessageContent::Thought(t) => {
+                assert_eq!(
+                    t.text,
+                    Some("T1".to_string()),
+                    "Second should be T1 (inserted at index 1)"
+                );
+            }
+            _ => panic!("Expected Thought at position 1"),
+        }
+        match &content[2] {
+            InputMessageContent::Text(t) => {
+                assert_eq!(t.text, "text4", "Third should be text4");
+            }
+            _ => panic!("Expected Text at position 2"),
+        }
+        match &content[3] {
+            InputMessageContent::Thought(t) => {
+                assert_eq!(
+                    t.text,
+                    Some("T3".to_string()),
+                    "Fourth should be T3 (inserted at index 3)"
+                );
+            }
+            _ => panic!("Expected Thought at position 3"),
+        }
+        match &content[4] {
+            InputMessageContent::Text(t) => {
+                assert_eq!(t.text, "text5", "Fifth should be text5");
+            }
+            _ => panic!("Expected Text at position 4"),
+        }
     }
 }
