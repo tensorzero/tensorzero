@@ -1,0 +1,419 @@
+//! Shared definitions for config path patterns used by tensorzero-core (config loading)
+//! and config-writer (config serialization).
+
+/// A component in a path pattern for matching config keys.
+#[derive(Debug, Copy, Clone)]
+pub enum PathComponent {
+    /// Matches a specific key name exactly.
+    Literal(&'static str),
+    /// Matches any key name (used for user-defined names like function names).
+    Wildcard,
+}
+
+/// This stores patterns for every possible file path that can be stored in a TensorZero config file.
+/// For example, `functions.my_function.system_schema = "some/relative/schema_path.json"` is matched by
+/// `&[PathComponent::Literal("functions"), PathComponent::Wildcard, PathComponent::Literal("system_schema")]`
+///
+/// Any config struct that stores a `ResolvedTomlPath` needs a corresponding entry in this array.
+/// If an entry is missing, then deserializing the struct will fail, as the `ResolvedTomlPath` deserializer
+/// expects a table produced by `resolve_paths`.
+///
+/// During config loading, we pre-process the `toml::de::DeTable`, and convert all entries located at
+/// `TARGET_PATH_COMPONENTS` (which should be strings) into absolute paths, using the source TOML file
+/// as the base path. For example, `functions.my_function.system_schema = "some/relative/schema_path.json"
+/// will become `functions.my_function.system_schema = { __tensorzero_remapped_path = "base/directory/some/relative/schema_path.json" }`
+///
+/// This allows us to abstract over config file globbing, and allow almost all of the codebase to work with
+/// absolute paths, without needing to know which TOML file a particular path was originally written in.
+///
+/// You should avoid declaring a `PathBuf` inside any TensorZero config structs, unless you're certain
+/// that the path should not be relative to the TOML file that it's written in.
+///
+/// One alternative we considered was use `Spanned<PathBuf>` in our config structs, and deserialize from
+/// a `toml::de::DeTable`. Unfortunately, this breaks whenever serde has an internal 'boundary'
+/// (internally-tagged enums, `#[serde(flatten)]`, and possible other attributes). In these cases, serde
+/// will deserialize into its own custom type (consuming the original `Deserializer`), and continue
+/// deserializing with the internal serde `Deserializer`. This causes any extra information to get
+/// lost (including the span information held by the `toml::de::DeTable` deserializer).
+/// While it might be possible to work around this (similar to what we do for error messages in
+/// the `TensorZeroDeserialize` macro), this is a load-bearing part of the codebase, and implicitly
+/// depends on internal Serde implementation details.
+pub static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("system_schema"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("user_schema"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("assistant_schema"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("output_schema"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("system_schema"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("user_schema"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("assistant_schema"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("output_schema"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("system_instructions"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("system_template"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("schemas"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("path"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("templates"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("path"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("user_template"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("assistant_template"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("system_instructions"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("templates"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("path"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("system_template"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("user_template"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("assistant_template"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("system_instructions"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("templates"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("path"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("system_template"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("user_template"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("assistant_template"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("system_instructions"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("system_instructions"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("templates"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("path"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("system_template"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("user_template"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("assistant_template"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("system_instructions"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("templates"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("path"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("system_template"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("user_template"),
+    ],
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("assistant_template"),
+    ],
+    &[
+        PathComponent::Literal("tools"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("parameters"),
+    ],
+    &[
+        PathComponent::Literal("gateway"),
+        PathComponent::Literal("template_filesystem_access"),
+        PathComponent::Literal("base_path"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("user"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("system"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("assistant"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("user"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("assistant"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("fuser"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("system"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("user"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("assistant"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("variants"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluator"),
+        PathComponent::Literal("input_wrappers"),
+        PathComponent::Literal("system"),
+    ],
+];

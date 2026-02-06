@@ -2,5 +2,5 @@
 import type { ResolvedTomlPathData } from "./ResolvedTomlPathData";
 
 export type UninitializedChatTemplates = {
-  [key in string]?: { path: ResolvedTomlPathData };
+  [key in string]: { path: ResolvedTomlPathData };
 };

@@ -1,14 +1,11 @@
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use tensorzero::{ClientExt, GetDatapointParams, StoredDatapoint};
-use tensorzero_core::config::Config;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::inferences::{
     InferenceOutputSource, InferenceQueries, ListInferencesParams,
 };
@@ -26,27 +23,12 @@ struct CloneDatapointsResponse {
 
 use crate::common::get_gateway_endpoint;
 
-lazy_static::lazy_static! {
-    static ref TEST_SETUP: tokio::sync::OnceCell<(ClickHouseConnectionInfo, Arc<Config>)> = tokio::sync::OnceCell::new();
-}
-
-async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
-    TEST_SETUP
-        .get_or_init(|| async {
-            let clickhouse: ClickHouseConnectionInfo = get_clickhouse().await;
-
-            let client = tensorzero::test_helpers::make_embedded_gateway().await;
-            let config = client.get_config().unwrap();
-            (clickhouse, config)
-        })
-        .await
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_datapoint_preserves_source_inference_id() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let embedded_client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let config = embedded_client.get_config().unwrap();
 
     // Step 1: Get an existing inference from the database
     let params = ListInferencesParams {
@@ -54,7 +36,7 @@ async fn test_clone_datapoint_preserves_source_inference_id() {
         limit: 1,
         ..Default::default()
     };
-    let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
+    let inferences = database.list_inferences(&config, &params).await.unwrap();
     assert!(!inferences.is_empty(), "Need at least 1 inference for test");
     let inference_id = inferences[0].id();
 
@@ -82,7 +64,7 @@ async fn test_clone_datapoint_preserves_source_inference_id() {
     let source_datapoint_id = create_result.ids[0];
 
     // Step 3: Verify the source datapoint has source_inference_id set
-    let source_datapoint = clickhouse
+    let source_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: source_dataset.clone(),
             datapoint_id: source_datapoint_id,
@@ -122,7 +104,7 @@ async fn test_clone_datapoint_preserves_source_inference_id() {
     let cloned_datapoint_id = clone_result.datapoint_ids[0].expect("Clone should succeed");
 
     // Step 5: Verify the cloned datapoint preserves source_inference_id
-    let cloned_datapoint = clickhouse
+    let cloned_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: target_dataset.clone(),
             datapoint_id: cloned_datapoint_id,
@@ -147,9 +129,8 @@ async fn test_clone_datapoint_preserves_source_inference_id() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_chat_datapoint_success() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, _config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Step 1: Create a chat datapoint
     let source_dataset = format!("test_clone_chat_source_{}", Uuid::now_v7());
@@ -207,7 +188,7 @@ async fn test_clone_chat_datapoint_success() {
     let cloned_datapoint_id = clone_result.datapoint_ids[0].expect("Clone should succeed");
 
     // Step 3: Verify the cloned datapoint
-    let cloned_datapoint = clickhouse
+    let cloned_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: target_dataset.clone(),
             datapoint_id: cloned_datapoint_id,
@@ -228,9 +209,8 @@ async fn test_clone_chat_datapoint_success() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_to_same_dataset() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, _config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Step 1: Create a datapoint
     let dataset_name = format!("test_clone_same_{}", Uuid::now_v7());
@@ -284,7 +264,7 @@ async fn test_clone_to_same_dataset() {
     let cloned_datapoint_id = clone_result.datapoint_ids[0].expect("Clone should succeed");
 
     // Step 3: Verify both datapoints exist
-    let source_datapoint = clickhouse
+    let source_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: source_datapoint_id,
@@ -293,7 +273,7 @@ async fn test_clone_to_same_dataset() {
         .await
         .unwrap();
 
-    let cloned_datapoint = clickhouse
+    let cloned_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: cloned_datapoint_id,
@@ -310,9 +290,8 @@ async fn test_clone_to_same_dataset() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_multiple_datapoints() {
-    skip_for_postgres!();
     let client = Client::new();
-    let (clickhouse, _config) = get_test_setup().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Step 1: Create multiple datapoints
     let source_dataset = format!("test_clone_multi_source_{}", Uuid::now_v7());
@@ -389,7 +368,7 @@ async fn test_clone_multiple_datapoints() {
         .collect();
 
     for cloned_id in &cloned_ids {
-        let cloned_datapoint = clickhouse
+        let cloned_datapoint = database
             .get_datapoint(&GetDatapointParams {
                 dataset_name: target_dataset.clone(),
                 datapoint_id: *cloned_id,
@@ -409,7 +388,6 @@ async fn test_clone_multiple_datapoints() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clone_nonexistent_datapoint_returns_null() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Try to clone a nonexistent datapoint

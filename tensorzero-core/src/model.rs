@@ -30,12 +30,11 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
-use crate::providers::aws_common::{AWSCredentials, AWSEndpointUrl, AWSRegion};
-use crate::providers::aws_sagemaker::AWSSagemakerProvider;
+use crate::providers::aws_bedrock::build_aws_bedrock_provider_config;
+use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_config};
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
-use aws_types::region::Region;
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -110,6 +109,7 @@ impl UninitializedModelConfig {
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
         relay_mode: bool,
+        is_config_snapshot: bool,
     ) -> Result<ModelConfig, Error> {
         let skip_relay = self.skip_relay.unwrap_or(false);
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
@@ -117,9 +117,11 @@ impl UninitializedModelConfig {
         // build `ModelProvider`s using the name keys from the map.
         let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
             async move {
-                let load_future = provider
-                    .config
-                    .load(provider_types, provider_type_default_credentials);
+                let load_future = provider.config.load(
+                    provider_types,
+                    provider_type_default_credentials,
+                    is_config_snapshot,
+                );
 
                 // In relay mode, don't run credential validation for providers,
                 // since requests to the parent model get redirected to the downstream gateway.
@@ -1100,86 +1102,6 @@ impl ProviderConfig {
     }
 }
 
-/// Processed AWS provider configuration.
-struct AWSProviderConfig {
-    static_region: Option<Region>,
-    region: AWSRegion,
-    endpoint_url: Option<AWSEndpointUrl>,
-    credentials: AWSCredentials,
-}
-
-/// Helper to process common AWS provider configuration.
-fn build_aws_provider_config(
-    region: Option<CredentialLocationOrHardcoded>,
-    allow_auto_detect_region: bool,
-    endpoint_url: Option<CredentialLocationOrHardcoded>,
-    access_key_id: Option<CredentialLocation>,
-    secret_access_key: Option<CredentialLocation>,
-    session_token: Option<CredentialLocation>,
-    provider_type: &str,
-) -> Result<AWSProviderConfig, Error> {
-    // Emit deprecation warning if allow_auto_detect_region is used
-    if allow_auto_detect_region {
-        crate::utils::deprecation_warning(&format!(
-            "The `allow_auto_detect_region` field is deprecated for `{provider_type}`. \
-             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
-        ));
-    }
-
-    // Convert CredentialLocationOrHardcoded to AWSRegion
-    let aws_region = region
-        .map(|loc| AWSRegion::from_credential_location(loc, provider_type))
-        .transpose()?
-        .flatten();
-
-    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
-    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
-        Some(AWSRegion::Sdk)
-    } else {
-        aws_region
-    };
-
-    // Check if we have a region or need to error
-    let aws_region = aws_region.ok_or_else(|| {
-        Error::new(ErrorDetails::Config {
-            message: format!(
-                "AWS {provider_type} provider requires a region. \
-                 Use `region = \"sdk\"` to enable auto-detection, \
-                 or specify a region like `region = \"us-east-1\"`."
-            ),
-        })
-    })?;
-
-    // For static regions, use at construction time.
-    // For SDK regions, pass None to use the default provider chain.
-    // For dynamic regions, use a fallback region for construction (will be overridden at request time).
-    let static_region = match &aws_region {
-        AWSRegion::Static(region) => Some(region.clone()),
-        AWSRegion::Sdk => None,
-        AWSRegion::Dynamic(_) => Some(Region::new("us-east-1")),
-    };
-
-    let endpoint_url = endpoint_url
-        .map(|loc| AWSEndpointUrl::from_credential_location(loc, provider_type))
-        .transpose()?
-        .flatten();
-
-    // Convert credential fields to AWSCredentials
-    let aws_credentials = AWSCredentials::from_fields(
-        access_key_id,
-        secret_access_key,
-        session_token,
-        provider_type,
-    )?;
-
-    Ok(AWSProviderConfig {
-        static_region,
-        region: aws_region,
-        endpoint_url,
-        credentials: aws_credentials,
-    })
-}
-
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -1207,7 +1129,7 @@ pub enum UninitializedProviderConfig {
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
-        beta_structured_outputs: bool,
+        beta_structured_outputs: Option<bool>,
         #[serde(default)]
         provider_tools: Vec<Value>,
     },
@@ -1222,6 +1144,10 @@ pub enum UninitializedProviderConfig {
         allow_auto_detect_region: bool,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         endpoint_url: Option<CredentialLocationOrHardcoded>,
+        /// API key for bearer token authentication (alternative to IAM credentials).
+        /// If set, uses `Authorization: Bearer <token>` instead of SigV4 signing.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        api_key: Option<CredentialLocation>,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         access_key_id: Option<CredentialLocation>,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
@@ -1373,6 +1299,7 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        is_config_snapshot: bool,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
@@ -1381,47 +1308,53 @@ impl UninitializedProviderConfig {
                 api_key_location,
                 beta_structured_outputs,
                 provider_tools,
-            } => ProviderConfig::Anthropic(AnthropicProvider::new(
-                model_name,
-                api_base,
-                AnthropicKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                beta_structured_outputs,
-                provider_tools,
-            )),
+            } => {
+                // Only log a deprecation warning if this is a fresh config (not a snapshot)
+                // since snapshot configs cannot be updated
+                if !is_config_snapshot && beta_structured_outputs.is_some() {
+                    crate::utils::deprecation_warning(
+                        "The 'beta_structured_outputs' field is no longer necessary for `anthropic` providers",
+                    );
+                }
+                ProviderConfig::Anthropic(AnthropicProvider::new(
+                    model_name,
+                    api_base,
+                    AnthropicKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                    provider_tools,
+                ))
+            }
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
                 region,
                 allow_auto_detect_region,
                 endpoint_url,
+                api_key,
                 access_key_id,
                 secret_access_key,
                 session_token,
             } => {
-                let aws_config = build_aws_provider_config(
+                let (region, endpoint_url, auth) = build_aws_bedrock_provider_config(
                     region,
                     allow_auto_detect_region,
                     endpoint_url,
+                    api_key,
                     access_key_id,
                     secret_access_key,
                     session_token,
-                    "aws_bedrock",
-                )?;
-
-                ProviderConfig::AWSBedrock(
-                    AWSBedrockProvider::new(
-                        model_id,
-                        aws_config.static_region,
-                        Some(aws_config.region),
-                        aws_config.endpoint_url,
-                        aws_config.credentials,
-                    )
-                    .await?,
                 )
+                .await?;
+
+                ProviderConfig::AWSBedrock(AWSBedrockProvider::new(
+                    model_id,
+                    region,
+                    endpoint_url,
+                    auth,
+                ))
             }
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -1434,14 +1367,13 @@ impl UninitializedProviderConfig {
                 secret_access_key,
                 session_token,
             } => {
-                let aws_config = build_aws_provider_config(
+                let aws_config = build_aws_sagemaker_config(
                     region,
                     allow_auto_detect_region,
                     endpoint_url,
                     access_key_id,
                     secret_access_key,
                     session_token,
-                    "aws_sagemaker",
                 )?;
 
                 let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
@@ -1449,7 +1381,6 @@ impl UninitializedProviderConfig {
                         HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
                             model_name,
                             None,
-
                             OpenAIKind
                                 .get_defaulted_credential(
                                     Some(&CredentialLocationWithFallback::Single(CredentialLocation::None)),
@@ -1478,8 +1409,7 @@ impl UninitializedProviderConfig {
                     AWSSagemakerProvider::new(
                         endpoint_name,
                         self_hosted,
-                        aws_config.static_region,
-                        Some(aws_config.region),
+                        aws_config.region,
                         aws_config.endpoint_url,
                         aws_config.credentials,
                     )
@@ -2654,8 +2584,6 @@ impl ShorthandModelConfig for ModelConfig {
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                // We don't support beta structured output for shorthand models
-                false,
                 // No provider tools for shorthand models
                 vec![],
             )),
@@ -3020,8 +2948,9 @@ mod tests {
             tokens_per_second = 10
             always = true
         ";
-        let uninitialized_config: UninitializedRateLimitingConfig =
+        let toml_config: crate::config::rate_limiting::TomlUninitializedRateLimitingConfig =
             toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let clients = InferenceClients {
@@ -3797,7 +3726,6 @@ mod tests {
                 "claude".to_string(),
                 None,
                 AnthropicCredentials::None,
-                false,
                 vec![],
             ))
         })
@@ -4117,7 +4045,6 @@ mod tests {
             "claude".to_string(),
             None,
             AnthropicCredentials::None,
-            false,
             vec![],
         ));
         assert!(

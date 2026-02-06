@@ -47,7 +47,6 @@ export function AddToDatasetButton({
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
 
-  // Handle success/error states from the fetcher
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
       if (fetcher.data.error) {

@@ -88,6 +88,10 @@ impl ToolMetadata for RunEvaluationTool {
         )
     }
 
+    fn strict(&self) -> bool {
+        false // precision_targets uses additionalProperties: {type: number} not supported in strict mode
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
@@ -133,7 +137,8 @@ impl ToolMetadata for RunEvaluationTool {
                     "description": "Include per-datapoint results in the response (default: false)."
                 }
             },
-            "required": ["evaluation_name", "variant_name"]
+            "required": ["evaluation_name", "variant_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

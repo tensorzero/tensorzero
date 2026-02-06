@@ -62,6 +62,10 @@ impl ToolMetadata for FeedbackTool {
         )
     }
 
+    fn strict(&self) -> bool {
+        false // Value uses anyOf with array type without explicit items
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
@@ -82,14 +86,21 @@ impl ToolMetadata for FeedbackTool {
                     "description": "The metric name: 'comment' for free-text, 'demonstration' for demonstrations, or a configured metric name for float/boolean values."
                 },
                 "value": {
-                    "description": "The feedback value. Type depends on metric_name: string for 'comment', string/array for 'demonstration', number for float metrics, boolean for boolean metrics."
+                    "description": "The feedback value. Type depends on metric_name: string for 'comment', string/array for 'demonstration', number for float metrics, boolean for boolean metrics.",
+                    "anyOf": [
+                        { "type": "string" },
+                        { "type": "array", "items": { "type": "object" } },
+                        { "type": "number" },
+                        { "type": "boolean" }
+                    ]
                 },
                 "dryrun": {
                     "type": "boolean",
                     "description": "If true, feedback will not be stored (useful for testing)."
                 }
             },
-            "required": ["metric_name", "value"]
+            "required": ["metric_name", "value"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

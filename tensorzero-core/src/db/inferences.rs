@@ -11,15 +11,21 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockall::automock;
 
-use crate::config::{Config, MetricConfigLevel};
-use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
+use crate::config::{Config, MetricConfig, MetricConfigLevel};
+use crate::db::TimeWindow;
+use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy, OrderByTerm};
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
+use crate::function::FunctionConfigType;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::{
-    ContentBlockChatOutput, FunctionType, JsonInferenceOutput, StoredInput,
+    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FunctionType, JsonInferenceDatabaseInsert,
+    JsonInferenceOutput, StoredInput,
 };
-use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
+use crate::serde_util::{
+    deserialize_defaulted_json_string, deserialize_json_string, deserialize_u64,
+    serialize_utc_datetime_rfc_3339_with_millis,
+};
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
@@ -238,6 +244,51 @@ pub struct ListInferencesParams<'a> {
     pub search_query_experimental: Option<&'a str>,
 }
 
+impl ListInferencesParams<'_> {
+    /// Validates that before/after pagination works with the rest of the request:
+    /// - If order_by is provided, only timestamp ordering is supported.
+    /// - Offset must not be provided.
+    ///
+    /// Returns an error if the request is invalid.
+    pub fn validate_pagination(&self) -> Result<(), Error> {
+        if self.pagination.is_none() {
+            return Ok(());
+        };
+        let Some(order_by) = self.order_by else {
+            return Ok(());
+        };
+
+        for order in order_by {
+            match &order.term {
+                OrderByTerm::Timestamp => {
+                    // Timestamp ordering is compatible with before/after pagination (UUIDv7 is time-ordered)
+                    continue;
+                }
+                OrderByTerm::Metric { name } => {
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "Cannot order by metric '{name}'; only ordering by timestamp is supported with before/after pagination.",
+                        ),
+                    }));
+                }
+                OrderByTerm::SearchRelevance => {
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: "Cannot order by search relevance; only ordering by timestamp is supported with before/after pagination.".to_string(),
+                    }));
+                }
+            }
+        }
+
+        if self.offset != 0 {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "OFFSET is not supported when using before/after pagination".to_string(),
+            }));
+        }
+
+        Ok(())
+    }
+}
+
 impl Default for ListInferencesParams<'_> {
     fn default() -> Self {
         Self {
@@ -315,12 +366,78 @@ pub struct CountInferencesParams<'a> {
 
 /// Function information retrieved for feedback validation.
 /// Contains the function name, type, variant, and episode ID associated with an inference or episode.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, sqlx::FromRow)]
 pub struct FunctionInfo {
     pub function_name: String,
     pub function_type: FunctionType,
     pub variant_name: String,
     pub episode_id: Uuid,
+}
+
+// ===== Inference count types (merged from inference_count module) =====
+
+/// Parameters for counting inferences for a function.
+#[derive(Debug)]
+pub struct CountInferencesForFunctionParams<'a> {
+    pub function_name: &'a str,
+    pub function_type: FunctionConfigType,
+    pub variant_name: Option<&'a str>,
+}
+
+/// Row returned from the count_inferences_by_variant query.
+#[derive(Debug, Deserialize)]
+pub struct CountByVariant {
+    pub variant_name: String,
+    /// Number of inferences for this variant
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub inference_count: u64,
+    /// ISO 8601 timestamp of the last inference for this variant
+    pub last_used_at: String,
+}
+
+/// Parameters for counting inferences with feedback.
+/// If `metric_threshold` is Some, only counts inferences with feedback meeting the threshold criteria.
+pub struct CountInferencesWithFeedbackParams<'a> {
+    pub function_name: &'a str,
+    pub function_type: FunctionConfigType,
+    pub metric_name: &'a str,
+    pub metric_config: &'a MetricConfig,
+    /// If present, only counts inferences with feedback meeting the threshold criteria.
+    pub metric_threshold: Option<f64>,
+}
+
+/// Parameters for getting function throughput by variant.
+#[derive(Debug)]
+pub struct GetFunctionThroughputByVariantParams<'a> {
+    pub function_name: &'a str,
+    pub time_window: TimeWindow,
+    pub max_periods: u32,
+}
+
+/// Row returned from the get_function_throughput_by_variant query.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct VariantThroughput {
+    /// Start datetime of the period in RFC 3339 format with milliseconds
+    #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
+    pub period_start: DateTime<Utc>,
+    pub variant_name: String,
+    /// Number of inferences for this (period, variant) combination
+    pub count: u32,
+}
+
+/// Row returned from the list_functions_with_inference_count query.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct FunctionInferenceCount {
+    pub function_name: String,
+    /// ISO 8601 timestamp of the most recent inference for this function
+    #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
+    pub last_inference_timestamp: DateTime<Utc>,
+    /// Total number of inferences for this function
+    pub inference_count: u32,
 }
 
 #[async_trait]
@@ -393,4 +510,51 @@ pub trait InferenceQueries {
         function_info: &FunctionInfo,
         inference_id: Uuid,
     ) -> Result<Option<String>, Error>;
+
+    // ===== Write methods =====
+
+    /// Insert chat inference records.
+    async fn insert_chat_inferences(
+        &self,
+        rows: &[ChatInferenceDatabaseInsert],
+    ) -> Result<(), Error>;
+
+    /// Insert JSON inference records.
+    async fn insert_json_inferences(
+        &self,
+        rows: &[JsonInferenceDatabaseInsert],
+    ) -> Result<(), Error>;
+
+    // ===== Inference count methods (merged from InferenceCountQueries trait) =====
+    // Note: count_inferences_for_function, count_inferences_with_demonstration_feedback, and
+    // count_inferences_for_episode were removed as they can be achieved via count_inferences with filters.
+
+    /// Counts inferences for a function, optionally filtered by variant, grouped by variant.
+    /// Returns grouped data with variant name, count, and last_used_at timestamps.
+    async fn count_inferences_by_variant(
+        &self,
+        params: CountInferencesForFunctionParams<'_>,
+    ) -> Result<Vec<CountByVariant>, Error>;
+
+    /// Count the number of inferences with feedback for a metric.
+    /// If `metric_threshold` is Some, only counts inferences with feedback meeting the threshold criteria
+    /// based on the metric config's optimize direction (max/min).
+    async fn count_inferences_with_feedback(
+        &self,
+        params: CountInferencesWithFeedbackParams<'_>,
+    ) -> Result<u64, Error>;
+
+    /// Get function throughput (inference counts) grouped by variant and time period.
+    /// Returns throughput data for the last `max_periods` time periods, grouped by variant.
+    /// For cumulative time window, returns all-time data with a fixed period_start.
+    async fn get_function_throughput_by_variant(
+        &self,
+        params: GetFunctionThroughputByVariantParams<'_>,
+    ) -> Result<Vec<VariantThroughput>, Error>;
+
+    /// List all functions with their inference counts, ordered by most recent inference.
+    /// Returns the function name, count of inferences, and timestamp of the most recent inference.
+    async fn list_functions_with_inference_count(
+        &self,
+    ) -> Result<Vec<FunctionInferenceCount>, Error>;
 }

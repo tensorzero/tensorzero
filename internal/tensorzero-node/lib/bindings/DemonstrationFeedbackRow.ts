@@ -4,6 +4,6 @@ export type DemonstrationFeedbackRow = {
   id: string;
   inference_id: string;
   value: string;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   timestamp: string;
 };

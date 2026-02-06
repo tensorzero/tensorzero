@@ -33,7 +33,7 @@ slow-timeout = { period = "20s", terminate-after = 5 }
 [profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 default-filter = '''
-not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey)) | test(export_bindings_) | test(export_schema_) | binary(optimization-mock))
+not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey)) | test(export_bindings_) | test(export_schema_) | binary(optimization-mock) | package(tensorzero-derive))
 '''
 junit.path = "junit.xml"
 

@@ -7,7 +7,7 @@ export type WorkflowEvaluationRunEpisodeWithFeedback = {
   episode_id: string;
   timestamp: string;
   run_id: string;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   task_name?: string;
   /**
    * The feedback metric names, sorted alphabetically.
