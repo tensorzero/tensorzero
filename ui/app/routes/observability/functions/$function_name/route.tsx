@@ -17,7 +17,6 @@ import { useFunctionConfig } from "~/context/config";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { Suspense, useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
-import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
 import {
   PageHeader,
   PageLayout,
@@ -45,6 +44,8 @@ import { fetchVariantsSectionData } from "./variants-data.server";
 import { VariantsSection } from "./VariantsSection";
 import { fetchExperimentationSectionData } from "./experimentation-data.server";
 import { ExperimentationSection } from "./ExperimentationSection";
+import { fetchThroughputSectionData } from "./throughput-data.server";
+import { ThroughputSection } from "./ThroughputSection";
 
 export type FunctionDetailData = Awaited<
   ReturnType<typeof fetchFunctionDetailData>
@@ -79,11 +80,6 @@ function FunctionDetailPageHeader({
 function SectionsSkeleton() {
   return (
     <>
-      <SectionLayout>
-        <SectionHeader heading="Throughput" />
-        <Skeleton className="h-64 w-full" />
-      </SectionLayout>
-
       <SectionLayout>
         <SectionHeader heading="Metrics" />
         <Skeleton className="mb-4 h-10 w-64" />
@@ -143,7 +139,6 @@ type FetchParams = {
   limit: number;
   metric_name: string | undefined;
   time_granularity: TimeWindow;
-  throughput_time_granularity: TimeWindow;
 };
 
 async function fetchFunctionDetailData(params: FetchParams) {
@@ -155,7 +150,6 @@ async function fetchFunctionDetailData(params: FetchParams) {
     limit,
     metric_name,
     time_granularity,
-    throughput_time_granularity,
   } = params;
 
   const client = getTensorZeroClient();
@@ -180,26 +174,16 @@ async function fetchFunctionDetailData(params: FetchParams) {
               : undefined,
           )
       : Promise.resolve(undefined);
-  const variantThroughputPromise = tensorZeroClient
-    .getFunctionThroughputByVariant(
-      function_name,
-      throughput_time_granularity,
-      10,
-    )
-    .then((response) => response.throughput);
-
   const [
     inferenceResult,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
-    variant_throughput,
   ] = await Promise.all([
     inferencePromise,
     numInferencesPromise,
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
-    variantThroughputPromise,
   ]);
 
   // Handle pagination from listInferenceMetadata response
@@ -220,7 +204,6 @@ async function fetchFunctionDetailData(params: FetchParams) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
-    variant_throughput,
   };
 }
 
@@ -260,6 +243,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             time_granularity: feedback_time_granularity,
           })
         : null,
+    throughputData: fetchThroughputSectionData({
+      function_name,
+      time_granularity: throughput_time_granularity,
+    }),
     functionDetailData: fetchFunctionDetailData({
       function_name,
       config,
@@ -268,7 +255,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       limit,
       metric_name,
       time_granularity,
-      throughput_time_granularity,
     }),
   };
 }
@@ -287,7 +273,6 @@ function SectionsContent({
     num_inferences,
     metricsWithFeedback,
     variant_performances,
-    variant_throughput,
   } = data;
 
   const navigate = useNavigate();
@@ -334,11 +319,6 @@ function SectionsContent({
   return (
     <>
       <SectionLayout>
-        <SectionHeader heading="Throughput" />
-        <VariantThroughput variant_throughput={variant_throughput} />
-      </SectionLayout>
-
-      <SectionLayout>
         <SectionHeader heading="Metrics" />
         <MetricSelector
           metricsWithFeedback={metricsExcludingDemonstrations}
@@ -379,6 +359,7 @@ export default function FunctionDetailPage({
     function_name,
     variantsData,
     experimentationData,
+    throughputData,
     functionDetailData,
   } = loaderData;
   const location = useLocation();
@@ -410,6 +391,11 @@ export default function FunctionDetailPage({
             locationKey={location.key}
           />
         )}
+
+        <ThroughputSection
+          throughputData={throughputData}
+          locationKey={location.key}
+        />
 
         <Suspense key={location.key} fallback={<SectionsSkeleton />}>
           <Await
