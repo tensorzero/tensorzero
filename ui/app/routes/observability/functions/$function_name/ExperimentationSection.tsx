@@ -21,42 +21,40 @@ export function ExperimentationSection({
   locationKey,
 }: ExperimentationSectionProps) {
   return (
-    <SectionLayout>
-      <Suspense
-        key={`experimentation-${locationKey}`}
-        fallback={
-          <>
+    <Suspense
+      key={`experimentation-${locationKey}`}
+      fallback={
+        <SectionLayout>
+          <SectionHeader heading="Experimentation" />
+          <Skeleton className="h-32 w-full" />
+        </SectionLayout>
+      }
+    >
+      <Await
+        resolve={promise}
+        errorElement={
+          <SectionLayout>
             <SectionHeader heading="Experimentation" />
-            <Skeleton className="h-32 w-full" />
-          </>
+            <SectionAsyncErrorState defaultMessage="Failed to load experimentation data" />
+          </SectionLayout>
         }
       >
-        <Await
-          resolve={promise}
-          errorElement={
-            <>
+        {(data) =>
+          data ? (
+            <SectionLayout>
               <SectionHeader heading="Experimentation" />
-              <SectionAsyncErrorState defaultMessage="Failed to load experimentation data" />
-            </>
-          }
-        >
-          {(data) =>
-            data ? (
-              <>
-                <SectionHeader heading="Experimentation" />
-                <FunctionExperimentation
-                  functionConfig={functionConfig}
-                  functionName={functionName}
-                  feedbackTimeseries={data.feedback_timeseries}
-                  variantSamplingProbabilities={
-                    data.variant_sampling_probabilities
-                  }
-                />
-              </>
-            ) : null
-          }
-        </Await>
-      </Suspense>
-    </SectionLayout>
+              <FunctionExperimentation
+                functionConfig={functionConfig}
+                functionName={functionName}
+                feedbackTimeseries={data.feedback_timeseries}
+                variantSamplingProbabilities={
+                  data.variant_sampling_probabilities
+                }
+              />
+            </SectionLayout>
+          ) : null
+        }
+      </Await>
+    </Suspense>
   );
 }
