@@ -10,12 +10,12 @@ import {
 import type { BasicInfoData } from "./route.server";
 
 interface BasicInfoSectionProps {
-  promise: Promise<BasicInfoData>;
+  basicInfoData: Promise<BasicInfoData>;
   locationKey: string;
 }
 
 export function BasicInfoSection({
-  promise,
+  basicInfoData,
   locationKey,
 }: BasicInfoSectionProps) {
   return (
@@ -23,7 +23,7 @@ export function BasicInfoSection({
       key={`basic-info-${locationKey}`}
       fallback={<BasicInfoSkeleton />}
     >
-      <Await resolve={promise} errorElement={<BasicInfoError />}>
+      <Await resolve={basicInfoData} errorElement={<BasicInfoError />}>
         {(data) => (
           <BasicInfo
             workflowEvaluationRun={data.workflowEvaluationRun}

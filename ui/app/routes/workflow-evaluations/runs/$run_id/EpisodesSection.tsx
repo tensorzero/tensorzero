@@ -17,14 +17,14 @@ import {
 import type { EpisodesData } from "./route.server";
 
 interface EpisodesSectionProps {
-  promise: Promise<EpisodesData>;
+  episodesData: Promise<EpisodesData>;
   offset: number;
   limit: number;
   locationKey: string;
 }
 
 export function EpisodesSection({
-  promise,
+  episodesData,
   offset,
   limit,
   locationKey,
@@ -32,7 +32,7 @@ export function EpisodesSection({
   return (
     <SectionLayout>
       <Suspense key={`episodes-${locationKey}`} fallback={<EpisodesSkeleton />}>
-        <Await resolve={promise} errorElement={<EpisodesError />}>
+        <Await resolve={episodesData} errorElement={<EpisodesError />}>
           {(data) => (
             <EpisodesContent data={data} offset={offset} limit={limit} />
           )}

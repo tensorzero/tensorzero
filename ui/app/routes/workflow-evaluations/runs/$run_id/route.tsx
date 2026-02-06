@@ -61,9 +61,12 @@ export default function WorkflowEvaluationRunSummaryPage({
         }
         name={run_id}
       />
-      <BasicInfoSection promise={basicInfoData} locationKey={location.key} />
+      <BasicInfoSection
+        basicInfoData={basicInfoData}
+        locationKey={location.key}
+      />
       <EpisodesSection
-        promise={episodesData}
+        episodesData={episodesData}
         offset={offset}
         limit={limit}
         locationKey={location.key}
