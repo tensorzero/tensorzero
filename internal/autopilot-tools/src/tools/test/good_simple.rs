@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Parameters for the good simple tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct GoodSimpleParams {
     /// The message to echo back.
     pub message: String,

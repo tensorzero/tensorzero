@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// Parameters for the error simple tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct ErrorSimpleParams {
     /// The error message to return.
     pub error_message: String,
