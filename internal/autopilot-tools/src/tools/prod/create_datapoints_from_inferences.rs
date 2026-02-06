@@ -100,7 +100,6 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
                                 "limit": {
                                     "type": "integer",
                                     "description": "Maximum number of inferences to use.",
-                                    "minimum": 1
                                 },
                                 "output_source": {
                                     "type": "string",

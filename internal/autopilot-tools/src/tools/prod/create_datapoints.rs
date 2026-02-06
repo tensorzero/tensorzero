@@ -45,6 +45,10 @@ impl ToolMetadata for CreateDatapointsTool {
         )
     }
 
+    fn strict(&self) -> bool {
+        false // Datapoints have arbitrary input/output objects
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
@@ -87,7 +91,8 @@ impl ToolMetadata for CreateDatapointsTool {
                                 "description": "Optional tags for the datapoint."
                             }
                         },
-                        "required": ["type", "function_name", "input"]
+                        "required": ["type", "function_name", "input"],
+                        "additionalProperties": false
                     }
                 }
             },

@@ -88,6 +88,10 @@ impl ToolMetadata for RunEvaluationTool {
         )
     }
 
+    fn strict(&self) -> bool {
+        false // precision_targets uses additionalProperties: {type: number} not supported in strict mode
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",

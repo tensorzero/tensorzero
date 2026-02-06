@@ -574,10 +574,9 @@ function AutopilotSessionEventsPageContent({
     });
   }, [interruptFetcher, sessionId]);
 
-  // Show toast on interrupt result (only if still on the same session)
+  // Show toast on interrupt failure (only if still on the same session)
   useEffect(() => {
     if (interruptFetcher.state === "idle" && interruptFetcher.data) {
-      // Only show toast if we're still on the session that was interrupted
       if (interruptedSessionRef.current !== sessionId) {
         return;
       }
@@ -585,12 +584,7 @@ function AutopilotSessionEventsPageContent({
         success: boolean;
         error?: string;
       };
-      if (data.success) {
-        toast.success({
-          title: "Session interrupted",
-          description: "The autopilot session has been interrupted.",
-        });
-      } else if (data.error) {
+      if (data.error) {
         toast.error({
           title: "Failed to interrupt session",
           description: data.error,

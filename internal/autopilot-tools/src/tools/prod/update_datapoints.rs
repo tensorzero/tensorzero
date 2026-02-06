@@ -45,6 +45,10 @@ impl ToolMetadata for UpdateDatapointsTool {
         )
     }
 
+    fn strict(&self) -> bool {
+        false // Datapoints have arbitrary input/output_schema objects
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
@@ -88,7 +92,8 @@ impl ToolMetadata for UpdateDatapointsTool {
                                 "description": "New tags (optional)."
                             }
                         },
-                        "required": ["type", "id"]
+                        "required": ["type", "id"],
+                        "additionalProperties": false
                     }
                 }
             },

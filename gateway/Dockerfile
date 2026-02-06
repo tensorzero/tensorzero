@@ -4,7 +4,7 @@ ARG PROFILE="performance"
 
 # ========== builder ==========
 
-FROM lukemathwalker/cargo-chef:latest-rust-1.90-trixie AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.88-trixie AS chef
 
 WORKDIR /src
 
