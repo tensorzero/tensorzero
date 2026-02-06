@@ -1,33 +1,9 @@
-import { Suspense } from "react";
-import { AlertCircle } from "lucide-react";
 import type { Route } from "./+types/route";
-import {
-  Await,
-  useAsyncError,
-  useLocation,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
-import {
-  PageHeader,
-  PageLayout,
-  SectionHeader,
-  SectionLayout,
-} from "~/components/layout/PageLayout";
-import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
-import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
-import { Skeleton } from "~/components/ui/skeleton";
-import {
-  getErrorMessage,
-  SectionErrorNotice,
-} from "~/components/ui/error/ErrorContentPrimitives";
-import {
-  fetchProjectsData,
-  fetchRunsData,
-  type ProjectsData,
-  type RunsData,
-} from "./route.server";
+import { useLocation } from "react-router";
+import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
+import { fetchProjectsData, fetchRunsData } from "./route.server";
+import { ProjectsSection } from "./ProjectsSection";
+import { RunsSection } from "./RunsSection";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -47,110 +23,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-function SectionSkeleton() {
-  return (
-    <>
-      <Skeleton className="mb-2 h-6 w-32" />
-      <Skeleton className="h-48 w-full" />
-    </>
-  );
-}
-
-function SectionError({
-  title,
-  defaultMessage,
-}: {
-  title: string;
-  defaultMessage: string;
-}) {
-  const error = useAsyncError();
-  return (
-    <SectionErrorNotice
-      icon={AlertCircle}
-      title={title}
-      description={getErrorMessage({ error, fallback: defaultMessage })}
-    />
-  );
-}
-
-function ProjectsContent({
-  data,
-  offset,
-  limit,
-}: {
-  data: ProjectsData;
-  offset: number;
-  limit: number;
-}) {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { projects, count } = data;
-
-  const handleNextPage = () => {
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.set("projectOffset", String(offset + limit));
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousPage = () => {
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.set("projectOffset", String(offset - limit));
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  return (
-    <>
-      <SectionHeader heading="Projects" count={count} />
-      <WorkflowEvaluationProjectsTable workflowEvaluationProjects={projects} />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={offset <= 0}
-        disableNext={offset + limit >= count}
-      />
-    </>
-  );
-}
-
-function RunsContent({
-  data,
-  offset,
-  limit,
-}: {
-  data: RunsData;
-  offset: number;
-  limit: number;
-}) {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { runs, count } = data;
-
-  const handleNextPage = () => {
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.set("runOffset", String(offset + limit));
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousPage = () => {
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.set("runOffset", String(offset - limit));
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  return (
-    <>
-      <SectionHeader heading="Evaluation Runs" count={count} />
-      <WorkflowEvaluationRunsTable workflowEvaluationRuns={runs} />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={offset <= 0}
-        disableNext={offset + limit >= count}
-      />
-    </>
-  );
-}
-
 export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
@@ -167,47 +39,18 @@ export default function EvaluationSummaryPage({
   return (
     <PageLayout>
       <PageHeader heading="Workflow Evaluations" />
-      <SectionLayout>
-        <Suspense
-          key={`projects-${location.key}`}
-          fallback={<SectionSkeleton />}
-        >
-          <Await
-            resolve={projectsData}
-            errorElement={
-              <SectionError
-                title="Error loading projects"
-                defaultMessage="Failed to load projects"
-              />
-            }
-          >
-            {(data) => (
-              <ProjectsContent
-                data={data}
-                offset={projectOffset}
-                limit={projectLimit}
-              />
-            )}
-          </Await>
-        </Suspense>
-      </SectionLayout>
-      <SectionLayout>
-        <Suspense key={`runs-${location.key}`} fallback={<SectionSkeleton />}>
-          <Await
-            resolve={runsData}
-            errorElement={
-              <SectionError
-                title="Error loading evaluation runs"
-                defaultMessage="Failed to load evaluation runs"
-              />
-            }
-          >
-            {(data) => (
-              <RunsContent data={data} offset={runOffset} limit={runLimit} />
-            )}
-          </Await>
-        </Suspense>
-      </SectionLayout>
+      <ProjectsSection
+        promise={projectsData}
+        offset={projectOffset}
+        limit={projectLimit}
+        locationKey={location.key}
+      />
+      <RunsSection
+        promise={runsData}
+        offset={runOffset}
+        limit={runLimit}
+        locationKey={location.key}
+      />
     </PageLayout>
   );
 }
