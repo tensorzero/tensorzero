@@ -21,27 +21,19 @@ export function ExperimentationSection({
   locationKey,
 }: ExperimentationSectionProps) {
   return (
-    <Suspense
-      key={`experimentation-${locationKey}`}
-      fallback={
-        <SectionLayout>
-          <SectionHeader heading="Experimentation" />
-          <Skeleton className="h-32 w-full" />
-        </SectionLayout>
-      }
-    >
-      <Await
-        resolve={promise}
-        errorElement={
-          <SectionLayout>
-            <SectionHeader heading="Experimentation" />
-            <SectionAsyncErrorState defaultMessage="Failed to load experimentation data" />
-          </SectionLayout>
-        }
+    <SectionLayout>
+      <SectionHeader heading="Experimentation" />
+      <Suspense
+        key={`experimentation-${locationKey}`}
+        fallback={<Skeleton className="h-32 w-full" />}
       >
-        {(data) => (
-          <SectionLayout>
-            <SectionHeader heading="Experimentation" />
+        <Await
+          resolve={promise}
+          errorElement={
+            <SectionAsyncErrorState defaultMessage="Failed to load experimentation data" />
+          }
+        >
+          {(data) => (
             <FunctionExperimentation
               functionConfig={functionConfig}
               functionName={functionName}
@@ -50,9 +42,9 @@ export function ExperimentationSection({
                 data.variant_sampling_probabilities
               }
             />
-          </SectionLayout>
-        )}
-      </Await>
-    </Suspense>
+          )}
+        </Await>
+      </Suspense>
+    </SectionLayout>
   );
 }
