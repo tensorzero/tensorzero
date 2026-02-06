@@ -28,7 +28,7 @@ export type UpdateJsonDatapointRequest = {
    * Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
    * it will be overwrite the existing tags.
    */
-  tags?: { [key in string]?: string };
+  tags?: { [key in string]: string };
   /**
    * Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
    */

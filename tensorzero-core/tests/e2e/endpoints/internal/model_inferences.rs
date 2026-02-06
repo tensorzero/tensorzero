@@ -35,7 +35,6 @@ async fn get_available_inference_id(request: ListInferencesRequest) -> Uuid {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_model_inferences_for_chat_inference() {
-    skip_for_postgres!();
     // First, get an inference_id from the list_inferences endpoint
     let inference_id = get_available_inference_id(ListInferencesRequest {
         function_name: Some("write_haiku".to_string()),
@@ -77,7 +76,6 @@ async fn test_get_model_inferences_for_chat_inference() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_model_inferences_for_json_inference() {
-    skip_for_postgres!();
     // Get an inference_id for a JSON function
     let inference_id = get_available_inference_id(ListInferencesRequest {
         function_name: Some("extract_entities".to_string()),
@@ -111,7 +109,6 @@ async fn test_get_model_inferences_for_json_inference() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_model_inferences_nonexistent_id() {
-    skip_for_postgres!();
     // Use a random UUID that doesn't exist
     let nonexistent_id = Uuid::now_v7();
 
@@ -132,7 +129,6 @@ async fn test_get_model_inferences_nonexistent_id() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_model_inferences_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/model_inferences/not-a-valid-uuid");
 

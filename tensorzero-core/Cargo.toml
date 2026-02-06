@@ -42,7 +42,7 @@ aws-smithy-runtime-api = "1.11.0"
 axum = { workspace = true }
 backon = { version = "1.6.0", features = ["tokio-sleep"] }
 blake3 = { workspace = true }
-bytes = "1.6.1"
+bytes = "1.11.1"
 chrono = { workspace = true }
 derive_builder = "0.20.0"
 durable = { workspace = true }
@@ -50,7 +50,7 @@ futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
-jsonschema = "0.40.0"
+jsonschema = "0.41.0"
 jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
@@ -81,6 +81,7 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../internal/tensorzero-derive" }
 tensorzero-types = { path = "../internal/tensorzero-types" }
+tensorzero-config-paths = { path = "../internal/tensorzero-config-paths" }
 tensorzero-types-providers = { path = "../internal/tensorzero-types-providers" }
 minijinja-utils = { path = "../internal/minijinja-utils" }
 clap = { workspace = true }
@@ -105,8 +106,8 @@ mime_guess = "2.0.5"
 indexmap = { version = "2.13.0", features = ["serde"] }
 base64 = "0.22.1"
 thiserror = { workspace = true }
-globset = "0.4.18"
-walkdir = "2.5.0"
+globset = { workspace = true }
+walkdir = { workspace = true }
 enum-map = "2.7.3"
 tokio-util = { version = "0.7.17", features = ["rt"] }
 ts-rs = { workspace = true, optional = true }
@@ -131,7 +132,7 @@ dashmap = "6.1.0"
 redis = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.21.0"
+tempfile = { workspace = true }
 rand_distr = "0.5.1"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 paste = "1.0.15"

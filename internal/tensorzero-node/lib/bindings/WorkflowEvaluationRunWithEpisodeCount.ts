@@ -6,8 +6,8 @@
 export type WorkflowEvaluationRunWithEpisodeCount = {
   name?: string;
   id: string;
-  variant_pins: { [key in string]?: string };
-  tags: { [key in string]?: string };
+  variant_pins: { [key in string]: string };
+  tags: { [key in string]: string };
   project_name?: string;
   num_episodes: number;
   timestamp: string;

@@ -73,7 +73,7 @@ async fn test_mutate_variant_chat() {
     // Analyze parent results
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,
@@ -208,7 +208,7 @@ async fn test_mutate_variant_json() {
     // Analyze parent results
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,
@@ -316,7 +316,7 @@ async fn test_mutate_variant_preserves_variables() {
 
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,
@@ -413,7 +413,7 @@ async fn test_mutate_variant_preserves_schema_references() {
 
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,
@@ -528,7 +528,7 @@ async fn test_mutate_variant_naming() {
 
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,

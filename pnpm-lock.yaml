@@ -140,7 +140,7 @@ importers:
         specifier: ^9.37.0
         version: 9.37.0
       '@napi-rs/cli':
-        specifier: ^3.0.0-alpha.72
+        specifier: ^3.5.1
         version: 3.5.1(@emnapi/runtime@1.8.1)(@types/node@20.19.4)
       '@types/node':
         specifier: ^20.19.4

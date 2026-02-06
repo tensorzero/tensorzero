@@ -10,8 +10,10 @@ use async_trait::async_trait;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel};
 use crate::db::TimeWindow;
+use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::datasets::{
     DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
@@ -30,12 +32,23 @@ use crate::db::inferences::{
     GetFunctionThroughputByVariantParams, InferenceMetadata, InferenceQueries,
     ListInferenceMetadataParams, ListInferencesParams, VariantThroughput,
 };
+use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::stored_datapoint::StoredDatapoint;
+use crate::db::workflow_evaluation_queries::{
+    GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationProjectRow,
+    WorkflowEvaluationQueries, WorkflowEvaluationRunEpisodeWithFeedbackRow,
+    WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRow,
+    WorkflowEvaluationRunWithEpisodeCountRow,
+};
+use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint};
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
-use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
+use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
+use crate::inference::types::{
+    ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
+};
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::tool::ToolCallConfigDatabaseInsert;
 
@@ -61,7 +74,15 @@ pub struct DelegatingDatabaseConnection {
 }
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
-pub trait DelegatingDatabaseQueries: FeedbackQueries + InferenceQueries + DatasetQueries {}
+pub trait DelegatingDatabaseQueries:
+    FeedbackQueries
+    + InferenceQueries
+    + DatasetQueries
+    + BatchInferenceQueries
+    + ModelInferenceQueries
+    + WorkflowEvaluationQueries
+{
+}
 impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
 impl DelegatingDatabaseQueries for PostgresConnectionInfo {}
 
@@ -499,5 +520,382 @@ impl DatasetQueries for DelegatingDatabaseConnection {
         }
 
         Ok(results)
+    }
+}
+#[async_trait]
+impl BatchInferenceQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn get_batch_request(
+        &self,
+        batch_id: Uuid,
+        inference_id: Option<Uuid>,
+    ) -> Result<Option<BatchRequestRow<'static>>, Error> {
+        self.get_read_database()
+            .get_batch_request(batch_id, inference_id)
+            .await
+    }
+
+    async fn get_batch_model_inferences(
+        &self,
+        batch_id: Uuid,
+        inference_ids: &[Uuid],
+    ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error> {
+        self.get_read_database()
+            .get_batch_model_inferences(batch_id, inference_ids)
+            .await
+    }
+
+    async fn get_completed_chat_batch_inferences(
+        &self,
+        batch_id: Uuid,
+        function_name: &str,
+        variant_name: &str,
+        inference_id: Option<Uuid>,
+    ) -> Result<Vec<CompletedBatchInferenceRow>, Error> {
+        self.get_read_database()
+            .get_completed_chat_batch_inferences(
+                batch_id,
+                function_name,
+                variant_name,
+                inference_id,
+            )
+            .await
+    }
+
+    async fn get_completed_json_batch_inferences(
+        &self,
+        batch_id: Uuid,
+        function_name: &str,
+        variant_name: &str,
+        inference_id: Option<Uuid>,
+    ) -> Result<Vec<CompletedBatchInferenceRow>, Error> {
+        self.get_read_database()
+            .get_completed_json_batch_inferences(
+                batch_id,
+                function_name,
+                variant_name,
+                inference_id,
+            )
+            .await
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn write_batch_request(&self, row: &BatchRequestRow<'_>) -> Result<(), Error> {
+        self.clickhouse.write_batch_request(row).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.write_batch_request(row).await
+        {
+            tracing::error!("Error writing batch request to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    async fn write_batch_model_inferences(
+        &self,
+        rows: &[BatchModelInferenceRow<'_>],
+    ) -> Result<(), Error> {
+        self.clickhouse.write_batch_model_inferences(rows).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.write_batch_model_inferences(rows).await
+        {
+            tracing::error!("Error writing batch model inferences to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ModelInferenceQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn get_model_inferences_by_inference_id(
+        &self,
+        inference_id: Uuid,
+    ) -> Result<Vec<StoredModelInference>, Error> {
+        self.get_read_database()
+            .get_model_inferences_by_inference_id(inference_id)
+            .await
+    }
+
+    async fn count_distinct_models_used(&self) -> Result<u32, Error> {
+        self.get_read_database().count_distinct_models_used().await
+    }
+
+    async fn get_model_usage_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<ModelUsageTimePoint>, Error> {
+        self.get_read_database()
+            .get_model_usage_timeseries(time_window, max_periods)
+            .await
+    }
+
+    async fn get_model_latency_quantiles(
+        &self,
+        time_window: TimeWindow,
+    ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
+        self.get_read_database()
+            .get_model_latency_quantiles(time_window)
+            .await
+    }
+
+    fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
+        self.get_read_database()
+            .get_model_latency_quantile_function_inputs()
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+
+        self.clickhouse.insert_model_inferences(rows).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_model_inferences(rows).await
+        {
+            tracing::error!("Error writing model inferences to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+#[async_trait]
+impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn list_workflow_evaluation_projects(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<WorkflowEvaluationProjectRow>, Error> {
+        self.get_read_database()
+            .list_workflow_evaluation_projects(limit, offset)
+            .await
+    }
+
+    async fn count_workflow_evaluation_projects(&self) -> Result<u32, Error> {
+        self.get_read_database()
+            .count_workflow_evaluation_projects()
+            .await
+    }
+
+    async fn search_workflow_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+        project_name: Option<&str>,
+        search_query: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunRow>, Error> {
+        self.get_read_database()
+            .search_workflow_evaluation_runs(limit, offset, project_name, search_query)
+            .await
+    }
+
+    async fn list_workflow_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+        run_id: Option<Uuid>,
+        project_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunWithEpisodeCountRow>, Error> {
+        self.get_read_database()
+            .list_workflow_evaluation_runs(limit, offset, run_id, project_name)
+            .await
+    }
+
+    async fn count_workflow_evaluation_runs(&self) -> Result<u32, Error> {
+        self.get_read_database()
+            .count_workflow_evaluation_runs()
+            .await
+    }
+
+    async fn get_workflow_evaluation_runs(
+        &self,
+        run_ids: &[Uuid],
+        project_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunRow>, Error> {
+        self.get_read_database()
+            .get_workflow_evaluation_runs(run_ids, project_name)
+            .await
+    }
+
+    async fn get_workflow_evaluation_run_statistics(
+        &self,
+        run_id: Uuid,
+        metric_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunStatisticsRow>, Error> {
+        self.get_read_database()
+            .get_workflow_evaluation_run_statistics(run_id, metric_name)
+            .await
+    }
+
+    async fn list_workflow_evaluation_run_episodes_by_task_name(
+        &self,
+        run_ids: &[Uuid],
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow>, Error> {
+        self.get_read_database()
+            .list_workflow_evaluation_run_episodes_by_task_name(run_ids, limit, offset)
+            .await
+    }
+
+    async fn count_workflow_evaluation_run_episodes_by_task_name(
+        &self,
+        run_ids: &[Uuid],
+    ) -> Result<u32, Error> {
+        self.get_read_database()
+            .count_workflow_evaluation_run_episodes_by_task_name(run_ids)
+            .await
+    }
+
+    async fn get_workflow_evaluation_run_episodes_with_feedback(
+        &self,
+        run_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<WorkflowEvaluationRunEpisodeWithFeedbackRow>, Error> {
+        self.get_read_database()
+            .get_workflow_evaluation_run_episodes_with_feedback(run_id, limit, offset)
+            .await
+    }
+
+    async fn count_workflow_evaluation_run_episodes(&self, run_id: Uuid) -> Result<u32, Error> {
+        self.get_read_database()
+            .count_workflow_evaluation_run_episodes(run_id)
+            .await
+    }
+
+    async fn get_workflow_evaluation_run_by_episode_id(
+        &self,
+        episode_id: Uuid,
+    ) -> Result<Option<WorkflowEvaluationRunInfo>, Error> {
+        self.get_read_database()
+            .get_workflow_evaluation_run_by_episode_id(episode_id)
+            .await
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn insert_workflow_evaluation_run(
+        &self,
+        run_id: Uuid,
+        variant_pins: &HashMap<String, String>,
+        tags: &HashMap<String, String>,
+        project_name: Option<&str>,
+        run_display_name: Option<&str>,
+        snapshot_hash: &SnapshotHash,
+    ) -> Result<(), Error> {
+        self.clickhouse
+            .insert_workflow_evaluation_run(
+                run_id,
+                variant_pins,
+                tags,
+                project_name,
+                run_display_name,
+                snapshot_hash,
+            )
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .insert_workflow_evaluation_run(
+                    run_id,
+                    variant_pins,
+                    tags,
+                    project_name,
+                    run_display_name,
+                    snapshot_hash,
+                )
+                .await
+        {
+            tracing::error!("Error writing workflow evaluation run to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    async fn insert_workflow_evaluation_run_episode(
+        &self,
+        run_id: Uuid,
+        episode_id: Uuid,
+        task_name: Option<&str>,
+        tags: &HashMap<String, String>,
+        snapshot_hash: &SnapshotHash,
+    ) -> Result<(), Error> {
+        self.clickhouse
+            .insert_workflow_evaluation_run_episode(
+                run_id,
+                episode_id,
+                task_name,
+                tags,
+                snapshot_hash,
+            )
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .insert_workflow_evaluation_run_episode(
+                    run_id,
+                    episode_id,
+                    task_name,
+                    tags,
+                    snapshot_hash,
+                )
+                .await
+        {
+            tracing::error!("Error writing workflow evaluation run episode to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+mod test_helpers_impl {
+    use super::DelegatingDatabaseConnection;
+    use crate::db::clickhouse::test_helpers::get_clickhouse;
+    use crate::db::postgres::test_helpers::get_postgres;
+    use crate::db::test_helpers::TestDatabaseHelpers;
+    use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
+    use async_trait::async_trait;
+
+    impl DelegatingDatabaseConnection {
+        pub async fn new_for_e2e_test() -> Self {
+            let clickhouse = get_clickhouse().await;
+            let postgres = get_postgres().await;
+            Self::new(clickhouse, postgres)
+        }
+    }
+
+    #[async_trait]
+    impl TestDatabaseHelpers for DelegatingDatabaseConnection {
+        async fn flush_pending_writes(&self) {
+            if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
+                self.postgres.flush_pending_writes().await;
+            } else {
+                self.clickhouse.flush_pending_writes().await;
+            }
+        }
+
+        async fn sleep_for_writes_to_be_visible(&self) {
+            if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
+                self.postgres.sleep_for_writes_to_be_visible().await;
+            } else {
+                self.clickhouse.sleep_for_writes_to_be_visible().await;
+            }
+        }
     }
 }

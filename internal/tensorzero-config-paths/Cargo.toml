@@ -1,0 +1,12 @@
+[package]
+name = "tensorzero-config-paths"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Minimal - no tensorzero deps to avoid cycles
+
+[lints]
+workspace = true

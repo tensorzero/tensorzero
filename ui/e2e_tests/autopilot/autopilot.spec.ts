@@ -1,4 +1,63 @@
 import { test, expect } from "@playwright/test";
+import { v7 } from "uuid";
+
+test("should interrupt an active session", async ({ page }) => {
+  // Increase timeout for this test since it involves LLM responses
+  test.setTimeout(120000);
+
+  // Navigate to autopilot sessions
+  await page.goto("/autopilot/sessions");
+
+  // Wait for the page to load
+  await expect(
+    page.getByRole("heading", { name: "Autopilot Sessions" }),
+  ).toBeVisible();
+
+  // Click to create a new session
+  await page.getByRole("button", { name: /new session/i }).click();
+
+  // Wait for the new session page
+  await expect(page).toHaveURL(/\/autopilot\/sessions\/new/);
+
+  // Find the message textarea and type a message that will trigger tool calls
+  const messageInput = page.getByRole("textbox");
+  // We randomize this message so it misses the provider proxy cache and we have time to click the stop button
+  await messageInput.fill(
+    `What functions are available in my TensorZero config? ${v7()}`,
+  );
+
+  // Send the message
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  // Wait for redirect to the actual session page
+  await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+    timeout: 30000,
+  });
+
+  // Wait for the stop button to appear (session is processing)
+  const stopButton = page.getByRole("button", {
+    name: /stop session/i,
+  });
+  await expect(stopButton).toBeVisible({ timeout: 30000 });
+
+  // Click the stop button
+  await stopButton.click();
+
+  // Verify the status update message appears in the event stream
+  await expect(page.getByText("Interrupted session")).toBeVisible({
+    timeout: 10000,
+  });
+
+  // Verify the send button reappears after interruption (session returns to idle)
+  const sendButton = page.getByRole("button", { name: /send message/i });
+  await expect(sendButton).toBeVisible({ timeout: 30000 });
+
+  // Verify the status indicator shows "Ready" (which is the label for "idle" status)
+  await expect(page.getByText("Ready")).toBeVisible({ timeout: 10000 });
+
+  // Verify no error message is shown - the session should be cleanly idle, not failed
+  await expect(page.getByText("Something went wrong")).not.toBeVisible();
+});
 
 test("should create a session, send a message, approve tool calls, and get a response", async ({
   page,
@@ -142,6 +201,24 @@ test.describe("Autopilot New Session Button", () => {
     await page.waitForURL("**/autopilot/sessions/new", { timeout: 10000 });
     await page.waitForLoadState("networkidle");
     expect(page.url()).toMatch(/\/autopilot\/sessions\/new$/);
+  });
+});
+
+test.describe("Scroll blur overlays", () => {
+  test("top fade is hidden on new session at rest", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const topFade = page.getByTestId("scroll-fade-top");
+    await expect(topFade).toHaveCSS("opacity", "0");
+  });
+
+  test("bottom fade is hidden on new session at rest", async ({ page }) => {
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const bottomFade = page.getByTestId("scroll-fade-bottom");
+    await expect(bottomFade).toHaveCSS("opacity", "0");
   });
 });
 

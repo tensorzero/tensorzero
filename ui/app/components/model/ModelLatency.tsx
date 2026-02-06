@@ -1,4 +1,8 @@
-import type { ModelLatencyDatapoint, TimeWindow } from "~/types/tensorzero";
+import type {
+  GetModelLatencyResponse,
+  ModelLatencyDatapoint,
+  TimeWindow,
+} from "~/types/tensorzero";
 import {
   Line,
   LineChart,
@@ -256,11 +260,9 @@ function transformLatencyData(
 }
 
 export function ModelLatency({
-  modelLatencyDataPromise,
-  quantiles,
+  modelLatencyResponsePromise,
 }: {
-  modelLatencyDataPromise: Promise<ModelLatencyDatapoint[]>;
-  quantiles: number[];
+  modelLatencyResponsePromise: Promise<GetModelLatencyResponse>;
 }) {
   const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
     "latencyTimeGranularity",
@@ -278,7 +280,7 @@ export function ModelLatency({
             Quantiles of latency metrics by model
           </CardDescription>
         </div>
-        <div className="flex flex-col justify-center gap-2">
+        <div className="flex items-center gap-2">
           <LatencyTimeWindowSelector
             value={timeGranularity}
             onValueChange={onTimeGranularityChange}
@@ -300,14 +302,14 @@ export function ModelLatency({
       <CardContent>
         <React.Suspense fallback={<div>Loading latency data...</div>}>
           <Await
-            resolve={modelLatencyDataPromise}
+            resolve={modelLatencyResponsePromise}
             errorElement={<ModelLatencyError />}
           >
-            {(latencyData) => (
+            {(response) => (
               <LatencyQuantileChart
-                latencyData={latencyData}
+                latencyData={response.data}
                 selectedMetric={selectedMetric}
-                quantiles={quantiles}
+                quantiles={response.quantiles}
               />
             )}
           </Await>
