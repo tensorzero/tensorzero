@@ -4,7 +4,7 @@
  * Includes links to external job details and raw data visualization.
  */
 
-import { AlertCircle, ExternalLink } from "lucide-react";
+import { AlertTriangle, ExternalLink } from "lucide-react";
 import { Calendar, Function } from "~/components/icons/Icons";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { RawDataAccordion } from "./RawDataAccordion";
@@ -117,7 +117,7 @@ export default function LLMFineTuningStatus({
         <SectionLayout>
           <SectionHeader heading="Error" />
           <SectionErrorNotice
-            icon={AlertCircle}
+            icon={AlertTriangle}
             title="Fine-tuning job failed"
             description={getErrorDescription(status)}
           />
