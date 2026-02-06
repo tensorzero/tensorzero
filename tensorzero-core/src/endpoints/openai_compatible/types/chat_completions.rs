@@ -2558,4 +2558,111 @@ mod tests {
             _ => panic!("Expected Text at position 4"),
         }
     }
+
+    /// Streaming chunks include an `id` field via `#[serde(flatten)]`.
+    /// When a client round-trips the JSON back as an `ExtraContentBlock`,
+    /// deserialization must not fail on the extra `id` field.
+    #[test]
+    fn test_streaming_unknown_chunk_round_trips_as_extra_content_block() {
+        use crate::endpoints::openai_compatible::types::streaming::ExtraContentBlockChunk;
+        use crate::inference::types::streams::UnknownChunk;
+
+        let chunk = ExtraContentBlockChunk::Unknown {
+            insert_index: 0,
+            chunk: UnknownChunk {
+                id: "unknown-0".to_string(),
+                data: json!({"custom": "data"}),
+                model_name: Some("my_model".to_string()),
+                provider_name: Some("my_provider".to_string()),
+            },
+        };
+
+        let serialized = serde_json::to_value(&chunk).expect("serialization should succeed");
+
+        // The serialized JSON should contain the `id` from the chunk
+        assert_eq!(
+            serialized["id"], "unknown-0",
+            "serialized JSON should include the flattened `id` field"
+        );
+
+        let block: ExtraContentBlock =
+            serde_json::from_value(serialized).expect("round-trip deserialization should succeed");
+
+        match block {
+            ExtraContentBlock::Unknown {
+                insert_index,
+                unknown,
+            } => {
+                assert_eq!(
+                    insert_index,
+                    Some(0),
+                    "insert_index should be preserved through round-trip"
+                );
+                assert_eq!(
+                    unknown.data,
+                    json!({"custom": "data"}),
+                    "data should be preserved through round-trip"
+                );
+                assert_eq!(
+                    unknown.model_name.as_deref(),
+                    Some("my_model"),
+                    "model_name should be preserved through round-trip"
+                );
+                assert_eq!(
+                    unknown.provider_name.as_deref(),
+                    Some("my_provider"),
+                    "provider_name should be preserved through round-trip"
+                );
+            }
+            ExtraContentBlock::Thought { .. } => panic!("Expected Unknown variant"),
+        }
+    }
+
+    #[test]
+    fn test_streaming_thought_chunk_round_trips_as_extra_content_block() {
+        use crate::endpoints::openai_compatible::types::streaming::ExtraContentBlockChunk;
+        use crate::inference::types::streams::ThoughtChunk;
+
+        let chunk = ExtraContentBlockChunk::Thought {
+            insert_index: 1,
+            chunk: ThoughtChunk {
+                id: "thought-0".to_string(),
+                text: Some("thinking...".to_string()),
+                signature: Some("sig".to_string()),
+                summary_id: None,
+                summary_text: None,
+                provider_type: None,
+                extra_data: None,
+            },
+        };
+
+        let serialized = serde_json::to_value(&chunk).expect("serialization should succeed");
+
+        let block: ExtraContentBlock =
+            serde_json::from_value(serialized).expect("round-trip deserialization should succeed");
+
+        match block {
+            ExtraContentBlock::Thought {
+                insert_index,
+                thought,
+            } => {
+                assert_eq!(
+                    insert_index,
+                    Some(1),
+                    "insert_index should be preserved through round-trip"
+                );
+                assert_eq!(
+                    thought.text,
+                    Some("thinking...".to_string()),
+                    "text should be preserved through round-trip"
+                );
+                assert_eq!(
+                    thought.signature,
+                    Some("sig".to_string()),
+                    "signature should be preserved through round-trip"
+                );
+            }
+            ExtraContentBlock::Unknown { .. } => panic!("Expected Thought variant"),
+        }
+    }
 }
