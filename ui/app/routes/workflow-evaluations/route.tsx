@@ -3,7 +3,6 @@ import { AlertCircle } from "lucide-react";
 import type { Route } from "./+types/route";
 import {
   Await,
-  isRouteErrorResponse,
   useAsyncError,
   useLocation,
   useNavigate,
@@ -20,7 +19,10 @@ import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
 import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { Skeleton } from "~/components/ui/skeleton";
-import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import {
+  getErrorMessage,
+  SectionErrorNotice,
+} from "~/components/ui/error/ErrorContentPrimitives";
 
 type ProjectsData = {
   projects: Awaited<
@@ -96,17 +98,11 @@ function SectionError({
   defaultMessage: string;
 }) {
   const error = useAsyncError();
-  let message = defaultMessage;
-  if (isRouteErrorResponse(error)) {
-    message = typeof error.data === "string" ? error.data : message;
-  } else if (error instanceof Error) {
-    message = error.message;
-  }
   return (
     <SectionErrorNotice
       icon={AlertCircle}
       title={title}
-      description={message}
+      description={getErrorMessage({ error, fallback: defaultMessage })}
     />
   );
 }
