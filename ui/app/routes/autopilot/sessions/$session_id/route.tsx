@@ -23,6 +23,7 @@ import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
+import { WriteAllConfigsButton } from "~/components/autopilot/WriteAllConfigsButton";
 import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 import {
   AutopilotStatusBanner,
@@ -34,6 +35,7 @@ import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
 import { logger } from "~/utils/logger";
 import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
+import { getEnv } from "~/utils/env.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
@@ -88,6 +90,9 @@ export async function loader({ params }: Route.LoaderArgs) {
     throw data("Session ID is required", { status: 400 });
   }
 
+  const env = getEnv();
+  const configWriteEnabled = Boolean(env.TENSORZERO_UI_CONFIG_FILE);
+
   // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
     return {
@@ -99,6 +104,7 @@ export async function loader({ params }: Route.LoaderArgs) {
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
+      configWriteEnabled,
     };
   }
 
@@ -134,6 +140,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     sessionId,
     eventsData: eventsDataPromise,
     isNewSession: false,
+    configWriteEnabled,
   };
 }
 
@@ -184,6 +191,7 @@ function EventStreamContent({
   onPendingToolCallsChange,
   onErrorChange,
   onHasReachedStartChange,
+  configWriteEnabled,
   pendingToolCallIds,
 }: {
   sessionId: string;
@@ -197,6 +205,7 @@ function EventStreamContent({
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
   onHasReachedStartChange: (hasReachedStart: boolean) => void;
+  configWriteEnabled: boolean;
   pendingToolCallIds: Set<string>;
 }) {
   const {
@@ -360,6 +369,8 @@ function EventStreamContent({
       pendingToolCallIds={pendingToolCallIds}
       optimisticMessages={visibleOptimisticMessages}
       status={isNewSession ? undefined : status}
+      configWriteEnabled={configWriteEnabled}
+      sessionId={sessionId}
     />
   );
 }
@@ -367,7 +378,8 @@ function EventStreamContent({
 function AutopilotSessionEventsPageContent({
   loaderData,
 }: Route.ComponentProps) {
-  const { sessionId, eventsData, isNewSession } = loaderData;
+  const { sessionId, eventsData, isNewSession, configWriteEnabled } =
+    loaderData;
   const { yoloMode, setYoloMode } = useAutopilotSession();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -752,10 +764,18 @@ function AutopilotSessionEventsPageContent({
                       ]
                 }
               />
-              <YoloModeToggle
-                checked={yoloMode}
-                onCheckedChange={setYoloMode}
-              />
+              <div className="flex items-center gap-2">
+                {configWriteEnabled && !isNewSession && (
+                  <WriteAllConfigsButton
+                    sessionId={sessionId}
+                    disabled={isEventsLoading || hasLoadError}
+                  />
+                )}
+                <YoloModeToggle
+                  checked={yoloMode}
+                  onCheckedChange={setYoloMode}
+                />
+              </div>
             </div>
             {sseError.error && sseError.isRetrying && (
               <AutopilotStatusBanner
@@ -804,6 +824,7 @@ function AutopilotSessionEventsPageContent({
                   onPendingToolCallsChange={handlePendingToolCallsChange}
                   onErrorChange={handleErrorChange}
                   onHasReachedStartChange={handleHasReachedStartChange}
+                  configWriteEnabled={configWriteEnabled}
                   pendingToolCallIds={pendingToolCallIds}
                 />
               )}

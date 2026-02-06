@@ -137,6 +137,8 @@ tsbuild = [
     "tensorzero-types",
     "-p",
     "config-writer",
+    "-p",
+    "autopilot-tools",
     # TODO(shuyangli): Remove `gateway` when we redesign evaluations crate.
     "-p",
     "gateway",

@@ -31,6 +31,7 @@ import type {
   VisualizationType,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
+import { WriteConfigButton } from "~/components/autopilot/WriteConfigButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
 
 /**
@@ -69,6 +70,8 @@ type EventStreamProps = {
   onAuthorize?: (eventId: string, approved: boolean) => Promise<void>;
   optimisticMessages?: OptimisticMessage[];
   status?: AutopilotStatus;
+  configWriteEnabled?: boolean;
+  sessionId?: string;
 };
 
 export function ToolEventId({ id }: { id: string }) {
@@ -138,6 +141,16 @@ export function getToolCallEventId(event: ToolEvent): string {
     return payload.tool_execution_id;
   }
   return payload.tool_call_event_id;
+}
+
+/**
+ * Type guard to check if an event is a config write event.
+ * A config write event is a tool_call with name === "write_config".
+ */
+export function isConfigWriteEvent(event: GatewayEvent): boolean {
+  return (
+    event.payload.type === "tool_call" && event.payload.name === "write_config"
+  );
 }
 
 function getMessageText(content: EventPayloadMessageContent[]) {
@@ -500,14 +513,19 @@ class EventErrorBoundary extends Component<
 function EventItem({
   event,
   isPending = false,
+  configWriteEnabled = false,
+  sessionId,
 }: {
   event: GatewayEvent;
   isPending?: boolean;
+  configWriteEnabled?: boolean;
+  sessionId?: string;
 }) {
   const { yoloMode } = useAutopilotSession();
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
+  const isConfigWrite = isConfigWriteEvent(event);
   const isExpandable =
     event.payload.type === "tool_call" ||
     event.payload.type === "error" ||
@@ -553,6 +571,9 @@ function EventItem({
           label
         )}
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
+          {isConfigWrite && configWriteEnabled && sessionId && (
+            <WriteConfigButton sessionId={sessionId} event={event} />
+          )}
           {eventIsToolEvent && (
             <>
               <ToolEventId id={getToolCallEventId(event)} />
@@ -702,6 +723,8 @@ export default function EventStream({
   pendingToolCallIds,
   optimisticMessages = [],
   status,
+  configWriteEnabled = false,
+  sessionId,
 }: EventStreamProps) {
   // Determine what to show at the top: sentinel, error, or session start
   // Only show session start when there's content to display (events or optimistic messages)
@@ -736,6 +759,8 @@ export default function EventStream({
           <EventItem
             event={event}
             isPending={pendingToolCallIds?.has(event.id)}
+            configWriteEnabled={configWriteEnabled}
+            sessionId={sessionId}
           />
         </EventErrorBoundary>
       ))}
