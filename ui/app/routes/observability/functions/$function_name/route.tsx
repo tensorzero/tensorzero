@@ -377,8 +377,12 @@ function SectionsContent({
 export default function FunctionDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { function_name, variantsData, experimentationData, functionDetailData } =
-    loaderData;
+  const {
+    function_name,
+    variantsData,
+    experimentationData,
+    functionDetailData,
+  } = loaderData;
   const location = useLocation();
   const function_config = useFunctionConfig(function_name);
 
