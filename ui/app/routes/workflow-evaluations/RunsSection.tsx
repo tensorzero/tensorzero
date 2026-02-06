@@ -1,9 +1,5 @@
 import { Suspense } from "react";
-import {
-  Await,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
+import { Await, useNavigate, useSearchParams } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
@@ -31,10 +27,7 @@ export function RunsSection({
     <SectionLayout>
       <SectionHeader heading="Evaluation Runs" count={countPromise} />
       <Suspense key={`runs-${locationKey}`} fallback={<RunsSkeleton />}>
-        <Await
-          resolve={promise}
-          errorElement={<RunsError />}
-        >
+        <Await resolve={promise} errorElement={<RunsError />}>
           {(data) => <RunsContent data={data} offset={offset} limit={limit} />}
         </Await>
       </Suspense>
