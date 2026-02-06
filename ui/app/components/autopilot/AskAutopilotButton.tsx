@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
 import { Button, ButtonIcon } from "~/components/ui/button";
 import { Chat } from "~/components/icons/Icons";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
@@ -9,6 +9,7 @@ interface AskAutopilotButtonProps {
 
 export function AskAutopilotButton({ message }: AskAutopilotButtonProps) {
   const autopilotAvailable = useAutopilotAvailable();
+  const navigate = useNavigate();
 
   if (!autopilotAvailable) {
     return null;
@@ -17,11 +18,13 @@ export function AskAutopilotButton({ message }: AskAutopilotButtonProps) {
   const params = new URLSearchParams({ message });
 
   return (
-    <Button variant="outline" size="sm" asChild>
-      <Link to={`/autopilot/sessions/new?${params.toString()}`}>
-        <ButtonIcon as={Chat} variant="tertiary" />
-        Ask Autopilot
-      </Link>
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => navigate(`/autopilot/sessions/new?${params.toString()}`)}
+    >
+      <ButtonIcon as={Chat} variant="tertiary" />
+      Ask Autopilot
     </Button>
   );
 }
