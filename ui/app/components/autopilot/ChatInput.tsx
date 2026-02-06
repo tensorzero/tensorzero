@@ -80,12 +80,15 @@ export function ChatInput({
   // Auto-focus textarea when navigating to new session page
   // Wait for disabled state to clear before focusing
   // Place cursor at the end so user can start typing immediately
+  // Use initialMessage length rather than textarea.value.length to avoid race
+  // with the text-sync effect (setText hasn't flushed to the DOM yet)
   useEffect(() => {
     if (isNewSession && !disabled && textareaRef.current) {
       const textarea = textareaRef.current;
       textarea.focus();
-      textarea.selectionStart = textarea.value.length;
-      textarea.selectionEnd = textarea.value.length;
+      const length = (initialMessage ?? "").length;
+      textarea.selectionStart = length;
+      textarea.selectionEnd = length;
     }
   }, [isNewSession, disabled, initialMessage]);
 
