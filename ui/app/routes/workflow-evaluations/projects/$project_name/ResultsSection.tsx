@@ -24,10 +24,7 @@ export function ResultsSection({
 }: ResultsSectionProps) {
   return (
     <Suspense key={locationKey} fallback={<ResultsSkeleton />}>
-      <Await
-        resolve={promise}
-        errorElement={<ResultsError />}
-      >
+      <Await resolve={promise} errorElement={<ResultsError />}>
         {(data) => (
           <ResultsContent
             runInfos={runInfos}
