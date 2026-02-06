@@ -84,7 +84,12 @@ function EpisodesContent({
 }
 
 function EpisodesSkeleton() {
-  return <Skeleton className="h-64 w-full" />;
+  return (
+    <>
+      <Skeleton className="h-64 w-full" />
+      <PageButtons disabled />
+    </>
+  );
 }
 
 function EpisodesError() {
