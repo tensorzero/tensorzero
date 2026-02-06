@@ -6,12 +6,11 @@ import {
 } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
 import { WorkflowEvalRunSelector } from "~/routes/workflow-evaluations/projects/$project_name/WorkflowEvalRunSelector";
-import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
 import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
 import { useNavigate, useSearchParams, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { fetchResultsData, type ResultsData } from "./route.server";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -19,44 +18,6 @@ export const handle: RouteHandle = {
     { label: match.params.project_name!, isIdentifier: true },
   ],
 };
-
-async function fetchResultsData(
-  runIds: string[],
-  projectName: string,
-  limit: number,
-  offset: number,
-) {
-  const client = getTensorZeroClient();
-  const statsPromises = runIds.map((runId) =>
-    client
-      .getWorkflowEvaluationRunStatistics(runId)
-      .then((response) => response.statistics),
-  );
-  const runInfosPromise = client
-    .getWorkflowEvaluationRuns(runIds, projectName)
-    .then((response) => response.runs);
-  const episodeInfoPromise = client
-    .listWorkflowEvaluationRunEpisodesByTaskName(runIds, limit, offset)
-    .then((response) => response.episodes);
-  const countPromise =
-    client.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
-
-  const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
-    Promise.all(statsPromises),
-    runInfosPromise,
-    episodeInfoPromise,
-    countPromise,
-  ]);
-
-  const runStats: Record<string, WorkflowEvaluationRunStatistics[]> = {};
-  runIds.forEach((runId, index) => {
-    runStats[runId] = statsResults[index];
-  });
-  // Sort runInfos by the same order as the url params
-  runInfos.sort((a, b) => runIds.indexOf(a.id) - runIds.indexOf(b.id));
-
-  return { runInfos, runStats, episodeInfo, count };
-}
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const projectName = params.project_name;
@@ -104,9 +65,9 @@ function ResultsContent({
   limit,
   offset,
 }: {
-  runInfos: Awaited<ReturnType<typeof fetchResultsData>>["runInfos"];
-  runStats: Awaited<ReturnType<typeof fetchResultsData>>["runStats"];
-  episodeInfo: Awaited<ReturnType<typeof fetchResultsData>>["episodeInfo"];
+  runInfos: ResultsData["runInfos"];
+  runStats: ResultsData["runStats"];
+  episodeInfo: ResultsData["episodeInfo"];
   count: number;
   limit: number;
   offset: number;
