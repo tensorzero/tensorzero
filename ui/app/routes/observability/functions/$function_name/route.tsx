@@ -259,7 +259,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             function_config,
             time_granularity: feedback_time_granularity,
           })
-        : Promise.resolve(undefined),
+        : null,
     functionDetailData: fetchFunctionDetailData({
       function_name,
       config,
@@ -402,12 +402,14 @@ export default function FunctionDetailPage({
           locationKey={location.key}
         />
 
-        <ExperimentationSection
-          promise={experimentationData}
-          functionConfig={function_config}
-          functionName={function_name}
-          locationKey={location.key}
-        />
+        {experimentationData && (
+          <ExperimentationSection
+            promise={experimentationData}
+            functionConfig={function_config}
+            functionName={function_name}
+            locationKey={location.key}
+          />
+        )}
 
         <Suspense key={location.key} fallback={<SectionsSkeleton />}>
           <Await

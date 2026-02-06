@@ -8,7 +8,7 @@ import type { FunctionConfig } from "~/types/tensorzero";
 import type { ExperimentationSectionData } from "./experimentation-data.server";
 
 interface ExperimentationSectionProps {
-  promise: Promise<ExperimentationSectionData | undefined>;
+  promise: Promise<ExperimentationSectionData>;
   functionConfig: FunctionConfig;
   functionName: string;
   locationKey: string;
@@ -39,21 +39,19 @@ export function ExperimentationSection({
           </SectionLayout>
         }
       >
-        {(data) =>
-          data ? (
-            <SectionLayout>
-              <SectionHeader heading="Experimentation" />
-              <FunctionExperimentation
-                functionConfig={functionConfig}
-                functionName={functionName}
-                feedbackTimeseries={data.feedback_timeseries}
-                variantSamplingProbabilities={
-                  data.variant_sampling_probabilities
-                }
-              />
-            </SectionLayout>
-          ) : null
-        }
+        {(data) => (
+          <SectionLayout>
+            <SectionHeader heading="Experimentation" />
+            <FunctionExperimentation
+              functionConfig={functionConfig}
+              functionName={functionName}
+              feedbackTimeseries={data.feedback_timeseries}
+              variantSamplingProbabilities={
+                data.variant_sampling_probabilities
+              }
+            />
+          </SectionLayout>
+        )}
       </Await>
     </Suspense>
   );
