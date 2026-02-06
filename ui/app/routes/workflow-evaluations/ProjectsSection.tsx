@@ -9,7 +9,7 @@ import type { ProjectsTableData } from "./route.server";
 import type { CountValue } from "~/components/layout/CountDisplay";
 
 interface ProjectsSectionProps {
-  promise: Promise<ProjectsTableData>;
+  projectsData: Promise<ProjectsTableData>;
   countPromise: CountValue;
   offset: number;
   limit: number;
@@ -17,7 +17,7 @@ interface ProjectsSectionProps {
 }
 
 export function ProjectsSection({
-  promise,
+  projectsData,
   countPromise,
   offset,
   limit,
@@ -27,7 +27,7 @@ export function ProjectsSection({
     <SectionLayout>
       <SectionHeader heading="Projects" count={countPromise} />
       <Suspense key={`projects-${locationKey}`} fallback={<ProjectsSkeleton />}>
-        <Await resolve={promise} errorElement={<ProjectsError />}>
+        <Await resolve={projectsData} errorElement={<ProjectsError />}>
           {(data) => (
             <ProjectsContent data={data} offset={offset} limit={limit} />
           )}

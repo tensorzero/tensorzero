@@ -9,7 +9,7 @@ import type { RunsTableData } from "./route.server";
 import type { CountValue } from "~/components/layout/CountDisplay";
 
 interface RunsSectionProps {
-  promise: Promise<RunsTableData>;
+  runsData: Promise<RunsTableData>;
   countPromise: CountValue;
   offset: number;
   limit: number;
@@ -17,7 +17,7 @@ interface RunsSectionProps {
 }
 
 export function RunsSection({
-  promise,
+  runsData,
   countPromise,
   offset,
   limit,
@@ -27,7 +27,7 @@ export function RunsSection({
     <SectionLayout>
       <SectionHeader heading="Evaluation Runs" count={countPromise} />
       <Suspense key={`runs-${locationKey}`} fallback={<RunsSkeleton />}>
-        <Await resolve={promise} errorElement={<RunsError />}>
+        <Await resolve={runsData} errorElement={<RunsError />}>
           {(data) => <RunsContent data={data} offset={offset} limit={limit} />}
         </Await>
       </Suspense>

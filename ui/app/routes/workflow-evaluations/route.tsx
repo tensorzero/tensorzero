@@ -53,14 +53,14 @@ export default function EvaluationSummaryPage({
     <PageLayout>
       <PageHeader heading="Workflow Evaluations" />
       <ProjectsSection
-        promise={projectsData}
+        projectsData={projectsData}
         countPromise={projectCountPromise}
         offset={projectOffset}
         limit={projectLimit}
         locationKey={location.key}
       />
       <RunsSection
-        promise={runsData}
+        runsData={runsData}
         countPromise={runCountPromise}
         offset={runOffset}
         limit={runLimit}
