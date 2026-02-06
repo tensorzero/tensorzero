@@ -276,8 +276,9 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
     // Verify pg_cron is available
     // TODO(#6176): Once we promote pgcron_setup.sql to a migration, we can remove this check.
     if let Err(e) = pgcron::check_pgcron_configured_correctly(&pool).await {
+        let msg = e.suppress_logging_of_error_message();
         tracing::warn!(
-            "pg_cron extension is not configured correctly for your Postgres setup: {e}. TensorZero will start requiring pg_cron soon. Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres",
+            "pg_cron extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_cron soon. Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres",
         );
     }
 

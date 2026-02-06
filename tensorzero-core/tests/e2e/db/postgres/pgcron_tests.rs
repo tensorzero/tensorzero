@@ -82,7 +82,7 @@ async fn test_check_pgcron_configured_correctly_returns_error_without_pgcron(poo
     );
 
     let err = result.unwrap_err();
-    let err_msg = err.to_string();
+    let err_msg = err.suppress_logging_of_error_message();
     assert!(
         err_msg.contains("pg_cron"),
         "Error message should mention pg_cron, got: {err_msg}"
