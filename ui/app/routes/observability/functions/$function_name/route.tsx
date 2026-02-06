@@ -116,7 +116,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       beforeInference,
       afterInference,
       limit,
-      countPromise: inferenceCountPromise,
     }),
   };
 }
