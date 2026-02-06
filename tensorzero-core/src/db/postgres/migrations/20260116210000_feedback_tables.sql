@@ -80,7 +80,7 @@ CREATE INDEX idx_static_eval_feedback_lookup
 CREATE INDEX idx_static_eval_feedback_created_at ON tensorzero.inference_evaluation_human_feedback(created_at);
 
 -- Custom aggregate functions for MIN/MAX on UUIDs
--- Postgres before version 18 doesn't have built-in MIN/MAX for UUIDs, so we create our own.
+-- PostgreSQL before version 18 doesn't have built-in MIN/MAX for UUIDs, so we create our own.
 
 -- Helper function for min_uuid aggregate
 CREATE OR REPLACE FUNCTION tensorzero.uuid_smaller(uuid, uuid)
