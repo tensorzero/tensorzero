@@ -488,11 +488,13 @@ impl VariantSampler for TrackAndStopConfig {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
-            return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Track-and-Stop probability update task has already been spawned for function '{function_name}'"
-                ),
-            }));
+            // This can happen when running GEPA, which re-uses the existing gateway config.
+            // We don't need to spawn another background update task - the existing task will update
+            // the `ArcSwap` read by all consumers
+            tracing::info!(
+                "Track-and-Stop experimentation background task has already been spawned for function '{function_name}'"
+            );
+            return Ok(());
         }
 
         // Spawn a background task that continuously updates sampling probabilities.
