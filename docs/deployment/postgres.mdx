@@ -12,14 +12,14 @@ description: Learn how to deploy Postgres for advanced TensorZero features.
 TensorZero only requires Postgres for certain advanced features.
 Most notably, you need to deploy Postgres to [run adaptive A/B tests](/experimentation/run-adaptive-ab-tests) and [set up auth for TensorZero](/operations/set-up-auth-for-tensorzero).
 
-## Deploy
+## Set up
 
-### Deploy Postgres
+<Steps>
+
+<Step title="Deploy Postgres">
 
 You can self-host Postgres or use a managed service (e.g. AWS RDS, Supabase, PlanetScale).
 Follow the deployment instructions for your chosen service.
-
-Internally, we test TensorZero using PlanetScale Postgres as well as self-hosted Postgres 14.
 
 <Note>
 
@@ -27,9 +27,11 @@ If you find any compatibility issues, please open a detailed [GitHub Discussion]
 
 </Note>
 
-### Set up `pg_cron`
+</Step>
 
-TensorZero requires the [`pg_cron`](https://github.com/citusdata/pg_cron) extension to be installed and enabled in your database.
+<Step title="Set up pg_cron">
+
+TensorZero requires the [`pg_cron`](https://github.com/citusdata/pg_cron) extension.
 
 <Warning>
 
@@ -37,11 +39,11 @@ TensorZero requires the [`pg_cron`](https://github.com/citusdata/pg_cron) extens
 
 </Warning>
 
-Below, we describe how to set up `pg_cron` in popular Postgres services.
+Here are example setup instructions for some popular Postgres providers.
 
-<Tabs>
+<AccordionGroup>
 
-<Tab title="Self-Hosted Postgres">
+<Accordion title="Self-Hosted Postgres">
 
 <Steps>
 
@@ -82,9 +84,9 @@ GRANT USAGE ON SCHEMA cron TO your_username;
 
 </Steps>
 
-</Tab>
+</Accordion>
 
-<Tab title="AWS RDS">
+<Accordion title="AWS RDS">
 
 <Steps>
 
@@ -113,9 +115,9 @@ GRANT USAGE ON SCHEMA cron TO your_username;
 
 See the [AWS documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL_pg_cron.html) for more details.
 
-</Tab>
+</Accordion>
 
-<Tab title="GCP Cloud SQL">
+<Accordion title="GCP Cloud SQL">
 
 <Steps>
 
@@ -146,9 +148,9 @@ GRANT USAGE ON SCHEMA cron TO your_username;
 
 See the [Cloud SQL documentation](https://docs.cloud.google.com/sql/docs/postgres/extensions#pg_cron) for more details.
 
-</Tab>
+</Accordion>
 
-<Tab title="Supabase">
+<Accordion title="Supabase">
 
 Enable `pg_cron` from the Database Extensions page in your Supabase dashboard, or run:
 
@@ -158,9 +160,9 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 
 See the [Supabase documentation](https://supabase.com/docs/guides/cron) for more details.
 
-</Tab>
+</Accordion>
 
-<Tab title="PlanetScale">
+<Accordion title="PlanetScale">
 
 <Steps>
 
@@ -184,13 +186,13 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 
 See the [PlanetScale documentation](https://planetscale.com/docs/postgres/extensions/pg_cron) for more details.
 
-</Tab>
+</Accordion>
 
-</Tabs>
+</AccordionGroup>
 
-## Configure
+</Step>
 
-### Connect to Postgres
+<Step title="Configure TensorZero">
 
 To configure TensorZero to use Postgres, set the `TENSORZERO_POSTGRES_URL` environment variable with your Postgres connection details.
 
@@ -201,11 +203,18 @@ TENSORZERO_POSTGRES_URL="postgres://[username]:[password]@[hostname]:[port]/[dat
 TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/tensorzero"
 ```
 
-### Apply Postgres migrations
+</Step>
 
-Unlike with ClickHouse, **TensorZero does not automatically apply Postgres migrations.**
+<Step title="Apply Postgres migrations">
+
+<Warning>
+
+**Unlike with ClickHouse, TensorZero does not automatically apply Postgres migrations.**
+
+</Warning>
 
 You must apply migrations manually with `gateway --run-postgres-migrations`.
+See [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) for more details.
 
 <Tabs>
 
@@ -216,8 +225,6 @@ If you've configured the gateway with Docker Compose, you can run the migrations
 ```bash
 docker compose run --rm gateway --run-postgres-migrations
 ```
-
-See [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) for more details.
 
 </Tab>
 
@@ -237,6 +244,10 @@ docker run --rm --network host \
 
 <Note>
 
-You might need to re-run this command after upgrading TensorZero from an earlier version.
+You should re-run this command when upgrading TensorZero from an earlier version.
 
 </Note>
+
+</Step>
+
+</Steps>
