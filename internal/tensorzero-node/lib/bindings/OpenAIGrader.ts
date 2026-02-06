@@ -94,6 +94,6 @@ export type OpenAIGrader =
       /**
        * Named graders to combine
        */
-      graders: { [key in string]?: OpenAIGrader };
+      graders: { [key in string]: OpenAIGrader };
       name: string;
     };

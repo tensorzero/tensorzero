@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use serde_json::{Map, from_value, json, to_value};
+use serde_json::{Map, Value, from_value, json, to_value};
 
 use tensorzero_core::{
     client::{
@@ -102,14 +102,12 @@ fn build_mutate_input(
     } = function_context;
 
     // Extract templates map from variant config
-    // Sort keys for deterministic serialization order (important for caching)
-    let mut template_names: Vec<_> = variant_config.templates.inner.keys().collect();
-    template_names.sort();
-    let mut templates_map = Map::new();
-    for name in template_names {
-        let config = &variant_config.templates.inner[name];
-        templates_map.insert(name.clone(), json!(config.path.data()));
-    }
+    let templates_map: Map<String, Value> = variant_config
+        .templates
+        .inner
+        .iter()
+        .map(|(name, config)| (name.clone(), json!(config.path.data())))
+        .collect();
 
     // Serialize analyses to JSON
     // Note: Thought signatures in inference outputs are already conditionally stripped
@@ -133,7 +131,16 @@ fn build_mutate_input(
     map.insert("templates_map".to_string(), json!(templates_map));
     map.insert("analyses".to_string(), analyses_json);
 
-    Ok(Arguments(map))
+    // Sort all JSON keys for deterministic serialization (important for caching)
+    let mut value = Value::Object(map);
+    value.sort_all_objects();
+    let Value::Object(sorted_map) = value else {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: "sort_all_objects changed Value variant".to_string(),
+        }));
+    };
+
+    Ok(Arguments(sorted_map))
 }
 
 /// Generate improved templates using the GEPA mutate function.

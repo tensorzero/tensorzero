@@ -128,7 +128,7 @@ export function ModelUsage({
             {METRIC_TYPE_CONFIG[selectedMetric].description} by model
           </CardDescription>
         </div>
-        <div className="flex flex-col justify-center gap-2">
+        <div className="flex items-center gap-2">
           <TimeWindowSelector
             value={timeGranularity}
             onValueChange={onTimeGranularityChange}

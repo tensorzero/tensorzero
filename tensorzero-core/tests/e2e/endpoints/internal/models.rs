@@ -9,7 +9,6 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_models_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/models/count");
 
@@ -31,7 +30,6 @@ async fn test_count_models_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_model_usage_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/models/usage?time_window=week&max_periods=10");
 
@@ -51,7 +49,6 @@ async fn test_model_usage_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_model_latency_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/models/latency?time_window=week");
 
@@ -71,7 +68,6 @@ async fn test_model_latency_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_model_usage_endpoint_missing_params() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Missing required parameters
     let url = get_gateway_endpoint("/internal/models/usage");
@@ -86,7 +82,6 @@ async fn test_model_usage_endpoint_missing_params() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_model_latency_endpoint_missing_params() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Missing required parameters
     let url = get_gateway_endpoint("/internal/models/latency");

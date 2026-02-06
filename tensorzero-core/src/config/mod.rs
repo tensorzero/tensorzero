@@ -675,6 +675,12 @@ impl ConfigFileGlob {
             _private: (),
         })
     }
+
+    /// Returns the base path extracted from the glob pattern.
+    /// This is the longest literal path prefix before any glob metacharacters.
+    pub fn base_path(&self) -> PathBuf {
+        extract_base_path_from_glob(&self.glob)
+    }
 }
 
 /// Extract the base path from a glob pattern.

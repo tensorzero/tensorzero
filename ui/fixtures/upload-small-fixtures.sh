@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 # When updating a file, rename it with a version suffix (e.g., model_inference_examples_v2.jsonl)
 # and update download-small-fixtures.py to use the new filename
 JSONL_FILES=(
-    "model_inference_examples.jsonl"
+    "model_inference_examples_20260203.jsonl"
     "chat_inference_examples_20260123.jsonl"
     "json_inference_examples.jsonl"
     "boolean_metric_feedback_examples.jsonl"

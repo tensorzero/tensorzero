@@ -30,6 +30,7 @@ type FadeGradientProps = {
   visible: boolean;
   color?: SurfaceColor;
   className?: string;
+  "data-testid"?: string;
 };
 
 export function FadeGradient({
@@ -37,9 +38,11 @@ export function FadeGradient({
   visible,
   color = SurfaceColor.Secondary,
   className,
+  "data-testid": testId,
 }: FadeGradientProps) {
   return (
     <div
+      data-testid={testId}
       className={cn(
         "h-10",
         surfaceColorClasses[color],

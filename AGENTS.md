@@ -4,6 +4,7 @@
 - If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` (from root), then rebuild the NAPI bindings with `pnpm --filter=tensorzero-node build`. Run `cargo check` first to catch compilation errors.
 - If you change a signature of a struct, function, and so on, use `grep` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
 - Place crate imports at the top of the file or module using `use crate::...`. Avoid imports inside functions or tests. Avoid long inline crate paths.
+- Run tests with `cargo nextest`.
 - Once you're done with your work, make sure to:
   - Run `cargo fmt`.
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
