@@ -15,10 +15,7 @@ interface MetricsSectionProps {
 export function MetricsSection({ promise, locationKey }: MetricsSectionProps) {
   return (
     <SectionLayout>
-      <Suspense
-        key={`metrics-${locationKey}`}
-        fallback={<MetricsSkeleton />}
-      >
+      <Suspense key={`metrics-${locationKey}`} fallback={<MetricsSkeleton />}>
         <Await
           resolve={promise}
           errorElement={

@@ -332,10 +332,7 @@ export default function FunctionDetailPage({
           locationKey={location.key}
         />
 
-        <MetricsSection
-          promise={metricsData}
-          locationKey={location.key}
-        />
+        <MetricsSection promise={metricsData} locationKey={location.key} />
 
         <Suspense key={location.key} fallback={<SectionsSkeleton />}>
           <Await
