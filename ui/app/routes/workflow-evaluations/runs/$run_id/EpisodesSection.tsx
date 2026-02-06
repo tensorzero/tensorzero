@@ -95,13 +95,16 @@ function EpisodesSkeleton() {
 function EpisodesError() {
   const error = useAsyncError();
   return (
-    <SectionErrorNotice
-      icon={AlertCircle}
-      title="Error loading episodes"
-      description={getErrorMessage({
-        error,
-        fallback: "Failed to load episodes",
-      })}
-    />
+    <>
+      <SectionErrorNotice
+        icon={AlertCircle}
+        title="Error loading episodes"
+        description={getErrorMessage({
+          error,
+          fallback: "Failed to load episodes",
+        })}
+      />
+      <PageButtons disabled />
+    </>
   );
 }
