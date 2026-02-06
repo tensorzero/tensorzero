@@ -1,10 +1,9 @@
 use async_trait::async_trait;
+use durable;
 use futures::TryStreamExt;
+use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
 use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
-
-use durable;
-use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
 
 use crate::error::{Error, ErrorDetails};
 
@@ -24,7 +23,7 @@ mod inference_filter_helpers;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
-const RUN_MIGRATIONS_COMMAND: &str = "Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres";
+const RUN_MIGRATIONS_COMMAND: &str = "You likely need to apply migrations to your Postgres database with `--run-postgres-migrations`. Please see our documentation to learn more: https://www.tensorzero.com/docs/deployment/postgres";
 
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
