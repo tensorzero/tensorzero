@@ -160,10 +160,9 @@ export const ErrorWithOnlyMessage: Story = {
     result: null,
     jobHandle: {
       type: "fireworks_sft",
-      job_id: "fw-job-abc123",
       job_url: "https://fireworks.ai/jobs/fw-job-abc123",
-      job_api_url: "https://api.fireworks.ai/v1/fine-tuning/jobs/fw-job-abc123",
-      credential_location: null,
+      job_path: "accounts/my-account/fineTuningJobs/fw-job-abc123",
+      deploy_after_training: false,
     } as OptimizationJobHandle,
   },
 };
