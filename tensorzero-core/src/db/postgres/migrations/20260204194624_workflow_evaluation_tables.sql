@@ -18,6 +18,10 @@ BEGIN
     bytes := '\x00000000000000000000000000000000'::BYTEA;
     temp := trunc(p_uint128);  -- Ensure we have an integer value
 
+    IF temp IS DISTINCT FROM p_uint128 THEN
+        RAISE EXCEPTION 'uint128_to_uuid: input % is not an integer', p_uint128;
+    END IF;
+
     -- Build 16 bytes from least significant to most significant (big-endian output)
     -- Use mod() and div() for precise integer arithmetic on large NUMERIC values
     FOR i IN REVERSE 15..0 LOOP
