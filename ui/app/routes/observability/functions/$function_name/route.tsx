@@ -294,7 +294,7 @@ async function fetchFunctionDetailData(params: FetchParams) {
       weight:
         function_name === DEFAULT_FUNCTION
           ? null
-          : (variant_config?.inner.weight ?? 0),
+          : (variant_config?.inner.weight ?? null),
     };
   });
 
