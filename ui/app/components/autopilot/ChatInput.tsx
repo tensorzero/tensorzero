@@ -59,6 +59,11 @@ export function ChatInput({
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
   const pendingTextRef = useRef<string>("");
 
+  // Sync text when initialMessage changes (e.g., navigating between ?message= URLs)
+  useEffect(() => {
+    setText(initialMessage ?? "");
+  }, [initialMessage]);
+
   // Store callbacks in refs to avoid re-triggering the effect when they change
   const onMessageSentRef = useRef(onMessageSent);
   const onMessageFailedRef = useRef(onMessageFailed);
