@@ -15,27 +15,16 @@ export async function fetchInferencesSectionData(params: {
   beforeInference: string | null;
   afterInference: string | null;
   limit: number;
-  countPromise: Promise<number>;
 }) {
-  const {
-    function_name,
-    beforeInference,
-    afterInference,
-    limit,
-    countPromise,
-  } = params;
+  const { function_name, beforeInference, afterInference, limit } = params;
 
   const client = getTensorZeroClient();
-  const inferencePromise = client.listInferenceMetadata({
+  const inferenceResult = await client.listInferenceMetadata({
     function_name,
     before: beforeInference || undefined,
     after: afterInference || undefined,
     limit: limit + 1, // Fetch one extra to determine pagination
   });
-  const [inferenceResult, num_inferences] = await Promise.all([
-    inferencePromise,
-    countPromise,
-  ]);
 
   const {
     items: inferences,
@@ -50,6 +39,5 @@ export async function fetchInferencesSectionData(params: {
     inferences,
     hasNextInferencePage,
     hasPreviousInferencePage,
-    num_inferences,
   };
 }
