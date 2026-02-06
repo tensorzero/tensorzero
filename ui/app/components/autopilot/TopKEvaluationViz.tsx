@@ -577,6 +577,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
             tickMargin={10}
             axisLine={true}
             tickFormatter={(value) => formatChartNumber(Number(value))}
+            width={50}
           />
           <ChartTooltip content={<CountTooltip />} />
           <Bar
