@@ -8,14 +8,14 @@ import type { FunctionConfig } from "~/types/tensorzero";
 import type { ExperimentationSectionData } from "./experimentation-data.server";
 
 interface ExperimentationSectionProps {
-  promise: Promise<ExperimentationSectionData>;
+  experimentationData: Promise<ExperimentationSectionData>;
   functionConfig: FunctionConfig;
   functionName: string;
   locationKey: string;
 }
 
 export function ExperimentationSection({
-  promise,
+  experimentationData,
   functionConfig,
   functionName,
   locationKey,
@@ -28,7 +28,7 @@ export function ExperimentationSection({
         fallback={<Skeleton className="h-32 w-full" />}
       >
         <Await
-          resolve={promise}
+          resolve={experimentationData}
           errorElement={
             <SectionAsyncErrorState defaultMessage="Failed to load experimentation data" />
           }

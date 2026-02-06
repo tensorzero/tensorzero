@@ -404,7 +404,7 @@ export default function FunctionDetailPage({
 
         {experimentationData && (
           <ExperimentationSection
-            promise={experimentationData}
+            experimentationData={experimentationData}
             functionConfig={function_config}
             functionName={function_name}
             locationKey={location.key}
