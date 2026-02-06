@@ -1,7 +1,4 @@
-import {
-  isJsonOutput,
-  type ParsedModelInferenceRow,
-} from "~/utils/clickhouse/inference";
+import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import type {
   FeedbackRow,
   FeedbackBounds,
@@ -10,15 +7,15 @@ import type {
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useConfig, useFunctionConfig } from "~/context/config";
-import BasicInfo from "~/routes/observability/inferences/$inference_id/InferenceBasicInfo";
+import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import { BasicInfo } from "~/routes/observability/inferences/$inference_id/BasicInfo";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
-import { ParameterCard } from "~/routes/observability/inferences/$inference_id/InferenceParameters";
+import { ParameterCard } from "~/routes/observability/inferences/$inference_id/ParameterCard";
 import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
-import { ModelInferencesTable } from "~/routes/observability/inferences/$inference_id/ModelInferencesTable";
-import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import { ModelInferencesContent } from "~/routes/observability/inferences/$inference_id/ModelInferencesSection";
 import {
   SectionHeader,
   SectionLayout,
@@ -28,7 +25,7 @@ import { useToast } from "~/hooks/use-toast";
 import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
-  type VariantResponseInfo,
+  prepareDemonstrationFromVariantOutput,
 } from "~/routes/api/tensorzero/inference.utils";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithSelect } from "~/components/inference/TryWithSelect";
@@ -104,6 +101,7 @@ export function InferenceDetailContent({
   const [openModal, setOpenModal] = useState<ModalType | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
+  const inferenceUsage = getTotalInferenceUsage(model_inferences);
   const functionConfig = useFunctionConfig(inference.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
 
@@ -263,15 +261,9 @@ export function InferenceDetailContent({
   const options = isDefault ? models : variants;
   const onSelect = isDefault ? onModelSelect : onVariantSelect;
 
-  const inferenceUsage = getTotalInferenceUsage(model_inferences);
-
   // Build the header components
   const basicInfoElement = (
-    <BasicInfo
-      inference={inference}
-      inferenceUsage={inferenceUsage}
-      modelInferences={model_inferences}
-    />
+    <BasicInfo inference={inference} modelInferences={model_inferences} />
   );
 
   const actionBarElement = (
@@ -405,7 +397,7 @@ export function InferenceDetailContent({
 
         <SectionLayout>
           <SectionHeader heading="Model Inferences" />
-          <ModelInferencesTable modelInferences={model_inferences} />
+          <ModelInferencesContent modelInferences={model_inferences} />
         </SectionLayout>
       </SectionsGroup>
 
@@ -457,18 +449,4 @@ export function InferenceDetailContent({
       )}
     </>
   );
-}
-
-function prepareDemonstrationFromVariantOutput(
-  variantOutput: VariantResponseInfo,
-) {
-  const output = variantOutput.output;
-  if (output === undefined) {
-    return undefined;
-  }
-  if (isJsonOutput(output)) {
-    return output.parsed;
-  } else {
-    return output;
-  }
 }

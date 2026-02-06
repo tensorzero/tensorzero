@@ -1,8 +1,12 @@
+import { Suspense } from "react";
+import { Await } from "react-router";
+import type { StoredInference } from "~/types/tensorzero";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { useFunctionConfig } from "~/context/config";
-import type { InferenceUsage } from "~/utils/clickhouse/helpers";
+import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   BasicInfoLayout,
+  BasicInfoLayoutSkeleton,
   BasicInfoItem,
   BasicInfoItemTitle,
   BasicInfoItemContent,
@@ -16,35 +20,46 @@ import {
   Cached,
 } from "~/components/icons/Icons";
 import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
-import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
+import { formatDateWithSeconds } from "~/utils/date";
+import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import type { StoredInference } from "~/types/tensorzero";
+import { InlineAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
+import type { ModelInferencesData } from "./inference-data.server";
 
-// Create timestamp tooltip component
-const createTimestampTooltip = (timestamp: string | number | Date) => {
-  const { formattedDate, formattedTime, relativeTime } =
-    getTimestampTooltipData(timestamp);
+interface BasicInfoStreamingProps {
+  inference: StoredInference;
+  promise: Promise<ModelInferencesData>;
+  locationKey: string;
+}
 
+export function BasicInfoStreaming({
+  inference,
+  promise,
+  locationKey,
+}: BasicInfoStreamingProps) {
   return (
-    <div className="flex flex-col gap-1">
-      <div>{formattedDate}</div>
-      <div>{formattedTime}</div>
-      <div>{relativeTime}</div>
-    </div>
+    <Suspense key={locationKey} fallback={<BasicInfoLayoutSkeleton rows={5} />}>
+      <Await
+        resolve={promise}
+        errorElement={
+          <InlineAsyncError defaultMessage="Failed to load inference details" />
+        }
+      >
+        {(modelInferences) => (
+          <BasicInfo inference={inference} modelInferences={modelInferences} />
+        )}
+      </Await>
+    </Suspense>
   );
-};
+}
 
 interface BasicInfoProps {
   inference: StoredInference;
-  inferenceUsage?: InferenceUsage;
   modelInferences?: ParsedModelInferenceRow[];
 }
 
-export default function BasicInfo({
-  inference,
-  inferenceUsage,
-  modelInferences = [],
-}: BasicInfoProps) {
+export function BasicInfo({ inference, modelInferences = [] }: BasicInfoProps) {
+  const inferenceUsage = getTotalInferenceUsage(modelInferences);
   const functionConfig = useFunctionConfig(inference.function_name);
   const variantType =
     functionConfig?.variants[inference.variant_name]?.inner.type ??
@@ -52,13 +67,7 @@ export default function BasicInfo({
       ? "chat_completion"
       : "unknown");
 
-  // Create timestamp tooltip
-  const timestampTooltip = createTimestampTooltip(inference.timestamp);
-
-  // Get function icon and background
   const functionIconConfig = getFunctionTypeIcon(inference.type);
-
-  // Determine cache status from model inferences
   const hasCachedInferences = modelInferences.some((mi) => mi.cached);
   const allCached =
     modelInferences.length > 0 && modelInferences.every((mi) => mi.cached);
@@ -145,7 +154,7 @@ export default function BasicInfo({
           <Chip
             icon={<Calendar className="text-fg-tertiary" />}
             label={formatDateWithSeconds(new Date(inference.timestamp))}
-            tooltip={timestampTooltip}
+            tooltip={<TimestampTooltip timestamp={inference.timestamp} />}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
