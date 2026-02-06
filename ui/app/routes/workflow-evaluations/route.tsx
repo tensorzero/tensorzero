@@ -17,51 +17,17 @@ import {
 } from "~/components/layout/PageLayout";
 import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
 import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   getErrorMessage,
   SectionErrorNotice,
 } from "~/components/ui/error/ErrorContentPrimitives";
-
-type ProjectsData = {
-  projects: Awaited<
-    ReturnType<
-      ReturnType<typeof getTensorZeroClient>["getWorkflowEvaluationProjects"]
-    >
-  >["projects"];
-  count: number;
-};
-
-type RunsData = {
-  runs: Awaited<
-    ReturnType<
-      ReturnType<typeof getTensorZeroClient>["listWorkflowEvaluationRuns"]
-    >
-  >["runs"];
-  count: number;
-};
-
-async function fetchProjectsData(
-  limit: number,
-  offset: number,
-): Promise<ProjectsData> {
-  const client = getTensorZeroClient();
-  const [response, count] = await Promise.all([
-    client.getWorkflowEvaluationProjects(limit, offset),
-    client.countWorkflowEvaluationProjects(),
-  ]);
-  return { projects: response.projects, count };
-}
-
-async function fetchRunsData(limit: number, offset: number): Promise<RunsData> {
-  const client = getTensorZeroClient();
-  const [response, count] = await Promise.all([
-    client.listWorkflowEvaluationRuns(limit, offset),
-    client.countWorkflowEvaluationRuns(),
-  ]);
-  return { runs: response.runs, count };
-}
+import {
+  fetchProjectsData,
+  fetchRunsData,
+  type ProjectsData,
+  type RunsData,
+} from "./route.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
