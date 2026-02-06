@@ -169,12 +169,12 @@ export function LineChartSkeleton({ className }: { className?: string }) {
             style={{ left: "100%", transform: "translateX(-50%)" }}
           />
         </div>
-      </div>
-      {/* Legend - outside h-72 container, matches BasicChartLegend placement */}
-      <div className="flex justify-center gap-4 pt-6">
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-4 w-16" />
+        {/* Legend - inside h-80 container, matches ChartLegendContent placement */}
+        <div className="flex justify-center gap-4 pt-3">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-16" />
+        </div>
       </div>
     </div>
   );
