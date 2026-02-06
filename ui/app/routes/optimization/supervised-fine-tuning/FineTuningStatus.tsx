@@ -34,7 +34,9 @@ import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives
  * Safely extracts error description from a failed job status.
  * Handles string errors, object errors (with safe stringify), and fallback messages.
  */
-function getErrorDescription(status: Extract<OptimizationJobInfo, { status: "failed" }>): string {
+function getErrorDescription(
+  status: Extract<OptimizationJobInfo, { status: "failed" }>,
+): string {
   if (status.error) {
     if (typeof status.error === "string") {
       return status.error;
