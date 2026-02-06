@@ -37,6 +37,7 @@ type ChatInputProps = {
   isInterruptible?: boolean;
   isInterrupting?: boolean;
   onInterrupt?: () => void;
+  initialMessage?: string;
 };
 
 export function ChatInput({
@@ -50,8 +51,9 @@ export function ChatInput({
   isInterruptible = false,
   isInterrupting = false,
   onInterrupt,
+  initialMessage,
 }: ChatInputProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialMessage ?? "");
   const fetcher = useFetcher<MessageResponse>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);

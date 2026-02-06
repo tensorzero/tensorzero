@@ -82,7 +82,7 @@ export type EventsData = {
   status: AutopilotStatus;
 };
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const sessionId = params.session_id;
   if (!sessionId) {
     throw data("Session ID is required", { status: 400 });
@@ -90,6 +90,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
+    const url = new URL(request.url);
+    const initialMessage = url.searchParams.get("message") ?? undefined;
     return {
       sessionId: "new",
       eventsData: {
@@ -99,6 +101,7 @@ export async function loader({ params }: Route.LoaderArgs) {
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
+      initialMessage,
     };
   }
 
@@ -134,6 +137,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     sessionId,
     eventsData: eventsDataPromise,
     isNewSession: false,
+    initialMessage: undefined,
   };
 }
 
@@ -367,7 +371,7 @@ function EventStreamContent({
 function AutopilotSessionEventsPageContent({
   loaderData,
 }: Route.ComponentProps) {
-  const { sessionId, eventsData, isNewSession } = loaderData;
+  const { sessionId, eventsData, isNewSession, initialMessage } = loaderData;
   const { yoloMode, setYoloMode } = useAutopilotSession();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -860,6 +864,7 @@ function AutopilotSessionEventsPageContent({
                 isInterruptible={isInterruptible}
                 isInterrupting={interruptFetcher.state !== "idle"}
                 onInterrupt={handleInterruptSession}
+                initialMessage={initialMessage}
               />
             </div>
           </div>
