@@ -87,7 +87,7 @@ export function ChatInput({
       textarea.selectionStart = textarea.value.length;
       textarea.selectionEnd = textarea.value.length;
     }
-  }, [isNewSession, disabled]);
+  }, [isNewSession, disabled, initialMessage]);
 
   // Sample a random placeholder for new sessions, default for existing sessions
   const placeholder = useMemo(
