@@ -5,7 +5,6 @@ import type { FunctionConfig, TimeWindow } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { getConfig } from "~/utils/config/index.server";
 
-// === Section Data Types ===
 
 export type InferencesSectionData = {
   inferences: Awaited<
@@ -64,7 +63,6 @@ export type ExperimentationSectionData = {
   >["probabilities"];
 };
 
-// === Section Fetch Functions ===
 
 type FetchInferencesParams = {
   function_name: string;
@@ -256,7 +254,6 @@ export async function fetchExperimentationSectionData(
   return { feedback_timeseries, variant_sampling_probabilities };
 }
 
-// === Combined Fetch (used while sections share a single Suspense boundary) ===
 
 type FetchAllParams = {
   function_name: string;
