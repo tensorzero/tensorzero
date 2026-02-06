@@ -89,7 +89,7 @@ export default function WorkflowEvaluationProjectPage({
           />
           {resultsData ? (
             <ResultsSection
-              promise={resultsData}
+              resultsData={resultsData}
               runInfos={runInfos}
               limit={limit}
               offset={offset}

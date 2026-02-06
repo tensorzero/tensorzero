@@ -8,7 +8,7 @@ import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimit
 import type { ResultsData } from "./route.server";
 
 interface ResultsSectionProps {
-  promise: Promise<ResultsData>;
+  resultsData: Promise<ResultsData>;
   runInfos: WorkflowEvaluationRun[];
   limit: number;
   offset: number;
@@ -16,7 +16,7 @@ interface ResultsSectionProps {
 }
 
 export function ResultsSection({
-  promise,
+  resultsData,
   runInfos,
   limit,
   offset,
@@ -24,7 +24,7 @@ export function ResultsSection({
 }: ResultsSectionProps) {
   return (
     <Suspense key={locationKey} fallback={<ResultsSkeleton />}>
-      <Await resolve={promise} errorElement={<ResultsError />}>
+      <Await resolve={resultsData} errorElement={<ResultsError />}>
         {(data) => (
           <ResultsContent
             runInfos={runInfos}
