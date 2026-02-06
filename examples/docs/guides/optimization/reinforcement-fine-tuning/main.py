@@ -173,7 +173,7 @@ async def main():
             },
             {
                 "role": "user",
-                "content": "Generated Output:\n{{sample.output_text}}\n\nReference Output:\n{{item.reference_text}}",
+                "content": "Message History:\n{{item.messages}}\n\nGenerated Output:\n{{sample.output_json}}\n\nReference Output:\n{{item.reference_text}}",
             },
         ],
         "range": [-1.0, 1.0],

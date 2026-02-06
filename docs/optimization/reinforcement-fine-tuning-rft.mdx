@@ -51,10 +51,11 @@ TensorZero supports six grader types, from simple string comparisons to composit
 
 Graders use template variables to access the model's output and reference data:
 
+- `{{item.messages}}` — The message history from the training data item (i.e. the input to the model).
+- `{{item.reference_text}}` — The reference text from the training data item.
 - `{{sample.output_text}}` — The model's text output.
 - `{{sample.output_json}}` — The model's structured JSON output (when `response_format` is specified).
 - `{{sample.output_tools}}` — The model's tool calls (if applicable).
-- `{{item.reference_text}}` — The reference text from the training data item.
 
 ### StringCheck
 
@@ -356,7 +357,7 @@ grader = {
         },
         {
             "role": "user",
-            "content": "Generated Output:\n{{sample.output_text}}\n\nReference Output:\n{{item.reference_text}}",
+            "content": "Message History:\n{{item.messages}}\n\nGenerated Output:\n{{sample.output_json}}\n\nReference Output:\n{{item.reference_text}}",
         },
     ],
     "range": [-1.0, 1.0],
