@@ -26,6 +26,7 @@ import { Input } from "~/components/ui/input";
 
 type VariantCountsWithMetadata = InferenceCountByVariant & {
   type: string;
+  weight: number | null;
 };
 
 const columnHelper = createColumnHelper<VariantCountsWithMetadata>();
@@ -65,7 +66,10 @@ export default function FunctionVariantTable({
       }),
       columnHelper.accessor("last_used_at", {
         header: "Last Used",
-        cell: (info) => <TableItemTime timestamp={info.getValue()} />,
+        cell: (info) => {
+          const value = info.getValue();
+          return value ? <TableItemTime timestamp={value} /> : "—";
+        },
       }),
     ],
     [function_name],
