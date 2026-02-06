@@ -33,6 +33,7 @@ use tracing::{debug, info};
 
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::{config::Config, utils::spawn_ignoring_shutdown};
 
 lazy_static! {
@@ -47,6 +48,7 @@ lazy_static! {
 pub fn setup_howdy(
     config: &Config,
     clickhouse: ClickHouseConnectionInfo,
+    postgres: PostgresConnectionInfo,
     token: CancellationToken,
 ) {
     if config.gateway.disable_pseudonymous_usage_analytics
@@ -55,17 +57,22 @@ pub fn setup_howdy(
         info!("Pseudonymous usage analytics is disabled");
         return;
     }
-    // TODO(shuyangli): Don't like this...
-    if clickhouse.client_type() == ClickHouseClientType::Disabled {
+    let clickhouse_disabled = clickhouse.client_type() == ClickHouseClientType::Disabled;
+    let postgres_disabled = postgres.get_pool().is_none();
+    if clickhouse_disabled && postgres_disabled {
         return;
     }
-    spawn_ignoring_shutdown(howdy_loop(clickhouse, token));
+    spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, token));
 }
 
 /// Loops and sends usage data to the Howdy service every 6 hours.
-pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: CancellationToken) {
+pub async fn howdy_loop(
+    clickhouse: ClickHouseConnectionInfo,
+    postgres: PostgresConnectionInfo,
+    token: CancellationToken,
+) {
     let client = Client::new();
-    let deployment_id = match get_deployment_id(&clickhouse).await {
+    let deployment_id = match get_deployment_id(&clickhouse, &postgres).await {
         Ok(deployment_id) => deployment_id,
         Err(()) => {
             return;
@@ -106,10 +113,25 @@ async fn send_howdy(
     Ok(())
 }
 
-/// Gets the deployment ID from the ClickHouse DB.
+/// Gets the deployment ID, trying ClickHouse first, then falling back to Postgres.
 /// This is a 64 char hex hash that is used to identify the deployment.
+pub async fn get_deployment_id(
+    clickhouse: &ClickHouseConnectionInfo,
+    postgres: &PostgresConnectionInfo,
+) -> Result<String, ()> {
+    // Try ClickHouse first (existing behavior)
+    if let Ok(id) = get_deployment_id_from_clickhouse(clickhouse).await {
+        return Ok(id);
+    }
+    // Fall back to Postgres
+    postgres.get_or_create_deployment_id().await
+}
+
+/// Gets the deployment ID from the ClickHouse DB.
 /// It is stored in the `DeploymentID` table.
-pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<String, ()> {
+async fn get_deployment_id_from_clickhouse(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<String, ()> {
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT deployment_id FROM DeploymentID LIMIT 1".to_string(),
@@ -117,7 +139,7 @@ pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<
         .await
         .map_err(|_| ())?;
     if response.response.is_empty() {
-        debug!("Failed to get deployment ID (response was empty)");
+        debug!("Failed to get deployment ID from ClickHouse (response was empty)");
         return Err(());
     }
     Ok(response.response.trim().to_string())

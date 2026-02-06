@@ -10,8 +10,9 @@ use async_trait::async_trait;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::config::snapshot::SnapshotHash;
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
+use crate::db::ConfigQueries;
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -100,6 +101,31 @@ impl DelegatingDatabaseConnection {
         } else {
             &self.clickhouse
         }
+    }
+}
+
+impl ConfigQueries for DelegatingDatabaseConnection {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        if ENABLE_POSTGRES_READ.get() {
+            self.postgres.get_config_snapshot(snapshot_hash).await
+        } else {
+            self.clickhouse.get_config_snapshot(snapshot_hash).await
+        }
+    }
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        self.clickhouse.write_config_snapshot(snapshot).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.write_config_snapshot(snapshot).await
+        {
+            tracing::error!("Error writing config snapshot to Postgres: {e}");
+        }
+
+        Ok(())
     }
 }
 

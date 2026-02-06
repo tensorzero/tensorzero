@@ -15,7 +15,7 @@ use tensorzero::{
     Client, ClientInferenceParams, Input, InputMessage, InputMessageContent, Role, TensorZeroError,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use tensorzero_core::config::write_config_snapshot;
+use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
@@ -103,7 +103,7 @@ Do a historical inference successfully!
     let snapshot_hash = snapshot.hash.clone();
 
     // Write the historical snapshot to ClickHouse
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Create the action request
@@ -229,7 +229,7 @@ model = "action_test_model_{id}"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let params = ActionInputInfo {
@@ -301,7 +301,7 @@ model = "eval_test_model_{id}"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let params = ActionInputInfo {
@@ -386,7 +386,7 @@ json_mode = "on"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Neither dataset_name nor datapoint_ids provided
@@ -471,7 +471,7 @@ json_mode = "on"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Both dataset_name AND datapoint_ids provided - should fail validation
@@ -559,7 +559,7 @@ json_mode = "on"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
 
     // Create test datapoints for the evaluation
     let datapoint_id_1 = Uuid::now_v7();
