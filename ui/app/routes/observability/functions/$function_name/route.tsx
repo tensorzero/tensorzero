@@ -279,50 +279,41 @@ async function fetchFunctionDetailData(params: FetchParams) {
     variantSamplingProbabilitiesPromise,
   ]);
 
+  const observedVariants = new Set<string>();
   const variant_counts_with_metadata = (
     variant_counts.count_by_variant ?? []
   ).map((variant_count) => {
-    let variant_config = function_config.variants[
-      variant_count.variant_name
-    ] || {
-      inner: {
-        // In case the variant is not found, we still want to display the variant name
-        type: "unknown",
-        weight: 0,
-      },
-    };
-
-    if (function_name === DEFAULT_FUNCTION) {
-      variant_config = {
-        inner: {
-          type: "chat_completion",
-          model: variant_count.variant_name,
-          weight: null,
-          templates: {},
-          temperature: null,
-          top_p: null,
-          max_tokens: null,
-          presence_penalty: null,
-          frequency_penalty: null,
-          seed: null,
-          stop_sequences: null,
-          json_mode: null,
-          retries: { num_retries: 0, max_delay_s: 0 },
-        },
-        timeouts: {
-          non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null },
-        },
-      };
-      function_config.variants[variant_count.variant_name] = variant_config;
-    }
-
+    observedVariants.add(variant_count.variant_name);
+    const variant_config = function_config.variants[variant_count.variant_name];
     return {
       ...variant_count,
-      type: variant_config.inner.type,
-      weight: variant_config.inner.weight,
+      type:
+        function_name === DEFAULT_FUNCTION
+          ? "chat_completion"
+          : (variant_config?.inner.type ?? "unknown"),
+      weight:
+        function_name === DEFAULT_FUNCTION
+          ? null
+          : (variant_config?.inner.weight ?? 0),
     };
   });
+
+  // Add configured variants that have no inferences yet
+  if (function_name !== DEFAULT_FUNCTION) {
+    for (const [variant_name, variant_config] of Object.entries(
+      function_config.variants,
+    )) {
+      if (!observedVariants.has(variant_name)) {
+        variant_counts_with_metadata.push({
+          variant_name,
+          inference_count: BigInt(0),
+          last_used_at: "",
+          type: variant_config.inner.type,
+          weight: variant_config.inner.weight,
+        });
+      }
+    }
+  }
 
   // Handle pagination from listInferenceMetadata response
   const {
