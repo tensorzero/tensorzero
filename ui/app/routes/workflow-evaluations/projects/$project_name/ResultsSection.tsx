@@ -26,9 +26,7 @@ export function ResultsSection({
     <Suspense key={locationKey} fallback={<ResultsSkeleton />}>
       <Await
         resolve={promise}
-        errorElement={
-          <SectionAsyncErrorState defaultMessage="Failed to load results" />
-        }
+        errorElement={<ResultsError />}
       >
         {(data) => (
           <ResultsContent
@@ -90,8 +88,16 @@ function ResultsContent({
 function ResultsSkeleton() {
   return (
     <>
-      <Skeleton className="h-6 w-48" />
-      <Skeleton className="mt-2 h-64 w-full" />
+      <Skeleton className="h-64 w-full" />
+      <PageButtons disabled />
+    </>
+  );
+}
+
+function ResultsError() {
+  return (
+    <>
+      <SectionAsyncErrorState defaultMessage="Failed to load results" />
       <PageButtons disabled />
     </>
   );
