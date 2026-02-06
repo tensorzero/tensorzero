@@ -84,6 +84,7 @@ function RunsSkeleton() {
     <>
       <Skeleton className="mb-2 h-6 w-32" />
       <Skeleton className="h-48 w-full" />
+      <PageButtons disabled />
     </>
   );
 }
