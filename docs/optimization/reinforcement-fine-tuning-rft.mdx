@@ -1,0 +1,743 @@
+---
+title: Reinforcement Fine-Tuning (RFT)
+sidebarTitle: Reinforcement Fine-Tuning
+description: Learn how to fine-tune LLMs using reinforcement learning with TensorZero.
+---
+
+Reinforcement Fine-Tuning (RFT) trains a language model using reward signals from graders, allowing the model to learn optimal behavior through reinforcement learning rather than imitation.
+Unlike [Supervised Fine-Tuning (SFT)](/optimization/supervised-fine-tuning-sft), which requires curated demonstrations of correct behavior, RFT uses graders to score model outputs and optimize toward higher rewards.
+This makes RFT particularly effective for tasks with clear evaluation criteria, even when ideal outputs are difficult to specify in advance.
+
+Here's how it works:
+
+1. You collect examples of LLM inputs (inferences with associated metrics).
+2. You define a grader that scores model outputs (using string matching, NLP metrics, LLM judges, or custom logic).
+3. TensorZero renders these examples using your prompt templates into a training dataset.
+4. TensorZero uploads the dataset with grader configuration and launches a reinforcement fine-tuning job on OpenAI.
+5. OpenAI fine-tunes a custom model using reinforcement learning to maximize the grader's reward signal.
+6. You update your configuration to use the fine-tuned model.
+
+## When should you use reinforcement fine-tuning (RFT)?
+
+Reinforcement fine-tuning is particularly useful when you have clear evaluation criteria and want the model to discover optimal strategies rather than imitate fixed examples.
+
+| Criterion            | Impact    | Details                                                |
+| -------------------- | --------- | ------------------------------------------------------ |
+| Complexity           | Moderate  | Requires grader design; more configuration than SFT    |
+| Data Efficiency      | High      | Can learn from reward signals without labeled examples |
+| Optimization Ceiling | High      | Directly optimizes for task-specific objectives        |
+| Optimization Cost    | Very High | More compute-intensive than SFT                        |
+| Inference Cost       | Low       | Fine-tuned models have the same cost as the base model |
+| Inference Latency    | Low       | No runtime overhead                                    |
+
+<Tip>
+
+RFT tends to work best when:
+
+- You have clear, automatable evaluation criteria (exact match, similarity metrics, LLM judges).
+  - If evaluation is subjective or hard to automate: consider [SFT](/optimization/supervised-fine-tuning-sft) with human-curated demonstrations.
+- You want the model to discover optimal strategies beyond what demonstrations can provide.
+  - If you already have high-quality demonstrations: [SFT](/optimization/supervised-fine-tuning-sft) may be simpler.
+- You're using an OpenAI reasoning model (o-series like o4-mini).
+  - If you need other providers: [SFT](/optimization/supervised-fine-tuning-sft) supports OpenAI, GCP Vertex AI, Fireworks, and Together.
+
+</Tip>
+
+## Graders: The Heart of RFT
+
+Graders are the reward functions that guide reinforcement fine-tuning.
+They evaluate model outputs and produce scores that the training process uses to improve behavior.
+TensorZero supports six grader types, from simple string comparisons to composite multi-grader configurations.
+
+Graders use template variables to access the model's output and reference data:
+
+- `{{sample.output_text}}` — The model's text output.
+- `{{sample.output_json}}` — The model's structured JSON output (when `response_format` is specified).
+- `{{sample.output_tools}}` — The model's tool calls (if applicable).
+- `{{item.reference_text}}` — The reference text from the training data item.
+
+### StringCheck
+
+A binary comparison grader that returns 1 for a match and 0 for no match.
+
+```python
+{
+    "type": "string_check",
+    "name": "exact_match",
+    "operation": "eq",  # eq, ne, like, ilike
+    "input": "{{sample.output_text}}",
+    "reference": "{{item.reference_text}}",
+}
+```
+
+### TextSimilarity
+
+A lexical similarity grader using standard NLP metrics.
+
+```python
+{
+    "type": "text_similarity",
+    "name": "similarity",
+    "evaluation_metric": "rouge_l",  # fuzzy_match, bleu, gleu, meteor, rouge_1-5, rouge_l
+    "input": "{{sample.output_text}}",
+    "reference": "{{item.reference_text}}",
+}
+```
+
+### ScoreModel
+
+An LLM-based grader that scores outputs using a model and a rubric.
+
+```python
+{
+    "type": "score_model",
+    "name": "semantic_score",
+    "model": "gpt-4.1-mini-2025-04-14",
+    "input": [
+        {"role": "developer", "content": "You are an expert grader. Score the output on a scale from 0 to 1."},
+        {"role": "user", "content": "Grade this output:\n{{sample.output_text}}"},
+    ],
+    "range": [0.0, 1.0],  # optional: normalize scores to this range
+}
+```
+
+### LabelModel
+
+An LLM-based grader that classifies outputs into predefined categories.
+
+```python
+{
+    "type": "label_model",
+    "name": "quality_label",
+    "model": "gpt-4.1-mini-2025-04-14",
+    "labels": ["good", "acceptable", "poor"],
+    "passing_labels": ["good", "acceptable"],
+    "input": [
+        {"role": "developer", "content": "Classify the quality of the following output."},
+        {"role": "user", "content": "Output:\n{{sample.output_text}}"},
+    ],
+}
+```
+
+### Python
+
+A custom Python function for domain-specific evaluation logic.
+
+```python
+{
+    "type": "python",
+    "name": "custom_scorer",
+    "source": "def grade(item, sample):\n    return 1.0 if len(sample['output_text']) > 10 else 0.0",
+    "image_tag": "python:3.11-slim",  # optional Docker image for sandboxed execution
+}
+```
+
+### Multi
+
+A composite grader that combines multiple graders using a mathematical expression.
+
+```python
+{
+    "type": "multi",
+    "name": "combined",
+    "graders": {
+        "exact_match": {
+            "type": "string_check",
+            "name": "exact_match",
+            "operation": "eq",
+            "input": "{{sample.output_text}}",
+            "reference": "{{item.reference_text}}",
+        },
+        "semantic": {
+            "type": "score_model",
+            "name": "semantic",
+            "model": "gpt-4.1-mini-2025-04-14",
+            "input": [
+                {"role": "developer", "content": "Score the semantic quality from 0 to 1."},
+                {"role": "user", "content": "Output:\n{{sample.output_text}}"},
+            ],
+            "range": [0.0, 1.0],
+        },
+    },
+    "calculate_output": "0.3 * exact_match + 0.7 * semantic",
+}
+```
+
+The `calculate_output` expression supports: `+`, `-`, `*`, `/`, `^`, `min`, `max`, `abs`, `floor`, `ceil`, `exp`, `sqrt`, `log`.
+
+## Fine-tune your LLM with Reinforcement Fine-Tuning
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/optimization/reinforcement-fine-tuning/) of this guide on GitHub.
+
+</Tip>
+
+<Steps>
+
+<Step title="Configure your LLM application">
+
+Define a [function with a baseline variant](/gateway/configure-functions-and-variants) for your application.
+
+```toml title="tensorzero.toml"
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::o4-mini-2025-04-16"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+```
+
+<Accordion title="Example: Data Extraction (Named Entity Recognition) — Configuration">
+
+```text title="system_template.minijinja"
+You are an assistant that is performing a named entity recognition task.
+Your job is to extract entities from a given text.
+
+The entities you are extracting are:
+
+- people
+- organizations
+- locations
+- miscellaneous other entities
+
+Please return the entities in the following JSON format:
+
+{
+"person": ["person1", "person2", ...],
+"organization": ["organization1", "organization2", ...],
+"location": ["location1", "location2", ...],
+"miscellaneous": ["miscellaneous1", "miscellaneous2", ...]
+}
+```
+
+</Accordion>
+
+</Step>
+
+<Step title="Collect your optimization data">
+
+<Tabs>
+
+<Tab title="TensorZero Dataset">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) of examples for the `extract_entities` function you configured.
+You can create datapoints from historical inferences or external/synthetic datasets.
+
+```python
+from tensorzero import ListDatapointsRequest
+
+datapoints = t0.list_datapoints(
+    dataset_name="extract_entities_dataset",
+    request=ListDatapointsRequest(
+        function_name="extract_entities",
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=datapoints.datapoints,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+</Tab>
+
+<Tab title="Historical Inferences">
+
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
+TensorZero automatically collects structured data about those inferences, which can later be used as training data for RFT.
+
+Unlike SFT, RFT does not require demonstration feedback (ground truth labels).
+Instead, the grader evaluates model outputs during training.
+You can simply use your historical inferences as-is:
+
+```python
+from tensorzero import ListInferencesRequest
+
+inferences_response = t0.list_inferences(
+    request=ListInferencesRequest(
+        function_name="extract_entities",
+        output_source="inference",  # Use the model's original outputs (no demonstrations needed)
+    ),
+)
+
+rendered_samples = t0.experimental_render_samples(
+    stored_samples=inferences_response.inferences,
+    variants={"extract_entities": "baseline"},
+)
+```
+
+<Tip>
+
+You can optionally submit metric feedback to track model performance over time, but these metrics are separate from the grader used for RFT training.
+
+</Tip>
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="Split data for training and validation">
+
+RFT uses a validation set to monitor training progress and prevent overfitting.
+Split your data into training and validation sets:
+
+```python
+import random
+
+random.shuffle(rendered_samples)
+split_idx = int(len(rendered_samples) * 0.8)  # 80% training, 20% validation
+train_samples = rendered_samples[:split_idx]
+val_samples = rendered_samples[split_idx:]
+
+print(f"Training samples: {len(train_samples)}")
+print(f"Validation samples: {len(val_samples)}")
+```
+
+<Tip>
+
+A typical split is 80% training and 20% validation.
+For smaller datasets, you may want to use a larger training proportion (e.g. 90/10).
+
+</Tip>
+
+</Step>
+
+<Step title="Configure your grader">
+
+Define the grader that will score model outputs during training.
+You can use any of the [grader types](#graders-the-heart-of-rft) described above.
+
+Here's an example using a ScoreModel grader that uses an LLM judge to evaluate NER quality:
+
+```python
+grader = {
+    "type": "score_model",
+    "name": "ner_judge",
+    "model": "gpt-4.1-mini-2025-04-14",
+    "input": [
+        {
+            "role": "developer",
+            "content": (
+                "You are an impartial grader for a Named Entity Recognition (NER) task.\n"
+                "You will receive **Input** (source text), **Generated Output**, and **Reference Output**.\n"
+                "Compare the generated output against the reference output and return a JSON object "
+                "with a single key `score` whose value is **-1**, **0**, or **1**.\n\n"
+                "# Task Description\n"
+                "Extract named entities from text into four categories:\n"
+                "- **person**: Names of specific people\n"
+                "- **organization**: Names of companies, institutions, agencies, or groups\n"
+                "- **location**: Names of geographical locations (countries, cities, landmarks)\n"
+                "- **miscellaneous**: Other named entities (events, products, nationalities, etc.)\n\n"
+                "# Evaluation Criteria (in priority order)\n\n"
+                "## 1. Correctness\n"
+                "- Only **proper nouns** should be extracted (specific people, places, organizations, things)\n"
+                "- Do NOT extract: common nouns, category labels, numbers, statistics, metadata, or headers\n\n"
+                "## 2. Verbatim Extraction\n"
+                "- Entities must appear **exactly** as written in the input text\n"
+                "- Preserve original spelling, capitalization, and formatting\n\n"
+                "## 3. No Duplicates\n"
+                "- Each entity should appear **exactly once** in the output\n\n"
+                "## 4. Completeness\n"
+                "- All valid named entities from the input should be captured\n\n"
+                "## 5. Correct Categorization\n"
+                "- Entities should be placed in the appropriate category\n\n"
+                "# Scoring\n"
+                "- **1 (better)**: Generated output is materially better than reference.\n"
+                "- **0 (similar)**: Outputs are comparable or differences are minor.\n"
+                "- **-1 (worse)**: Generated output is materially worse.\n\n"
+                "Return **only** a JSON object: {\"score\": <value>}"
+            ),
+        },
+        {
+            "role": "user",
+            "content": "Generated Output:\n{{sample.output_text}}\n\nReference Output:\n{{item.reference_text}}",
+        },
+    ],
+    "range": [-1.0, 1.0],
+}
+```
+
+</Step>
+
+<Step title="Configure RFT optimization">
+
+Configure RFT by specifying the reasoning model to fine-tune and the grader:
+
+```python
+from tensorzero import OpenAIRFTConfig
+
+optimization_config = OpenAIRFTConfig(
+    model="o4-mini-2025-04-16",
+    grader=grader,
+)
+```
+
+OpenAI uses credentials from the `OPENAI_API_KEY` environment variable by default.
+
+<Tip>
+
+RFT requires OpenAI reasoning models (o-series).
+Regular GPT models are not supported for reinforcement fine-tuning.
+
+</Tip>
+
+<Warning>
+
+RFT training jobs on OpenAI require a minimum training quota (e.g. at least 4 hours of compute, which can cost $400+).
+Larger datasets increase cost significantly.
+Check your [OpenAI billing and plan details](https://platform.openai.com/settings/organization/billing/overview) before launching a job, and start with a small dataset to estimate costs.
+
+</Warning>
+
+</Step>
+
+<Step title="Launch the RFT job">
+
+Launch the RFT job using the TensorZero Gateway:
+
+```python
+job_handle = t0.experimental_launch_optimization(
+    train_samples=train_samples,
+    val_samples=val_samples,
+    optimization_config=optimization_config,
+)
+
+print(job_handle)
+```
+
+The job handle contains the job ID and URLs for monitoring progress on OpenAI's dashboard.
+
+</Step>
+
+<Step title="Poll for completion">
+
+RFT jobs run asynchronously on OpenAI's infrastructure.
+Poll for completion:
+
+```python
+import asyncio
+from tensorzero import OptimizationJobStatus
+
+job_info = t0.experimental_poll_optimization(job_handle=job_handle)
+
+# For long-running jobs, poll periodically:
+while job_info.status == OptimizationJobStatus.Pending:
+    print(f"Job status: {job_info.status}")
+    await asyncio.sleep(60)  # wait 1 minute between polls
+    job_info = t0.experimental_poll_optimization(job_handle=job_handle)
+
+if job_info.status == OptimizationJobStatus.Completed:
+    print("Reinforcement fine-tuning complete!")
+else:
+    print(f"Job failed: {job_info.message}")
+```
+
+<Tip>
+
+Reinforcement fine-tuning typically takes longer than SFT due to the additional reinforcement learning steps.
+You can close your script and poll later using the job handle.
+
+</Tip>
+
+</Step>
+
+<Step title="Update your configuration with the fine-tuned model">
+
+After optimization completes, extract the fine-tuned model name and update your configuration:
+
+```python
+fine_tuned_model = job_info.output["routing"][0]
+print(f"Fine-tuned model: {fine_tuned_model}")
+```
+
+Add the fine-tuned model and a new variant to your `tensorzero.toml`:
+
+```toml title="tensorzero.toml"
+[models.extract_entities_fine_tuned]
+routing = ["openai"]
+
+[models.extract_entities_fine_tuned.providers.openai]
+type = "openai"
+model_name = "ft:o4-mini-2025-04-16:org::xxxxx"  # from above
+
+[functions.extract_entities.variants.fine_tuned]
+type = "chat_completion"
+model = "extract_entities_fine_tuned"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+```
+
+<Tip>
+
+For most model providers, you can also use the shorthand syntax in your variant configuration:
+
+```toml
+model = "openai::ft:o4-mini-2025-04-16:org::xxxxx"
+```
+
+This avoids needing to define a separate `[models.*]` section.
+
+</Tip>
+
+That's it!
+Your fine-tuned model is now ready to use.
+
+</Step>
+
+</Steps>
+
+<Tip>
+
+You can run experiments comparing your baseline and fine-tuned variants using [adaptive A/B testing](/experimentation/run-adaptive-ab-tests).
+
+</Tip>
+
+## Configuration Reference
+
+### `OpenAIRFTConfig`
+
+Configure OpenAI reinforcement fine-tuning by creating an `OpenAIRFTConfig` object with the following parameters.
+
+#### Supported models for fine-tuning
+
+As of February 2026, RFT supports fine-tuning the following model:
+
+| Model   | Model ID             |
+| ------- | -------------------- |
+| o4-mini | `o4-mini-2025-04-16` |
+
+#### Supported models for grading
+
+As of February 2026, the `model` field in `ScoreModel` and `LabelModel` graders must be one of these models:
+
+| Model        | Model ID                  |
+| ------------ | ------------------------- |
+| GPT-4.1      | `gpt-4.1-2025-04-14`      |
+| GPT-4.1 Mini | `gpt-4.1-mini-2025-04-14` |
+| GPT-4.1 Nano | `gpt-4.1-nano-2025-04-14` |
+| GPT-4o       | `gpt-4o-2024-08-06`       |
+| GPT-4o Mini  | `gpt-4o-mini-2024-07-18`  |
+| o4-mini      | `o4-mini-2025-04-16`      |
+| o3           | `o3-2025-04-16`           |
+| o3-mini      | `o3-mini-2025-01-31`      |
+| o1           | `o1-2024-12-17`           |
+
+{/* Required Parameters */}
+
+<ParamField body="model" type="str" required>
+  The reasoning model to fine-tune (e.g. `o4-mini-2025-04-16`). Must be one of
+  the [supported models for fine-tuning](#supported-models-for-fine-tuning).
+</ParamField>
+
+<ParamField body="grader" type="dict" required>
+  The grader configuration that defines how model outputs are scored during
+  training. See the [Grader Reference](#grader-reference) for available grader
+  types and their parameters.
+</ParamField>
+
+{/* Optional Parameters */}
+
+<ParamField body="response_format" type="dict">
+  JSON schema configuration for structured outputs during RFT sampling.
+  When specified, model outputs conform to the provided schema and are available in `{{sample.output_json}}`.
+  If not specified, structured outputs are returned as raw JSON strings in `{{sample.output_text}}`.
+</ParamField>
+
+<ParamField body="batch_size" type="int">
+  Batch size for training. If not specified, OpenAI chooses automatically.
+</ParamField>
+
+<ParamField body="compute_multiplier" type="float">
+  Scales computational resources for training.
+</ParamField>
+
+<ParamField body="eval_interval" type="int">
+  How frequently to run validation during training.
+</ParamField>
+
+<ParamField body="eval_samples" type="int">
+  Number of samples to use for validation.
+</ParamField>
+
+<ParamField body="learning_rate_multiplier" type="float">
+  Learning rate multiplier. Values between 0.5 and 2.0 are typical.
+</ParamField>
+
+<ParamField body="n_epochs" type="int">
+  Number of training epochs. If not specified, OpenAI chooses automatically
+  based on dataset size.
+</ParamField>
+
+<ParamField body="reasoning_effort" type="str">
+  Controls how much reasoning the model does during training. Accepted values:
+  `"low"`, `"medium"`, `"high"`.
+</ParamField>
+
+<ParamField body="seed" type="int">
+  Random seed for reproducibility.
+</ParamField>
+
+<ParamField body="suffix" type="str">
+  Suffix to add to the fine-tuned model name for identification.
+</ParamField>
+
+## Grader Reference
+
+### `StringCheck`
+
+Binary string comparison grader.
+Returns 1 for a match and 0 for no match.
+
+<ParamField body="type" type="str" required>
+  Must be `"string_check"`.
+</ParamField>
+
+<ParamField body="name" type="str" required>
+  A unique name for this grader.
+</ParamField>
+
+<ParamField body="operation" type="str" required>
+  The comparison operation. One of: `"eq"` (exact match), `"ne"` (not equal),
+  `"like"` (contains, case-sensitive), `"ilike"` (contains, case-insensitive).
+</ParamField>
+
+<ParamField body="input" type="str" required>
+  Template to extract the value from the model output (e.g. `"{{sample.output_text}}"`).
+</ParamField>
+
+<ParamField body="reference" type="str" required>
+  The expected value to compare against (e.g. `"{{item.reference_text}}"`).
+</ParamField>
+
+### `TextSimilarity`
+
+Lexical similarity grader using standard NLP metrics.
+
+<ParamField body="type" type="str" required>
+  Must be `"text_similarity"`.
+</ParamField>
+
+<ParamField body="name" type="str" required>
+  A unique name for this grader.
+</ParamField>
+
+<ParamField body="evaluation_metric" type="str" required>
+  The similarity metric to use. One of: `"fuzzy_match"`, `"bleu"`, `"gleu"`,
+  `"meteor"`, `"rouge_1"`, `"rouge_2"`, `"rouge_3"`, `"rouge_4"`, `"rouge_5"`,
+  `"rouge_l"`.
+</ParamField>
+
+<ParamField body="input" type="str" required>
+  Template to extract text from the model output (e.g. `"{{sample.output_text}}"`).
+</ParamField>
+
+<ParamField body="reference" type="str" required>
+  Reference text for similarity comparison (e.g. `"{{item.reference_text}}"`).
+</ParamField>
+
+### `ScoreModel`
+
+LLM-based grader for semantic evaluation.
+Uses a model to score outputs based on a rubric.
+
+<ParamField body="type" type="str" required>
+  Must be `"score_model"`.
+</ParamField>
+
+<ParamField body="name" type="str" required>
+  A unique name for this grader.
+</ParamField>
+
+<ParamField body="model" type="str" required>
+  The model to use for scoring (e.g. `"gpt-4.1-mini-2025-04-14"`).
+</ParamField>
+
+<ParamField body="input" type="list[dict]" required>
+  A list of messages defining the scoring rubric. Each message has a `role`
+  (`"developer"` or `"user"`) and `content` (string, supports template
+  variables).
+</ParamField>
+
+<ParamField body="range" type="list[float]">
+  Score range for normalization, as `[min, max]` (e.g. `[0.0, 1.0]`).
+</ParamField>
+
+### `LabelModel`
+
+LLM-based grader that classifies outputs into predefined categories.
+
+<ParamField body="type" type="str" required>
+  Must be `"label_model"`.
+</ParamField>
+
+<ParamField body="name" type="str" required>
+  A unique name for this grader.
+</ParamField>
+
+<ParamField body="model" type="str" required>
+  The model to use for classification (e.g. `"gpt-4.1-mini-2025-04-14"`).
+</ParamField>
+
+<ParamField body="labels" type="list[str]" required>
+  All possible output labels (e.g. `["good", "acceptable", "poor"]`).
+</ParamField>
+
+<ParamField body="passing_labels" type="list[str]" required>
+  Labels considered successful or passing (e.g. `["good", "acceptable"]`).
+</ParamField>
+
+<ParamField body="input" type="list[dict]" required>
+  A list of messages defining the classification criteria. Each message has a
+  `role` (`"developer"` or `"user"`) and `content` (string, supports template
+  variables).
+</ParamField>
+
+### `Python`
+
+Custom Python function for domain-specific evaluation logic.
+
+<ParamField body="type" type="str" required>
+  Must be `"python"`.
+</ParamField>
+
+<ParamField body="name" type="str" required>
+  A unique name for this grader.
+</ParamField>
+
+<ParamField body="source" type="str" required>
+  Python code implementing the scoring logic. Must define a `grade(item,
+  sample)` function that returns a numeric score.
+</ParamField>
+
+<ParamField body="image_tag" type="str">
+  Docker image for sandboxed execution (e.g. `"python:3.11-slim"`).
+</ParamField>
+
+### `Multi`
+
+Combines multiple graders using a mathematical expression.
+
+<ParamField body="type" type="str" required>
+  Must be `"multi"`.
+</ParamField>
+
+<ParamField body="name" type="str" required>
+  A unique name for this grader.
+</ParamField>
+
+<ParamField body="graders" type="dict[str, dict]" required>
+  A dictionary of named graders to combine. Each key is used as a variable name
+  in the `calculate_output` expression.
+</ParamField>
+
+<ParamField body="calculate_output" type="str" required>
+  A mathematical expression combining grader scores (e.g. `"0.3 * exact_match +
+  0.7 * semantic"`). Supports: `+`, `-`, `*`, `/`, `^`, `min`, `max`, `abs`,
+  `floor`, `ceil`, `exp`, `sqrt`, `log`.
+</ParamField>
