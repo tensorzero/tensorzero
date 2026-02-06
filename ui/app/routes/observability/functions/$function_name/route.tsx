@@ -440,7 +440,7 @@ export default function FunctionDetailPage({
 
       <SectionsGroup>
         <VariantsSection
-          promise={variantsData}
+          variantsData={variantsData}
           functionName={function_name}
           locationKey={location.key}
         />

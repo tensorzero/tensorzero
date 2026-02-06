@@ -19,44 +19,30 @@ import FunctionVariantTable from "./FunctionVariantTable";
 import type { VariantsSectionData } from "./variants-data.server";
 
 interface VariantsSectionProps {
-  promise: Promise<VariantsSectionData>;
+  variantsData: Promise<VariantsSectionData>;
   functionName: string;
   locationKey: string;
 }
 
 export function VariantsSection({
-  promise,
+  variantsData,
   functionName,
   locationKey,
 }: VariantsSectionProps) {
   return (
     <SectionLayout>
+      <SectionHeader heading="Variants" />
       <Suspense key={`variants-${locationKey}`} fallback={<VariantsSkeleton />}>
-        <Await resolve={promise} errorElement={<VariantsError />}>
+        <Await resolve={variantsData} errorElement={<VariantsError />}>
           {(data) => (
-            <VariantsContent data={data} functionName={functionName} />
+            <FunctionVariantTable
+              variant_counts={data.variant_counts}
+              function_name={functionName}
+            />
           )}
         </Await>
       </Suspense>
     </SectionLayout>
-  );
-}
-
-function VariantsContent({
-  data,
-  functionName,
-}: {
-  data: VariantsSectionData;
-  functionName: string;
-}) {
-  return (
-    <>
-      <SectionHeader heading="Variants" />
-      <FunctionVariantTable
-        variant_counts={data.variant_counts}
-        function_name={functionName}
-      />
-    </>
   );
 }
 
@@ -75,30 +61,27 @@ function VariantsTableHeaders() {
 
 function VariantsSkeleton() {
   return (
-    <>
-      <SectionHeader heading="Variants" />
-      <Table>
-        <VariantsTableHeaders />
-        <TableBody>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <TableRow key={i}>
-              <TableCell>
-                <Skeleton className="h-4 w-32" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-24" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-16" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-32" />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </>
+    <Table>
+      <VariantsTableHeaders />
+      <TableBody>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <TableRow key={i}>
+            <TableCell>
+              <Skeleton className="h-4 w-32" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-24" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-16" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-32" />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -110,22 +93,19 @@ function VariantsError() {
   });
 
   return (
-    <>
-      <SectionHeader heading="Variants" />
-      <Table>
-        <VariantsTableHeaders />
-        <TableBody>
-          <TableRow>
-            <TableCell colSpan={4}>
-              <TableErrorNotice
-                icon={AlertCircle}
-                title="Error loading data"
-                description={message}
-              />
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </>
+    <Table>
+      <VariantsTableHeaders />
+      <TableBody>
+        <TableRow>
+          <TableCell colSpan={4}>
+            <TableErrorNotice
+              icon={AlertCircle}
+              title="Error loading data"
+              description={message}
+            />
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
   );
 }
