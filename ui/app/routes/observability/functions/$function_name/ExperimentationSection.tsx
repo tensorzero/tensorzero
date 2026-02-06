@@ -38,9 +38,7 @@ export function ExperimentationSection({
               functionConfig={functionConfig}
               functionName={functionName}
               feedbackTimeseries={data.feedback_timeseries}
-              variantSamplingProbabilities={
-                data.variant_sampling_probabilities
-              }
+              variantSamplingProbabilities={data.variant_sampling_probabilities}
             />
           )}
         </Await>
