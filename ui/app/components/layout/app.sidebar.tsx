@@ -161,31 +161,29 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            {autopilotAvailable && (
-              <SidebarMenuItem className="relative list-none">
-                <SidebarMenuButton
-                  asChild
-                  tooltip={state === "collapsed" ? "Autopilot" : undefined}
-                  isActive={activePathUtils.isActive("/autopilot")}
+            <SidebarMenuItem className="relative list-none">
+              <SidebarMenuButton
+                asChild
+                tooltip={state === "collapsed" ? "Autopilot" : undefined}
+                isActive={activePathUtils.isActive("/autopilot")}
+              >
+                <Link to="/autopilot" className="flex items-center gap-2">
+                  <Chat className="h-4 w-4" />
+                  <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                    Autopilot
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+              {autopilotAvailable && state === "expanded" && (
+                <Link
+                  to="/autopilot/sessions/new"
+                  className="text-fg-muted hover:text-fg-primary absolute top-1/2 right-2 z-10 -translate-y-1/2 rounded p-0.5 transition-colors"
+                  aria-label="New session"
                 >
-                  <Link to="/autopilot" className="flex items-center gap-2">
-                    <Chat className="h-4 w-4" />
-                    <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                      Autopilot
-                    </span>
-                  </Link>
-                </SidebarMenuButton>
-                {state === "expanded" && (
-                  <Link
-                    to="/autopilot/sessions/new"
-                    className="text-fg-muted hover:text-fg-primary absolute top-1/2 right-2 z-10 -translate-y-1/2 rounded p-0.5 transition-colors"
-                    aria-label="New session"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Link>
-                )}
-              </SidebarMenuItem>
-            )}
+                  <Plus className="h-4 w-4" />
+                </Link>
+              )}
+            </SidebarMenuItem>
           </SidebarGroupContent>
         </SidebarGroup>
         {navigation.map((section) => (
