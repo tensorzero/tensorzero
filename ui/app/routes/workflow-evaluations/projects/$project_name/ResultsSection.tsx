@@ -92,6 +92,7 @@ function ResultsSkeleton() {
     <>
       <Skeleton className="h-6 w-48" />
       <Skeleton className="mt-2 h-64 w-full" />
+      <PageButtons disabled />
     </>
   );
 }
