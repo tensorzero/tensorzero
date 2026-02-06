@@ -317,7 +317,7 @@ export function InferenceDetailContent({
         </humanFeedbackFetcher.Form>
       </HumanFeedbackModal>
       <AskAutopilotButton
-        message={`Tell me about inference ${inference.inference_id}`}
+        message={`Inference ID: ${inference.inference_id}\n\n`}
       />
     </ActionBar>
   );
