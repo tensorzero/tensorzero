@@ -6,6 +6,7 @@ const CAPABILITIES = [
   "Generate and refine prompts based on human feedback, metrics, and evaluations",
   "Drive optimization workflows like fine-tuning, reinforcement learning, and distillation",
   "Set up evaluations, run A/B tests, and close the feedback loop",
+  "Update your TensorZero configuration with new variants, evaluations, and experiments",
   "And much more — if you can describe it, Autopilot can do it",
 ];
 
@@ -75,7 +76,7 @@ const ZERO_ASCII = `                            ..00000000000000000000..
 
 export function AutopilotTeaser() {
   return (
-    <div className="relative flex min-h-[calc(100vh-2rem)] items-center justify-center overflow-hidden px-8 pb-20">
+    <div className="relative flex min-h-[calc(100vh-2rem)] items-center justify-center overflow-hidden px-8 pb-8">
       <div
         className="pointer-events-none absolute inset-0 flex select-none items-center justify-center opacity-[0.03]"
         aria-hidden="true"
@@ -92,16 +93,15 @@ export function AutopilotTeaser() {
 
         <div className="flex flex-col gap-4">
           <h2 className="text-fg-primary text-2xl font-semibold">
-            An automated AI engineer for your LLM systems
+            Automated AI engineer for your LLM systems
           </h2>
-          <p className="text-fg-secondary text-base leading-relaxed">
+          <p className="text-fg-secondary max-w-[34rem] text-base leading-relaxed">
             TensorZero Autopilot analyzes your inference data, optimizes prompts
-            and models, sets up evals, and runs A/B tests. Think of it like
-            Claude Code for LLM engineering.
+            and models, sets up evals, runs A/B tests — and handles the rest.
           </p>
         </div>
 
-        <div className="flex w-full flex-col gap-3 text-left">
+        <div className="flex max-w-md flex-col gap-3 text-left">
           {CAPABILITIES.map((capability) => (
             <div
               key={capability}
@@ -114,7 +114,7 @@ export function AutopilotTeaser() {
         </div>
 
         <a
-          href="https://www.tensorzero.com/autopilot"
+          href="https://www.tensorzero.com/autopilot-waitlist"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center justify-center rounded-lg bg-orange-600 px-8 py-3 text-base font-medium text-white transition-colors hover:bg-orange-700"

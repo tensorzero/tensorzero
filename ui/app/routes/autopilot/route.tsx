@@ -4,7 +4,7 @@ import { checkAutopilotAvailable } from "~/utils/config/index.server";
 import { AutopilotTeaser } from "./AutopilotTeaser";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const autopilotAvailable = await checkAutopilotAvailable();
+  const autopilotAvailable = false; // await checkAutopilotAvailable();
   if (autopilotAvailable) {
     const url = new URL(request.url);
     return redirect(`/autopilot/sessions${url.search}`);
