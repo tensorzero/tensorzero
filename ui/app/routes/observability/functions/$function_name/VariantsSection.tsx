@@ -31,10 +31,7 @@ export function VariantsSection({
 }: VariantsSectionProps) {
   return (
     <SectionLayout>
-      <Suspense
-        key={`variants-${locationKey}`}
-        fallback={<VariantsSkeleton />}
-      >
+      <Suspense key={`variants-${locationKey}`} fallback={<VariantsSkeleton />}>
         <Await resolve={promise} errorElement={<VariantsError />}>
           {(data) => (
             <VariantsContent data={data} functionName={functionName} />
