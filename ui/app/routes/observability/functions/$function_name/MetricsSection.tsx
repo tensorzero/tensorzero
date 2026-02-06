@@ -8,21 +8,22 @@ import { VariantPerformance } from "~/components/function/variant/VariantPerform
 import type { MetricsSectionData } from "./metrics-data.server";
 
 interface MetricsSectionProps {
-  promise: Promise<MetricsSectionData>;
+  metricsData: Promise<MetricsSectionData>;
   locationKey: string;
 }
 
-export function MetricsSection({ promise, locationKey }: MetricsSectionProps) {
+export function MetricsSection({
+  metricsData,
+  locationKey,
+}: MetricsSectionProps) {
   return (
     <SectionLayout>
+      <SectionHeader heading="Metrics" />
       <Suspense key={`metrics-${locationKey}`} fallback={<MetricsSkeleton />}>
         <Await
-          resolve={promise}
+          resolve={metricsData}
           errorElement={
-            <>
-              <SectionHeader heading="Metrics" />
-              <SectionAsyncErrorState defaultMessage="Failed to load metrics data" />
-            </>
+            <SectionAsyncErrorState defaultMessage="Failed to load metrics data" />
           }
         >
           {(data) => <MetricsContent data={data} />}
@@ -56,7 +57,6 @@ function MetricsContent({ data }: { data: MetricsSectionData }) {
 
   return (
     <>
-      <SectionHeader heading="Metrics" />
       <MetricSelector
         metricsWithFeedback={metricsExcludingDemonstrations}
         selectedMetric={metric_name || ""}
@@ -75,7 +75,6 @@ function MetricsContent({ data }: { data: MetricsSectionData }) {
 function MetricsSkeleton() {
   return (
     <>
-      <SectionHeader heading="Metrics" />
       <Skeleton className="mb-4 h-10 w-64" />
       <Skeleton className="h-64 w-full" />
     </>
