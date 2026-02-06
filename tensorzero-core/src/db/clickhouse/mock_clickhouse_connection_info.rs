@@ -237,6 +237,10 @@ impl ConfigQueries for MockClickHouseConnectionInfo {
     ) -> Result<ConfigSnapshot, Error> {
         self.config_queries.get_config_snapshot(snapshot_hash).await
     }
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        self.config_queries.write_config_snapshot(snapshot).await
+    }
 }
 
 #[async_trait]

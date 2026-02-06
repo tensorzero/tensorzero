@@ -372,6 +372,68 @@ impl ConfigQueries for ClickHouseConnectionInfo {
 
         ConfigSnapshot::from_stored(&row.config, row.extra_templates, row.tags, &snapshot_hash)
     }
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        #[derive(Serialize)]
+        struct ConfigSnapshotRow<'a> {
+            config: &'a str,
+            extra_templates: &'a HashMap<String, String>,
+            hash: SnapshotHash,
+            tensorzero_version: &'static str,
+            tags: &'a HashMap<String, String>,
+        }
+
+        let version_hash = snapshot.hash.clone();
+
+        let config_string = toml::to_string(&snapshot.config).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize config snapshot: {e}"),
+            })
+        })?;
+
+        let row = ConfigSnapshotRow {
+            config: &config_string,
+            extra_templates: &snapshot.extra_templates,
+            hash: version_hash.clone(),
+            tensorzero_version: crate::endpoints::status::TENSORZERO_VERSION,
+            tags: &snapshot.tags,
+        };
+
+        let json_data = serde_json::to_string(&row).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize config snapshot: {e}"),
+            })
+        })?;
+
+        let external_data = ExternalDataInfo {
+            external_data_name: "new_data".to_string(),
+            structure: "config String, extra_templates Map(String, String), hash String, tensorzero_version String, tags Map(String, String)".to_string(),
+            format: "JSONEachRow".to_string(),
+            data: json_data,
+        };
+
+        let query = format!(
+            r"INSERT INTO ConfigSnapshot
+(config, extra_templates, hash, tensorzero_version, tags, created_at, last_used)
+SELECT
+    new_data.config,
+    new_data.extra_templates,
+    toUInt256(new_data.hash) as hash,
+    new_data.tensorzero_version,
+    mapUpdate(
+        (SELECT any(tags) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')),
+        new_data.tags
+    ) as tags,
+    ifNull((SELECT any(created_at) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')), now64()) as created_at,
+    now64() as last_used
+FROM new_data"
+        );
+
+        self.run_query_with_external_data(external_data, query)
+            .await?;
+
+        Ok(())
+    }
 }
 
 pub struct GetMaybeReplicatedTableEngineNameArgs<'a> {

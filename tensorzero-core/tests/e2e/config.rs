@@ -7,7 +7,7 @@ use tensorzero::{
     InputMessageContent, Role,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use tensorzero_core::config::{Config, ConfigFileGlob, write_config_snapshot};
+use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
@@ -173,7 +173,7 @@ optimize = "max"
     let hash_number = hash.to_string();
 
     // Write the config snapshot
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
 
     // Wait a bit for the data to be committed
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -216,7 +216,7 @@ optimize = "max"
     let snapshot2 =
         ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    write_config_snapshot(&clickhouse, snapshot2).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot2).await.unwrap();
 
     // Wait for the data to be committed
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -290,7 +290,7 @@ optimize = "max"
     let hash = snapshot.hash.clone();
 
     // Write the config snapshot
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
 
     // Wait for the data to be committed
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -385,7 +385,7 @@ optimize = "max"
     let hash = snapshot.hash.clone();
 
     // Write the config snapshot
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot).await.unwrap();
 
     // Wait for the data to be committed
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1012,7 +1012,7 @@ optimize = "max"
     let hash = snapshot1.hash.clone();
 
     // Write the first config snapshot
-    write_config_snapshot(&clickhouse, snapshot1).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot1).await.unwrap();
 
     // Wait for the data to be committed
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1042,7 +1042,7 @@ optimize = "max"
     assert_eq!(snapshot2.hash, hash, "Same config should produce same hash");
 
     // Write the second snapshot (should merge tags)
-    write_config_snapshot(&clickhouse, snapshot2).await.unwrap();
+    clickhouse.write_config_snapshot(&snapshot2).await.unwrap();
 
     // Wait for the data to be committed
     tokio::time::sleep(Duration::from_millis(500)).await;

@@ -177,6 +177,11 @@ pub trait ConfigQueries {
         &self,
         snapshot_hash: SnapshotHash,
     ) -> impl Future<Output = Result<ConfigSnapshot, Error>> + Send;
+
+    fn write_config_snapshot(
+        &self,
+        snapshot: &ConfigSnapshot,
+    ) -> impl Future<Output = Result<(), Error>> + Send;
 }
 
 /// A stored DICL (Dynamic In-Context Learning) example.
