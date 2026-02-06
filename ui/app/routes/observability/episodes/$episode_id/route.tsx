@@ -13,6 +13,7 @@ import {
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import {
   PageHeader,
   PageLayout,
@@ -412,6 +413,7 @@ export default function EpisodeDetailPage({
               />
             </humanFeedbackFetcher.Form>
           </HumanFeedbackModal>
+          <AskAutopilotButton message={`Episode ID: ${episode_id}\n\n`} />
         </ActionBar>
       </PageHeader>
 

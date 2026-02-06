@@ -23,6 +23,8 @@ import type { TimeWindow } from "~/types/tensorzero";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import type { Route } from "./+types/route";
+import { ActionBar } from "~/components/layout/ActionBar";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import {
   PageHeader,
   PageLayout,
@@ -394,7 +396,13 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
           />
         }
         name={variant_name}
-      />
+      >
+        <ActionBar>
+          <AskAutopilotButton
+            message={`Variant: ${variant_name}\nFunction: ${function_name}\n\n`}
+          />
+        </ActionBar>
+      </PageHeader>
 
       <SectionsGroup>
         <SectionLayout>

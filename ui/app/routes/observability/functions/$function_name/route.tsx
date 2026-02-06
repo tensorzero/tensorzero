@@ -8,6 +8,8 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { ActionBar } from "~/components/layout/ActionBar";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
@@ -70,6 +72,9 @@ function FunctionDetailPageHeader({
       }
     >
       {functionConfig && <BasicInfo functionConfig={functionConfig} />}
+      <ActionBar>
+        <AskAutopilotButton message={`Function: ${functionName}\n\n`} />
+      </ActionBar>
     </PageHeader>
   );
 }
