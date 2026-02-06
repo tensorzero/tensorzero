@@ -422,9 +422,9 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
   }, [data.variant_summaries]);
 
   // Compute Y values for separation lines
-  // Lines are drawn at the midpoint between:
-  // - The min lower bound of the top-k variants (sorted by lower bound descending)
-  // - The max upper bound of the remaining variants
+  // When there's a visible gap (no overlap), the line is drawn at the midpoint.
+  // When confidence intervals overlap (epsilon-based separation), the line is
+  // drawn slightly below the winner's lower bound.
   // Note: Failed variants are excluded from this calculation
   const separationYValues = useMemo(() => {
     const separationIndices = data.confident_top_k_sizes ?? [];
@@ -440,6 +440,9 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
       }))
       .sort((a, b) => b.lower - a.lower);
 
+    // Offset for overlap case: 2% of y-axis range (which is 0-1)
+    const overlapOffset = 0.02;
+
     return separationIndices
       .map((k) => {
         if (k <= 0 || k >= sortedByLower.length) return null;
@@ -454,8 +457,11 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
         // Max upper bound of rest
         const maxUpperRest = Math.max(...rest.map((v) => v.upper));
 
-        // Y value is midpoint between separation
-        const y = (minLowerTopK + maxUpperRest) / 2;
+        // Y value depends on whether there's a visible gap or overlap
+        const y =
+          minLowerTopK > maxUpperRest
+            ? (minLowerTopK + maxUpperRest) / 2 // Visible gap: use midpoint
+            : minLowerTopK - overlapOffset; // Overlap: offset below winner's LCB
 
         return { k, y };
       })

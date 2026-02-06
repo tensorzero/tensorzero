@@ -600,9 +600,10 @@ const visualizationEvents: GatewayEvent[] = [
   ),
   // Visualization event tied to the tool call
   // Data designed to show separation lines at top-1 and top-3:
-  // Non-failed variants sorted by lower bound: echo(0.85) > empty2(0.70) > empty(0.60) > test(0.35)
-  // Top-1: echo's lower (0.85) > max upper of rest (0.80) ✓
-  // Top-3: empty's lower (0.60) > test's upper (0.50) ✓
+  // Non-failed variants sorted by lower bound: echo(0.85) > empty2(0.70) > empty(0.60) > test(0.45)
+  // Top-1: echo's lower (0.85) > max upper of rest (0.80) ✓ (clear gap, line at midpoint)
+  // Top-3: empty's lower (0.60) < test's upper (0.62) - overlap due to epsilon tolerance
+  //        (line drawn below empty's LCB to test epsilon-based separation)
   // Failed variants (displayed on right): failed_bad_variant1, failed_bad_variant2
   buildEvent(
     {
@@ -623,9 +624,9 @@ const visualizationEvents: GatewayEvent[] = [
               failed: false,
             },
             test: {
-              mean_est: 0.42,
-              cs_lower: 0.35,
-              cs_upper: 0.5,
+              mean_est: 0.52,
+              cs_lower: 0.45,
+              cs_upper: 0.62, // UCB overlaps with empty's LCB (0.6) to test epsilon-based separation
               count: BigInt(25),
               failed: false,
             },
