@@ -1,8 +1,6 @@
 import { Suspense } from "react";
-import { AlertCircle } from "lucide-react";
 import {
   Await,
-  useAsyncError,
   useNavigate,
   useSearchParams,
 } from "react-router";
@@ -10,14 +8,13 @@ import PageButtons from "~/components/utils/PageButtons";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
 import { Skeleton } from "~/components/ui/skeleton";
-import {
-  getErrorMessage,
-  SectionErrorNotice,
-} from "~/components/ui/error/ErrorContentPrimitives";
-import type { RunsData } from "./route.server";
+import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
+import type { RunsTableData } from "./route.server";
+import type { CountValue } from "~/components/layout/CountDisplay";
 
 interface RunsSectionProps {
-  promise: Promise<RunsData>;
+  promise: Promise<RunsTableData>;
+  countPromise: CountValue;
   offset: number;
   limit: number;
   locationKey: string;
@@ -25,14 +22,19 @@ interface RunsSectionProps {
 
 export function RunsSection({
   promise,
+  countPromise,
   offset,
   limit,
   locationKey,
 }: RunsSectionProps) {
   return (
     <SectionLayout>
+      <SectionHeader heading="Evaluation Runs" count={countPromise} />
       <Suspense key={`runs-${locationKey}`} fallback={<RunsSkeleton />}>
-        <Await resolve={promise} errorElement={<RunsError />}>
+        <Await
+          resolve={promise}
+          errorElement={<RunsError />}
+        >
           {(data) => <RunsContent data={data} offset={offset} limit={limit} />}
         </Await>
       </Suspense>
@@ -45,7 +47,7 @@ function RunsContent({
   offset,
   limit,
 }: {
-  data: RunsData;
+  data: RunsTableData;
   offset: number;
   limit: number;
 }) {
@@ -67,7 +69,6 @@ function RunsContent({
 
   return (
     <>
-      <SectionHeader heading="Evaluation Runs" count={count} />
       <WorkflowEvaluationRunsTable workflowEvaluationRuns={runs} />
       <PageButtons
         onPreviousPage={handlePreviousPage}
@@ -82,7 +83,6 @@ function RunsContent({
 function RunsSkeleton() {
   return (
     <>
-      <Skeleton className="mb-2 h-6 w-32" />
       <Skeleton className="h-48 w-full" />
       <PageButtons disabled />
     </>
@@ -90,15 +90,10 @@ function RunsSkeleton() {
 }
 
 function RunsError() {
-  const error = useAsyncError();
   return (
-    <SectionErrorNotice
-      icon={AlertCircle}
-      title="Error loading evaluation runs"
-      description={getErrorMessage({
-        error,
-        fallback: "Failed to load evaluation runs",
-      })}
-    />
+    <>
+      <SectionAsyncErrorState defaultMessage="Failed to load evaluation runs" />
+      <PageButtons disabled />
+    </>
   );
 }

@@ -1,6 +1,6 @@
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
-export type ProjectsData = {
+export type ProjectsTableData = {
   projects: Awaited<
     ReturnType<
       ReturnType<typeof getTensorZeroClient>["getWorkflowEvaluationProjects"]
@@ -9,7 +9,7 @@ export type ProjectsData = {
   count: number;
 };
 
-export type RunsData = {
+export type RunsTableData = {
   runs: Awaited<
     ReturnType<
       ReturnType<typeof getTensorZeroClient>["listWorkflowEvaluationRuns"]
@@ -18,26 +18,28 @@ export type RunsData = {
   count: number;
 };
 
-export async function fetchProjectsData(
+export async function fetchProjectsTableData(
   limit: number,
   offset: number,
-): Promise<ProjectsData> {
+  countPromise: Promise<number>,
+): Promise<ProjectsTableData> {
   const client = getTensorZeroClient();
   const [response, count] = await Promise.all([
     client.getWorkflowEvaluationProjects(limit, offset),
-    client.countWorkflowEvaluationProjects(),
+    countPromise,
   ]);
   return { projects: response.projects, count };
 }
 
-export async function fetchRunsData(
+export async function fetchRunsTableData(
   limit: number,
   offset: number,
-): Promise<RunsData> {
+  countPromise: Promise<number>,
+): Promise<RunsTableData> {
   const client = getTensorZeroClient();
   const [response, count] = await Promise.all([
     client.listWorkflowEvaluationRuns(limit, offset),
-    client.countWorkflowEvaluationRuns(),
+    countPromise,
   ]);
   return { runs: response.runs, count };
 }

@@ -1,8 +1,6 @@
 import { Suspense } from "react";
-import { AlertCircle } from "lucide-react";
 import {
   Await,
-  useAsyncError,
   useNavigate,
   useSearchParams,
 } from "react-router";
@@ -10,14 +8,13 @@ import PageButtons from "~/components/utils/PageButtons";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
 import { Skeleton } from "~/components/ui/skeleton";
-import {
-  getErrorMessage,
-  SectionErrorNotice,
-} from "~/components/ui/error/ErrorContentPrimitives";
-import type { ProjectsData } from "./route.server";
+import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
+import type { ProjectsTableData } from "./route.server";
+import type { CountValue } from "~/components/layout/CountDisplay";
 
 interface ProjectsSectionProps {
-  promise: Promise<ProjectsData>;
+  promise: Promise<ProjectsTableData>;
+  countPromise: CountValue;
   offset: number;
   limit: number;
   locationKey: string;
@@ -25,14 +22,19 @@ interface ProjectsSectionProps {
 
 export function ProjectsSection({
   promise,
+  countPromise,
   offset,
   limit,
   locationKey,
 }: ProjectsSectionProps) {
   return (
     <SectionLayout>
+      <SectionHeader heading="Projects" count={countPromise} />
       <Suspense key={`projects-${locationKey}`} fallback={<ProjectsSkeleton />}>
-        <Await resolve={promise} errorElement={<ProjectsError />}>
+        <Await
+          resolve={promise}
+          errorElement={<ProjectsError />}
+        >
           {(data) => (
             <ProjectsContent data={data} offset={offset} limit={limit} />
           )}
@@ -47,7 +49,7 @@ function ProjectsContent({
   offset,
   limit,
 }: {
-  data: ProjectsData;
+  data: ProjectsTableData;
   offset: number;
   limit: number;
 }) {
@@ -69,7 +71,6 @@ function ProjectsContent({
 
   return (
     <>
-      <SectionHeader heading="Projects" count={count} />
       <WorkflowEvaluationProjectsTable workflowEvaluationProjects={projects} />
       <PageButtons
         onPreviousPage={handlePreviousPage}
@@ -84,7 +85,6 @@ function ProjectsContent({
 function ProjectsSkeleton() {
   return (
     <>
-      <Skeleton className="mb-2 h-6 w-32" />
       <Skeleton className="h-48 w-full" />
       <PageButtons disabled />
     </>
@@ -92,15 +92,10 @@ function ProjectsSkeleton() {
 }
 
 function ProjectsError() {
-  const error = useAsyncError();
   return (
-    <SectionErrorNotice
-      icon={AlertCircle}
-      title="Error loading projects"
-      description={getErrorMessage({
-        error,
-        fallback: "Failed to load projects",
-      })}
-    />
+    <>
+      <SectionAsyncErrorState defaultMessage="Failed to load projects" />
+      <PageButtons disabled />
+    </>
   );
 }

@@ -1,9 +1,10 @@
 import type { Route } from "./+types/route";
 import { useLocation } from "react-router";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
-import { fetchProjectsData, fetchRunsData } from "./route.server";
+import { fetchProjectsTableData, fetchRunsTableData } from "./route.server";
 import { ProjectsSection } from "./ProjectsSection";
 import { RunsSection } from "./RunsSection";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -13,9 +14,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   const projectOffset = parseInt(searchParams.get("projectOffset") || "0");
   const projectLimit = parseInt(searchParams.get("projectLimit") || "15");
 
+  const client = getTensorZeroClient();
+  const projectCountPromise = client.countWorkflowEvaluationProjects();
+  const runCountPromise = client.countWorkflowEvaluationRuns();
+
   return {
-    projectsData: fetchProjectsData(projectLimit, projectOffset),
-    runsData: fetchRunsData(runLimit, runOffset),
+    projectCountPromise,
+    projectsData: fetchProjectsTableData(
+      projectLimit,
+      projectOffset,
+      projectCountPromise,
+    ),
+    runCountPromise,
+    runsData: fetchRunsTableData(runLimit, runOffset, runCountPromise),
     runOffset,
     runLimit,
     projectOffset,
@@ -27,7 +38,9 @@ export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const {
+    projectCountPromise,
     projectsData,
+    runCountPromise,
     runsData,
     runOffset,
     runLimit,
@@ -41,12 +54,14 @@ export default function EvaluationSummaryPage({
       <PageHeader heading="Workflow Evaluations" />
       <ProjectsSection
         promise={projectsData}
+        countPromise={projectCountPromise}
         offset={projectOffset}
         limit={projectLimit}
         locationKey={location.key}
       />
       <RunsSection
         promise={runsData}
+        countPromise={runCountPromise}
         offset={runOffset}
         limit={runLimit}
         locationKey={location.key}
