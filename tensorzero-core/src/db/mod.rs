@@ -84,7 +84,7 @@ impl TimeWindow {
         }
     }
 
-    /// Converts the time window to the PostgreSQL date_trunc time unit.
+    /// Converts the time window to the Postgres date_trunc time unit.
     pub fn to_postgres_time_unit(&self) -> &'static str {
         match self {
             TimeWindow::Minute => "minute",

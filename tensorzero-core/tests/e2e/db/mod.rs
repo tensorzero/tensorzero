@@ -59,11 +59,11 @@ pub async fn get_test_postgres() -> PostgresConnectionInfo {
         .expect("Environment variable TENSORZERO_POSTGRES_URL must be set");
 
     let start = std::time::Instant::now();
-    println!("Connecting to PostgreSQL");
+    println!("Connecting to Postgres");
     let pool = PgPoolOptions::new()
         .connect(&postgres_url)
         .await
-        .expect("Failed to connect to PostgreSQL");
-    println!("Connected to PostgreSQL in {:?}", start.elapsed());
+        .expect("Failed to connect to Postgres");
+    println!("Connected to Postgres in {:?}", start.elapsed());
     PostgresConnectionInfo::new_with_pool(pool)
 }

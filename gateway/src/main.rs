@@ -116,10 +116,10 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_postgres_migrations {
-        tracing::info!("Applying PostgreSQL migrations...");
+        tracing::info!("Applying Postgres migrations...");
         manual_run_postgres_migrations()
             .await
-            .log_err_pretty("Failed to run PostgreSQL migrations")?;
+            .log_err_pretty("Failed to run Postgres migrations")?;
         tracing::info!("Postgres is ready.");
         return Ok(());
     }
