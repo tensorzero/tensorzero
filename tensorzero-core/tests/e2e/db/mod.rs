@@ -40,6 +40,7 @@ macro_rules! make_clickhouse_only_test {
 mod bandit_queries;
 mod batch_inference_endpoint_internals;
 mod batch_inference_queries;
+mod config_queries;
 mod dataset_queries;
 mod dicl_queries;
 mod evaluation_queries;
