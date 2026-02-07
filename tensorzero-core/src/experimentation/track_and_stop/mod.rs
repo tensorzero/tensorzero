@@ -488,11 +488,13 @@ impl VariantSampler for TrackAndStopConfig {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
-            return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Track-and-Stop probability update task has already been spawned for function '{function_name}'"
-                ),
-            }));
+            // This can happen when running GEPA, which re-uses the existing gateway config.
+            // We don't need to spawn another background update task - the existing task will update
+            // the `ArcSwap` read by all consumers
+            tracing::info!(
+                "Track-and-Stop experimentation background task has already been spawned for function '{function_name}'"
+            );
+            return Ok(());
         }
 
         // Spawn a background task that continuously updates sampling probabilities.
@@ -2084,6 +2086,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_prevents_duplicate_task_spawning() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
         // Create a TrackAndStopConfig instance
         let config = TrackAndStopConfig {
             metric: "test_metric".to_string(),
@@ -2112,17 +2116,21 @@ mod tests {
             .await;
         assert!(result1.is_ok(), "First setup call should succeed");
 
-        // Second call to setup should fail with an error
+        // Second call to setup should also succeed (no-op) and log a message
         let result2 = config
             .setup(db, "test_function", &postgres, cancel_token.clone())
             .await;
-        assert!(result2.is_err(), "Second setup call should fail");
-
-        // Verify the error message mentions the task has already been spawned
-        let err = result2.unwrap_err();
         assert!(
-            err.to_string().contains("already been spawned"),
-            "Error should mention task already spawned, got: {err}"
+            result2.is_ok(),
+            "Second setup call should succeed (task already spawned)"
+        );
+
+        // Verify the info log message is emitted
+        assert!(
+            logs_contain(
+                "Track-and-Stop experimentation background task has already been spawned for function"
+            ),
+            "Expected log message about task already being spawned"
         );
 
         // Clean up: cancel the spawned task
