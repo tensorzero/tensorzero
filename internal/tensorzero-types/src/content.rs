@@ -136,7 +136,6 @@ impl<'de> Deserialize<'de> for Unknown {
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
         struct UnknownDeserialize {
             data: Value,
             model_provider_name: Option<String>,

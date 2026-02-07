@@ -712,7 +712,7 @@ describe("OpenAI Compatibility", () => {
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -758,7 +758,7 @@ describe("OpenAI Compatibility", () => {
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -833,7 +833,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.choices[0].message.content).toBe(
       "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
     );
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -1150,7 +1150,7 @@ describe("OpenAI Compatibility", () => {
 
     const jsonContent = JSON.parse(result.choices[0].message.content!);
     expect(jsonContent.response.toLowerCase()).toContain("tokyo");
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
 
     expect(result.usage?.prompt_tokens).toBeGreaterThan(50);
     expect(result.usage?.completion_tokens).toBeGreaterThan(0);

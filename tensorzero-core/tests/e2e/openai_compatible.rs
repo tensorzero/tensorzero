@@ -1266,8 +1266,10 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
     assert!(!content.unwrap().is_empty());
 
     // Should not have tool_calls in final response
-    let tool_calls = final_choice["message"]["tool_calls"].as_array().unwrap();
-    assert!(tool_calls.is_empty());
+    assert!(
+        final_choice["message"].get("tool_calls").is_none(),
+        "Expected no tool_calls field in final response"
+    );
 
     println!(
         "Multi-turn test passed! Got final response: {}",
