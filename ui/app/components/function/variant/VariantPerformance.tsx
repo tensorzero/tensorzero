@@ -18,7 +18,6 @@ import {
 import {
   ChartContainer,
   ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "~/components/ui/chart";
@@ -84,7 +83,7 @@ export function VariantPerformance({
           />
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="h-80 w-full">
+          <ChartContainer config={chartConfig}>
             <BarChart accessibilityLayer data={data}>
               <CartesianGrid vertical={false} />
               <XAxis
@@ -130,9 +129,6 @@ export function VariantPerformance({
                   />
                 }
               />
-              <ChartLegend
-                content={<ChartLegendContent className="font-mono text-xs" />}
-              />
               {singleVariantMode ? (
                 <Bar
                   key={variantNames[0]}
@@ -166,6 +162,16 @@ export function VariantPerformance({
               )}
             </BarChart>
           </ChartContainer>
+          <ChartLegend
+            items={variantNames}
+            colors={
+              singleVariantMode
+                ? [CHART_COLORS[0]]
+                : variantNames.map(
+                    (name) => chartConfig[name]?.color ?? CHART_COLORS[0],
+                  )
+            }
+          />
         </CardContent>
       </Card>
     </div>
