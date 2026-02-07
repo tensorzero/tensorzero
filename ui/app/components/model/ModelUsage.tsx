@@ -11,6 +11,7 @@ import { useState, Suspense } from "react";
 import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle } from "lucide-react";
+import { BarChartSkeleton } from "~/components/ui/BarChartSkeleton";
 
 import {
   Card,
@@ -140,7 +141,7 @@ export function ModelUsage({
         </div>
       </CardHeader>
       <CardContent>
-        <Suspense fallback={<div>Loading model usage data...</div>}>
+        <Suspense fallback={<BarChartSkeleton />}>
           <Await
             resolve={modelUsageDataPromise}
             errorElement={<ModelUsageError />}
