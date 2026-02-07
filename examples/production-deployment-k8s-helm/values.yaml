@@ -21,7 +21,7 @@ gateway:
   replicaCount: 1
   command: [ "gateway" ]
   args:
-    # Update this to the correct path if you are using a secret for the configuration
+    # If you enable `configFromExternalSecret`, update this to the secret mount path.
     - --config-file=/app/config/tensorzero.toml
   # Optional service account name for the gateway deployment
   serviceAccountName: "" # @schema description: The service account name for the gateway deployment.
@@ -171,8 +171,9 @@ configMap:
       # type = "filesystem"
       # path = "/app/storage/"
 
-# If enabled, the configuration will be mounted from this secret instead of the configmap
-#  Secret must have a key called "tensorzero.toml" containing the configuration
+# If enabled, the gateway configuration will be mounted from a Secret instead of the ConfigMap.
+# The Secret must have a key called `tensorzero.toml` containing the configuration.
+# If you change `mountPath`, also update `gateway.args` accordingly.
 configFromExternalSecret:
   enabled: false
   secretName: "tensorzero-secret"
