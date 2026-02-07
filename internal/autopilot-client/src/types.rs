@@ -187,6 +187,51 @@ pub struct EventPayloadError {
     pub message: String,
 }
 
+// =============================================================================
+// Ask User Question Types
+// =============================================================================
+
+/// An option for an AskUserQuestion question.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AskUserQuestionOption {
+    /// The display text for this option that the user will see and select.
+    pub label: String,
+    /// Explanation of what this option means or what will happen if chosen.
+    pub description: String,
+}
+
+/// A single question in an AskUserQuestion payload.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AskUserQuestionItem {
+    /// The complete question to ask the user.
+    pub question: String,
+    /// Very short label displayed as a chip/tag (max 12 chars).
+    pub header: String,
+    /// The available choices for this question (2-4 options).
+    pub options: Vec<AskUserQuestionOption>,
+    /// Set to true to allow the user to select multiple options instead of just one.
+    #[serde(default, rename = "multiSelect")]
+    #[cfg_attr(feature = "ts-bindings", ts(rename = "multiSelect"))]
+    pub multi_select: bool,
+}
+
+/// AskUserQuestion payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadAskUserQuestion {
+    /// Questions to ask the user (1-4 questions).
+    pub questions: Vec<AskUserQuestionItem>,
+    /// User answers collected by the permission component.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub answers: Option<HashMap<String, String>>,
+}
+
 /// Status update payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,6 +262,7 @@ pub enum EventPayload {
     ToolCallAuthorization(EventPayloadToolCallAuthorization),
     ToolResult(EventPayloadToolResult),
     Visualization(EventPayloadVisualization),
+    AskUserQuestion(EventPayloadAskUserQuestion),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -252,6 +298,7 @@ pub enum GatewayEventPayload {
     ToolCallAuthorization(GatewayEventPayloadToolCallAuthorization),
     ToolResult(EventPayloadToolResult),
     Visualization(EventPayloadVisualization),
+    AskUserQuestion(EventPayloadAskUserQuestion),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -271,6 +318,7 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             }
             EventPayload::ToolResult(r) => Ok(GatewayEventPayload::ToolResult(r)),
             EventPayload::Visualization(v) => Ok(GatewayEventPayload::Visualization(v)),
+            EventPayload::AskUserQuestion(q) => Ok(GatewayEventPayload::AskUserQuestion(q)),
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
     }
