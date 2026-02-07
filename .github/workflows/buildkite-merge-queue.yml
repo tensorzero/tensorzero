@@ -5,15 +5,50 @@ on:
   # merge_group:
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   merge-queue-tests:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
+      - name: Get merge queue position
+        id: get-position
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Extract PR number from merge queue branch name (format: gh-readonly-queue/main/pr-<NUMBER>-<SHA>)
+          PR_NUMBER=$(echo "${{ github.ref_name }}" | sed -n 's/.*\/pr-\([0-9]*\)-.*/\1/p')
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "Could not extract PR number from ref: ${{ github.ref_name }}"
+            echo "priority=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Query GitHub GraphQL API for merge queue position
+          POSITION=$(gh api graphql -f query='
+            query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $number) {
+                  mergeQueueEntry {
+                    position
+                  }
+                }
+              }
+            }
+          ' -f owner="${{ github.repository_owner }}" -f name="${{ github.event.repository.name }}" -F number="$PR_NUMBER" \
+            --jq '.data.repository.pullRequest.mergeQueueEntry.position // 0')
+
+          # Set priority to negative of position (so lower positions have higher priority)
+          PRIORITY=$((-POSITION))
+          echo "PR #$PR_NUMBER is at merge queue position $POSITION, setting priority to $PRIORITY"
+          echo "priority=$PRIORITY" >> "$GITHUB_OUTPUT"
+
       - name: Trigger a Buildkite Build on Push using v2.0.0
         uses: buildkite/trigger-pipeline-action@v2.0.0
         with:
           buildkite_api_access_token: ${{ secrets.TRIGGER_BK_BUILD_TOKEN }}
           pipeline: "tensorzero/merge-queue-tests"
+          build_env_vars: '{"MERGE_QUEUE_PRIORITY": "${{ steps.get-position.outputs.priority }}"}'
