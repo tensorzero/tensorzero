@@ -8,12 +8,12 @@ use crate::config::{
     Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
 };
 use crate::db::TimeWindow;
+use crate::db::clickhouse::episode_queries::parse_count;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
     ClickhouseType, JoinRegistry, OrderByTerm, OrderDirection, QueryParameter,
     generate_order_by_sql,
 };
-use crate::db::clickhouse::select_queries::parse_count;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::inferences::{
     ClickHouseStoredInferenceWithDispreferredOutputs, CountByVariant,
