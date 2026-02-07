@@ -308,6 +308,8 @@ export * from "./SearchEvaluationRunsResponse";
 export * from "./SearchWorkflowEvaluationRunsResponse";
 export * from "./ServiceTier";
 export * from "./Session";
+export * from "./SessionSortField";
+export * from "./SortOrder";
 export * from "./StaleDatasetResponse";
 export * from "./StaticToolConfig";
 export * from "./StaticWeightsConfig";
