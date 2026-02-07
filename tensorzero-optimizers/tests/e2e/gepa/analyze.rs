@@ -42,7 +42,8 @@ pub fn create_test_function_config() -> FunctionConfig {
         parallel_tool_calls: None,
         description: Some("Test function for GEPA e2e tests".to_string()),
         all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+        experimentation:
+            tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
     })
 }
 
@@ -68,7 +69,8 @@ pub fn create_test_json_function_config() -> FunctionConfig {
         json_mode_tool_call_config,
         description: Some("Test JSON function for GEPA e2e tests".to_string()),
         all_explicit_template_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+        experimentation:
+            tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
     })
 }
 
@@ -118,7 +120,8 @@ pub fn create_test_function_config_with_schemas() -> FunctionConfig {
         parallel_tool_calls: None,
         description: Some("Test function with schemas for GEPA e2e tests".to_string()),
         all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+        experimentation:
+            tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
     })
 }
 
@@ -181,7 +184,8 @@ pub fn create_test_function_config_with_static_tools() -> (
         parallel_tool_calls: None,
         description: Some("Test function with static tools".to_string()),
         all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+        experimentation:
+            tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
     });
 
     // Create static_tools HashMap

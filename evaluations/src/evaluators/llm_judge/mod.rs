@@ -120,6 +120,7 @@ pub async fn run_llm_judge_evaluator(
         function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
         episode_id: None,
+        namespace: None,
         input: judge_input,
         stream: Some(false),
         include_original_response: false,

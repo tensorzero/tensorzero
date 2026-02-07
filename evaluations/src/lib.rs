@@ -776,6 +776,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         cache_options: get_cache_options(inference_cache),
         dryrun: Some(dryrun),
         episode_id: None,
+        namespace: None,
         model_name: None,
         stream: Some(false),
         params: InferenceParams::default(),

@@ -558,7 +558,8 @@ mod tests {
             parallel_tool_calls: None,
             description: Some("Test function".to_string()),
             all_explicit_templates_names: std::collections::HashSet::new(),
-            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+            experimentation:
+                tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
         })
     }
 
@@ -608,7 +609,8 @@ mod tests {
             parallel_tool_calls: None,
             description: Some("Test function with schemas".to_string()),
             all_explicit_templates_names: std::collections::HashSet::new(),
-            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+            experimentation:
+                tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
         })
     }
 

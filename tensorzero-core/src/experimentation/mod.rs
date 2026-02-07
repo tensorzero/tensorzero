@@ -5,7 +5,7 @@ use std::{
 };
 
 use schemars::JsonSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio_util::sync::CancellationToken;
@@ -116,6 +116,45 @@ impl Default for ExperimentationConfig {
     }
 }
 
+/// Holds the base experimentation config plus namespace-specific configs (loaded version).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Default)]
+pub struct ExperimentationConfigWithNamespaces {
+    /// The base experimentation config used when no namespace is provided
+    /// or when the provided namespace doesn't have a specific config
+    pub base: ExperimentationConfig,
+    /// Namespace-specific experimentation configs
+    pub namespaces: HashMap<String, ExperimentationConfig>,
+}
+
+impl ExperimentationConfigWithNamespaces {
+    /// Get the experimentation config for a given namespace.
+    /// If namespace is None or the namespace doesn't have a specific config,
+    /// returns the base config.
+    pub fn get_for_namespace(&self, namespace: Option<&str>) -> &ExperimentationConfig {
+        match namespace {
+            Some(ns) => self.namespaces.get(ns).unwrap_or(&self.base),
+            None => &self.base,
+        }
+    }
+
+    /// Check if a specific namespace has a dedicated config
+    pub fn has_namespace_config(&self, namespace: &str) -> bool {
+        self.namespaces.contains_key(namespace)
+    }
+
+    /// Create an ExperimentationConfigWithNamespaces from a legacy variants map.
+    /// This creates a config with only a base experimentation config (no namespace overrides).
+    pub fn legacy_from_variants_map(variants: &HashMap<String, Arc<VariantInfo>>) -> Self {
+        Self {
+            base: ExperimentationConfig::legacy_from_variants_map(variants),
+            namespaces: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -125,6 +164,66 @@ pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform(uniform::UniformConfig),
     TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
+}
+
+/// Wrapper struct that holds the base experimentation config plus namespace-specific configs.
+/// This is the type used in the TOML config to allow both a default config and per-namespace overrides.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct UninitializedExperimentationConfigWithNamespaces {
+    /// The base experimentation config (type, candidate_variants, etc.)
+    #[serde(flatten)]
+    pub base: UninitializedExperimentationConfig,
+    /// Namespace-specific experimentation configs
+    #[serde(default)]
+    pub namespaces: HashMap<String, UninitializedExperimentationConfig>,
+}
+
+impl UninitializedExperimentationConfigWithNamespaces {
+    pub fn load(
+        self,
+        variants: &HashMap<String, Arc<VariantInfo>>,
+        metrics: &HashMap<String, crate::config::MetricConfig>,
+        function_name: &str,
+    ) -> Result<ExperimentationConfigWithNamespaces, Error> {
+        use crate::config::Namespace;
+
+        // Load the base config
+        let base = self.base.load(variants, metrics)?;
+
+        // Load namespace-specific configs
+        let mut loaded_namespaces = HashMap::new();
+        for (namespace, config) in self.namespaces {
+            // Validate namespace identifier format using the Namespace newtype
+            Namespace::new(&namespace).map_err(|_| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Invalid namespace identifier `{namespace}` in `functions.{function_name}.experimentation.namespaces`. \
+                        Namespace identifiers must start with a lowercase letter and contain only lowercase letters, digits, and underscores."
+                    ),
+                })
+            })?;
+
+            // Check that namespace configs don't use track_and_stop
+            if matches!(config, UninitializedExperimentationConfig::TrackAndStop(_)) {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Namespace-specific experimentation config `functions.{function_name}.experimentation.namespaces.{namespace}` \
+                        cannot use `track_and_stop` type. Only `uniform` and `static_weights` are supported for namespace configs."
+                    ),
+                }));
+            }
+
+            let loaded_config = config.load(variants, metrics)?;
+            loaded_namespaces.insert(namespace, loaded_config);
+        }
+
+        Ok(ExperimentationConfigWithNamespaces {
+            base,
+            namespaces: loaded_namespaces,
+        })
+    }
 }
 
 impl UninitializedExperimentationConfig {

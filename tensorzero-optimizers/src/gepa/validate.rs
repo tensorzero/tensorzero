@@ -509,7 +509,7 @@ mod tests {
     use tensorzero_core::{
         config::{Config, ErrorContext, SchemaData, TimeoutsConfig, path::ResolvedTomlPathData},
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
-        experimentation::ExperimentationConfig,
+        experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
@@ -1265,7 +1265,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }))
     }
 

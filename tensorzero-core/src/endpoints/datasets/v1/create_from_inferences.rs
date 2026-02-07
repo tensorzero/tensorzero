@@ -136,7 +136,7 @@ mod tests {
     use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
     use crate::db::stored_datapoint::StoredDatapoint;
     use crate::endpoints::stored_inferences::v1::types::ListInferencesRequest;
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{ContentBlockChatOutput, Text};
     use crate::jsonschema_util::JSONSchema;
@@ -160,7 +160,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: Default::default(),
             })),
         );
@@ -174,7 +174,7 @@ mod tests {
                 output_schema: JSONSchema::default(),
                 json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_template_names: Default::default(),
             })),
         );
