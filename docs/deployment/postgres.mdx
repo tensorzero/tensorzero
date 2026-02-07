@@ -12,12 +12,14 @@ description: Learn how to deploy Postgres for advanced TensorZero features.
 TensorZero only requires Postgres for certain advanced features.
 Most notably, you need to deploy Postgres to [run adaptive A/B tests](/experimentation/run-adaptive-ab-tests) and [set up auth for TensorZero](/operations/set-up-auth-for-tensorzero).
 
-## Deploy
+## Set up
+
+<Steps>
+
+<Step title="Deploy Postgres">
 
 You can self-host Postgres or use a managed service (e.g. AWS RDS, Supabase, PlanetScale).
 Follow the deployment instructions for your chosen service.
-
-Internally, we test TensorZero using self-hosted Postgres 14.
 
 <Note>
 
@@ -25,9 +27,172 @@ If you find any compatibility issues, please open a detailed [GitHub Discussion]
 
 </Note>
 
-## Configure
+</Step>
 
-### Connect to Postgres
+<Step title="Set up pg_cron">
+
+TensorZero requires the [`pg_cron`](https://github.com/citusdata/pg_cron) extension.
+
+<Warning>
+
+**You must install `pg_cron` in the logical database used by TensorZero.**
+
+</Warning>
+
+Here are example setup instructions for some popular Postgres providers.
+
+<AccordionGroup>
+
+<Accordion title="Self-Hosted Postgres">
+
+<Steps>
+
+<Step title="Install pg_cron">
+
+Follow the [official instructions](https://github.com/citusdata/pg_cron#installing-pg_cron) to install `pg_cron`.
+
+</Step>
+
+<Step title="Configure postgresql.conf">
+
+Add `pg_cron` to `shared_preload_libraries` and configure it to use your TensorZero database by setting `cron.database_name`:
+
+```ini title="postgresql.conf"
+shared_preload_libraries = 'pg_cron'
+
+# Use the name of TensorZero's database,
+# or 'postgres' if you use the default database for TensorZero
+cron.database_name = 'tensorzero'
+```
+
+</Step>
+
+<Step title="Create the extension and grant permissions (optional)">
+
+If you use a non-default Postgres user for TensorZero, connect to your database and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Replace `your_username` with TensorZero's Postgres user
+GRANT USAGE ON SCHEMA cron TO your_username;
+```
+
+</Step>
+
+<Step title="Restart Postgres"></Step>
+
+</Steps>
+
+</Accordion>
+
+<Accordion title="AWS RDS">
+
+<Steps>
+
+<Step title="Configure the parameter group">
+
+Create a custom parameter group if you haven't already. Add `pg_cron` to the `shared_preload_libraries` parameter and set `cron.database_name` to your TensorZero database name.
+
+</Step>
+
+<Step title="Reboot the RDS instance"></Step>
+
+<Step title="Create the extension and grant permissions">
+
+Connect to your database and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Replace `your_username` with TensorZero's Postgres user
+GRANT USAGE ON SCHEMA cron TO your_username;
+```
+
+</Step>
+
+</Steps>
+
+See the [AWS documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL_pg_cron.html) for more details.
+
+</Accordion>
+
+<Accordion title="GCP Cloud SQL">
+
+<Steps>
+
+<Step title="Configure database flags">
+
+Set the `cloudsql.enable_pg_cron` [database flag](https://docs.cloud.google.com/sql/docs/postgres/flags) to `on` and set the `cron.database_name` database flag to your TensorZero database name.
+
+</Step>
+
+<Step title="Create the extension and grant permissions">
+
+Connect to your database and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+```
+
+If TensorZero uses a non-default user, grant permissions:
+
+```sql
+-- Replace `your_username` with TensorZero's Postgres user
+GRANT USAGE ON SCHEMA cron TO your_username;
+```
+
+</Step>
+
+</Steps>
+
+See the [Cloud SQL documentation](https://docs.cloud.google.com/sql/docs/postgres/extensions#pg_cron) for more details.
+
+</Accordion>
+
+<Accordion title="Supabase">
+
+Enable `pg_cron` from the Database Extensions page in your Supabase dashboard, or run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+```
+
+See the [Supabase documentation](https://supabase.com/docs/guides/cron) for more details.
+
+</Accordion>
+
+<Accordion title="PlanetScale">
+
+<Steps>
+
+<Step title="Enable pg_cron in the dashboard">
+
+In the PlanetScale dashboard, select your database and navigate to **Clusters**. Select the branch to configure, then go to the **Extensions** tab. Enable `pg_cron` and set `cron.database_name` to your TensorZero database name, then click **Queue extension changes** and **Apply changes**.
+
+</Step>
+
+<Step title="Create the extension">
+
+Connect to your database and run:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+```
+
+</Step>
+
+</Steps>
+
+See the [PlanetScale documentation](https://planetscale.com/docs/postgres/extensions/pg_cron) for more details.
+
+</Accordion>
+
+</AccordionGroup>
+
+</Step>
+
+<Step title="Configure TensorZero">
 
 To configure TensorZero to use Postgres, set the `TENSORZERO_POSTGRES_URL` environment variable with your Postgres connection details.
 
@@ -38,11 +203,18 @@ TENSORZERO_POSTGRES_URL="postgres://[username]:[password]@[hostname]:[port]/[dat
 TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/tensorzero"
 ```
 
-### Apply Postgres migrations
+</Step>
 
-Unlike with ClickHouse, **TensorZero does not automatically apply Postgres migrations.**
+<Step title="Apply Postgres migrations">
+
+<Warning>
+
+**Unlike with ClickHouse, TensorZero does not automatically apply Postgres migrations.**
+
+</Warning>
 
 You must apply migrations manually with `gateway --run-postgres-migrations`.
+See [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) for more details.
 
 <Tabs>
 
@@ -53,8 +225,6 @@ If you've configured the gateway with Docker Compose, you can run the migrations
 ```bash
 docker compose run --rm gateway --run-postgres-migrations
 ```
-
-See [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) for more details.
 
 </Tab>
 
@@ -74,6 +244,10 @@ docker run --rm --network host \
 
 <Note>
 
-You might need to re-run this command after upgrading TensorZero from an earlier version.
+You should re-run this command when upgrading TensorZero from an earlier version.
 
 </Note>
+
+</Step>
+
+</Steps>
