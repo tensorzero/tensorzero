@@ -1559,6 +1559,8 @@ pub struct OpenAIAssistantRequestMessage<'a> {
     pub content: Option<Vec<OpenAIContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<Cow<'a, str>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1587,7 +1589,8 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content,
                 tool_calls,
-            }) => content.is_none() && tool_calls.is_none(),
+                reasoning_content,
+            }) => content.is_none() && tool_calls.is_none() && reasoning_content.is_none(),
             OpenAIRequestMessage::Tool(_) => false,
         }
     }
@@ -2060,6 +2063,7 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
+    let mut reasoning_content: Option<Cow<'_, str>> = None;
 
     for block in content_block_cows {
         match block {
@@ -2110,10 +2114,42 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
                 assistant_content_blocks.push(prepare_file_message(file, messages_config).await?);
             }
             Cow::Borrowed(ContentBlock::Thought(thought)) => {
-                warn_discarded_thought_block(messages_config.provider_type, thought);
+                // Thought blocks from other providers are already filtered at the model layer.
+                debug_assert!(matches!(
+                    thought.provider_type.as_deref(),
+                    None | Some(PROVIDER_TYPE)
+                ));
+
+                if let Some(text) = &thought.text {
+                    match &mut reasoning_content {
+                        Some(existing) => {
+                            let combined = format!("{}\n\n{}", existing.as_ref(), text);
+                            reasoning_content = Some(Cow::Owned(combined));
+                        }
+                        None => {
+                            reasoning_content = Some(Cow::Borrowed(text));
+                        }
+                    }
+                }
             }
             Cow::Owned(ContentBlock::Thought(ref thought)) => {
-                warn_discarded_thought_block(messages_config.provider_type, thought);
+                // Thought blocks from other providers are already filtered at the model layer.
+                debug_assert!(matches!(
+                    thought.provider_type.as_deref(),
+                    None | Some(PROVIDER_TYPE)
+                ));
+
+                if let Some(text) = &thought.text {
+                    match &mut reasoning_content {
+                        Some(existing) => {
+                            let combined = format!("{}\n\n{}", existing.as_ref(), text);
+                            reasoning_content = Some(Cow::Owned(combined));
+                        }
+                        None => {
+                            reasoning_content = Some(Cow::Owned(text.clone()));
+                        }
+                    }
+                }
             }
             Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
@@ -2141,6 +2177,7 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
     let message = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
         content,
         tool_calls,
+        reasoning_content,
     });
 
     Ok(message)
@@ -4391,6 +4428,7 @@ mod tests {
                     text: "Sure, here is the data.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
@@ -4414,6 +4452,7 @@ mod tests {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
@@ -4440,6 +4479,7 @@ mod tests {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::Developer(
@@ -4485,6 +4525,7 @@ mod tests {
                     text: "Sure, here's one for you.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
@@ -4508,6 +4549,7 @@ mod tests {
                     text: "Here's the summary.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
 
@@ -5801,6 +5843,223 @@ mod tests {
             usage.completion_tokens,
             Some(50),
             "completion_tokens should be 50"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_with_reasoning_content() {
+        // Test that Thought blocks with provider_type = "openai" are included as reasoning_content
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Hello, world!".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("I'm thinking about this...".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("openai".to_string()),
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(msg.content.is_some(), "content should be present");
+                assert!(
+                    msg.reasoning_content.is_some(),
+                    "reasoning_content should be present"
+                );
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("I'm thinking about this..."),
+                    "reasoning_content should match thought text"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_with_no_provider_type_thought() {
+        // Test that Thought blocks with provider_type = None are included as reasoning_content
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Response text".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("Generic reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(
+                    msg.reasoning_content.is_some(),
+                    "reasoning_content should be included for None provider_type"
+                );
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("Generic reasoning"),
+                    "reasoning_content should match thought text"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_concatenates_multiple_thoughts() {
+        // Test that multiple Thought blocks are concatenated with "\n\n"
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("First thought".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("openai".to_string()),
+                extra_data: None,
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("Second thought".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(
+                    msg.reasoning_content.is_some(),
+                    "reasoning_content should be present"
+                );
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("First thought\n\nSecond thought"),
+                    "multiple thoughts should be concatenated with double newline"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_skips_signature_only_thought() {
+        // Test that a Thought with text = None (signature-only) results in reasoning_content = None
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Hello".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: None,
+                signature: Some("sig123".to_string()),
+                summary: None,
+                provider_type: Some("openai".to_string()),
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(
+                    msg.reasoning_content.is_none(),
+                    "reasoning_content should be None for signature-only thought"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[test]
+    fn test_openai_assistant_message_serialization_reasoning_content() {
+        // Test that serialized JSON includes reasoning_content when present and omits it when None
+        let msg_with_reasoning = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+            content: Some(vec![OpenAIContentBlock::Text {
+                text: "Hello".into(),
+            }]),
+            tool_calls: None,
+            reasoning_content: Some(Cow::Borrowed("I'm thinking...")),
+        });
+
+        let serialized =
+            serde_json::to_string(&msg_with_reasoning).expect("failed to serialize message");
+
+        assert!(
+            serialized.contains("reasoning_content"),
+            "serialized message should contain reasoning_content"
+        );
+        assert!(
+            serialized.contains("I'm thinking..."),
+            "serialized message should contain reasoning text"
+        );
+        assert!(
+            serialized.contains("\"role\":\"assistant\""),
+            "serialized message should have assistant role"
+        );
+
+        let msg_without_reasoning =
+            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+                content: Some(vec![OpenAIContentBlock::Text {
+                    text: "Hello".into(),
+                }]),
+                tool_calls: None,
+                reasoning_content: None,
+            });
+
+        let serialized =
+            serde_json::to_string(&msg_without_reasoning).expect("failed to serialize message");
+
+        assert!(
+            !serialized.contains("reasoning_content"),
+            "serialized message should not contain reasoning_content when None"
         );
     }
 }

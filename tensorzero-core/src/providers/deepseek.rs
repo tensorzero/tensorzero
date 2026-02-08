@@ -863,9 +863,19 @@ fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<Ope
                     (None, None) => None,
                 };
 
+                let combined_reasoning_content =
+                    match (&curr.reasoning_content, &next.reasoning_content) {
+                        (Some(r1), Some(r2)) => {
+                            Some(Cow::Owned(format!("{}\n\n{}", r1.as_ref(), r2.as_ref())))
+                        }
+                        (Some(r), None) | (None, Some(r)) => Some(r.clone()),
+                        (None, None) => None,
+                    };
+
                 result[i] = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                     content: combined_content,
                     tool_calls: combined_tool_calls,
+                    reasoning_content: combined_reasoning_content,
                 });
                 result.remove(i + 1);
             }
@@ -1311,6 +1321,7 @@ mod tests {
         OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
             content: content.map(|c| vec![OpenAIContentBlock::Text { text: c.into() }]),
             tool_calls,
+            reasoning_content: None,
         })
     }
     fn tool_message<'a>(content: &'a str, tool_call_id: &'a str) -> OpenAIRequestMessage<'a> {
@@ -1422,6 +1433,7 @@ mod tests {
             OpenAIAssistantRequestMessage {
                 content: Some(content),
                 tool_calls: Some(vec![tool_call1.clone(), tool_call2.clone()]),
+                reasoning_content: None,
             },
         )];
         assert_eq!(output, expected);
@@ -1481,6 +1493,7 @@ mod tests {
                     },
                 ]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         assert_eq!(output, expected);
@@ -1500,6 +1513,7 @@ mod tests {
                     OpenAIContentBlock::Text { text: "A3".into() },
                 ]),
                 tool_calls: Some(vec![tool_call1.clone()]),
+                reasoning_content: None,
             },
         )];
         assert_eq!(output, expected);
