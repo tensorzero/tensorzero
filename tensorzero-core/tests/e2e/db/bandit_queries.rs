@@ -56,7 +56,7 @@ async fn test_metrics_by_variant_many_results(conn: impl FeedbackQueries) {
     assert_eq!(metrics_by_variant.len(), 3);
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by_key(|v| std::cmp::Reverse(v.count));
+    metrics_by_variant.sort_by_key(|b| std::cmp::Reverse(b.count));
     let metric = metrics_by_variant.first().unwrap();
     assert_eq!(metric.variant_name, "dicl");
     assert_eq!(metric.count, 39);
@@ -84,7 +84,7 @@ async fn test_metrics_by_variant_episode_boolean(conn: impl FeedbackQueries) {
         .unwrap();
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by_key(|v| std::cmp::Reverse(v.count));
+    metrics_by_variant.sort_by_key(|b| std::cmp::Reverse(b.count));
     println!("metrics_by_variant: {metrics_by_variant:?}");
     assert_eq!(metrics_by_variant.len(), 3);
     let metric = metrics_by_variant.first().unwrap();
@@ -116,7 +116,7 @@ async fn test_metrics_by_variant_episode_float(conn: impl FeedbackQueries) {
         .unwrap();
     // Sort by count in descending order for deterministic results
     let mut metrics_by_variant = metrics_by_variant;
-    metrics_by_variant.sort_by_key(|v| std::cmp::Reverse(v.count));
+    metrics_by_variant.sort_by_key(|b| std::cmp::Reverse(b.count));
     println!("metrics_by_variant: {metrics_by_variant:?}");
     assert_eq!(metrics_by_variant.len(), 3);
     let metric = metrics_by_variant.first().unwrap();
@@ -897,7 +897,7 @@ async fn test_get_cumulative_feedback_timeseries_baseline_continuity(conn: impl 
             .collect();
 
         // Sort by period
-        variant_points.sort_by_key(|v| v.period_end);
+        variant_points.sort_by_key(|a| a.period_end);
 
         if variant_points.len() > 1 {
             // Verify counts are non-decreasing (cumulative)
