@@ -13,16 +13,12 @@ use std::{
 use tracing::Span;
 use tracing_futures::Instrument;
 
-use eventsource_stream::Eventsource;
 use futures::{Stream, StreamExt};
 use http::{HeaderMap, HeaderName, HeaderValue};
 use pin_project::pin_project;
-use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest::{Body, Response, StatusCode};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
-use reqwest_eventsource::{
-    CannotCloneRequestError, Error as ReqwestEventSourceError, Event, RequestBuilderExt,
-};
+use reqwest_sse_stream::{Event, RequestBuilderExt, ReqwestSseStreamError};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -306,7 +302,7 @@ pub struct TensorzeroRequestBuilder<'a> {
 #[pin_project]
 pub struct TensorZeroEventSource {
     #[pin]
-    stream: Pin<Box<dyn Stream<Item = Result<Event, Box<ReqwestEventSourceError>>> + Send>>,
+    stream: Pin<Box<dyn Stream<Item = Result<Event, Box<ReqwestSseStreamError>>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
     // We deliberately hold this span across the entire lifetime of the event source stream,
@@ -315,7 +311,7 @@ pub struct TensorZeroEventSource {
 }
 
 impl Stream for TensorZeroEventSource {
-    type Item = Result<Event, Box<reqwest_eventsource::Error>>;
+    type Item = Result<Event, Box<ReqwestSseStreamError>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -544,9 +540,9 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         self
     }
 
-    pub fn eventsource(mut self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
+    pub async fn eventsource(mut self) -> Result<TensorZeroEventSource, ReqwestSseStreamError> {
         self = self.with_otlp_headers();
-        let event_source = self.builder.eventsource()?;
+        let event_source = self.builder.eventsource().await?;
         Ok(TensorZeroEventSource {
             stream: Box::pin(event_source.map(|r| r.map_err(Box::new))),
             ticket: self.ticket.into_owned(),
@@ -562,27 +558,12 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         mut self,
     ) -> Result<
         (TensorZeroEventSource, http::HeaderMap),
-        (ReqwestEventSourceError, Option<http::HeaderMap>),
+        (ReqwestSseStreamError, Option<http::HeaderMap>),
     > {
         self = self.with_otlp_headers();
         let ticket = self.ticket.into_owned();
-        let builder = self.builder.header(ACCEPT, "text/event-stream");
-        let response = builder
-            .send()
-            .instrument(tensorzero_h2_workaround_span())
-            .await
-            .map_err(|e| (ReqwestEventSourceError::Transport(e), None))?;
-
-        let headers = response.headers().clone();
-        let response =
-            validate_event_stream_response(response).map_err(|e| (e, Some(headers.clone())))?;
-        let stream = response.bytes_stream().eventsource().map(|event| {
-            event
-                .map(Event::Message)
-                .map_err(|e| Box::new(ReqwestEventSourceError::from(e)))
-        });
-        // Emit an initial Open event to mirror `reqwest_eventsource::EventSource` behavior.
-        let stream = futures::stream::once(async { Ok(Event::Open) }).chain(stream);
+        let (event_stream, headers) = self.builder.eventsource_with_headers().await?;
+        let stream = event_stream.map(|r| r.map_err(Box::new));
 
         Ok((
             TensorZeroEventSource {
@@ -746,40 +727,6 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
     })
 }
 
-#[expect(clippy::result_large_err)]
-fn validate_event_stream_response(response: Response) -> Result<Response, ReqwestEventSourceError> {
-    match response.status() {
-        StatusCode::OK => {}
-        status => {
-            return Err(ReqwestEventSourceError::InvalidStatusCode(status, response));
-        }
-    }
-    let content_type = if let Some(content_type) = response.headers().get(&CONTENT_TYPE) {
-        content_type
-    } else {
-        return Err(ReqwestEventSourceError::InvalidContentType(
-            HeaderValue::from_static(""),
-            response,
-        ));
-    };
-    // Check if the media type (ignoring parameters like charset) is text/event-stream
-    if content_type
-        .to_str()
-        .map(|value| {
-            let media_type = value.split(';').next().unwrap_or("").trim();
-            media_type.eq_ignore_ascii_case("text/event-stream")
-        })
-        .unwrap_or(false)
-    {
-        Ok(response)
-    } else {
-        Err(ReqwestEventSourceError::InvalidContentType(
-            content_type.clone(),
-            response,
-        ))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -834,9 +781,6 @@ mod tests {
             match event {
                 Ok(_) => {}
                 Err(e) => {
-                    if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
-                        break;
-                    }
                     panic!("Error in streaming response: {e:?}");
                 }
             }
@@ -890,6 +834,7 @@ mod tests {
         let mut event_source = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
         process_stream(&mut event_source).await;
         drop(event_source);
@@ -929,6 +874,7 @@ mod tests {
                     let mut stream = client
                         .get(format!("http://{addr}/hello-stream"))
                         .eventsource()
+                        .await
                         .unwrap();
                     process_stream(&mut stream).await;
                 });
@@ -981,6 +927,7 @@ mod tests {
         let mut stream = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
         process_stream(&mut stream).await;
         drop(stream);
@@ -1028,6 +975,7 @@ mod tests {
                     let mut stream = client
                         .get(format!("http://{addr}/hello-stream"))
                         .eventsource()
+                        .await
                         .unwrap();
                     process_stream(&mut stream).await;
                 });
@@ -1045,6 +993,7 @@ mod tests {
         let mut stream = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
 
         process_stream(&mut stream).await;

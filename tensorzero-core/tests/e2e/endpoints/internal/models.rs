@@ -9,7 +9,6 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_models_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/models/count");
 
@@ -31,7 +30,6 @@ async fn test_count_models_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_model_usage_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/models/usage?time_window=week&max_periods=10");
 
@@ -51,7 +49,6 @@ async fn test_model_usage_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_model_latency_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/models/latency?time_window=week");
 
@@ -64,14 +61,28 @@ async fn test_model_latency_endpoint() {
 
     let response: GetModelLatencyResponse = resp.json().await.unwrap();
 
-    // The response should have data (may be empty if no recent usage)
-    // Just verify we can deserialize the response successfully
-    let _ = response.data;
+    assert!(
+        !response.quantiles.is_empty(),
+        "Expected non-empty quantiles in latency response"
+    );
+    for datapoint in &response.data {
+        assert_eq!(
+            datapoint.response_time_ms_quantiles.len(),
+            response.quantiles.len(),
+            "response_time_ms_quantiles length should match quantiles length for model `{}`",
+            datapoint.model_name
+        );
+        assert_eq!(
+            datapoint.ttft_ms_quantiles.len(),
+            response.quantiles.len(),
+            "ttft_ms_quantiles length should match quantiles length for model `{}`",
+            datapoint.model_name
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_model_usage_endpoint_missing_params() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Missing required parameters
     let url = get_gateway_endpoint("/internal/models/usage");
@@ -86,7 +97,6 @@ async fn test_model_usage_endpoint_missing_params() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_model_latency_endpoint_missing_params() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Missing required parameters
     let url = get_gateway_endpoint("/internal/models/latency");

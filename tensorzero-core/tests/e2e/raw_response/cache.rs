@@ -7,7 +7,7 @@
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Map, Value, json};
 use tensorzero::test_helpers::{
     make_embedded_gateway_e2e_with_unique_db, make_http_gateway_with_unique_db,
@@ -421,6 +421,7 @@ async fn make_openai_request_to_gateway(
             .post(&url)
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
 
         // Collect raw_response entries from all chunks

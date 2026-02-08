@@ -8,6 +8,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::{DemonstrationFeedbackFilter, InferenceFilter};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::{CountInferencesParams, InferenceOutputSource, InferenceQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -49,7 +50,7 @@ pub struct CountInferencesResponse {
 
 /// Counts inferences matching the given parameters.
 pub async fn count_inferences(
-    clickhouse: &impl InferenceQueries,
+    database: &impl InferenceQueries,
     config: &crate::config::Config,
     request: &CountInferencesRequest,
 ) -> Result<CountInferencesResponse, Error> {
@@ -78,7 +79,7 @@ pub async fn count_inferences(
         search_query_experimental: request.search_query_experimental.as_deref(),
     };
 
-    let count = clickhouse.count_inferences(config, &params).await?;
+    let count = database.count_inferences(config, &params).await?;
 
     Ok(CountInferencesResponse { count })
 }
@@ -98,12 +99,10 @@ pub async fn count_inferences_handler(
     State(app_state): AppState,
     Json(request): Json<CountInferencesRequest>,
 ) -> Result<Json<CountInferencesResponse>, Error> {
-    let response = count_inferences(
-        &app_state.clickhouse_connection_info,
-        &app_state.config,
-        &request,
-    )
-    .await?;
-
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = count_inferences(&database, &app_state.config, &request).await?;
     Ok(Json(response))
 }

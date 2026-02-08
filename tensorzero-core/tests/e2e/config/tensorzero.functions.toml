@@ -794,3 +794,13 @@ candidates = ["working_candidate", "failing_candidate"]
 [functions.mixture_of_n_with_failing_candidate.variants.mixture_of_n.fuser]
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.compact_context]
+type = "chat"
+system_schema = "../../../../ui/fixtures/config/functions/compact_context/system_schema.json"
+
+[functions.compact_context.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_template = "../../../../ui/fixtures/config/functions/compact_context/baseline/system_template.minijinja"
+retries = { num_retries = 4, max_delay_s = 10 }

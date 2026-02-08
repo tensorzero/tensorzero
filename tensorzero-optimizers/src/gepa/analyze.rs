@@ -3,7 +3,6 @@
 //! Analyzes inference outputs to identify errors, improvements, and optimal patterns.
 //! Builds inputs for the analyze function and handles results with optional inference context.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::future::join_all;
@@ -33,35 +32,42 @@ use evaluations::stats::EvaluationInfo;
 
 use crate::gepa::validate::FunctionContext;
 
-/// Fields to exclude when serializing datapoints for GEPA functions.
-/// These metadata fields are not relevant for prompt optimization and waste tokens.
-const DATAPOINT_FIELDS_TO_DROP: &[&str] = &[
-    "dataset_name",
-    "id",
-    "episode_id",
-    "auxiliary",
-    "is_deleted",
-    "is_custom",
-    "source_inference_id",
-    "staled_at",
-    "updated_at",
-    "name",
+/// Fields to include when serializing datapoints for GEPA functions.
+/// Only these fields are relevant for prompt optimization analysis.
+/// This reduces token usage by excluding IDs, timestamps, and internal flags.
+/// Note: `tool_params` fields are flattened into the top-level object.
+const DATAPOINT_FIELDS_TO_KEEP: &[&str] = &[
+    "function_name",
+    "input",
+    "output",
+    "output_schema", // JSON datapoints only
+    "tags",
+    // Flattened DynamicToolParams fields (Chat datapoints only)
+    "allowed_tools",
+    "additional_tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "provider_tools",
 ];
 
-/// Serialize a datapoint for GEPA functions, excluding superfluous metadata fields.
+/// Serialize a datapoint for GEPA functions, including only whitelisted fields.
 ///
-/// This reduces token usage by removing fields like IDs, timestamps, and flags
-/// that are not relevant for prompt optimization analysis.
+/// This reduces token usage by only including fields relevant for prompt
+/// optimization analysis, excluding IDs, timestamps, and internal flags.
 fn serialize_filtered_datapoint(datapoint: &Datapoint) -> Result<Value, Error> {
-    let mut value = to_value(datapoint)?;
+    let value = to_value(datapoint)?;
 
-    if let Some(obj) = value.as_object_mut() {
-        for field in DATAPOINT_FIELDS_TO_DROP {
-            obj.remove(*field);
-        }
-    }
+    let Some(obj) = value.as_object() else {
+        return Ok(value);
+    };
 
-    Ok(value)
+    let filtered: Map<String, Value> = obj
+        .iter()
+        .filter(|(key, _)| DATAPOINT_FIELDS_TO_KEEP.contains(&key.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    Ok(Value::Object(filtered))
 }
 
 // ============================================================================
@@ -197,27 +203,49 @@ pub fn build_analyze_input(
     } = function_context;
 
     // Extract templates map from variant config
-    let templates_map: HashMap<String, String> = variant_config
+    let templates_map: Map<String, Value> = variant_config
         .templates
         .inner
         .iter()
-        .map(|(name, config)| (name.clone(), config.path.data().to_string()))
+        .map(|(name, config)| (name.clone(), json!(config.path.data())))
         .collect();
 
     // Build evaluation_scores map with just the scores
-    let mut evaluation_scores = Map::new();
-    for (evaluator_name, result_opt) in &eval_info.evaluations {
-        // Preserve the score type (number, boolean, or null)
-        let score = result_opt
-            .as_ref()
-            .map(|value| match value {
-                Value::Number(n) => json!(n),
-                Value::Bool(b) => json!(b),
-                _ => json!(null),
-            })
-            .unwrap_or(json!(null));
-        evaluation_scores.insert(evaluator_name.clone(), score);
+    // Preserve the score type (number, boolean, or null)
+    let evaluation_scores: Map<String, Value> = eval_info
+        .evaluations
+        .iter()
+        .map(|(name, result_opt)| {
+            let score = result_opt
+                .as_ref()
+                .map(|value| match value {
+                    Value::Number(n) => json!(n),
+                    Value::Bool(b) => json!(b),
+                    _ => json!(null),
+                })
+                .unwrap_or(json!(null));
+            (name.clone(), score)
+        })
+        .collect();
+
+    // Strip thought signatures at the type level before serialization.
+    // Only Chat types can contain Thought blocks; Json outputs are left intact.
+    let mut datapoint_for_serialization = eval_info.datapoint.clone();
+    match &mut datapoint_for_serialization {
+        Datapoint::Chat(chat_datapoint) => {
+            strip_signatures_from_chat_datapoint(chat_datapoint);
+        }
+        Datapoint::Json(_) => {} // No signatures to strip in JSON
     }
+
+    let output_value = match &eval_info.response {
+        InferenceResponse::Chat(chat_response) => {
+            let mut content = chat_response.content.clone();
+            strip_signatures_from_chat_output(&mut content);
+            to_value(&content)?
+        }
+        InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
+    };
 
     // Build the input with high-level objects that will be serialized in the template
     let mut map = Map::new();
@@ -230,34 +258,23 @@ pub fn build_analyze_input(
         to_value(evaluation_config)?,
     );
     map.insert("templates_map".to_string(), json!(templates_map));
-
-    // Strip thought signatures at the type level before serialization.
-    // Only Chat types can contain Thought blocks; Json outputs are left intact.
-    let mut datapoint_for_serialization = eval_info.datapoint.clone();
-    match &mut datapoint_for_serialization {
-        Datapoint::Chat(chat_datapoint) => {
-            strip_signatures_from_chat_datapoint(chat_datapoint);
-        }
-        Datapoint::Json(_) => {} // No signatures to strip in JSON
-    }
-
-    // Serialize with filtered fields
-    let datapoint_value = serialize_filtered_datapoint(&datapoint_for_serialization)?;
-    map.insert("datapoint".to_string(), datapoint_value);
-
-    let output_value = match &eval_info.response {
-        InferenceResponse::Chat(chat_response) => {
-            let mut content = chat_response.content.clone();
-            strip_signatures_from_chat_output(&mut content);
-            to_value(&content)?
-        }
-        InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
-    };
+    map.insert(
+        "datapoint".to_string(),
+        serialize_filtered_datapoint(&datapoint_for_serialization)?,
+    );
     map.insert("output".to_string(), output_value);
-
     map.insert("evaluation_scores".to_string(), json!(evaluation_scores));
 
-    Ok(Arguments(map))
+    // Sort all JSON keys for deterministic serialization (important for caching)
+    let mut value = Value::Object(map);
+    value.sort_all_objects();
+    let Value::Object(sorted_map) = value else {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: "sort_all_objects changed Value variant".to_string(),
+        }));
+    };
+
+    Ok(Arguments(sorted_map))
 }
 
 /// Analyzes a single inference using the analyze function.

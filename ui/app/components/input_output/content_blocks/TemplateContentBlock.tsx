@@ -16,10 +16,7 @@ export interface TemplateContentBlockProps {
 }
 
 // Schema for validating `block.arguments`
-const templateArgumentsSchema = z.record(
-  z.string(),
-  ZodJsonValueSchema.optional(),
-);
+const templateArgumentsSchema = z.record(z.string(), ZodJsonValueSchema);
 
 export function TemplateContentBlock({
   block,

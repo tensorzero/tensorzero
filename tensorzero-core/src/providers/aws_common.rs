@@ -21,6 +21,52 @@ use crate::{
     model::{CredentialLocation, CredentialLocationOrHardcoded},
 };
 
+/// Parse and validate AWS region configuration.
+///
+/// Handles:
+/// - Deprecation warning for `allow_auto_detect_region`
+/// - Region parsing from `CredentialLocationOrHardcoded` to `AWSRegion`
+/// - Region validation (requiring a region is present)
+///
+/// Returns the resolved `AWSRegion` or an error if region is required but missing.
+pub fn parse_aws_region(
+    region: Option<CredentialLocationOrHardcoded>,
+    allow_auto_detect_region: bool,
+    provider_type: &str,
+) -> Result<AWSRegion, Error> {
+    // Emit deprecation warning if allow_auto_detect_region is used
+    if allow_auto_detect_region {
+        crate::utils::deprecation_warning(&format!(
+            "The `allow_auto_detect_region` field is deprecated for `{provider_type}`. \
+             Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
+        ));
+    }
+
+    // Convert CredentialLocationOrHardcoded to AWSRegion
+    let aws_region = region
+        .map(|loc| AWSRegion::from_credential_location(loc, provider_type))
+        .transpose()?
+        .flatten();
+
+    // If no region specified and allow_auto_detect_region (deprecated) is set, use region = "sdk"
+    let aws_region = if aws_region.is_none() && allow_auto_detect_region {
+        Some(AWSRegion::Sdk)
+    } else {
+        aws_region
+    };
+
+    // Check if we have a region or need to error
+    aws_region.ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "AWS {provider_type} provider requires a region. \
+                 Use `region = \"sdk\"` to enable auto-detection, \
+                 or specify a region like `region = \"us-east-1\"`."
+            ),
+        })
+    })
+}
+
 /// AWS endpoint configuration supporting static, env, and dynamic resolution.
 #[derive(Clone, Debug)]
 pub enum AWSEndpointUrl {
@@ -218,11 +264,63 @@ impl AWSRegion {
             }
         }
     }
+
+    /// Get the static region to use when initializing the AWS SDK config.
+    ///
+    /// - `Static(r)`: Use the configured region
+    /// - `Sdk`: None (let SDK auto-detect from environment)
+    /// - `Dynamic`: Use a fallback region (the actual request region comes dynamically)
+    pub fn static_region_for_sdk_config(&self) -> Option<Region> {
+        match self {
+            AWSRegion::Static(r) => Some(r.clone()),
+            AWSRegion::Sdk => None,
+            AWSRegion::Dynamic(_) => Some(Region::new("us-east-1")),
+        }
+    }
+
+    /// Resolve region at runtime with optional SDK config for Sdk variant.
+    ///
+    /// - `Static(r)`: Returns the configured region directly
+    /// - `Dynamic(key)`: Resolves from request credentials
+    /// - `Sdk`: Extracts region from the provided SDK config
+    ///
+    /// For `Sdk` variant, `sdk_config` must be provided, otherwise an error is returned.
+    pub fn resolve_with_sdk_config(
+        &self,
+        credentials: &InferenceCredentials,
+        sdk_config: Option<&SdkConfig>,
+        provider_type: &str,
+    ) -> Result<Region, Error> {
+        match self {
+            AWSRegion::Static(region) => Ok(region.clone()),
+            AWSRegion::Dynamic(key_name) => {
+                let region_str = credentials.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::DynamicRegionNotFound {
+                        key_name: key_name.clone(),
+                    })
+                })?;
+                Ok(Region::new(region_str.expose_secret().to_string()))
+            }
+            AWSRegion::Sdk => sdk_config
+                .and_then(|config| config.region().cloned())
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
+                        relay_raw_responses: None,
+                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                        message: "No region configured".to_string(),
+                        provider_type: provider_type.to_string(),
+                        api_type: ApiType::ChatCompletions,
+                    })
+                }),
+        }
+    }
 }
 
 /// AWS credentials configuration supporting static (env), dynamic, and sdk resolution.
 #[derive(Clone, Debug)]
-pub enum AWSCredentials {
+pub enum AWSIAMCredentials {
     /// Credentials resolved from env vars at startup
     Static {
         access_key_id: String,
@@ -239,7 +337,7 @@ pub enum AWSCredentials {
     Sdk,
 }
 
-impl AWSCredentials {
+impl AWSIAMCredentials {
     /// Create AWSCredentials from flattened credential location fields.
     /// Returns `Sdk` if no credentials are specified (uses SDK default credential chain).
     pub fn from_fields(
@@ -259,7 +357,7 @@ impl AWSCredentials {
                         ),
                     }));
                 }
-                Ok(AWSCredentials::Sdk)
+                Ok(AWSIAMCredentials::Sdk)
             }
             (Some(_), None) => Err(Error::new(ErrorDetails::Config {
                 message: format!(
@@ -309,7 +407,7 @@ impl AWSCredentials {
                         ),
                     }));
                 }
-                Ok(AWSCredentials::Sdk)
+                Ok(AWSIAMCredentials::Sdk)
             }
             (CredentialLocation::Env(ak_var), CredentialLocation::Env(sk_var)) => {
                 // Static credentials from environment
@@ -348,7 +446,7 @@ impl AWSCredentials {
                         }));
                     }
                 };
-                Ok(AWSCredentials::Static {
+                Ok(AWSIAMCredentials::Static {
                     access_key_id: ak,
                     secret_access_key: SecretString::new(sk.into()),
                     session_token: st,
@@ -368,7 +466,7 @@ impl AWSCredentials {
                         }));
                     }
                 };
-                Ok(AWSCredentials::Dynamic {
+                Ok(AWSIAMCredentials::Dynamic {
                     access_key_id_key: ak_key.clone(),
                     secret_access_key_key: sk_key.clone(),
                     session_token_key: st_key,
@@ -408,11 +506,178 @@ fn validate_aws_credential_location(
     }
 }
 
+/// AWS authentication method - either API key (bearer token) or IAM credentials (SigV4).
+/// Used by AWS Bedrock to support both bearer token auth and SigV4 signing.
+#[derive(Debug)]
+pub enum AWSBedrockCredentials {
+    /// Bearer token authentication (Authorization: Bearer <token>).
+    /// Used with AWS Bedrock API keys.
+    ApiKey(SecretString),
+    /// Dynamic bearer token resolved at request time.
+    DynamicApiKey(String),
+    /// IAM credentials for SigV4 signing, with loaded SDK config.
+    IAM {
+        credentials: AWSIAMCredentials,
+        sdk_config: Box<SdkConfig>,
+    },
+}
+
+impl AWSBedrockCredentials {
+    /// Create AWSBedrockCredentials from config fields.
+    ///
+    /// Priority:
+    /// 1. Explicit api_key → bearer auth
+    /// 2. Explicit IAM credentials → SigV4
+    /// 3. AWS_BEARER_TOKEN_BEDROCK env var → bearer auth
+    /// 4. SDK credential chain → SigV4
+    ///
+    /// For IAM auth, loads the AWS SDK config with the given region.
+    ///
+    /// Returns `(credentials, resolved_sdk_region)` where `resolved_sdk_region` is `Some`
+    /// when bearer auth is used with `region = "sdk"`. In this case, the caller should
+    /// replace `AWSRegion::Sdk` with `AWSRegion::Static(resolved_sdk_region)`.
+    pub async fn from_fields(
+        api_key: Option<CredentialLocation>,
+        access_key_id: Option<CredentialLocation>,
+        secret_access_key: Option<CredentialLocation>,
+        session_token: Option<CredentialLocation>,
+        region: &AWSRegion,
+        provider_type: &str,
+    ) -> Result<(Self, Option<Region>), Error> {
+        // Validate: cannot specify both api_key and IAM credentials
+        let has_iam_creds =
+            access_key_id.is_some() || secret_access_key.is_some() || session_token.is_some();
+
+        if api_key.is_some() && has_iam_creds {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Cannot specify both `api_key` and IAM credentials (`access_key_id`/`secret_access_key`) for `{provider_type}`. Use one or the other."
+                ),
+            }));
+        }
+
+        // 1. Explicit api_key takes priority
+        if let Some(key_loc) = api_key {
+            let creds = Self::from_api_key_location(key_loc, provider_type)?;
+            // For bearer auth with region = "sdk", resolve the region now
+            let resolved_region =
+                Self::resolve_sdk_region_for_bearer_auth(region, provider_type).await?;
+            return Ok((creds, resolved_region));
+        }
+
+        // Compute the static region for SDK config initialization
+        let static_region = region.static_region_for_sdk_config();
+
+        // 2. Explicit IAM credentials (or session_token alone, which will error in from_fields)
+        if has_iam_creds {
+            let credentials = AWSIAMCredentials::from_fields(
+                access_key_id,
+                secret_access_key,
+                session_token,
+                provider_type,
+            )?;
+            let sdk_config = config_with_region(provider_type, static_region).await?;
+            return Ok((
+                AWSBedrockCredentials::IAM {
+                    credentials,
+                    sdk_config: Box::new(sdk_config),
+                },
+                None,
+            ));
+        }
+
+        // 3. Nothing configured - try AWS_BEARER_TOKEN_BEDROCK env var first, then SDK
+        if let Some(token) = std::env::var("AWS_BEARER_TOKEN_BEDROCK")
+            .ok()
+            .filter(|t| !t.is_empty())
+        {
+            tracing::debug!(
+                "Using environment variable `AWS_BEARER_TOKEN_BEDROCK` for `{provider_type}` authentication"
+            );
+            // For bearer auth with region = "sdk", resolve the region now
+            let resolved_region =
+                Self::resolve_sdk_region_for_bearer_auth(region, provider_type).await?;
+            return Ok((
+                AWSBedrockCredentials::ApiKey(SecretString::new(token.into())),
+                resolved_region,
+            ));
+        }
+
+        // 4. Fall back to SDK credential chain (SigV4)
+        tracing::debug!("Using AWS SDK credential chain for `{provider_type}` authentication");
+        let sdk_config = config_with_region(provider_type, static_region).await?;
+        Ok((
+            AWSBedrockCredentials::IAM {
+                credentials: AWSIAMCredentials::Sdk,
+                sdk_config: Box::new(sdk_config),
+            },
+            None,
+        ))
+    }
+
+    /// For bearer auth with `region = "sdk"`, load SDK config to resolve the region.
+    /// Returns `Some(region)` if region was `Sdk`, `None` otherwise.
+    async fn resolve_sdk_region_for_bearer_auth(
+        region: &AWSRegion,
+        provider_type: &str,
+    ) -> Result<Option<Region>, Error> {
+        if !matches!(region, AWSRegion::Sdk) {
+            return Ok(None);
+        }
+        // Load SDK config just to resolve the region
+        let sdk_config = config_with_region(provider_type, None).await?;
+        let resolved = sdk_config.region().cloned().ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Failed to auto-detect AWS region for `{provider_type}`. \
+                     Please set `AWS_REGION` environment variable or specify an explicit region."
+                ),
+            })
+        })?;
+        tracing::debug!(
+            "Resolved SDK region `{}` for bearer auth in `{provider_type}`",
+            resolved.as_ref()
+        );
+        Ok(Some(resolved))
+    }
+
+    fn from_api_key_location(loc: CredentialLocation, provider_type: &str) -> Result<Self, Error> {
+        match loc {
+            CredentialLocation::Env(var) => {
+                let token = std::env::var(&var).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Environment variable `{var}` not found for `api_key` in `{provider_type}`."
+                        ),
+                    })
+                })?;
+                Ok(AWSBedrockCredentials::ApiKey(SecretString::new(
+                    token.into(),
+                )))
+            }
+            CredentialLocation::Dynamic(key) => Ok(AWSBedrockCredentials::DynamicApiKey(key)),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Unsupported credential location for `api_key` in `{provider_type}`. Use `env::` or `dynamic::`."
+                ),
+            })),
+        }
+    }
+
+    /// Returns true if this auth method uses bearer token authentication.
+    pub fn is_bearer_auth(&self) -> bool {
+        matches!(
+            self,
+            AWSBedrockCredentials::ApiKey(_) | AWSBedrockCredentials::DynamicApiKey(_)
+        )
+    }
+}
+
 /// Warn if there's a potential credential exfiltration risk.
 /// This occurs when dynamic endpoint_url is configured with static or SDK credentials.
 pub fn warn_if_credential_exfiltration_risk(
     endpoint_url: &Option<AWSEndpointUrl>,
-    credentials: &AWSCredentials,
+    credentials: &AWSIAMCredentials,
     provider_type: &str,
 ) {
     let has_dynamic_endpoint = endpoint_url
@@ -421,7 +686,7 @@ pub fn warn_if_credential_exfiltration_risk(
 
     // Warn if there are static or SDK credentials that could be exfiltrated via dynamic endpoint.
     // If credentials are also dynamic, there's no exfiltration risk (client controls all credentials).
-    let has_exfiltrable_credentials = !matches!(credentials, AWSCredentials::Dynamic { .. });
+    let has_exfiltrable_credentials = !matches!(credentials, AWSIAMCredentials::Dynamic { .. });
 
     if has_dynamic_endpoint && has_exfiltrable_credentials {
         tracing::warn!(
@@ -513,7 +778,7 @@ pub struct AWSProviderConfig {
     pub sdk_config: SdkConfig,
     pub region: Option<AWSRegion>,
     pub endpoint_url: Option<AWSEndpointUrl>,
-    pub credentials: AWSCredentials,
+    pub credentials: AWSIAMCredentials,
 }
 
 impl AWSProviderConfig {
@@ -522,7 +787,7 @@ impl AWSProviderConfig {
         static_region: Option<Region>,
         region: Option<AWSRegion>,
         endpoint_url: Option<AWSEndpointUrl>,
-        credentials: AWSCredentials,
+        credentials: AWSIAMCredentials,
         provider_type: &str,
     ) -> Result<Self, Error> {
         let sdk_config = config_with_region(provider_type, static_region).await?;
@@ -614,13 +879,13 @@ impl AWSProviderConfig {
 /// Handles static, dynamic, and SDK credential types. This is the shared
 /// implementation used by both Bedrock and SageMaker providers.
 pub async fn resolve_request_credentials(
-    credentials: &AWSCredentials,
+    credentials: &AWSIAMCredentials,
     sdk_config: &SdkConfig,
     dynamic_api_keys: &InferenceCredentials,
     provider_type: &str,
 ) -> Result<Credentials, Error> {
     match credentials {
-        AWSCredentials::Static {
+        AWSIAMCredentials::Static {
             access_key_id,
             secret_access_key,
             session_token,
@@ -636,7 +901,7 @@ pub async fn resolve_request_credentials(
                 "tensorzero",
             ))
         }
-        AWSCredentials::Dynamic {
+        AWSIAMCredentials::Dynamic {
             access_key_id_key,
             secret_access_key_key,
             session_token_key,
@@ -678,7 +943,7 @@ pub async fn resolve_request_credentials(
                 "tensorzero",
             ))
         }
-        AWSCredentials::Sdk => get_credentials(sdk_config, provider_type).await,
+        AWSIAMCredentials::Sdk => get_credentials(sdk_config, provider_type).await,
     }
 }
 
@@ -926,6 +1191,85 @@ pub async fn send_aws_request(
     })
 }
 
+/// Send an AWS Bedrock request with API key (bearer token) authentication.
+///
+/// This is used when an API key is configured instead of IAM credentials.
+/// Uses `Authorization: Bearer <token>` header instead of SigV4 signing.
+pub async fn send_aws_request_with_api_key(
+    http_client: &TensorzeroHttpClient,
+    url: &str,
+    extra_headers: http::HeaderMap,
+    body_bytes: Vec<u8>,
+    api_key: &SecretString,
+    provider_type: &str,
+    raw_request: &str,
+) -> Result<AwsRequestResponse, Error> {
+    // Build headers with content-type, accept, and authorization
+    let mut headers = extra_headers;
+    headers.insert(
+        http::header::CONTENT_TYPE,
+        http::header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        http::header::ACCEPT,
+        http::header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        http::header::AUTHORIZATION,
+        http::header::HeaderValue::from_str(&format!("Bearer {}", api_key.expose_secret()))
+            .map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Invalid API key format: {e}"),
+                })
+            })?,
+    );
+
+    // Send request (no signing needed for bearer auth)
+    let start_time = Instant::now();
+    let response = http_client
+        .post(url)
+        .headers(headers)
+        .body(body_bytes)
+        .send()
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error sending request to AWS Bedrock: {e}"),
+                raw_request: Some(raw_request.to_string()),
+                raw_response: None,
+                provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
+            })
+        })?;
+
+    let response_time = start_time.elapsed();
+    let status = response.status();
+    let raw_response = response.text().await.map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!("Error reading response from AWS Bedrock: {e}"),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: None,
+            provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
+        })
+    })?;
+
+    if !status.is_success() {
+        return Err(Error::new(ErrorDetails::InferenceServer {
+            message: format!("AWS Bedrock returned error status {status}: {raw_response}"),
+            raw_request: Some(raw_request.to_string()),
+            raw_response: Some(raw_response),
+            provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
+        }));
+    }
+
+    Ok(AwsRequestResponse {
+        raw_response,
+        response_time,
+    })
+}
+
 /// Check if a Smithy EventStream message is an exception.
 ///
 /// AWS Smithy event streams can contain exception messages indicated by the
@@ -1098,7 +1442,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_request_credentials_static() {
-        let creds = AWSCredentials::Static {
+        let creds = AWSIAMCredentials::Static {
             access_key_id: "AKIATEST".to_string(),
             secret_access_key: SecretString::new("secretkey".to_string().into()),
             session_token: None,
@@ -1118,7 +1462,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_request_credentials_static_with_session_token() {
-        let creds = AWSCredentials::Static {
+        let creds = AWSIAMCredentials::Static {
             access_key_id: "AKIATEST".to_string(),
             secret_access_key: SecretString::new("secretkey".to_string().into()),
             session_token: Some(SecretString::new("mysessiontoken".to_string().into())),
@@ -1138,7 +1482,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_request_credentials_dynamic_found() {
-        let creds = AWSCredentials::Dynamic {
+        let creds = AWSIAMCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: None,
@@ -1166,7 +1510,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_request_credentials_dynamic_with_session_token() {
-        let creds = AWSCredentials::Dynamic {
+        let creds = AWSIAMCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: Some("aws_session_token".to_string()),
@@ -1190,7 +1534,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_request_credentials_dynamic_missing_access_key() {
-        let creds = AWSCredentials::Dynamic {
+        let creds = AWSIAMCredentials::Dynamic {
             access_key_id_key: "missing_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: None,
@@ -1214,7 +1558,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_request_credentials_dynamic_missing_secret_key() {
-        let creds = AWSCredentials::Dynamic {
+        let creds = AWSIAMCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "missing_secret_key".to_string(),
             session_token_key: None,
@@ -1237,7 +1581,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_request_credentials_dynamic_missing_session_token() {
-        let creds = AWSCredentials::Dynamic {
+        let creds = AWSIAMCredentials::Dynamic {
             access_key_id_key: "aws_access_key".to_string(),
             secret_access_key_key: "aws_secret_key".to_string(),
             session_token_key: Some("missing_session".to_string()),
@@ -1263,7 +1607,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_request_credentials_sdk_no_provider() {
-        let creds = AWSCredentials::Sdk;
+        let creds = AWSIAMCredentials::Sdk;
         let sdk_config = SdkConfig::builder().build();
         let dynamic_api_keys = make_credentials(HashMap::new());
 
@@ -1284,17 +1628,17 @@ mod tests {
 
     #[test]
     fn test_aws_credentials_from_fields_none_returns_sdk() {
-        let result =
-            AWSCredentials::from_fields(None, None, None, "test_provider").expect("should succeed");
+        let result = AWSIAMCredentials::from_fields(None, None, None, "test_provider")
+            .expect("should succeed");
         assert!(
-            matches!(result, AWSCredentials::Sdk),
+            matches!(result, AWSIAMCredentials::Sdk),
             "No credentials should return Sdk"
         );
     }
 
     #[test]
     fn test_aws_credentials_from_fields_session_token_without_credentials_errors() {
-        let result = AWSCredentials::from_fields(
+        let result = AWSIAMCredentials::from_fields(
             None,
             None,
             Some(CredentialLocation::Dynamic("token".to_string())),
@@ -1313,7 +1657,7 @@ mod tests {
 
     #[test]
     fn test_aws_credentials_from_fields_access_key_without_secret_errors() {
-        let result = AWSCredentials::from_fields(
+        let result = AWSIAMCredentials::from_fields(
             Some(CredentialLocation::Dynamic("ak".to_string())),
             None,
             None,
@@ -1332,7 +1676,7 @@ mod tests {
 
     #[test]
     fn test_aws_credentials_from_fields_secret_key_without_access_key_errors() {
-        let result = AWSCredentials::from_fields(
+        let result = AWSIAMCredentials::from_fields(
             None,
             Some(CredentialLocation::Dynamic("sk".to_string())),
             None,
@@ -1351,7 +1695,7 @@ mod tests {
 
     #[test]
     fn test_aws_credentials_from_fields_all_dynamic_succeeds() {
-        let creds = AWSCredentials::from_fields(
+        let creds = AWSIAMCredentials::from_fields(
             Some(CredentialLocation::Dynamic("ak".to_string())),
             Some(CredentialLocation::Dynamic("sk".to_string())),
             Some(CredentialLocation::Dynamic("st".to_string())),
@@ -1360,14 +1704,14 @@ mod tests {
         .expect("should succeed");
 
         assert!(
-            matches!(creds, AWSCredentials::Dynamic { .. }),
+            matches!(creds, AWSIAMCredentials::Dynamic { .. }),
             "Should be Dynamic credentials"
         );
     }
 
     #[test]
     fn test_aws_credentials_from_fields_all_sdk_succeeds() {
-        let creds = AWSCredentials::from_fields(
+        let creds = AWSIAMCredentials::from_fields(
             Some(CredentialLocation::Sdk),
             Some(CredentialLocation::Sdk),
             Some(CredentialLocation::Sdk),
@@ -1376,14 +1720,14 @@ mod tests {
         .expect("should succeed");
 
         assert!(
-            matches!(creds, AWSCredentials::Sdk),
+            matches!(creds, AWSIAMCredentials::Sdk),
             "Should be Sdk credentials"
         );
     }
 
     #[test]
     fn test_aws_credentials_from_fields_mixed_dynamic_env_errors() {
-        let result = AWSCredentials::from_fields(
+        let result = AWSIAMCredentials::from_fields(
             Some(CredentialLocation::Dynamic("ak".to_string())),
             Some(CredentialLocation::Env("SECRET_KEY".to_string())),
             None,
@@ -1399,7 +1743,7 @@ mod tests {
 
     #[test]
     fn test_aws_credentials_from_fields_session_token_mismatch_errors() {
-        let result = AWSCredentials::from_fields(
+        let result = AWSIAMCredentials::from_fields(
             Some(CredentialLocation::Dynamic("ak".to_string())),
             Some(CredentialLocation::Dynamic("sk".to_string())),
             Some(CredentialLocation::Env("SESSION_TOKEN".to_string())),
@@ -1418,7 +1762,7 @@ mod tests {
 
     #[test]
     fn test_aws_credentials_from_fields_path_not_allowed() {
-        let result = AWSCredentials::from_fields(
+        let result = AWSIAMCredentials::from_fields(
             Some(CredentialLocation::Path("/path/to/key".to_string())),
             Some(CredentialLocation::Path("/path/to/secret".to_string())),
             None,
@@ -1441,7 +1785,7 @@ mod tests {
         // Dynamic endpoint with static creds - should warn (we can't verify tracing here,
         // but we verify the conditions)
         let dynamic_endpoint = Some(AWSEndpointUrl::Dynamic("ep".to_string()));
-        let static_creds = AWSCredentials::Static {
+        let static_creds = AWSIAMCredentials::Static {
             access_key_id: "ak".to_string(),
             secret_access_key: SecretString::new("sk".to_string().into()),
             session_token: None,
@@ -1451,11 +1795,11 @@ mod tests {
         warn_if_credential_exfiltration_risk(&dynamic_endpoint, &static_creds, "test");
 
         // Dynamic endpoint with SDK creds - should warn
-        let sdk_creds = AWSCredentials::Sdk;
+        let sdk_creds = AWSIAMCredentials::Sdk;
         warn_if_credential_exfiltration_risk(&dynamic_endpoint, &sdk_creds, "test");
 
         // Dynamic endpoint with dynamic creds - should NOT warn
-        let dynamic_creds = AWSCredentials::Dynamic {
+        let dynamic_creds = AWSIAMCredentials::Dynamic {
             access_key_id_key: "ak".to_string(),
             secret_access_key_key: "sk".to_string(),
             session_token_key: None,
@@ -1472,165 +1816,168 @@ mod tests {
         warn_if_credential_exfiltration_risk(&None, &static_creds, "test");
     }
 
-    // ===== AWSProviderConfig::get_region tests =====
+    // ===== AWSBedrockCredentials::from_fields priority tests =====
 
-    fn make_sdk_config_with_region(region: &str) -> SdkConfig {
-        SdkConfig::builder()
-            .region(Region::new(region.to_string()))
-            .build()
-    }
-
-    fn make_sdk_config_without_region() -> SdkConfig {
-        SdkConfig::builder().build()
-    }
-
-    #[test]
-    fn test_get_region_with_static_region() {
-        let config = AWSProviderConfig {
-            sdk_config: make_sdk_config_with_region("us-west-2"),
-            region: Some(AWSRegion::Static(Region::new("eu-central-1"))),
-            endpoint_url: None,
-            credentials: AWSCredentials::Sdk,
-        };
-        let credentials = make_credentials(HashMap::new());
-
-        let result = config
-            .get_region(&credentials, "test_provider")
-            .expect("get_region should succeed");
-        assert_eq!(
-            result.as_ref(),
-            "eu-central-1",
-            "Static region should be returned directly, ignoring sdk_config region"
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_explicit_api_key_over_env_var() {
+        // Set env var that would otherwise be used
+        tensorzero_unsafe_helpers::set_env_var_tests_only(
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "env_token_should_not_be_used",
         );
-    }
 
-    #[test]
-    fn test_get_region_with_dynamic_region() {
-        let config = AWSProviderConfig {
-            sdk_config: make_sdk_config_with_region("us-west-2"),
-            region: Some(AWSRegion::Dynamic("aws_region".to_string())),
-            endpoint_url: None,
-            credentials: AWSCredentials::Sdk,
-        };
-        let credentials = make_credentials(HashMap::from([("aws_region", "ap-northeast-1")]));
+        let region = AWSRegion::Static(Region::new("us-east-1"));
 
-        let result = config
-            .get_region(&credentials, "test_provider")
-            .expect("get_region should succeed");
-        assert_eq!(
-            result.as_ref(),
-            "ap-northeast-1",
-            "Dynamic region should be resolved from credentials"
+        // Set an env var for the explicit api_key to use
+        tensorzero_unsafe_helpers::set_env_var_tests_only(
+            "TEST_EXPLICIT_API_KEY",
+            "explicit_api_key_value",
         );
-    }
 
-    #[test]
-    fn test_get_region_with_dynamic_region_missing() {
-        let config = AWSProviderConfig {
-            sdk_config: make_sdk_config_with_region("us-west-2"),
-            region: Some(AWSRegion::Dynamic("missing_region".to_string())),
-            endpoint_url: None,
-            credentials: AWSCredentials::Sdk,
-        };
-        let credentials = make_credentials(HashMap::new());
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            Some(CredentialLocation::Env("TEST_EXPLICIT_API_KEY".to_string())),
+            None,
+            None,
+            None,
+            &region,
+            "test",
+        )
+        .await
+        .expect("Explicit api_key should succeed");
 
-        let result = config.get_region(&credentials, "test_provider");
         assert!(
-            result.is_err(),
-            "get_region should fail when dynamic region key is missing"
+            matches!(creds, AWSBedrockCredentials::ApiKey(_)),
+            "Explicit api_key should take priority and return ApiKey variant"
         );
-        let err = result.unwrap_err();
-        assert!(
-            err.to_string().contains("missing_region"),
-            "Error should mention the missing key: {err}"
-        );
+
+        // Clean up
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("TEST_EXPLICIT_API_KEY");
     }
 
-    #[test]
-    fn test_get_region_with_sdk_region_uses_sdk_config() {
-        // This is the key test for the bug fix:
-        // When region is Some(AWSRegion::Sdk), we should fall back to sdk_config.region()
-        let config = AWSProviderConfig {
-            sdk_config: make_sdk_config_with_region("us-east-1"),
-            region: Some(AWSRegion::Sdk),
-            endpoint_url: None,
-            credentials: AWSCredentials::Sdk,
-        };
-        let credentials = make_credentials(HashMap::new());
-
-        let result = config
-            .get_region(&credentials, "test_provider")
-            .expect("get_region should succeed with AWSRegion::Sdk");
-        assert_eq!(
-            result.as_ref(),
-            "us-east-1",
-            "AWSRegion::Sdk should fall back to sdk_config.region()"
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_explicit_iam_over_env_var() {
+        // Set env var that would otherwise be used
+        tensorzero_unsafe_helpers::set_env_var_tests_only(
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "env_token_should_not_be_used",
         );
+
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        // Set env vars for explicit IAM credentials
+        tensorzero_unsafe_helpers::set_env_var_tests_only("TEST_AWS_ACCESS_KEY", "AKIATEST");
+        tensorzero_unsafe_helpers::set_env_var_tests_only("TEST_AWS_SECRET_KEY", "secrettest");
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            None,
+            Some(CredentialLocation::Env("TEST_AWS_ACCESS_KEY".to_string())),
+            Some(CredentialLocation::Env("TEST_AWS_SECRET_KEY".to_string())),
+            None,
+            &region,
+            "test",
+        )
+        .await
+        .expect("Explicit IAM credentials should succeed");
+
+        assert!(
+            matches!(creds, AWSBedrockCredentials::IAM { .. }),
+            "Explicit IAM credentials should take priority and return IAM variant"
+        );
+
+        // Clean up
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("TEST_AWS_ACCESS_KEY");
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("TEST_AWS_SECRET_KEY");
     }
 
-    #[test]
-    fn test_get_region_with_none_uses_sdk_config() {
-        let config = AWSProviderConfig {
-            sdk_config: make_sdk_config_with_region("us-west-1"),
-            region: None,
-            endpoint_url: None,
-            credentials: AWSCredentials::Sdk,
-        };
-        let credentials = make_credentials(HashMap::new());
-
-        let result = config
-            .get_region(&credentials, "test_provider")
-            .expect("get_region should succeed with None region");
-        assert_eq!(
-            result.as_ref(),
-            "us-west-1",
-            "None region should fall back to sdk_config.region()"
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_env_var_when_nothing_configured() {
+        // Clear any explicit config and set the env var
+        tensorzero_unsafe_helpers::set_env_var_tests_only(
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "bearer_token_from_env",
         );
+
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            None, // no api_key
+            None, // no access_key_id
+            None, // no secret_access_key
+            None, // no session_token
+            &region, "test",
+        )
+        .await
+        .expect("Env var AWS_BEARER_TOKEN_BEDROCK should be used");
+
+        assert!(
+            matches!(creds, AWSBedrockCredentials::ApiKey(_)),
+            "AWS_BEARER_TOKEN_BEDROCK env var should be used when nothing else is configured"
+        );
+
+        // Clean up
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
     }
 
-    #[test]
-    fn test_get_region_with_sdk_region_no_sdk_config_region() {
-        // When region is Sdk but sdk_config has no region, should error
-        let config = AWSProviderConfig {
-            sdk_config: make_sdk_config_without_region(),
-            region: Some(AWSRegion::Sdk),
-            endpoint_url: None,
-            credentials: AWSCredentials::Sdk,
-        };
-        let credentials = make_credentials(HashMap::new());
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_empty_env_var_falls_back_to_sdk() {
+        // Set env var to empty string - should be ignored
+        tensorzero_unsafe_helpers::set_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK", "");
 
-        let result = config.get_region(&credentials, "test_provider");
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            None, // no api_key
+            None, // no access_key_id
+            None, // no secret_access_key
+            None, // no session_token
+            &region, "test",
+        )
+        .await
+        .expect("Empty env var should fall back to SDK");
+
         assert!(
-            result.is_err(),
-            "get_region should fail when sdk_config has no region"
+            matches!(
+                creds,
+                AWSBedrockCredentials::IAM {
+                    credentials: AWSIAMCredentials::Sdk,
+                    ..
+                }
+            ),
+            "Empty AWS_BEARER_TOKEN_BEDROCK should fall back to SDK credential chain"
         );
-        let err = result.unwrap_err();
-        assert!(
-            err.to_string().contains("No region configured"),
-            "Error should mention no region configured: {err}"
-        );
+
+        // Clean up
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
     }
 
-    #[test]
-    fn test_get_region_with_none_no_sdk_config_region() {
-        // When region is None and sdk_config has no region, should error
-        let config = AWSProviderConfig {
-            sdk_config: make_sdk_config_without_region(),
-            region: None,
-            endpoint_url: None,
-            credentials: AWSCredentials::Sdk,
-        };
-        let credentials = make_credentials(HashMap::new());
+    #[tokio::test]
+    async fn test_bedrock_credentials_priority_no_env_var_falls_back_to_sdk() {
+        // Ensure env var is not set
+        tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
 
-        let result = config.get_region(&credentials, "test_provider");
+        let region = AWSRegion::Static(Region::new("us-east-1"));
+
+        let (creds, _) = AWSBedrockCredentials::from_fields(
+            None, // no api_key
+            None, // no access_key_id
+            None, // no secret_access_key
+            None, // no session_token
+            &region, "test",
+        )
+        .await
+        .expect("No credentials should fall back to SDK");
+
         assert!(
-            result.is_err(),
-            "get_region should fail when sdk_config has no region"
-        );
-        let err = result.unwrap_err();
-        assert!(
-            err.to_string().contains("No region configured"),
-            "Error should mention no region configured: {err}"
+            matches!(
+                creds,
+                AWSBedrockCredentials::IAM {
+                    credentials: AWSIAMCredentials::Sdk,
+                    ..
+                }
+            ),
+            "No credentials configured should fall back to SDK credential chain"
         );
     }
 }

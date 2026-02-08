@@ -707,17 +707,18 @@ jobs:
     runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     # This needs to pull from Docker Hub, so only run in the merge queue, or when running on a PR from the main repository
+    # TODO - switch back to 'latest': https://github.com/tensorzero/tensorzero/issues/6080
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"25.11","prefix":"25.11","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
         exclude:
           - replicated: true
             clickhouse_version:
-              { "tag": "latest", "prefix": "latest", "allow_failure": false }
-        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"latest","prefix":"latest","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
+              { "tag": "25.11", "prefix": "25.11", "allow_failure": false }
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.11","prefix":"25.11","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -870,36 +871,50 @@ jobs:
         if: always() && matrix.replicated == true
         run: |
           echo "Error logs for ClickHouse 01:"
-          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker cp e2e-clickhouse-01-1:/var/log/clickhouse-server/clickhouse-server.err.log -
           echo "Error logs for ClickHouse 02:"
-          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker cp e2e-clickhouse-02-1:/var/log/clickhouse-server/clickhouse-server.err.log -
           echo "Error logs for ClickHouse 03:"
-          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker cp e2e-clickhouse-03-1:/var/log/clickhouse-server/clickhouse-server.err.log -
 
       - name: Print ClickHouse trace logs (replicated)
         if: always() && matrix.replicated == true
         run: |
           echo "Trace logs for ClickHouse 01:"
-          docker exec e2e-clickhouse-01-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker cp e2e-clickhouse-01-1:/var/log/clickhouse-server/clickhouse-server.log -
           echo "Trace logs for ClickHouse 02:"
-          docker exec e2e-clickhouse-02-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker cp e2e-clickhouse-02-1:/var/log/clickhouse-server/clickhouse-server.log -
           echo "Trace logs for ClickHouse 03:"
-          docker exec e2e-clickhouse-03-1 cat /var/log/clickhouse-server/clickhouse-server.log
+          docker cp e2e-clickhouse-03-1:/var/log/clickhouse-server/clickhouse-server.log -
 
       - name: Print container health checks (replicated)
         if: always() && matrix.replicated == true
         run: |
           echo "Health check for ClickHouse 01:"
-          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-01) | jq
+          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-01-1 | jq
           echo "Health check for ClickHouse 02:"
-          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-02) | jq
+          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-02-1 | jq
           echo "Health check for ClickHouse 03:"
-          docker inspect --format "{{json .State.Health }}" $(docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml ps -q clickhouse-03) | jq
+          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-03-1 | jq
 
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
         run: |
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+
+      - name: Print ClickHouse error logs (non-replicated)
+        if: always() && matrix.replicated == false
+        run: docker cp e2e-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.err.log -
+
+      - name: Print ClickHouse trace logs (non-replicated)
+        if: always() && matrix.replicated == false
+        run: docker cp e2e-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.log -
+
+      - name: Print container health checks (non-replicated)
+        if: always() && matrix.replicated == false
+        run: |
+          echo "Health check for ClickHouse:"
+          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-1 | jq || echo "Could not read health check"
 
       - name: Print e2e logs
         if: always()
@@ -977,7 +992,7 @@ jobs:
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build postgres gateway-postgres-migrations fixtures-postgres -d --wait
 
       - name: Test (Rust)
-        run: cargo test-e2e --filterset 'test(db::) & test(postgres)'
+        run: cargo nextest run --filterset 'test(db::) & test(postgres)'
 
       - name: Print docker compose logs
         if: always()
@@ -1200,6 +1215,30 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
+  build-provider-proxy-container:
+    uses: ./.github/workflows/build-provider-proxy-container.yml
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-live-tests-container:
+    uses: ./.github/workflows/build-live-tests-container.yml
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
     permissions:
@@ -1352,6 +1391,8 @@ jobs:
         build-gateway-e2e-container,
         build-mock-provider-api-container,
         build-fixtures-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
       ]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
@@ -1421,6 +1462,8 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
         build-mock-provider-api-container,
         mocked-batch-tests,
         publish-dev-docker-hub-images,

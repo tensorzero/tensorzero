@@ -27,8 +27,9 @@ anyhow.workspace = true
 uuid = { workspace = true }
 object_store = { workspace = true }
 bytes = "1.10.1"
+reqwest = { workspace = true }
 
 [dev-dependencies]
-eventsource-stream = "0.2.3"
+sse-stream = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 tokio-stream = { workspace = true }

@@ -7,7 +7,7 @@ use crate::{
 use futures::{StreamExt, future::try_join_all};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

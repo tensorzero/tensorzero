@@ -3,8 +3,8 @@
 use futures::StreamExt;
 use rand::Rng;
 use reqwest::Client;
-use reqwest_eventsource::Event;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_sse_stream::Event;
+use reqwest_sse_stream::RequestBuilderExt;
 use serde_json::Value;
 use serde_json::json;
 use std::time::Duration;
@@ -531,6 +531,7 @@ pub async fn check_test_streaming_cache_with_err(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -919,6 +920,7 @@ async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
             .post(&url)
             .json(&payload)
             .eventsource()
+            .await
             .unwrap();
 
         let mut chunks_with_usage = 0;

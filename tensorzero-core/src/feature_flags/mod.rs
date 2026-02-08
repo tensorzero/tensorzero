@@ -43,10 +43,6 @@ pub trait Flag: Send + Sync {
 
     /// The environment variable name for this flag.
     fn env_var_name(&self) -> String;
-
-    /// Initializes the flag value to default value or environment variable override.
-    /// Returns an error if an environment variable is set but its value is invalid.
-    fn init(&self) -> Result<(), Error>;
 }
 
 /// Definition of a feature flag with a specific value type.
@@ -96,15 +92,21 @@ impl<T: FlagValue> FlagDefinition<T> {
 
     /// Gets the value of this flag.
     ///
-    /// # Panics
-    ///
-    /// Panics if the flag is not initialized.
-    #[cfg(not(test))]
-    #[expect(clippy::expect_used)]
+    /// If the value cannot be parsed from the environment, use the default value.
+    #[cfg(not(any(test, feature = "e2e_tests")))]
     pub fn get(&self) -> T {
         self.value
-            .get()
-            .expect("All feature flags must be initialized and validated at startup")
+            .get_or_init(|| {
+                self.read_from_env()
+                    .inspect_err(|e| {
+                        tracing::error!(
+                            "Failed to parse flag value: {:?}. Using default value: {:?}",
+                            e,
+                            self.default,
+                        );
+                    })
+                    .unwrap_or_else(|_| self.default.clone())
+            })
             .clone()
     }
 
@@ -114,7 +116,8 @@ impl<T: FlagValue> FlagDefinition<T> {
     /// # Panics
     ///
     /// Panics if the flag value from the environment cannot be parsed into the correct type.
-    #[cfg(test)]
+    #[expect(clippy::expect_used, reason = "acceptable in test-only code")]
+    #[cfg(any(test, feature = "e2e_tests"))]
     pub fn get(&self) -> T {
         self.value
             .get_or_init(|| {
@@ -145,44 +148,11 @@ impl<T: FlagValue> Flag for FlagDefinition<T> {
     fn env_var_name(&self) -> String {
         self.env_var_name()
     }
-
-    fn init(&self) -> Result<(), Error> {
-        let flag_value = self.read_from_env()?;
-        match self.value.set(flag_value.clone()) {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                if e == flag_value {
-                    Ok(())
-                } else {
-                    // To prevent subtle errors from initializing flags multiple times with different values
-                    // (so at runtime it's hard to reason about the flag value), we error out.
-                    Err(Error::new(ErrorDetails::AppState {
-                        message: format!(
-                            "Attempted to reinitialize flag {} with different value {:?} (current value: {:?})",
-                            self.name,
-                            flag_value,
-                            e.clone()
-                        ),
-                    }))
-                }
-            }
-        }
-    }
 }
 
 mod flags;
 
 pub use flags::*;
-
-/// Initializes all feature flags.
-///
-/// This should be called on application startup.
-pub fn init_flags() -> Result<(), Error> {
-    for flag in ALL_FLAGS {
-        flag.init()?;
-    }
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {

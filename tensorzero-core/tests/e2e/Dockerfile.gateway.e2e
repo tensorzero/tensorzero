@@ -1,10 +1,10 @@
 # ========== builder ==========
 
-FROM rust:1.88.0 AS builder
+FROM rust:1.88-slim AS builder
 
 WORKDIR /src
 
-RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y clang libc++-dev git && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 RUN git rev-parse HEAD

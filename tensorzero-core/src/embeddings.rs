@@ -665,7 +665,7 @@ impl UninitializedEmbeddingProviderConfig {
     ) -> Result<EmbeddingProviderInfo, Error> {
         let provider_config = self
             .config
-            .load(provider_types, default_credentials)
+            .load(provider_types, default_credentials, false)
             .await?;
         // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
         // field via StoredEmbeddingProviderConfig when loading from snapshot)

@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::inference::types::{
     Role, StoredContentBlock, StoredRequestMessage, Text, Unknown, Usage,
@@ -58,7 +58,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload);
     let (inference_id, output_usage) = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         let mut last_chunk = None;
         while let Some(chunk) = chunks.next().await {
@@ -288,7 +288,7 @@ async fn test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
         .json(&payload);
 
     let (content, inference_id) = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         while let Some(chunk) = chunks.next().await {
             println!("chunk: {chunk:?}");
@@ -940,7 +940,7 @@ async fn test_mixture_of_n_bad_fuser_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload);
 
-    let mut chunks = builder.eventsource().unwrap();
+    let mut chunks = builder.eventsource().await.unwrap();
     let mut first_inference_id = None;
     let mut chunk_data = vec![];
     while let Some(chunk) = chunks.next().await {
@@ -1114,7 +1114,7 @@ async fn test_mixture_of_n_single_candidate_inner(stream: bool, episode_id: Uuid
         .post(get_gateway_endpoint("/inference"))
         .json(&payload);
     let inference_id = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         let mut chunk_data = vec![];
         while let Some(chunk) = chunks.next().await {

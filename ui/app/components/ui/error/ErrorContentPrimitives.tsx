@@ -4,6 +4,30 @@ import { AlertCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { cn } from "~/utils/common";
 
+/**
+ * Extracts a user-friendly message from an error of any type.
+ * Handles React Router's route error responses, standard Errors, and unknown types.
+ */
+export function getErrorMessage({
+  error,
+  fallback,
+}: {
+  /** The error to extract a message from (typically from useAsyncError()) */
+  error: unknown;
+  /** Default message if error type is unrecognized */
+  fallback: string;
+}): string {
+  if (isRouteErrorResponse(error)) {
+    return typeof error.data === "string"
+      ? error.data
+      : `${error.status} ${error.statusText}`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+}
+
 interface ErrorContentCardProps {
   children: React.ReactNode;
   className?: string;
@@ -222,24 +246,75 @@ export function SectionAsyncErrorState({
     );
   }
 
-  let message: string;
-  if (isRouteErrorResponse(error)) {
-    if (typeof error.data === "string") {
-      message = error.data;
-    } else {
-      message = `${error.status} ${error.statusText}`;
-    }
-  } else if (error instanceof Error) {
-    message = error.message;
-  } else {
-    message = defaultMessage;
-  }
-
   return (
     <SectionErrorNotice
       icon={AlertCircle}
       title="Error loading data"
-      description={message}
+      description={getErrorMessage({ error, fallback: defaultMessage })}
     />
+  );
+}
+
+interface InlineAsyncErrorProps {
+  defaultMessage?: string;
+}
+
+/**
+ * Inline error for header-level content (BasicInfo, etc.)
+ * Uses a subtle inline design that fits within flex layouts without
+ * taking over the entire section. Displays icon and error text.
+ *
+ * Must be rendered inside an <Await errorElement={...}> context.
+ */
+export function InlineAsyncError({
+  defaultMessage = "Failed to load data",
+}: InlineAsyncErrorProps) {
+  const error = useAsyncError();
+
+  if (error === undefined) {
+    throw new Error(
+      "InlineAsyncError must be used inside an <Await errorElement={...}>",
+    );
+  }
+
+  const message = getErrorMessage({ error, fallback: defaultMessage });
+
+  return (
+    <div className="inline-flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+interface ActionBarAsyncErrorProps {
+  defaultMessage?: string;
+}
+
+/**
+ * Error state for action bars / button groups.
+ * Renders as a chip-like element that fits alongside buttons.
+ * Uses same height as action bar skeletons (h-8).
+ *
+ * Must be rendered inside an <Await errorElement={...}> context.
+ */
+export function ActionBarAsyncError({
+  defaultMessage = "Unable to load actions",
+}: ActionBarAsyncErrorProps) {
+  const error = useAsyncError();
+
+  if (error === undefined) {
+    throw new Error(
+      "ActionBarAsyncError must be used inside an <Await errorElement={...}>",
+    );
+  }
+
+  const message = getErrorMessage({ error, fallback: defaultMessage });
+
+  return (
+    <div className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+      <span>{message}</span>
+    </div>
   );
 }

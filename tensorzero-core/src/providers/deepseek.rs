@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;

@@ -23,7 +23,6 @@ use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
-use tensorzero_core::feature_flags;
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
@@ -83,9 +82,6 @@ async fn main() -> ExitCode {
 async fn run() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
 
-    // Initialize feature flags
-    feature_flags::init_flags().log_err_pretty("Failed to initialize feature flags")?;
-
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config
@@ -120,10 +116,10 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_postgres_migrations {
-        tracing::info!("Applying PostgreSQL migrations...");
+        tracing::info!("Applying Postgres migrations...");
         manual_run_postgres_migrations()
             .await
-            .log_err_pretty("Failed to run PostgreSQL migrations")?;
+            .log_err_pretty("Failed to run Postgres migrations")?;
         tracing::info!("Postgres is ready.");
         return Ok(());
     }

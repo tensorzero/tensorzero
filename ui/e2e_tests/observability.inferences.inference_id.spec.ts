@@ -373,11 +373,13 @@ test.describe("should be able to add demonstration feedback via Try with X flows
     test(buttonText, async ({ page }) => {
       await page.goto(`/observability/inferences/${inference}`);
 
-      // Wait for the page to load
+      // Wait for the page to load and the action bar to resolve
       await page.waitForLoadState("networkidle");
+      const tryButton = page.getByText(buttonText);
+      await expect(tryButton).toBeEnabled();
 
       // Click on "Try with variant" button
-      await page.getByText(buttonText).click();
+      await tryButton.click();
 
       // Wait for the dropdown menu to appear and select a variant
       // Look for variant options and click on one that's not the current variant
@@ -448,11 +450,13 @@ test.describe("should navigate to inference from Try with X modal and verify tag
     test(buttonText, async ({ page }) => {
       await page.goto(`/observability/inferences/${inference}`);
 
-      // Wait for the page to load
+      // Wait for the page to load and the action bar to resolve
       await page.waitForLoadState("networkidle");
+      const tryButton = page.getByText(buttonText);
+      await expect(tryButton).toBeEnabled();
 
       // Click on "Try with variant/model" button
-      await page.getByText(buttonText).click();
+      await tryButton.click();
 
       // Wait for the dropdown menu to appear and select a variant
       // ButtonSelect uses cmdk CommandItem which has role="option"
@@ -553,7 +557,7 @@ test("should be able to add a datapoint from the inference page", async ({
   await deleteButton.click();
 
   // Wait for the shadcn dialog to appear and click the Delete button
-  const dialog = page.locator('div[role="dialog"]');
+  const dialog = page.getByRole("alertdialog");
   await dialog.waitFor({ state: "visible" });
 
   // Click the destructive "Delete" button in the dialog
@@ -618,7 +622,7 @@ test("should handle model inference with null input and output tokens", async ({
   await page.getByText("01954435-76ab-78b1-a76e-d5676b0dd2f9").click();
 
   // Wait for the sheet/dialog to appear
-  const sheet = page.locator('[role="dialog"]');
+  const sheet = page.getByRole("dialog");
   await sheet.waitFor({ state: "visible" });
 
   // Verify we're on the model inference page (use exact match to avoid matching "Model Inferences")

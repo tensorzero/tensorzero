@@ -7,7 +7,7 @@
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero::test_helpers::make_http_gateway_with_unique_db;
 use uuid::Uuid;
@@ -188,6 +188,7 @@ async fn test_openai_compatible_raw_response_streaming() {
         .post(format!("{base_url}/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_chunk = false;
@@ -273,6 +274,7 @@ async fn test_openai_compatible_raw_response_streaming_not_requested() {
         .post(format!("{base_url}/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     while let Some(chunk) = chunks.next().await {

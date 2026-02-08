@@ -43,6 +43,7 @@
 use arc_swap::ArcSwap;
 use check_stopping::{CheckStoppingArgs, StoppingResult, check_stopping};
 use error::TrackAndStopError;
+use schemars::JsonSchema;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
@@ -257,7 +258,9 @@ impl Nursery {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedTrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
@@ -271,7 +274,8 @@ pub struct UninitializedTrackAndStopConfig {
     epsilon: f64,
     #[serde(default = "default_update_period_s")]
     update_period_s: u64,
-    #[serde(default = "default_min_prob")]
+    #[serde(default = "default_min_prob", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     min_prob: Option<f64>,
 }
 
@@ -450,13 +454,13 @@ impl VariantSampler for TrackAndStopConfig {
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
-        // Track-and-Stop requires PostgreSQL for episode-to-variant mapping
+        // Track-and-Stop requires Postgres for episode-to-variant mapping
         match postgres {
             PostgresConnectionInfo::Disabled => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is not available. \
-                        Track-and-Stop requires PostgreSQL for episode-to-variant consistency. \
+                        "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is not available. \
+                        Track-and-Stop requires Postgres for episode-to-variant consistency. \
                         Please set the `TENSORZERO_POSTGRES_URL` environment variable.",
                     ),
                 }));
@@ -471,8 +475,8 @@ impl VariantSampler for TrackAndStopConfig {
         postgres.health().await.map_err(|e| {
             Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is unhealthy: {e}. \
-                    Track-and-Stop requires a healthy PostgreSQL connection for episode-to-variant consistency.",
+                    "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is unhealthy: {e}. \
+                    Track-and-Stop requires a healthy Postgres connection for episode-to-variant consistency.",
                 ),
             })
         })?;
@@ -2170,8 +2174,8 @@ mod tests {
             "Error message should mention Track-and-Stop, got: {err_msg}"
         );
         assert!(
-            err_msg.contains("PostgreSQL"),
-            "Error message should mention PostgreSQL, got: {err_msg}"
+            err_msg.contains("Postgres"),
+            "Error message should mention Postgres, got: {err_msg}"
         );
         assert!(
             err_msg.contains("test_function"),

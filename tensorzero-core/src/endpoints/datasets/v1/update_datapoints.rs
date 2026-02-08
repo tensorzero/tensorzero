@@ -8,6 +8,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -55,6 +56,9 @@ pub async fn update_datapoints_handler(
 /// and inserts the updated datapoints into ClickHouse.
 ///
 /// Returns an error if there are no datapoints, or if there are duplicate datapoint IDs.
+///
+/// TODO(#5691): implement update_datapints on DatasetQueries trait, make Clickhouse call get + insert,
+/// and make Postgres call update directly.
 pub async fn update_datapoints(
     app_state: &AppStateData,
     dataset_name: &str,
@@ -82,14 +86,18 @@ pub async fn update_datapoints(
         object_store_info: &app_state.config.object_store_info,
     };
 
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
     // Fetch all datapoints in a single batch query
     let datapoint_ids: Vec<Uuid> = request
         .datapoints
         .iter()
         .map(UpdateDatapointRequest::id)
         .collect();
-    let datapoints_vec = app_state
-        .clickhouse_connection_info
+    let datapoints_vec = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
@@ -167,10 +175,7 @@ pub async fn update_datapoints(
         }
     }
 
-    app_state
-        .clickhouse_connection_info
-        .insert_datapoints(&datapoints)
-        .await?;
+    database.insert_datapoints(&datapoints).await?;
     Ok(UpdateDatapointsResponse { ids: new_ids })
 }
 
@@ -397,12 +402,13 @@ pub async fn update_datapoints_metadata_handler(
     Path(path_params): Path<UpdateDatapointsMetadataPathParams>,
     StructuredJson(request): StructuredJson<UpdateDatapointsMetadataRequest>,
 ) -> Result<Json<UpdateDatapointsResponse>, Error> {
-    let response = update_datapoints_metadata(
-        &app_state.clickhouse_connection_info,
-        &path_params.dataset_name,
-        request,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
+    let response =
+        update_datapoints_metadata(&database, &path_params.dataset_name, request).await?;
     Ok(Json(response))
 }
 
@@ -410,7 +416,7 @@ pub async fn update_datapoints_metadata_handler(
 /// This function only updates metadata fields (like name) without creating new datapoint IDs.
 /// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
 pub async fn update_datapoints_metadata(
-    clickhouse_handler: &impl DatasetQueries,
+    database: &impl DatasetQueries,
     dataset_name: &str,
     request: UpdateDatapointsMetadataRequest,
 ) -> Result<UpdateDatapointsResponse, Error> {
@@ -433,7 +439,7 @@ pub async fn update_datapoints_metadata(
 
     // Fetch all datapoints in a single batch query
     let datapoint_ids: Vec<Uuid> = request.datapoints.iter().map(|d| d.id).collect();
-    let datapoints_vec = clickhouse_handler
+    let datapoints_vec = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
@@ -498,7 +504,7 @@ pub async fn update_datapoints_metadata(
         }
     }
 
-    clickhouse_handler.insert_datapoints(&datapoints).await?;
+    database.insert_datapoints(&datapoints).await?;
 
     // Return the same IDs (not new ones, since we didn't create new datapoints)
     Ok(UpdateDatapointsResponse { ids: datapoint_ids })

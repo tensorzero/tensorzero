@@ -7,34 +7,45 @@ import {
   useRef,
   useState,
 } from "react";
+import { v7 as uuid } from "uuid";
 import {
   Await,
   data,
-  isRouteErrorResponse,
   useAsyncError,
   useFetcher,
   useNavigate,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
+import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
+import {
+  AutopilotStatusBanner,
+  AutopilotStatusBannerVariant,
+} from "~/components/autopilot/AutopilotStatusBanner";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
+import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
 import { logger } from "~/utils/logger";
 import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
+import { useAutoApproval } from "~/hooks/use-auto-approval";
+import {
+  AutopilotSessionProvider,
+  useAutopilotSession,
+} from "~/contexts/AutopilotSessionContext";
 import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
+import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
-import { getFeatureFlags } from "~/utils/feature_flags";
 
 // Nil UUID for creating new sessions
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -71,7 +82,7 @@ export type EventsData = {
   status: AutopilotStatus;
 };
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const sessionId = params.session_id;
   if (!sessionId) {
     throw data("Session ID is required", { status: 400 });
@@ -79,6 +90,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
+    const url = new URL(request.url);
+    const initialMessage = url.searchParams.get("message") ?? undefined;
     return {
       sessionId: "new",
       eventsData: {
@@ -88,6 +101,7 @@ export async function loader({ params }: Route.LoaderArgs) {
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
+      initialMessage,
     };
   }
 
@@ -123,6 +137,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     sessionId,
     eventsData: eventsDataPromise,
     isNewSession: false,
+    initialMessage: undefined,
   };
 }
 
@@ -131,15 +146,6 @@ function EventStreamSkeleton() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
       <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
-    </div>
-  );
-}
-
-// Warning banner for transient errors
-function ErrorBanner({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
-      {children}
     </div>
   );
 }
@@ -182,6 +188,7 @@ function EventStreamContent({
   onPendingToolCallsChange,
   onErrorChange,
   onHasReachedStartChange,
+  pendingToolCallIds,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -194,6 +201,7 @@ function EventStreamContent({
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
   onHasReachedStartChange: (hasReachedStart: boolean) => void;
+  pendingToolCallIds: Set<string>;
 }) {
   const {
     events: initialEvents,
@@ -231,12 +239,6 @@ function EventStreamContent({
   useEffect(() => {
     onErrorChange(error, isRetrying);
   }, [error, isRetrying, onErrorChange]);
-
-  // Derive pending tool call IDs for highlighting in the event stream
-  const pendingToolCallIds = useMemo(
-    () => new Set(pendingToolCalls.map((e) => e.id)),
-    [pendingToolCalls],
-  );
 
   // Fetch older events for infinite scroll pagination
   const fetchOlderEvents = useCallback(
@@ -366,10 +368,11 @@ function EventStreamContent({
   );
 }
 
-export default function AutopilotSessionEventsPage({
+function AutopilotSessionEventsPageContent({
   loaderData,
 }: Route.ComponentProps) {
-  const { sessionId, eventsData, isNewSession } = loaderData;
+  const { sessionId, eventsData, isNewSession, initialMessage } = loaderData;
+  const { yoloMode, setYoloMode } = useAutopilotSession();
   const navigate = useNavigate();
   const { toast } = useToast();
   const interruptFetcher = useFetcher();
@@ -394,6 +397,12 @@ export default function AutopilotSessionEventsPage({
   // Pending tool calls state - lifted from EventStreamContent for footer rendering
   const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>([]);
 
+  // Derive pending tool call IDs Set once - used by EventStream and useAutoApproval
+  const pendingToolCallIds = useMemo(
+    () => new Set(pendingToolCalls.map((tc) => tc.id)),
+    [pendingToolCalls],
+  );
+
   const handlePendingToolCallsChange = useCallback(
     (toolCalls: GatewayEvent[]) => {
       setPendingToolCalls(toolCalls);
@@ -406,7 +415,7 @@ export default function AutopilotSessionEventsPage({
 
   // State for tool call authorization loading
   const [authLoadingStates, setAuthLoadingStates] = useState<
-    Map<string, "approving" | "rejecting">
+    Map<string, "approving" | "rejecting" | "approving_all">
   >(new Map());
 
   // State for SSE connection error
@@ -441,11 +450,12 @@ export default function AutopilotSessionEventsPage({
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
 
-  // Reset loading/error state when navigating to a different session
-  // Note: key={sessionId} on Suspense remounts EventStreamContent, which will call onLoaded
+  // Reset state when navigating to a different session
+  // Note: key={sessionId} on EventStreamContent ensures a fresh mount that will call onLoaded
+  // We don't set isEventsLoading here because the effect ordering with Suspense is unpredictable -
+  // EventStreamContent's onLoaded may run before this effect, causing isEventsLoading to get stuck
   useEffect(() => {
     setOptimisticMessages([]);
-    setIsEventsLoading(!isNewSession);
     setHasLoadError(false);
     setHasReachedStart(false);
     setAutopilotStatus({ status: "idle" });
@@ -453,6 +463,7 @@ export default function AutopilotSessionEventsPage({
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
+    // Note: useAutoApproval handles its own cleanup on session change via internal effect
   }, [sessionId, isNewSession]);
 
   useEffect(() => {
@@ -471,7 +482,14 @@ export default function AutopilotSessionEventsPage({
     return undefined;
   }, [oldestPendingToolCall?.id]);
 
-  // Handle tool call authorization
+  const { failedIds: failedAutoApprovals } = useAutoApproval({
+    enabled: yoloMode && !isNewSession,
+    sessionId,
+    pendingToolCalls,
+    pendingToolCallIds,
+  });
+
+  // Handle tool call authorization (manual)
   const handleAuthorize = useCallback(
     async (eventId: string, approved: boolean) => {
       userActionRef.current = true;
@@ -519,6 +537,38 @@ export default function AutopilotSessionEventsPage({
     [sessionId, toast],
   );
 
+  // Handle approve all tool calls (manual batch approval)
+  const handleApproveAll = useCallback(async () => {
+    if (pendingToolCalls.length === 0) return;
+
+    userActionRef.current = true;
+
+    // Use the oldest pending tool call's ID for loading state display
+    const displayEventId = pendingToolCalls[0].id;
+    // Use the newest pending tool call's ID for the API
+    const lastEventId = pendingToolCalls[pendingToolCalls.length - 1].id;
+
+    setAuthLoadingStates((prev) =>
+      new Map(prev).set(displayEventId, "approving_all"),
+    );
+
+    try {
+      await approveAllToolCalls(sessionId, lastEventId);
+    } catch (err) {
+      logger.error("Failed to approve all tool calls:", err);
+      toast.error({
+        title: "Batch approval failed",
+        description: "Failed to approve all tool calls. Please try again.",
+      });
+    } finally {
+      setAuthLoadingStates((prev) => {
+        const next = new Map(prev);
+        next.delete(displayEventId);
+        return next;
+      });
+    }
+  }, [sessionId, pendingToolCalls, toast]);
+
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
     interruptedSessionRef.current = sessionId;
@@ -528,10 +578,9 @@ export default function AutopilotSessionEventsPage({
     });
   }, [interruptFetcher, sessionId]);
 
-  // Show toast on interrupt result (only if still on the same session)
+  // Show toast on interrupt failure (only if still on the same session)
   useEffect(() => {
     if (interruptFetcher.state === "idle" && interruptFetcher.data) {
-      // Only show toast if we're still on the session that was interrupted
       if (interruptedSessionRef.current !== sessionId) {
         return;
       }
@@ -539,12 +588,7 @@ export default function AutopilotSessionEventsPage({
         success: boolean;
         error?: string;
       };
-      if (data.success) {
-        toast.success({
-          title: "Session interrupted",
-          description: "The autopilot session has been interrupted.",
-        });
-      } else if (data.error) {
+      if (data.error) {
         toast.error({
           title: "Failed to interrupt session",
           description: data.error,
@@ -553,12 +597,9 @@ export default function AutopilotSessionEventsPage({
     }
   }, [interruptFetcher.state, interruptFetcher.data, toast, sessionId]);
 
-  // Interruptible when actively processing (not idle or failed) and feature flag is enabled
-  const { FF_INTERRUPT_SESSION } = getFeatureFlags();
+  // Interruptible when actively processing (not idle or failed)
   const isInterruptible =
-    FF_INTERRUPT_SESSION &&
-    autopilotStatus.status !== "idle" &&
-    autopilotStatus.status !== "failed";
+    autopilotStatus.status !== "idle" && autopilotStatus.status !== "failed";
 
   // Disable submit unless status is idle or failed
   const submitDisabled =
@@ -627,20 +668,20 @@ export default function AutopilotSessionEventsPage({
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const target = e.currentTarget;
-      setShowTopFade(target.scrollTop > 20 || !hasReachedStart);
+      setShowTopFade(target.scrollTop > 0 || !hasReachedStart);
       const distanceFromBottom =
         target.scrollHeight - target.scrollTop - target.clientHeight;
-      setShowBottomFade(distanceFromBottom > 20);
+      setShowBottomFade(distanceFromBottom > 0);
     },
     [hasReachedStart],
   );
 
-  // Update top fade when hasReachedStart changes (not just on scroll)
-  // Without this, fade lingers if user is near top when reaching start
+  // Hide top fade when hasReachedStart becomes true and user is already at top
+  // (scroll handler won't fire if user hasn't scrolled)
   useEffect(() => {
     if (hasReachedStart) {
       const container = scrollContainerRef.current;
-      if (container && container.scrollTop <= 20) {
+      if (container && container.scrollTop === 0) {
         setShowTopFade(false);
       }
     }
@@ -659,7 +700,7 @@ export default function AutopilotSessionEventsPage({
       setOptimisticMessages((prev) => [
         ...prev,
         {
-          tempId: crypto.randomUUID(),
+          tempId: uuid(),
           eventId: response.event_id,
           text,
           status: "sending",
@@ -701,7 +742,7 @@ export default function AutopilotSessionEventsPage({
         <div className="container mx-auto px-8">
           {/* Header background - matches message width with slight outset */}
           <div ref={headerRef} className="bg-bg-secondary -mx-2 px-2 pt-4 pb-5">
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto flex items-center justify-between">
               <Breadcrumbs
                 segments={
                   isNewSession
@@ -715,15 +756,25 @@ export default function AutopilotSessionEventsPage({
                       ]
                 }
               />
+              <YoloModeToggle
+                checked={yoloMode}
+                onCheckedChange={setYoloMode}
+              />
             </div>
             {sseError.error && sseError.isRetrying && (
-              <ErrorBanner>Failed to fetch events. Retrying...</ErrorBanner>
+              <AutopilotStatusBanner
+                variant={AutopilotStatusBannerVariant.Warning}
+                className="mt-3"
+              >
+                Failed to fetch events. Retrying...
+              </AutopilotStatusBanner>
             )}
           </div>
           <FadeGradient
             direction={FadeDirection.Top}
             visible={showTopFade}
             className="-mx-2"
+            data-testid="scroll-fade-top"
           />
         </div>
       </div>
@@ -757,6 +808,7 @@ export default function AutopilotSessionEventsPage({
                   onPendingToolCallsChange={handlePendingToolCallsChange}
                   onErrorChange={handleErrorChange}
                   onHasReachedStartChange={handleHasReachedStartChange}
+                  pendingToolCallIds={pendingToolCallIds}
                 />
               )}
             </Await>
@@ -771,11 +823,22 @@ export default function AutopilotSessionEventsPage({
             direction={FadeDirection.Bottom}
             visible={showBottomFade}
             className="-mx-2"
+            data-testid="scroll-fade-bottom"
           />
           {/* Footer background - matches message width with slight outset */}
           <div ref={footerRef} className="bg-bg-secondary -mx-2 px-2">
             <div className="pointer-events-auto flex flex-col gap-4 pt-4 pb-8">
-              {oldestPendingToolCall && (
+              {yoloMode && failedAutoApprovals.size > 0 && (
+                <AutopilotStatusBanner
+                  variant={AutopilotStatusBannerVariant.Warning}
+                  icon={AlertTriangle}
+                >
+                  Auto-approval failed for {failedAutoApprovals.size} tool
+                  {failedAutoApprovals.size === 1 ? " call" : " calls"}.
+                  Retrying in background...
+                </AutopilotStatusBanner>
+              )}
+              {oldestPendingToolCall && !yoloMode && (
                 <PendingToolCallCard
                   key={oldestPendingToolCall.id}
                   event={oldestPendingToolCall}
@@ -786,6 +849,7 @@ export default function AutopilotSessionEventsPage({
                   onAuthorize={(approved) =>
                     handleAuthorize(oldestPendingToolCall.id, approved)
                   }
+                  onApproveAll={handleApproveAll}
                   additionalCount={pendingToolCalls.length - 1}
                   isInCooldown={isInCooldown}
                 />
@@ -800,6 +864,7 @@ export default function AutopilotSessionEventsPage({
                 isInterruptible={isInterruptible}
                 isInterrupting={interruptFetcher.state !== "idle"}
                 onInterrupt={handleInterruptSession}
+                initialMessage={initialMessage}
               />
             </div>
           </div>
@@ -809,30 +874,16 @@ export default function AutopilotSessionEventsPage({
   );
 }
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
+export default function AutopilotSessionEventsPage(
+  props: Route.ComponentProps,
+) {
+  return (
+    <AutopilotSessionProvider>
+      <AutopilotSessionEventsPageContent {...props} />
+    </AutopilotSessionProvider>
+  );
+}
 
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <LayoutErrorBoundary error={error} />;
 }

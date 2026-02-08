@@ -766,7 +766,7 @@ async fn test_openai_compatible_route_with_json_schema() {
 #[tokio::test]
 async fn test_openai_compatible_streaming_tool_call() {
     use futures::StreamExt;
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::{Event, RequestBuilderExt};
 
     let client = Client::new();
     let episode_id = Uuid::now_v7();
@@ -814,6 +814,7 @@ async fn test_openai_compatible_streaming_tool_call() {
         .header("Content-Type", "application/json")
         .json(&body)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -934,7 +935,7 @@ async fn test_openai_compatible_deny_unknown_fields() {
 #[tokio::test]
 async fn test_openai_compatible_streaming() {
     use futures::StreamExt;
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::{Event, RequestBuilderExt};
 
     let client = Client::new();
     let episode_id = Uuid::now_v7();
@@ -955,6 +956,7 @@ async fn test_openai_compatible_streaming() {
         .header("Content-Type", "application/json")
         .json(&body)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -1264,8 +1266,10 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
     assert!(!content.unwrap().is_empty());
 
     // Should not have tool_calls in final response
-    let tool_calls = final_choice["message"]["tool_calls"].as_array().unwrap();
-    assert!(tool_calls.is_empty());
+    assert!(
+        final_choice["message"].get("tool_calls").is_none(),
+        "Expected no tool_calls field in final response"
+    );
 
     println!(
         "Multi-turn test passed! Got final response: {}",

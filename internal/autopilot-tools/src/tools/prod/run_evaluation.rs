@@ -1,7 +1,7 @@
 //! Tool for running evaluations on datasets.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::{borrow::Cow, time::Duration};
 
 use async_trait::async_trait;
 use durable_tools::{
@@ -88,6 +88,10 @@ impl ToolMetadata for RunEvaluationTool {
         )
     }
 
+    fn strict(&self) -> bool {
+        false // precision_targets uses additionalProperties: {type: number} not supported in strict mode
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
@@ -133,7 +137,8 @@ impl ToolMetadata for RunEvaluationTool {
                     "description": "Include per-datapoint results in the response (default: false)."
                 }
             },
-            "required": ["evaluation_name", "variant_name"]
+            "required": ["evaluation_name", "variant_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -142,6 +147,10 @@ impl ToolMetadata for RunEvaluationTool {
             }
             .into()
         })
+    }
+
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(30 * 60)
     }
 }
 

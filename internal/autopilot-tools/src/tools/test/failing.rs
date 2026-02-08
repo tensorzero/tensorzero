@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// Parameters for the failing tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct FailingToolParams {
     /// The error message to return.
     pub error_message: String,
