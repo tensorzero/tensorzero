@@ -75,13 +75,18 @@ check_dockerfile \
   "rust:$RUST_VERSION" \
   "uses rust:$RUST_VERSION"
 
+check_dockerfile \
+  "tensorzero-core/tests/e2e/Dockerfile.live" \
+  "FROM lukemathwalker/cargo-chef:" \
+  "rust-$RUST_MAJOR_MINOR" \
+  "cargo-chef uses rust-$RUST_MAJOR_MINOR"
+
 # Other Dockerfiles using rust:X.YY.Z
 DOCKERFILES=(
   "provider-proxy/Dockerfile"
   "evaluations/Dockerfile"
   "tensorzero-core/tests/e2e/Dockerfile.gateway.e2e"
   "tensorzero-core/tests/e2e/Dockerfile.clickhouse"
-  "tensorzero-core/tests/e2e/Dockerfile.live"
   "tensorzero-core/tests/mock-provider-api/Dockerfile"
   "ui/fixtures/Dockerfile.unit"
 )
