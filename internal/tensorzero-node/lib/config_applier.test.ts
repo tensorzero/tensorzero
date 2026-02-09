@@ -1,22 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { ConfigWriter } from "./index";
+import { ConfigApplier } from "./index";
 import type { EditPayload } from "./bindings";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
 
-describe("ConfigWriter", () => {
+describe("ConfigApplier", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "config-writer-test-"));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "config-applier-test-"));
   });
 
   afterEach(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("should create a ConfigWriter and apply an UpsertVariant edit", async () => {
+  it("should create a ConfigApplier and apply an UpsertVariant edit", async () => {
     // Create a sample config file
     const configContent = `[functions.my_function]
 type = "chat"
@@ -27,9 +27,9 @@ model = "gpt-4"
 `;
     await fs.writeFile(path.join(tmpDir, "tensorzero.toml"), configContent);
 
-    // Create ConfigWriter
+    // Create ConfigApplier
     const globPattern = path.join(tmpDir, "**/*.toml");
-    const writer = await ConfigWriter.new(globPattern);
+    const applier = await ConfigApplier.new(globPattern);
 
     // Create an UpsertVariant edit
     const edit: EditPayload = {
@@ -65,7 +65,7 @@ model = "gpt-4"
     };
 
     // Apply the edit
-    const writtenPaths = await writer.applyEdit(edit);
+    const writtenPaths = await applier.applyEdit(edit);
 
     // Verify we got paths back
     expect(
@@ -101,7 +101,7 @@ model = "gpt-4"
   it("should fail with invalid glob pattern", async () => {
     const globPattern = path.join(tmpDir, "**/*.toml");
     // No config files exist, should fail
-    await expect(ConfigWriter.new(globPattern)).rejects.toThrow();
+    await expect(ConfigApplier.new(globPattern)).rejects.toThrow();
   });
 
   it("should fail with invalid JSON", async () => {
@@ -112,14 +112,15 @@ type = "chat"
     await fs.writeFile(path.join(tmpDir, "tensorzero.toml"), configContent);
 
     const globPattern = path.join(tmpDir, "**/*.toml");
-    const writer = await ConfigWriter.new(globPattern);
+    const applier = await ConfigApplier.new(globPattern);
 
     // Try to apply an invalid edit (access the native method directly via workaround)
     // Since applyEdit expects EditPayload, we need to test via the native binding
     // This tests that invalid JSON is handled properly
-    const nativeWriter = (writer as unknown as { nativeConfigWriter: unknown })
-      .nativeConfigWriter as { applyEdit: (json: string) => Promise<string[]> };
-    await expect(nativeWriter.applyEdit("invalid json")).rejects.toThrow(
+    const nativeApplier = (
+      applier as unknown as { nativeConfigApplier: unknown }
+    ).nativeConfigApplier as { applyEdit: (json: string) => Promise<string[]> };
+    await expect(nativeApplier.applyEdit("invalid json")).rejects.toThrow(
       "Failed to parse EditPayload",
     );
   });

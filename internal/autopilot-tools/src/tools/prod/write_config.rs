@@ -15,8 +15,8 @@ use tensorzero_core::config::UninitializedConfig;
 
 use autopilot_client::AutopilotSideInfo;
 
-// Re-export EditPayload types from tensorzero-config-writer
-pub use config_writer::{
+// Re-export EditPayload types from config-applier
+pub use config_applier::{
     EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
     UpsertVariantPayload,
 };
