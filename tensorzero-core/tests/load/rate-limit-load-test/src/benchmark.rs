@@ -186,7 +186,7 @@ pub async fn create_valkey_client() -> Result<ValkeyConnectionInfo> {
     let valkey_url = std::env::var("TENSORZERO_VALKEY_URL")
         .unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
-    let client = ValkeyConnectionInfo::new(&valkey_url)
+    let client = ValkeyConnectionInfo::new(&valkey_url, None)
         .await
         .map_err(|e| anyhow!("Failed to connect to Valkey: {e}"))?;
 

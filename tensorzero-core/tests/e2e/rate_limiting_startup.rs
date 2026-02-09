@@ -480,7 +480,7 @@ async fn test_valkey_migration_old_ratelimit_keys() {
     );
 
     // Create the ValkeyConnectionInfo, which triggers the migration
-    let _valkey_conn = ValkeyConnectionInfo::new(&valkey_url)
+    let _valkey_conn = ValkeyConnectionInfo::new(&valkey_url, None)
         .await
         .expect("Failed to create ValkeyConnectionInfo");
 
@@ -556,7 +556,7 @@ async fn test_valkey_migration_does_not_overwrite_existing_new_keys() {
         .expect("Failed to set new key");
 
     // Create the ValkeyConnectionInfo, which triggers the migration
-    let _valkey_conn = ValkeyConnectionInfo::new(&valkey_url)
+    let _valkey_conn = ValkeyConnectionInfo::new(&valkey_url, None)
         .await
         .expect("Failed to create ValkeyConnectionInfo");
 

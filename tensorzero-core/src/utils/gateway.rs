@@ -257,7 +257,8 @@ impl GatewayHandle {
             postgres_connection_info.clone(),
         );
         let config = Arc::new(Box::pin(config.into_config(&db)).await?);
-        let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
+        let valkey_connection_info =
+            setup_valkey(valkey_url.as_deref(), config.gateway.cache.valkey.ttl_s).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
@@ -610,9 +611,12 @@ pub async fn setup_postgres(
 ///
 /// # Arguments
 /// * `valkey_url` - Optional Valkey URL (from `TENSORZERO_VALKEY_URL` env var)
-pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionInfo, Error> {
+pub async fn setup_valkey(
+    valkey_url: Option<&str>,
+    cache_ttl_s: Option<u64>,
+) -> Result<ValkeyConnectionInfo, Error> {
     match valkey_url {
-        Some(url) => ValkeyConnectionInfo::new(url).await,
+        Some(url) => ValkeyConnectionInfo::new(url, cache_ttl_s).await,
         None => {
             tracing::debug!("Disabling Valkey: `TENSORZERO_VALKEY_URL` is not set.");
             Ok(ValkeyConnectionInfo::Disabled)
@@ -869,6 +873,7 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
             relay: None,
             metrics: Default::default(),
+            cache: Default::default(),
         };
 
         let config = Config {
@@ -941,6 +946,7 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
             relay: None,
             metrics: Default::default(),
+            cache: Default::default(),
         };
 
         let config = Config {
@@ -978,6 +984,7 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
             relay: None,
             metrics: Default::default(),
+            cache: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
@@ -1014,6 +1021,7 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
             relay: None,
             metrics: Default::default(),
+            cache: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
