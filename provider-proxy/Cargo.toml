@@ -39,7 +39,7 @@ workspace = true
 
 [dev-dependencies]
 axum.workspace = true
-rand = "0.9.1"
+rand = "0.10.0"
 async-stream.workspace = true
 reqwest-sse-stream.workspace = true
 futures-util = "0.3.31"
