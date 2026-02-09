@@ -17,6 +17,7 @@ permissions:
   actions: read
 
 env:
+  CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}

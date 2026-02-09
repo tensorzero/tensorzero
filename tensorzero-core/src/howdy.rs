@@ -31,9 +31,10 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::{config::Config, utils::spawn_ignoring_shutdown};
+use crate::{db::clickhouse::ClickHouseConnectionInfo, feature_flags};
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -47,6 +48,7 @@ lazy_static! {
 pub fn setup_howdy(
     config: &Config,
     clickhouse: ClickHouseConnectionInfo,
+    postgres: PostgresConnectionInfo,
     token: CancellationToken,
 ) {
     if config.gateway.disable_pseudonymous_usage_analytics
@@ -55,17 +57,23 @@ pub fn setup_howdy(
         info!("Pseudonymous usage analytics is disabled");
         return;
     }
-    // TODO(shuyangli): Don't like this...
-    if clickhouse.client_type() == ClickHouseClientType::Disabled {
+
+    // TODO(#5691): Support reading deployment ID when ClickHouse is disabled.
+    let clickhouse_disabled = clickhouse.client_type() == ClickHouseClientType::Disabled;
+    if clickhouse_disabled {
         return;
     }
-    spawn_ignoring_shutdown(howdy_loop(clickhouse, token));
+    spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, token));
 }
 
 /// Loops and sends usage data to the Howdy service every 6 hours.
-pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: CancellationToken) {
+pub async fn howdy_loop(
+    clickhouse: ClickHouseConnectionInfo,
+    postgres: PostgresConnectionInfo,
+    token: CancellationToken,
+) {
     let client = Client::new();
-    let deployment_id = match get_deployment_id(&clickhouse).await {
+    let deployment_id = match get_deployment_id(&clickhouse, &postgres).await {
         Ok(deployment_id) => deployment_id,
         Err(()) => {
             return;
@@ -106,21 +114,46 @@ async fn send_howdy(
     Ok(())
 }
 
-/// Gets the deployment ID from the ClickHouse DB.
-/// This is a 64 char hex hash that is used to identify the deployment.
-/// It is stored in the `DeploymentID` table.
-pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<String, ()> {
-    let response = clickhouse
-        .run_query_synchronous_no_params(
-            "SELECT deployment_id FROM DeploymentID LIMIT 1".to_string(),
-        )
-        .await
-        .map_err(|_| ())?;
-    if response.response.is_empty() {
-        debug!("Failed to get deployment ID (response was empty)");
+/// Synchronizes the deployment ID from ClickHouse to Postgres if Postgres is enabled.
+/// For existing ClickHouse deployments, we make sure Postgres contains the same deployment ID.
+async fn synchronize_deployment_id(
+    clickhouse: &ClickHouseConnectionInfo,
+    postgres: &PostgresConnectionInfo,
+) -> Result<(), ()> {
+    if !feature_flags::ENABLE_POSTGRES_WRITE.get() {
+        return Ok(());
+    }
+
+    if clickhouse.client_type() != ClickHouseClientType::Production {
+        return Ok(());
+    }
+    if !matches!(postgres, &PostgresConnectionInfo::Enabled { .. }) {
+        return Ok(());
+    }
+    let Ok(id) = clickhouse.get_deployment_id().await else {
+        tracing::debug!("Failed to get deployment ID from ClickHouse");
+        return Err(());
+    };
+
+    if let Err(e) = &postgres.insert_deployment_id(&id).await {
+        tracing::debug!("Failed to sync deployment ID to Postgres: {e}");
         return Err(());
     }
-    Ok(response.response.trim().to_string())
+    Ok(())
+}
+
+/// Gets the deployment ID.
+/// This is a 64 char hex hash that is used to identify the deployment.
+pub async fn get_deployment_id(
+    clickhouse: &ClickHouseConnectionInfo,
+    postgres: &PostgresConnectionInfo,
+) -> Result<String, ()> {
+    // Make sure deployment ID is consistent between ClickHouse and Postgres
+    // TODO(#5691): This is currently a no-op gated behind ENABLE_POSTGRES_READ.
+    synchronize_deployment_id(clickhouse, postgres).await?;
+
+    // TODO(#5691): Support reading deployment ID from Postgres
+    return clickhouse.get_deployment_id().await;
 }
 
 /// Gets the howdy report.
