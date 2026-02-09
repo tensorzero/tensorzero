@@ -11,7 +11,9 @@ import {
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
-import FeedbackTable from "~/components/feedback/FeedbackTable";
+import FeedbackTable, {
+  FeedbackTableHeaders,
+} from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import {
@@ -35,15 +37,12 @@ import type {
   FeedbackBounds,
 } from "~/types/tensorzero";
 import { Skeleton } from "~/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableRow } from "~/components/ui/table";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
-import { TableErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+  TableErrorNotice,
+  getErrorMessage,
+} from "~/components/ui/error/ErrorContentPrimitives";
+import type { FeedbackActionData } from "~/routes/api/feedback/route";
 import { AlertCircle } from "lucide-react";
 
 export type InferencesData = {
@@ -170,11 +169,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-/** Response type from /api/feedback endpoint */
-type FeedbackActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
-
 function InferencePaginationContent({ data }: { data: InferencesData }) {
   const { inferences, hasNextPage, hasPreviousPage } = data;
   const navigate = useNavigate();
@@ -208,24 +202,12 @@ function InferencePaginationContent({ data }: { data: InferencesData }) {
   );
 }
 
-function FeedbackTableHeaders() {
-  return (
-    <TableHeader>
-      <TableRow>
-        <TableHead>ID</TableHead>
-        <TableHead>Metric</TableHead>
-        <TableHead>Value</TableHead>
-        <TableHead>Tags</TableHead>
-        <TableHead>Time</TableHead>
-      </TableRow>
-    </TableHeader>
-  );
-}
-
 function FeedbackSectionError() {
   const error = useAsyncError();
-  const message =
-    error instanceof Error ? error.message : "Failed to load feedback";
+  const message = getErrorMessage({
+    error,
+    fallback: "Failed to load feedback",
+  });
 
   return (
     <>

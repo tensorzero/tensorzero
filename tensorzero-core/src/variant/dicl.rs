@@ -31,6 +31,7 @@ use crate::model::ModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::utils::retries::RetryConfig;
 use crate::{
+    db::DICLQueries,
     embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -601,49 +602,28 @@ impl DiclConfig {
             .into());
         };
 
-        // Format the embedding as a string for ClickHouse
-        let formatted_embedding = format!(
-            "[{}]",
-            embedding_vector
-                .as_float()
-                .ok_or_else(|| Error::new(ErrorDetails::InternalError {
-                    message: format!("Failed to convert DICL embedding to float array. {IMPOSSIBLE_ERROR_MESSAGE}")
-                }))?
-                .iter()
-                .map(|&x| x.to_string())
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-        let query = format!(
-            r"SELECT input, output, cosineDistance(embedding, {}) as cosine_distance
-                   FROM DynamicInContextLearningExample
-                   WHERE function_name='{}' AND variant_name='{}'
-                   ORDER BY cosine_distance ASC
-                   LIMIT {}
-                   FORMAT JSONEachRow",
-            formatted_embedding,
-            function_name,
-            variant_name,
-            self.k()
-        );
+        let embedding_floats = embedding_vector.as_float().ok_or_else(|| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!(
+                    "Failed to convert DICL embedding to float array. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            })
+        })?;
 
-        // Run the query on the ClickHouse database to find nearest neighbors
-        let result = clients
+        // Run the similarity search query via the DICLQueries trait
+        let dicl_results = clients
             .clickhouse_connection_info
-            .run_query_synchronous_no_params(query)
+            .get_similar_dicl_examples(function_name, variant_name, embedding_floats, self.k())
             .await?;
 
-        // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
-        let raw_examples: Vec<RawExample> = result
-            .response
-            .lines()
-            .map(serde_json::from_str::<RawExample>)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to parse raw examples: {e}"),
-                })
-            })?;
+        let raw_examples: Vec<RawExample> = dicl_results
+            .into_iter()
+            .map(|ex| RawExample {
+                input: ex.input,
+                output: ex.output,
+                cosine_distance: ex.cosine_distance,
+            })
+            .collect();
 
         let initial_count = raw_examples.len();
 

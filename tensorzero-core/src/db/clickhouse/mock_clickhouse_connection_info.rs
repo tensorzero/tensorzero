@@ -282,7 +282,7 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
     }
 
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
-        // Return ClickHouse quantiles since this is a mock for ClickHouse
-        super::migration_manager::migrations::migration_0037::QUANTILES
+        self.model_inference_queries
+            .get_model_latency_quantile_function_inputs()
     }
 }
