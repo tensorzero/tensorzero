@@ -1,0 +1,9 @@
+FROM postgres:14-trixie
+
+# Install pg_cron from Debian packages
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-14-cron \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure postgresql.conf to load pg_cron
+RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample

@@ -84,7 +84,7 @@ export type EventsData = {
   status: AutopilotStatus;
 };
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const sessionId = params.session_id;
   if (!sessionId) {
     throw data("Session ID is required", { status: 400 });
@@ -95,6 +95,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
+    const url = new URL(request.url);
+    const initialMessage = url.searchParams.get("message") ?? undefined;
     return {
       sessionId: "new",
       eventsData: {
@@ -105,6 +107,7 @@ export async function loader({ params }: Route.LoaderArgs) {
       },
       isNewSession: true,
       configWriteEnabled,
+      initialMessage,
     };
   }
 
@@ -141,6 +144,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     eventsData: eventsDataPromise,
     isNewSession: false,
     configWriteEnabled,
+    initialMessage: undefined,
   };
 }
 
@@ -378,8 +382,13 @@ function EventStreamContent({
 function AutopilotSessionEventsPageContent({
   loaderData,
 }: Route.ComponentProps) {
-  const { sessionId, eventsData, isNewSession, configWriteEnabled } =
-    loaderData;
+  const {
+    sessionId,
+    eventsData,
+    isNewSession,
+    configWriteEnabled,
+    initialMessage,
+  } = loaderData;
   const { yoloMode, setYoloMode } = useAutopilotSession();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -586,10 +595,9 @@ function AutopilotSessionEventsPageContent({
     });
   }, [interruptFetcher, sessionId]);
 
-  // Show toast on interrupt result (only if still on the same session)
+  // Show toast on interrupt failure (only if still on the same session)
   useEffect(() => {
     if (interruptFetcher.state === "idle" && interruptFetcher.data) {
-      // Only show toast if we're still on the session that was interrupted
       if (interruptedSessionRef.current !== sessionId) {
         return;
       }
@@ -597,12 +605,7 @@ function AutopilotSessionEventsPageContent({
         success: boolean;
         error?: string;
       };
-      if (data.success) {
-        toast.success({
-          title: "Session interrupted",
-          description: "The autopilot session has been interrupted.",
-        });
-      } else if (data.error) {
+      if (data.error) {
         toast.error({
           title: "Failed to interrupt session",
           description: data.error,
@@ -887,6 +890,7 @@ function AutopilotSessionEventsPageContent({
                 isInterruptible={isInterruptible}
                 isInterrupting={interruptFetcher.state !== "idle"}
                 onInterrupt={handleInterruptSession}
+                initialMessage={initialMessage}
               />
             </div>
           </div>

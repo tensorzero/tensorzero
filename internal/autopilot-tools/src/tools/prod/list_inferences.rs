@@ -44,6 +44,10 @@ impl ToolMetadata for ListInferencesTool {
         )
     }
 
+    fn strict(&self) -> bool {
+        false // Filter children are recursive arbitrary objects
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
@@ -92,7 +96,7 @@ impl ToolMetadata for ListInferencesTool {
                 },
                 "filters": {
                     "description": "Optional filter to apply when querying inferences. Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).",
-                    "oneOf": [
+                    "anyOf": [
                         {
                             "type": "object",
                             "description": "Filter by float metric value.",
@@ -106,7 +110,8 @@ impl ToolMetadata for ListInferencesTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "metric_name", "value", "comparison_operator"]
+                            "required": ["type", "metric_name", "value", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -116,7 +121,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "metric_name": { "type": "string", "description": "Name of the metric to filter by." },
                                 "value": { "type": "boolean", "description": "Value to compare against." }
                             },
-                            "required": ["type", "metric_name", "value"]
+                            "required": ["type", "metric_name", "value"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -125,7 +131,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "type": { "const": "demonstration_feedback" },
                                 "has_demonstration": { "type": "boolean", "description": "Whether the inference has a demonstration." }
                             },
-                            "required": ["type", "has_demonstration"]
+                            "required": ["type", "has_demonstration"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -140,7 +147,8 @@ impl ToolMetadata for ListInferencesTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "key", "value", "comparison_operator"]
+                            "required": ["type", "key", "value", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -154,7 +162,8 @@ impl ToolMetadata for ListInferencesTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "time", "comparison_operator"]
+                            "required": ["type", "time", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -163,7 +172,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "type": { "const": "and" },
                                 "children": { "type": "array", "description": "Array of filters to AND together.", "items": { "type": "object" } }
                             },
-                            "required": ["type", "children"]
+                            "required": ["type", "children"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -172,7 +182,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "type": { "const": "or" },
                                 "children": { "type": "array", "description": "Array of filters to OR together.", "items": { "type": "object" } }
                             },
-                            "required": ["type", "children"]
+                            "required": ["type", "children"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -181,7 +192,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "type": { "const": "not" },
                                 "child": { "type": "object", "description": "Filter to negate." }
                             },
-                            "required": ["type", "child"]
+                            "required": ["type", "child"],
+                            "additionalProperties": false
                         }
                     ]
                 },
@@ -207,7 +219,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "description": "The ordering direction."
                             }
                         },
-                        "required": ["by", "direction"]
+                        "required": ["by", "direction"],
+                        "additionalProperties": false
                     }
                 },
                 "search_query_experimental": {

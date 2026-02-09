@@ -26,7 +26,7 @@ The judge is configurable to fit your problem by describing the task and metric 
   <img src="visualization.svg" alt="Metrics by Variant" />
 </p>
 
-Though &mdash; unsurprisingly &mdash; it doesn't outperform DICL (see `recipes/dicl`) and supervised fine-tuning (see `recipes/supervised_fine_tuning`), it materially outperforms a naive initial prompt.
+Though &mdash; unsurprisingly &mdash; it doesn't outperform DICL and supervised fine-tuning, it materially outperforms a naive initial prompt.
 
 > [!TIP]
 >

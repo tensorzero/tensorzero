@@ -1,5 +1,6 @@
 services:
   postgres:
+    # This is for ClickHouse tests, not Postgres tests, so we don't require our custom image.
     image: postgres:14-alpine
     environment:
       POSTGRES_DB: tensorzero-e2e-tests

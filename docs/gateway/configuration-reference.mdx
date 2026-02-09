@@ -4558,30 +4558,30 @@ There are no additional fields available for this type.
 
 ## `[postgres]`
 
-The `[postgres]` section defines the configuration for PostgreSQL connectivity.
+The `[postgres]` section defines the configuration for Postgres connectivity.
 
-PostgreSQL is required for certain TensorZero features including [adaptive experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
-PostgreSQL can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey-redis) is recommended for high-throughput deployments.
-You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
+Postgres is required for certain TensorZero features including [adaptive experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
+Postgres can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey-redis) is recommended for high-throughput deployments.
+You can connect to Postgres by setting the `TENSORZERO_POSTGRES_URL` environment variable.
 
 ### `connection_pool_size`
 
 - **Type:** integer
 - **Required:** no (default: `20`)
 
-Defines the maximum number of connections in the PostgreSQL connection pool.
+Defines the maximum number of connections in the Postgres connection pool.
 
 ### `enabled`
 
 - **Type:** boolean
 - **Required:** no (default: `null`)
 
-Enable PostgreSQL connectivity.
-If `true`, the gateway will throw an error on startup if it fails to connect to PostgreSQL (requires `TENSORZERO_POSTGRES_URL` environment variable).
-If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
-If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
+Enable Postgres connectivity.
+If `true`, the gateway will throw an error on startup if it fails to connect to Postgres (requires `TENSORZERO_POSTGRES_URL` environment variable).
+If `false`, the gateway will not use Postgres even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
+If omitted, the gateway will connect to Postgres if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable Postgres with a warning.
 
-If you have features that require PostgreSQL (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
+If you have features that require Postgres (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
 
 ## `[rate_limiting]`
 
