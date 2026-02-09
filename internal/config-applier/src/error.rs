@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ConfigWriterError {
+pub enum ConfigApplierError {
     #[error("IO error for `{path}`: {message}")]
     Io { path: PathBuf, message: String },
 
@@ -39,7 +39,7 @@ pub enum ConfigWriterError {
     InvalidConfigStructure { path: String, key: String },
 }
 
-impl ConfigWriterError {
+impl ConfigApplierError {
     pub fn io(path: impl Into<PathBuf>, err: impl std::fmt::Display) -> Self {
         Self::Io {
             path: path.into(),

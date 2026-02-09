@@ -1,18 +1,18 @@
-use config_writer::{ConfigWriter as InnerConfigWriter, EditPayload};
+use config_applier::{ConfigApplier as InnerConfigApplier, EditPayload};
 use tokio::sync::Mutex;
 
-#[napi(js_name = "ConfigWriter")]
-pub struct ConfigWriter {
-    inner: Mutex<InnerConfigWriter>,
+#[napi(js_name = "ConfigApplier")]
+pub struct ConfigApplier {
+    inner: Mutex<InnerConfigApplier>,
 }
 
 #[napi]
-impl ConfigWriter {
+impl ConfigApplier {
     #[napi(factory)]
     pub async fn new(glob_pattern: String) -> Result<Self, napi::Error> {
-        let inner = InnerConfigWriter::new(&glob_pattern)
-            .await
-            .map_err(|e| napi::Error::from_reason(format!("Failed to create ConfigWriter: {e}")))?;
+        let inner = InnerConfigApplier::new(&glob_pattern).await.map_err(|e| {
+            napi::Error::from_reason(format!("Failed to create ConfigApplier: {e}"))
+        })?;
         Ok(Self {
             inner: Mutex::new(inner),
         })
