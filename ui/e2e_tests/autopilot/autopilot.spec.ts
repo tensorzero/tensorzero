@@ -43,13 +43,6 @@ test("should interrupt an active session", async ({ page }) => {
   // Click the stop button
   await stopButton.click();
 
-  // Verify the success toast appears
-  await expect(
-    page.getByRole("status").filter({ hasText: "Session interrupted" }),
-  ).toBeVisible({
-    timeout: 10000,
-  });
-
   // Verify the status update message appears in the event stream
   await expect(page.getByText("Interrupted session")).toBeVisible({
     timeout: 10000,
@@ -285,5 +278,150 @@ test.describe("YOLO mode", () => {
     await expect(page.getByText("Tool Result").first()).toBeVisible({
       timeout: 60000,
     });
+  });
+});
+
+test.describe("Tool call authorization deduplication", () => {
+  test("spam-clicking Approve sends only one request", async ({ page }) => {
+    test.setTimeout(120000);
+
+    // Track requests by tool_call_event_id to scope assertion to the clicked tool call
+    const requestsByToolCallId = new Map<string, number>();
+    let firstToolCallId: string | null = null;
+
+    await page.route("**/events/authorize", async (route) => {
+      const body = route.request().postDataJSON();
+      const toolCallId = body?.tool_call_event_id;
+      if (toolCallId) {
+        if (!firstToolCallId) {
+          firstToolCallId = toolCallId;
+        }
+        requestsByToolCallId.set(
+          toolCallId,
+          (requestsByToolCallId.get(toolCallId) ?? 0) + 1,
+        );
+      }
+      await route.continue();
+    });
+
+    await page.goto("/autopilot/sessions/new");
+
+    const messageInput = page.getByRole("textbox");
+    await messageInput.fill(
+      "What functions are available in my TensorZero config?",
+    );
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+      timeout: 30000,
+    });
+
+    // Wait for Approve button to appear
+    const approveButton = page.getByRole("button", { name: "Approve" }).first();
+    await expect(approveButton).toBeVisible({ timeout: 60000 });
+
+    // Get button position before clicking - use mouse.click at fixed coordinates
+    // to avoid flakiness if the button is removed/disabled after first click
+    const boundingBox = await approveButton.boundingBox();
+    if (!boundingBox) {
+      throw new Error("Approve button bounding box not found");
+    }
+    const clickX = boundingBox.x + boundingBox.width / 2;
+    const clickY = boundingBox.y + boundingBox.height / 2;
+
+    // Spam-click at the fixed position rapidly
+    await Promise.all([
+      page.mouse.click(clickX, clickY),
+      page.mouse.click(clickX, clickY),
+      page.mouse.click(clickX, clickY),
+    ]);
+
+    // Wait for request to complete
+    await page.waitForTimeout(2000);
+
+    // Only count requests for the first tool call (the one we spam-clicked)
+    const requestCount = firstToolCallId
+      ? (requestsByToolCallId.get(firstToolCallId) ?? 0)
+      : 0;
+    expect(
+      requestCount,
+      "Spam-clicking Approve should send only one request for the same tool call",
+    ).toBe(1);
+  });
+
+  test("spam-clicking Reject sends only one request", async ({ page }) => {
+    test.setTimeout(120000);
+
+    // Track requests by tool_call_event_id to scope assertion to the clicked tool call
+    const requestsByToolCallId = new Map<string, number>();
+    let firstToolCallId: string | null = null;
+
+    await page.route("**/events/authorize", async (route) => {
+      const body = route.request().postDataJSON();
+      const toolCallId = body?.tool_call_event_id;
+      if (toolCallId) {
+        if (!firstToolCallId) {
+          firstToolCallId = toolCallId;
+        }
+        requestsByToolCallId.set(
+          toolCallId,
+          (requestsByToolCallId.get(toolCallId) ?? 0) + 1,
+        );
+      }
+      await route.continue();
+    });
+
+    await page.goto("/autopilot/sessions/new");
+
+    const messageInput = page.getByRole("textbox");
+    await messageInput.fill(
+      "What functions are available in my TensorZero config?",
+    );
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+      timeout: 30000,
+    });
+
+    // Wait for Reject button to appear
+    const rejectButton = page.getByRole("button", { name: "Reject" }).first();
+    await expect(rejectButton).toBeVisible({ timeout: 60000 });
+
+    // Click Reject to show confirmation
+    await rejectButton.click();
+
+    // Wait for and spam-click the confirm button (button has aria-label="Confirm rejection")
+    const confirmButton = page
+      .getByRole("button", { name: "Confirm rejection" })
+      .first();
+    await expect(confirmButton).toBeVisible();
+
+    // Get button position before clicking - use mouse.click at fixed coordinates
+    // to avoid flakiness if the button is removed/disabled after first click
+    const boundingBox = await confirmButton.boundingBox();
+    if (!boundingBox) {
+      throw new Error("Confirm rejection button bounding box not found");
+    }
+    const clickX = boundingBox.x + boundingBox.width / 2;
+    const clickY = boundingBox.y + boundingBox.height / 2;
+
+    // Spam-click at the fixed position rapidly
+    await Promise.all([
+      page.mouse.click(clickX, clickY),
+      page.mouse.click(clickX, clickY),
+      page.mouse.click(clickX, clickY),
+    ]);
+
+    // Wait for request to complete
+    await page.waitForTimeout(2000);
+
+    // Only count requests for the first tool call (the one we spam-clicked)
+    const requestCount = firstToolCallId
+      ? (requestsByToolCallId.get(firstToolCallId) ?? 0)
+      : 0;
+    expect(
+      requestCount,
+      "Spam-clicking Reject confirm should send only one request for the same tool call",
+    ).toBe(1);
   });
 });

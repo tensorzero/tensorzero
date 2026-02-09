@@ -37,6 +37,7 @@ type ChatInputProps = {
   isInterruptible?: boolean;
   isInterrupting?: boolean;
   onInterrupt?: () => void;
+  initialMessage?: string;
 };
 
 export function ChatInput({
@@ -50,12 +51,18 @@ export function ChatInput({
   isInterruptible = false,
   isInterrupting = false,
   onInterrupt,
+  initialMessage,
 }: ChatInputProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialMessage ?? "");
   const fetcher = useFetcher<MessageResponse>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
   const pendingTextRef = useRef<string>("");
+
+  // Sync text when initialMessage changes (e.g., navigating between ?message= URLs)
+  useEffect(() => {
+    setText(initialMessage ?? "");
+  }, [initialMessage]);
 
   // Store callbacks in refs to avoid re-triggering the effect when they change
   const onMessageSentRef = useRef(onMessageSent);
@@ -72,11 +79,18 @@ export function ChatInput({
 
   // Auto-focus textarea when navigating to new session page
   // Wait for disabled state to clear before focusing
+  // Place cursor at the end so user can start typing immediately
+  // Use initialMessage length rather than textarea.value.length to avoid race
+  // with the text-sync effect (setText hasn't flushed to the DOM yet)
   useEffect(() => {
     if (isNewSession && !disabled && textareaRef.current) {
-      textareaRef.current.focus();
+      const textarea = textareaRef.current;
+      textarea.focus();
+      const length = (initialMessage ?? "").length;
+      textarea.selectionStart = length;
+      textarea.selectionEnd = length;
     }
-  }, [isNewSession, disabled]);
+  }, [isNewSession, disabled, initialMessage]);
 
   // Sample a random placeholder for new sessions, default for existing sessions
   const placeholder = useMemo(

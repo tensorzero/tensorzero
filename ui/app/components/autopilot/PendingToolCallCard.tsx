@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { Button } from "~/components/ui/button";
 import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import type { GatewayEvent } from "~/types/tensorzero";
@@ -10,7 +11,8 @@ type PendingToolCallCardProps = {
   event: GatewayEvent;
   isLoading: boolean;
   loadingAction?: "approving" | "rejecting" | "approving_all";
-  onAuthorize: (approved: boolean) => void;
+  onApprove: () => void;
+  onReject: () => void;
   onApproveAll?: () => void;
   additionalCount: number;
   isInCooldown?: boolean;
@@ -21,7 +23,8 @@ export function PendingToolCallCard({
   event,
   isLoading,
   loadingAction,
-  onAuthorize,
+  onApprove,
+  onReject,
   onApproveAll,
   additionalCount,
   isInCooldown = false,
@@ -38,7 +41,7 @@ export function PendingToolCallCard({
   const { name, arguments: args } = event.payload;
 
   const handleApprove = () => {
-    onAuthorize(true);
+    onApprove();
   };
 
   const handleRejectClick = () => {
@@ -46,7 +49,7 @@ export function PendingToolCallCard({
   };
 
   const handleRejectConfirm = () => {
-    onAuthorize(false);
+    onReject();
     setConfirmReject(false);
   };
 
@@ -103,24 +106,24 @@ export function PendingToolCallCard({
               role="group"
               aria-label="Confirm rejection"
             >
-              <button
-                type="button"
-                className="h-6 cursor-pointer rounded bg-red-600 px-2 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              <Button
+                variant="destructive"
+                size="xs"
                 disabled={isDisabled}
                 onClick={handleRejectConfirm}
                 aria-label="Confirm rejection"
               >
                 {loadingAction === "rejecting" ? "Rejecting..." : "Yes, reject"}
-              </button>
-              <button
-                type="button"
-                className="h-6 cursor-pointer rounded bg-gray-100 px-2 text-xs font-medium hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:hover:bg-gray-700"
+              </Button>
+              <Button
+                variant="secondary"
+                size="xs"
                 disabled={isDisabled}
                 onClick={handleRejectCancel}
                 aria-label="Cancel rejection"
               >
                 No, keep it
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -130,33 +133,28 @@ export function PendingToolCallCard({
                 </span>
               )}
               {additionalCount > 0 && onApproveAll && (
-                <button
-                  type="button"
-                  className="h-6 cursor-pointer rounded border border-green-600 bg-green-50 px-2 text-xs font-medium text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-600 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-900/40"
+                <Button
+                  variant="successOutline"
+                  size="xs"
                   disabled={isDisabled}
                   onClick={onApproveAll}
                 >
                   {loadingAction === "approving_all"
                     ? "Approving..."
                     : `Approve All (${additionalCount + 1})`}
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
-                className="bg-fg-primary text-bg-primary hover:bg-fg-secondary h-6 cursor-pointer rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isDisabled}
-                onClick={handleApprove}
-              >
+              <Button size="xs" disabled={isDisabled} onClick={handleApprove}>
                 {loadingAction === "approving" ? "Approving..." : "Approve"}
-              </button>
-              <button
-                type="button"
-                className="h-6 cursor-pointer rounded border border-red-300 px-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+              </Button>
+              <Button
+                variant="destructiveOutline"
+                size="xs"
                 disabled={isDisabled}
                 onClick={handleRejectClick}
               >
                 Reject
-              </button>
+              </Button>
             </div>
           )}
           <div className="text-fg-muted flex items-center gap-1.5 text-xs">

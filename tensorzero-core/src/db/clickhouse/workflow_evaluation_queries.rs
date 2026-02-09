@@ -311,7 +311,7 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
                   metric_name,
                   toUInt32(count()) as count,
                   avg(value) as avg_metric,
-                  stddevSamp(value) as stdev,
+                  stddevSampStable(value) as stdev,
                   false as is_boolean
                 FROM FloatMetricFeedbackByTargetId
                 WHERE target_id IN (
@@ -325,7 +325,7 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
                   metric_name,
                   toUInt32(count()) as count,
                   avg(value) as avg_metric,
-                  stddevSamp(value) as stdev,
+                  stddevSampStable(value) as stdev,
                   true as is_boolean
                 FROM BooleanMetricFeedbackByTargetId
                 WHERE target_id IN (

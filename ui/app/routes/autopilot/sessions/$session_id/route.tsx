@@ -30,14 +30,14 @@ import {
 } from "~/components/autopilot/AutopilotStatusBanner";
 import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
-import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
-import { logger } from "~/utils/logger";
 import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
 import { useAutoApproval } from "~/hooks/use-auto-approval";
+import { useManualAuthorization } from "~/hooks/use-manual-authorization";
+import type { AuthorizationLoadingAction } from "~/utils/autopilot/types";
 import {
   AutopilotSessionProvider,
   useAutopilotSession,
@@ -82,7 +82,7 @@ export type EventsData = {
   status: AutopilotStatus;
 };
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const sessionId = params.session_id;
   if (!sessionId) {
     throw data("Session ID is required", { status: 400 });
@@ -90,6 +90,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
+    const url = new URL(request.url);
+    const initialMessage = url.searchParams.get("message") ?? undefined;
     return {
       sessionId: "new",
       eventsData: {
@@ -99,6 +101,7 @@ export async function loader({ params }: Route.LoaderArgs) {
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
+      initialMessage,
     };
   }
 
@@ -134,6 +137,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     sessionId,
     eventsData: eventsDataPromise,
     isNewSession: false,
+    initialMessage: undefined,
   };
 }
 
@@ -367,7 +371,7 @@ function EventStreamContent({
 function AutopilotSessionEventsPageContent({
   loaderData,
 }: Route.ComponentProps) {
-  const { sessionId, eventsData, isNewSession } = loaderData;
+  const { sessionId, eventsData, isNewSession, initialMessage } = loaderData;
   const { yoloMode, setYoloMode } = useAutopilotSession();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -411,7 +415,7 @@ function AutopilotSessionEventsPageContent({
 
   // State for tool call authorization loading
   const [authLoadingStates, setAuthLoadingStates] = useState<
-    Map<string, "approving" | "rejecting" | "approving_all">
+    Map<string, AuthorizationLoadingAction>
   >(new Map());
 
   // State for SSE connection error
@@ -446,10 +450,13 @@ function AutopilotSessionEventsPageContent({
   const userActionRef = useRef(false);
   const [isInCooldown, setIsInCooldown] = useState(false);
 
-  // Reset state when navigating to a different session
-  // Note: key={sessionId} on EventStreamContent ensures a fresh mount that will call onLoaded
-  // We don't set isEventsLoading here because the effect ordering with Suspense is unpredictable -
-  // EventStreamContent's onLoaded may run before this effect, causing isEventsLoading to get stuck
+  // Manual authorization hook - handles deduplication of authorization requests
+  const manualAuthorization = useManualAuthorization(sessionId);
+  // Extract reset separately - it's stable (no deps) so won't cause extra effect triggers
+  const resetManualAuthorization = manualAuthorization.reset;
+
+  // Reset loading/error state when navigating to a different session
+  // Note: key={sessionId} on Suspense remounts EventStreamContent, which will call onLoaded
   useEffect(() => {
     setOptimisticMessages([]);
     setHasLoadError(false);
@@ -459,8 +466,9 @@ function AutopilotSessionEventsPageContent({
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
+    resetManualAuthorization();
     // Note: useAutoApproval handles its own cleanup on session change via internal effect
-  }, [sessionId, isNewSession]);
+  }, [sessionId, isNewSession, resetManualAuthorization]);
 
   useEffect(() => {
     const currentTopId = oldestPendingToolCall?.id ?? null;
@@ -485,42 +493,18 @@ function AutopilotSessionEventsPageContent({
     pendingToolCallIds,
   });
 
-  // Handle tool call authorization (manual)
-  const handleAuthorize = useCallback(
-    async (eventId: string, approved: boolean) => {
+  const handleApprove = useCallback(
+    async (eventId: string) => {
+      if (manualAuthorization.isProcessed(eventId)) return;
       userActionRef.current = true;
-
-      setAuthLoadingStates((prev) =>
-        new Map(prev).set(eventId, approved ? "approving" : "rejecting"),
-      );
+      setAuthLoadingStates((prev) => new Map(prev).set(eventId, "approving"));
 
       try {
-        const response = await fetch(
-          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/authorize`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tool_call_event_id: eventId,
-              status: approved
-                ? { type: "approved" }
-                : {
-                    type: "rejected",
-                    reason: "The user rejected the tool call.",
-                  },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error("Authorization failed");
-        }
-      } catch (err) {
-        logger.error("Failed to authorize tool call:", err);
+        await manualAuthorization.approve(eventId);
+      } catch {
         toast.error({
-          title: "Authorization failed",
-          description:
-            "Failed to submit tool call authorization. Please try again.",
+          title: "Approval failed",
+          description: "Failed to submit approval. Please try again.",
         });
       } finally {
         setAuthLoadingStates((prev) => {
@@ -530,28 +514,55 @@ function AutopilotSessionEventsPageContent({
         });
       }
     },
-    [sessionId, toast],
+    [manualAuthorization, toast],
   );
 
-  // Handle approve all tool calls (manual batch approval)
+  const handleReject = useCallback(
+    async (eventId: string) => {
+      if (manualAuthorization.isProcessed(eventId)) return;
+      userActionRef.current = true;
+      setAuthLoadingStates((prev) => new Map(prev).set(eventId, "rejecting"));
+
+      try {
+        await manualAuthorization.reject(eventId);
+      } catch {
+        toast.error({
+          title: "Rejection failed",
+          description: "Failed to submit rejection. Please try again.",
+        });
+      } finally {
+        setAuthLoadingStates((prev) => {
+          const next = new Map(prev);
+          next.delete(eventId);
+          return next;
+        });
+      }
+    },
+    [manualAuthorization, toast],
+  );
+
   const handleApproveAll = useCallback(async () => {
     if (pendingToolCalls.length === 0) return;
 
+    const eventIds = pendingToolCalls.map((e) => e.id);
+    const displayEventId = eventIds[0];
+    const lastEventId = eventIds[eventIds.length - 1];
+
+    // Early bailout if ALL events are already processed
+    // (allows batch to proceed if some events are still pending)
+    const hasUnprocessedEvents = eventIds.some(
+      (id) => !manualAuthorization.isProcessed(id),
+    );
+    if (!hasUnprocessedEvents) return;
+
     userActionRef.current = true;
-
-    // Use the oldest pending tool call's ID for loading state display
-    const displayEventId = pendingToolCalls[0].id;
-    // Use the newest pending tool call's ID for the API
-    const lastEventId = pendingToolCalls[pendingToolCalls.length - 1].id;
-
     setAuthLoadingStates((prev) =>
       new Map(prev).set(displayEventId, "approving_all"),
     );
 
     try {
-      await approveAllToolCalls(sessionId, lastEventId);
-    } catch (err) {
-      logger.error("Failed to approve all tool calls:", err);
+      await manualAuthorization.approveAll(eventIds, lastEventId);
+    } catch {
       toast.error({
         title: "Batch approval failed",
         description: "Failed to approve all tool calls. Please try again.",
@@ -563,7 +574,7 @@ function AutopilotSessionEventsPageContent({
         return next;
       });
     }
-  }, [sessionId, pendingToolCalls, toast]);
+  }, [pendingToolCalls, manualAuthorization, toast]);
 
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
@@ -574,10 +585,9 @@ function AutopilotSessionEventsPageContent({
     });
   }, [interruptFetcher, sessionId]);
 
-  // Show toast on interrupt result (only if still on the same session)
+  // Show toast on interrupt failure (only if still on the same session)
   useEffect(() => {
     if (interruptFetcher.state === "idle" && interruptFetcher.data) {
-      // Only show toast if we're still on the session that was interrupted
       if (interruptedSessionRef.current !== sessionId) {
         return;
       }
@@ -585,12 +595,7 @@ function AutopilotSessionEventsPageContent({
         success: boolean;
         error?: string;
       };
-      if (data.success) {
-        toast.success({
-          title: "Session interrupted",
-          description: "The autopilot session has been interrupted.",
-        });
-      } else if (data.error) {
+      if (data.error) {
         toast.error({
           title: "Failed to interrupt session",
           description: data.error,
@@ -848,9 +853,8 @@ function AutopilotSessionEventsPageContent({
                   loadingAction={authLoadingStates.get(
                     oldestPendingToolCall.id,
                   )}
-                  onAuthorize={(approved) =>
-                    handleAuthorize(oldestPendingToolCall.id, approved)
-                  }
+                  onApprove={() => handleApprove(oldestPendingToolCall.id)}
+                  onReject={() => handleReject(oldestPendingToolCall.id)}
                   onApproveAll={handleApproveAll}
                   additionalCount={pendingToolCalls.length - 1}
                   isInCooldown={isInCooldown}
@@ -866,6 +870,7 @@ function AutopilotSessionEventsPageContent({
                 isInterruptible={isInterruptible}
                 isInterrupting={interruptFetcher.state !== "idle"}
                 onInterrupt={handleInterruptSession}
+                initialMessage={initialMessage}
               />
             </div>
           </div>

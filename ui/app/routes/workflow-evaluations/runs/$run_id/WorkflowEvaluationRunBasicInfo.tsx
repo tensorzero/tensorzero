@@ -6,7 +6,8 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { Calendar } from "~/components/icons/Icons";
-import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
+import { formatDateWithSeconds } from "~/utils/date";
+import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import type { WorkflowEvaluationRunWithEpisodeCount } from "~/types/tensorzero";
 import KVChip from "~/components/ui/KVChip";
 import { CommitHash } from "~/components/ui/CommitHash";
@@ -15,20 +16,6 @@ import {
   toVariantUrl,
   toWorkflowEvaluationProjectUrl,
 } from "~/utils/urls";
-
-// Create timestamp tooltip component
-const createTimestampTooltip = (timestamp: string | number | Date) => {
-  const { formattedDate, formattedTime, relativeTime } =
-    getTimestampTooltipData(timestamp);
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div>{formattedDate}</div>
-      <div>{formattedTime}</div>
-      <div>{relativeTime}</div>
-    </div>
-  );
-};
 
 interface BasicInfoProps {
   workflowEvaluationRun: WorkflowEvaluationRunWithEpisodeCount;
@@ -39,11 +26,6 @@ export default function BasicInfo({
   workflowEvaluationRun,
   count,
 }: BasicInfoProps) {
-  // Create timestamp tooltip
-  const timestampTooltip = createTimestampTooltip(
-    workflowEvaluationRun.timestamp,
-  );
-
   const filteredTags = Object.entries(workflowEvaluationRun.tags).filter(
     ([k]) => !k.startsWith("tensorzero::"),
   );
@@ -147,7 +129,9 @@ export default function BasicInfo({
             label={formatDateWithSeconds(
               new Date(workflowEvaluationRun.timestamp),
             )}
-            tooltip={timestampTooltip}
+            tooltip={
+              <TimestampTooltip timestamp={workflowEvaluationRun.timestamp} />
+            }
           />
         </BasicInfoItemContent>
       </BasicInfoItem>

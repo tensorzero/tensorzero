@@ -84,7 +84,7 @@ impl TimeWindow {
         }
     }
 
-    /// Converts the time window to the PostgreSQL date_trunc time unit.
+    /// Converts the time window to the Postgres date_trunc time unit.
     pub fn to_postgres_time_unit(&self) -> &'static str {
         match self {
             TimeWindow::Minute => "minute",
@@ -177,4 +177,72 @@ pub trait ConfigQueries {
         &self,
         snapshot_hash: SnapshotHash,
     ) -> impl Future<Output = Result<ConfigSnapshot, Error>> + Send;
+}
+
+/// A stored DICL (Dynamic In-Context Learning) example.
+#[derive(Debug, Clone)]
+pub struct StoredDICLExample {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub namespace: String,
+    pub input: String,
+    pub output: String,
+    pub embedding: Vec<f32>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A DICL example returned from similarity search.
+#[derive(Debug, Clone)]
+pub struct DICLExampleWithDistance {
+    pub input: String,
+    pub output: String,
+    pub cosine_distance: f32,
+}
+
+/// Trait for DICL (Dynamic In-Context Learning) queries.
+///
+/// DICL stores examples with embeddings for similarity search during inference.
+/// The variant retrieves similar examples based on the input embedding to provide
+/// in-context learning examples to the model.
+pub trait DICLQueries {
+    /// Insert a DICL example into the database.
+    fn insert_dicl_example(
+        &self,
+        example: &StoredDICLExample,
+    ) -> impl Future<Output = Result<(), Error>> + Send;
+
+    /// Insert multiple DICL examples in a batch.
+    fn insert_dicl_examples(
+        &self,
+        examples: &[StoredDICLExample],
+    ) -> impl Future<Output = Result<u64, Error>> + Send;
+
+    /// Get similar DICL examples using cosine distance.
+    ///
+    /// Returns examples sorted by cosine distance (ascending).
+    fn get_similar_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        embedding: &[f32],
+        limit: u32,
+    ) -> impl Future<Output = Result<Vec<DICLExampleWithDistance>, Error>> + Send;
+
+    /// Check if DICL examples exist for a given function and variant.
+    fn has_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+    ) -> impl Future<Output = Result<bool, Error>> + Send;
+
+    /// Delete DICL examples for a given function and variant.
+    ///
+    /// If namespace is provided, only deletes examples in that namespace.
+    fn delete_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        namespace: Option<&str>,
+    ) -> impl Future<Output = Result<u64, Error>> + Send;
 }

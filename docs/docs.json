@@ -86,14 +86,9 @@
             "group": "Optimization",
             "pages": [
               "optimization/index",
-              {
-                "group": "Guides",
-                "expanded": true,
-                "pages": [
-                  "optimization/dynamic-in-context-learning-dicl",
-                  "optimization/gepa"
-                ]
-              }
+              "optimization/dynamic-in-context-learning-dicl",
+              "optimization/gepa",
+              "optimization/supervised-fine-tuning-sft"
             ]
           },
           {
