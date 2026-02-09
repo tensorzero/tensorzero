@@ -448,6 +448,7 @@ fn make_stream_from_non_stream(
                 usage,
                 raw_usage: raw_usage_entries.clone(),
                 raw_response: None, // Not used for fused stream chunks
+                collected_chunks: None,
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -459,6 +460,7 @@ fn make_stream_from_non_stream(
             provider_latency,
             raw_chunk: String::new(), // No actual streaming data for fake streams
             finish_reason: json.finish_reason,
+            collected_chunks: None,
         })),
     };
     Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
@@ -1853,6 +1855,7 @@ mod tests {
                 provider_latency: None,
                 raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: Some(FinishReason::Length),
+                collected_chunks: None,
             })),]
         );
     }

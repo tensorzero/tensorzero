@@ -9,6 +9,7 @@ mod best_of_n;
 mod built_in;
 mod cache;
 mod clickhouse;
+mod collected_chunks;
 #[macro_use]
 mod common;
 mod config;

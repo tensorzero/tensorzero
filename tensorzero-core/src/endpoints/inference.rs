@@ -138,6 +138,9 @@ pub struct Params {
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
+    /// If `true`, include the collected chunks in the response.
+    #[serde(default)]
+    pub include_collected_chunks: bool,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
@@ -174,6 +177,7 @@ struct InferenceMetadata {
     pub include_original_response: bool,
     pub include_raw_response: bool,
     pub include_raw_usage: bool,
+    pub include_collected_chunks: bool,
     pub model_inference_id: Uuid,
 }
 
@@ -507,6 +511,7 @@ pub async fn inference(
             include_original_response: params.include_original_response,
             include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
+            include_collected_chunks: params.include_collected_chunks,
         }))
         .await?;
         return Ok(InferenceOutputData {
@@ -566,6 +571,7 @@ pub async fn inference(
             include_original_response: params.include_original_response,
             include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
+            include_collected_chunks: params.include_collected_chunks,
         }))
         .await;
 
@@ -626,6 +632,7 @@ struct InferVariantArgs<'a> {
     include_original_response: bool,
     include_raw_response: bool,
     include_raw_usage: bool,
+    include_collected_chunks: bool,
 }
 
 async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Error> {
@@ -655,6 +662,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         include_original_response,
         include_raw_response,
         include_raw_usage,
+        include_collected_chunks,
     } = args;
 
     // Will be edited by the variant as part of making the request so we must clone here
@@ -729,6 +737,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
             model_inference_id: model_used_info.model_inference_id,
+            include_collected_chunks,
         };
 
         let stream = create_stream(
@@ -1094,7 +1103,43 @@ fn create_stream(
             metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).chain(std::iter::once(model_inference_usage))
         );
 
-        let chunk = match *function {
+
+
+        // Build the collect_chunks args before moving buffer and metadata fields
+        let templates = Arc::clone(&config.templates);
+        let collect_chunks_args = CollectChunksArgs {
+            value: buffer,
+            inference_id: metadata.inference_id,
+            episode_id: metadata.episode_id,
+            system: metadata.system.clone(),
+            input_messages: metadata.input_messages.clone(),
+            function: Arc::clone(&function),
+            model_name: metadata.model_name.clone(),
+            model_provider_name: metadata.model_provider_name.clone(),
+            raw_request: metadata.raw_request.clone(),
+            raw_response: metadata.raw_response.clone(),
+            inference_params: metadata.inference_params.clone(),
+            function_name: Arc::from(metadata.function_name.as_str()),
+            variant_name: Arc::from(metadata.variant_name.as_str()),
+            dynamic_output_schema: metadata.dynamic_output_schema.clone().map(Arc::new),
+            templates,
+            tool_config: metadata.tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
+            cached: metadata.cached,
+            extra_body: metadata.extra_body.clone(),
+            extra_headers: metadata.extra_headers.clone(),
+            fetch_and_encode_input_files_before_inference: metadata.fetch_and_encode_input_files_before_inference,
+            model_inference_id: metadata.model_inference_id,
+            // Use only the current model's usage, not the aggregated total
+            // (previous model inferences are added separately below)
+            model_inference_usage,
+            finish_reason,
+        };
+
+        let collect_chunks_future = async move {
+            collect_chunks(collect_chunks_args).await
+        }.shared();
+
+        let mut chunk = match *function {
             FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 finish_reason,
                 usage: Some(inference_usage),
@@ -1107,7 +1152,23 @@ fn create_stream(
             }),
         };
 
-        buffer.push(chunk.clone());
+        if metadata.include_collected_chunks {
+            let collected_chunks = collect_chunks_future.clone().await?;
+            match (&mut chunk, collected_chunks) {
+                (InferenceResultChunk::Chat(c), InferenceResult::Chat(chat_result)) => {
+                    c.collected_chunks = Some(chat_result.content);
+                }
+                (InferenceResultChunk::Json(c), InferenceResult::Json(json_result)) => {
+                    c.collected_chunks = Some(JsonInferenceOutput {
+                        raw: json_result.output.raw,
+                        parsed: json_result.output.parsed,
+                    });
+                }
+                _ => {
+                    tracing::error!("Function type and result type should always match. {IMPOSSIBLE_ERROR_MESSAGE}");
+                }
+            }
+        }
 
         yield Ok(prepare_response_chunk(&metadata, chunk));
 
@@ -1127,61 +1188,35 @@ fn create_stream(
                 input,
                 dryrun: _,
                 start_time,
-                inference_params,
-                model_name,
-                model_provider_name,
-                raw_request,
-                raw_response,
-                system,
-                input_messages,
+                inference_params: _,
+                model_name: _,
+                model_provider_name: _,
+                raw_request: _,
+                raw_response: _,
+                system: _,
+                input_messages: _,
                 previous_model_inference_results,
                 tags,
                 tool_config,
-                dynamic_output_schema,
-                cached,
+                dynamic_output_schema: _,
+                cached: _,
                 extra_body,
                 json_mode: _,
                 extra_headers,
-                fetch_and_encode_input_files_before_inference,
+                fetch_and_encode_input_files_before_inference: _,
                 include_original_response: _,
                 include_raw_response: _,
                 include_raw_usage: _,
-                model_inference_id,
+                include_collected_chunks: _,
+                model_inference_id: _,
             } = metadata;
 
             let config = config.clone();
             let async_writes = config.gateway.observability.async_writes;
             let write_future = async move {
-                let templates = Arc::clone(&config.templates);
-                let collect_chunks_args = CollectChunksArgs {
-                    value: buffer,
-                    inference_id,
-                    episode_id,
-                    system,
-                    input_messages,
-                    function,
-                    model_name,
-                    model_provider_name,
-                    raw_request,
-                    raw_response,
-                    inference_params,
-                    function_name: Arc::from(function_name.as_str()),
-                    variant_name: Arc::from(variant_name.as_str()),
-                    dynamic_output_schema: dynamic_output_schema.map(Arc::new),
-                    templates,
-                    tool_config: tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
-                    cached,
-                    extra_body: extra_body.clone(),
-                    extra_headers: extra_headers.clone(),
-                    fetch_and_encode_input_files_before_inference,
-                    model_inference_id,
-                    // Use only the current model's usage, not the aggregated total
-                    // (previous model inferences are added separately below)
-                    model_inference_usage,
-                    finish_reason,
-                };
+
                 let inference_response: Result<InferenceResult, Error> =
-                    collect_chunks(collect_chunks_args).await;
+                    collect_chunks_future.await;
 
                 let inference_response = inference_response.ok();
 
@@ -1266,6 +1301,7 @@ fn should_stream_chunk_in_create_stream(
                 raw_chunk: _,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
+                collected_chunks: _,
             } = c;
 
             // We want to stream the chunk if `raw_usage` is relevant
@@ -1297,6 +1333,7 @@ fn should_stream_chunk_in_create_stream(
                 thought_chunks: _,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
+                collected_chunks: _,
             } = c;
 
             // We want to stream the chunk if `raw_usage` is relevant
@@ -1330,6 +1367,7 @@ fn prepare_response_chunk(
         metadata.include_raw_response,
         metadata.json_mode,
         metadata.include_raw_usage,
+        metadata.include_collected_chunks,
     )
 }
 
@@ -1679,6 +1717,8 @@ pub struct ChatInferenceResponseChunk {
     pub original_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_chunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collected_chunks: Option<Vec<ContentBlockChatOutput>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1702,6 +1742,8 @@ pub struct JsonInferenceResponseChunk {
     pub original_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_chunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collected_chunks: Option<JsonInferenceOutput>,
 }
 
 impl InferenceResponseChunk {
@@ -1716,6 +1758,7 @@ impl InferenceResponseChunk {
         include_raw_response: bool,
         json_mode: Option<JsonMode>,
         include_raw_usage: bool,
+        include_collected_chunks: bool,
     ) -> Self {
         // Compute the usage
         let usage = if cached {
@@ -1773,6 +1816,12 @@ impl InferenceResponseChunk {
                     include_raw_response,
                 );
 
+                let collected_chunks = if include_collected_chunks {
+                    result.collected_chunks
+                } else {
+                    None
+                };
+
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
                     inference_id,
                     episode_id,
@@ -1786,6 +1835,7 @@ impl InferenceResponseChunk {
                     finish_reason: result.finish_reason,
                     original_chunk,
                     raw_chunk,
+                    collected_chunks,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -1795,6 +1845,12 @@ impl InferenceResponseChunk {
                     include_original_response,
                     include_raw_response,
                 );
+
+                let collected_chunks = if include_collected_chunks {
+                    result.collected_chunks
+                } else {
+                    None
+                };
 
                 InferenceResponseChunk::Json(JsonInferenceResponseChunk {
                     inference_id,
@@ -1809,6 +1865,7 @@ impl InferenceResponseChunk {
                     finish_reason: result.finish_reason,
                     original_chunk,
                     raw_chunk,
+                    collected_chunks,
                 })
             }
         }
@@ -2095,6 +2152,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
+            collected_chunks: None,
         });
         let raw_request = "raw request".to_string();
         let inference_metadata = InferenceMetadata {
@@ -2128,6 +2186,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
+            include_collected_chunks: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2163,6 +2222,7 @@ mod tests {
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
+            collected_chunks: None,
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -2195,6 +2255,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
+            include_collected_chunks: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2589,6 +2650,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: true,
             model_inference_id: Uuid::now_v7(),
+            include_collected_chunks: false,
         }
     }
 
@@ -2619,6 +2681,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
+            collected_chunks: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2670,6 +2733,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
+            collected_chunks: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2705,6 +2769,7 @@ mod tests {
             finish_reason: None,
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(50)),
+            collected_chunks: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2737,6 +2802,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
+            collected_chunks: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2783,6 +2849,7 @@ mod tests {
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
+            collected_chunks: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2818,6 +2885,7 @@ mod tests {
             finish_reason: None,
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(50)),
+            collected_chunks: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
