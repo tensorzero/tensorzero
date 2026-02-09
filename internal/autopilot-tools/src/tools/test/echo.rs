@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Parameters for the echo tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct EchoParams {
     /// The message to echo back.
     pub message: String,

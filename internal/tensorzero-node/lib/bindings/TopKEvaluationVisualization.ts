@@ -15,4 +15,8 @@ export type TopKEvaluationVisualization = {
    * and 5th ranked variants (sorted by lower confidence bound descending).
    */
   confident_top_k_sizes: Array<number>;
+  /**
+   * Explanation of the results for the user.
+   */
+  summary_text?: string;
 };

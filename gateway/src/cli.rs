@@ -41,7 +41,7 @@ pub struct EarlyExitCommands {
     #[arg(long, alias = "run-migrations")] // TODO: remove (deprecated)
     pub run_clickhouse_migrations: bool,
 
-    /// Run PostgreSQL migrations manually then exit.
+    /// Run Postgres migrations manually then exit.
     #[arg(long)]
     pub run_postgres_migrations: bool,
 
