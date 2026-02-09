@@ -2,6 +2,12 @@ name: Build Gateway E2E Container
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to check out and tag. Falls back to github.sha if not provided."
+        required: false
+        type: string
+        default: ""
     secrets:
       DOCKERHUB_USERNAME:
         required: true
@@ -17,12 +23,16 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+    env:
+      EFFECTIVE_REF: ${{ inputs.ref || github.sha }}
 
     steps:
       # TODO - investigate why using the Namespace checkout action causes
       # 'tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT' to be `None`
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       # We use 'DOCKERHUB_LIMITED_TOKEN' to ensure that we can only push to our private '-dev' repos,
       # not to any of the public production repos.
@@ -48,10 +58,10 @@ jobs:
 
       - name: Build `gateway-e2e` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f gateway/Dockerfile --build-arg PROFILE=dev --build-arg "CARGO_BUILD_FLAGS=--features e2e_tests" --target gateway . -t tensorzero/gateway-e2e:sha-${{ github.sha }}
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f gateway/Dockerfile --build-arg PROFILE=dev --build-arg "CARGO_BUILD_FLAGS=--features e2e_tests" --target gateway . -t tensorzero/gateway-e2e:sha-${{ env.EFFECTIVE_REF }}
 
       - name: Save `gateway-e2e` container
-        run: docker save tensorzero/gateway-e2e:sha-${{ github.sha }} > gateway-e2e-container.tar
+        run: docker save tensorzero/gateway-e2e:sha-${{ env.EFFECTIVE_REF }} > gateway-e2e-container.tar
 
       - name: Upload `gateway-e2e` container as an artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
@@ -65,4 +75,4 @@ jobs:
       # Note that this pushes an e2e build of the gateway to 'tensorzero/gateway-e2e'.
       # It does *not* push to the production 'tensorzero/gateway' repo.
       - name: Push `gateway-e2e` container to DockerHub
-        run: docker push tensorzero/gateway-e2e:sha-${{ github.sha }}
+        run: docker push tensorzero/gateway-e2e:sha-${{ env.EFFECTIVE_REF }}

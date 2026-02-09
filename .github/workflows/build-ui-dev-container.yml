@@ -1,4 +1,4 @@
-name: Build Provider Proxy Container
+name: Build UI Dev Container
 
 on:
   workflow_call:
@@ -15,7 +15,7 @@ on:
         required: true
 
 jobs:
-  build-provider-proxy-container:
+  build-ui-dev-container:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
@@ -32,14 +32,13 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
 
+      # We use 'DOCKERHUB_LIMITED_TOKEN' to ensure that we can only push to our private '-dev' repos,
+      # not to any of the public production repos.
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-
-      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
-      # (where the oidc token is not available)
 
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
@@ -51,21 +50,9 @@ jobs:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Build `provider-proxy` container
+      - name: Build `ui-dev` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f provider-proxy/Dockerfile --target provider-proxy . -t tensorzero/provider-proxy:sha-${{ env.EFFECTIVE_REF }}
+          docker buildx build --build-arg DEBUG_BUILD=1 --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f ui/Dockerfile . -t tensorzero/ui-dev:sha-${{ env.EFFECTIVE_REF }}
 
-      - name: Save `provider-proxy` container
-        run: docker save tensorzero/provider-proxy:sha-${{ env.EFFECTIVE_REF }} > provider-proxy-container.tar
-
-      - name: Upload `provider-proxy` container as an artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        with:
-          name: build-provider-proxy-container
-          path: provider-proxy-container.tar
-          retention-days: 1
-          if-no-files-found: error
-          overwrite: false
-
-      - name: Push `provider-proxy` container to DockerHub
-        run: docker push tensorzero/provider-proxy:sha-${{ env.EFFECTIVE_REF }}
+      - name: Push `ui-dev` container to DockerHub
+        run: docker push tensorzero/ui-dev:sha-${{ env.EFFECTIVE_REF }}

@@ -8,11 +8,17 @@ on:
 permissions:
   pull-requests: write
   contents: read
+  id-token: write
 
 jobs:
-  trigger-autopilot-e2e:
+  check-containers:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
+    outputs:
+      pr_sha: ${{ steps.get-sha.outputs.pr_sha }}
+      need_gateway_e2e: ${{ steps.check.outputs.need_gateway_e2e }}
+      need_provider_proxy: ${{ steps.check.outputs.need_provider_proxy }}
+      need_ui_dev: ${{ steps.check.outputs.need_ui_dev }}
     steps:
       - name: Add initial reaction
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
@@ -22,6 +28,90 @@ jobs:
           comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
           reactions: eyes
 
+      - name: Get PR SHA
+        id: get-sha
+        run: echo "pr_sha=${{ github.event.client_payload.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Check if containers exist on DockerHub
+        id: check
+        run: |
+          check_image() {
+            local image=$1
+            local tag=$2
+            local TOKEN
+            TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:${image}:pull" | jq -r '.token')
+            local STATUS
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Accept: application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json" \
+              "https://registry-1.docker.io/v2/${image}/manifests/${tag}")
+            if [ "$STATUS" = "200" ]; then
+              echo "found"
+            else
+              echo "missing"
+            fi
+          }
+
+          SHA="${{ github.event.client_payload.pull_request.head.sha }}"
+          TAG="sha-${SHA}"
+
+          GATEWAY=$(check_image "tensorzero/gateway-e2e" "$TAG")
+          PROXY=$(check_image "tensorzero/provider-proxy" "$TAG")
+          UI_DEV=$(check_image "tensorzero/ui-dev" "$TAG")
+
+          echo "gateway-e2e: $GATEWAY"
+          echo "provider-proxy: $PROXY"
+          echo "ui-dev: $UI_DEV"
+
+          echo "need_gateway_e2e=$( [ "$GATEWAY" = "missing" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          echo "need_provider_proxy=$( [ "$PROXY" = "missing" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          echo "need_ui_dev=$( [ "$UI_DEV" = "missing" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+
+  build-gateway-e2e:
+    needs: [check-containers]
+    if: needs.check-containers.outputs.need_gateway_e2e == 'true'
+    uses: ./.github/workflows/build-gateway-e2e-container.yml
+    with:
+      ref: ${{ needs.check-containers.outputs.pr_sha }}
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-provider-proxy:
+    needs: [check-containers]
+    if: needs.check-containers.outputs.need_provider_proxy == 'true'
+    uses: ./.github/workflows/build-provider-proxy-container.yml
+    with:
+      ref: ${{ needs.check-containers.outputs.pr_sha }}
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-ui-dev:
+    needs: [check-containers]
+    if: needs.check-containers.outputs.need_ui_dev == 'true'
+    uses: ./.github/workflows/build-ui-dev-container.yml
+    with:
+      ref: ${{ needs.check-containers.outputs.pr_sha }}
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  trigger-autopilot-e2e:
+    needs:
+      [check-containers, build-gateway-e2e, build-provider-proxy, build-ui-dev]
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
       - name: Generate GitHub App token
         uses: actions/create-github-app-token@v1
         id: app-token
@@ -39,7 +129,7 @@ jobs:
           event-type: tensorzero-main-updated
           client-payload: |
             {
-              "tensorzero_commit": "${{ github.event.client_payload.pull_request.head.sha }}",
+              "tensorzero_commit": "${{ needs.check-containers.outputs.pr_sha }}",
               "triggered_by": "${{ github.actor }}",
               "source_run_id": "${{ github.run_id }}",
               "source_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
