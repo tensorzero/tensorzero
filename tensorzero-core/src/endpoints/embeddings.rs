@@ -6,7 +6,7 @@ use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::{
-    cache::CacheParamsOptions,
+    cache::{CacheBackend, CacheParamsOptions},
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
@@ -52,6 +52,7 @@ pub async fn embeddings(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    cache_backend: CacheBackend,
     deferred_tasks: TaskTracker,
     rate_limiting_manager: std::sync::Arc<RateLimitingManager>,
     params: EmbeddingsParams,
@@ -94,6 +95,7 @@ pub async fn embeddings(
         http_client: http_client.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
+        cache_backend,
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         tags: tags.clone(),
@@ -208,6 +210,7 @@ mod tests {
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            CacheBackend::Disabled,
             tokio_util::task::TaskTracker::new(),
             Arc::new(RateLimitingManager::new_dummy()),
             params,
@@ -246,6 +249,7 @@ mod tests {
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            CacheBackend::Disabled,
             tokio_util::task::TaskTracker::new(),
             Arc::new(RateLimitingManager::new_dummy()),
             params,

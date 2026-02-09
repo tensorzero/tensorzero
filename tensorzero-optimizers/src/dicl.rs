@@ -5,7 +5,7 @@ use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    cache::CacheOptions,
+    cache::{CacheBackend, CacheOptions},
     config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
     db::{
         DICLQueries, StoredDICLExample,
@@ -361,6 +361,7 @@ async fn process_embedding_batch(
         clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
         postgres_connection_info,
         cache_options: CacheOptions::default(),
+        cache_backend: CacheBackend::Disabled,
         tags: tags.clone(),
         rate_limiting_manager,
         // We don't currently perform any OTLP export in optimization workflows

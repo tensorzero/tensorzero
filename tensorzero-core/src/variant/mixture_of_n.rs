@@ -954,7 +954,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheBackend, CacheEnabledMode, CacheOptions},
         config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
@@ -1481,6 +1481,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_backend: CacheBackend::Disabled,
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
