@@ -38,6 +38,7 @@ pub mod inference_queries;
 pub mod migration_manager;
 pub mod model_inferences;
 pub mod query_builder;
+mod resolve_uuid;
 mod select_queries;
 mod table_name;
 pub mod workflow_evaluation_queries;
