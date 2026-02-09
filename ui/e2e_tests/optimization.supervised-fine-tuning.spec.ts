@@ -297,9 +297,10 @@ test.describe("Error handling", () => {
     // Click on the Start Fine-tuning Job button
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
-    await page
-      .getByText("failed because the model is an error model")
-      .waitFor({ timeout: 12000 });
+    await page.getByText("Fine-tuning job failed").waitFor({ timeout: 12000 });
+    await expect(
+      page.getByText("failed because the model is an error model").first(),
+    ).toBeVisible();
   });
 });
 
