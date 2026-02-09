@@ -73,7 +73,7 @@ mod valkey {
     async fn create_valkey_client() -> ValkeyConnectionInfo {
         let url =
             std::env::var("TENSORZERO_VALKEY_URL").expect("TENSORZERO_VALKEY_URL should be set");
-        ValkeyConnectionInfo::new(&url)
+        ValkeyConnectionInfo::new(&url, None)
             .await
             .expect("Failed to connect to Valkey")
     }

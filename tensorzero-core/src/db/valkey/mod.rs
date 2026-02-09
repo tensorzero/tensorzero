@@ -19,12 +19,15 @@ use crate::error::{Error, ErrorDetails};
 /// - No connection pool management needed
 #[derive(Clone)]
 pub enum ValkeyConnectionInfo {
-    Enabled { connection: Box<ConnectionManager> },
+    Enabled {
+        connection: Box<ConnectionManager>,
+        cache_ttl_s: Option<u64>,
+    },
     Disabled,
 }
 
 impl ValkeyConnectionInfo {
-    pub async fn new(valkey_url: &str) -> Result<Self, Error> {
+    pub async fn new(valkey_url: &str, cache_ttl_s: Option<u64>) -> Result<Self, Error> {
         let client = Client::open(valkey_url).map_err(|e| {
             Error::new(ErrorDetails::ValkeyConnection {
                 message: format!("Failed to create Valkey client: {e}"),
@@ -45,6 +48,7 @@ impl ValkeyConnectionInfo {
 
         Ok(Self::Enabled {
             connection: Box::new(connection),
+            cache_ttl_s,
         })
     }
 
@@ -54,7 +58,7 @@ impl ValkeyConnectionInfo {
 
     pub fn get_connection(&self) -> Option<&ConnectionManager> {
         match self {
-            Self::Enabled { connection } => Some(connection),
+            Self::Enabled { connection, .. } => Some(connection),
             Self::Disabled => None,
         }
     }
@@ -106,7 +110,7 @@ impl HealthCheckable for ValkeyConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
-            Self::Enabled { connection } => {
+            Self::Enabled { connection, .. } => {
                 let check = async {
                     let mut conn = connection.clone();
                     let _: String = conn.ping().await.map_err(|e| {

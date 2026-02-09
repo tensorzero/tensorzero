@@ -67,9 +67,12 @@ impl CacheQueries for ValkeyConnectionInfo {
     }
 
     async fn cache_write(&self, cache_key: &CacheKey, data: &str) -> Result<(), Error> {
-        let connection = match self.get_connection() {
-            Some(conn) => conn,
-            None => return Ok(()),
+        let (connection, cache_ttl_s) = match self {
+            Self::Enabled {
+                connection,
+                cache_ttl_s,
+            } => (connection, *cache_ttl_s),
+            Self::Disabled => return Ok(()),
         };
         let key = make_valkey_key(cache_key);
         // Parse the data to wrap it in ValkeyCacheEntry
@@ -88,12 +91,24 @@ impl CacheQueries for ValkeyConnectionInfo {
             })
         })?;
         let mut conn = connection.clone();
-        // No TTL - rely on Valkey's maxmemory-policy (e.g. allkeys-lru) for eviction
-        conn.set::<_, _, ()>(&key, &entry_json).await.map_err(|e| {
-            Error::new(ErrorDetails::Cache {
-                message: format!("Valkey SET failed: {e}"),
-            })
-        })?;
+        match cache_ttl_s {
+            Some(ttl) => {
+                conn.set_ex::<_, _, ()>(&key, &entry_json, ttl)
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Cache {
+                            message: format!("Valkey SET EX failed: {e}"),
+                        })
+                    })?;
+            }
+            None => {
+                conn.set::<_, _, ()>(&key, &entry_json).await.map_err(|e| {
+                    Error::new(ErrorDetails::Cache {
+                        message: format!("Valkey SET failed: {e}"),
+                    })
+                })?;
+            }
+        }
         Ok(())
     }
 }

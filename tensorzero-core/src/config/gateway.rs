@@ -138,6 +138,19 @@ impl MetricsConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct GatewayCacheConfig {
+    #[serde(default)]
+    pub valkey: GatewayCacheValkeyConfig,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayCacheValkeyConfig {
+    pub ttl_s: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
@@ -172,6 +185,8 @@ pub struct UninitializedGatewayConfig {
     pub relay: Option<UninitializedRelayConfig>,
     #[serde(default)]
     pub metrics: MetricsConfig,
+    #[serde(default)]
+    pub cache: GatewayCacheConfig,
 }
 
 impl UninitializedGatewayConfig {
@@ -230,6 +245,7 @@ impl UninitializedGatewayConfig {
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
             relay,
             metrics: self.metrics,
+            cache: self.cache,
         })
     }
 }
@@ -255,6 +271,7 @@ pub struct GatewayConfig {
     #[serde(skip)]
     pub relay: Option<TensorzeroRelay>,
     pub metrics: MetricsConfig,
+    pub cache: GatewayCacheConfig,
 }
 
 impl Default for GatewayConfig {
@@ -274,6 +291,7 @@ impl Default for GatewayConfig {
             global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
             relay: Default::default(),
             metrics: Default::default(),
+            cache: Default::default(),
         }
     }
 }
