@@ -1,8 +1,12 @@
 use std::future::Future;
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::config::OtlpConfig;
 use crate::db::cache::CacheQueries;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::valkey::ValkeyConnectionInfo;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
 use crate::inference::types::{
@@ -19,6 +23,40 @@ use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use uuid::Uuid;
+
+/// Backend selection for the inference cache.
+/// `ClickHouse` delegates to the existing ClickHouse-backed cache.
+/// `Valkey` delegates to a Valkey (Redis-compatible) backend.
+/// `Disabled` is a no-op: lookups return `None`, writes succeed immediately.
+#[derive(Clone)]
+pub enum CacheBackend {
+    ClickHouse(ClickHouseConnectionInfo),
+    Valkey(ValkeyConnectionInfo),
+    Disabled,
+}
+
+#[async_trait]
+impl CacheQueries for CacheBackend {
+    async fn cache_lookup(
+        &self,
+        cache_key: &CacheKey,
+        max_age_s: Option<u32>,
+    ) -> Result<Option<String>, Error> {
+        match self {
+            CacheBackend::ClickHouse(ch) => ch.cache_lookup(cache_key, max_age_s).await,
+            CacheBackend::Valkey(v) => v.cache_lookup(cache_key, max_age_s).await,
+            CacheBackend::Disabled => Ok(None),
+        }
+    }
+
+    async fn cache_write(&self, cache_key: &CacheKey, data: &str) -> Result<(), Error> {
+        match self {
+            CacheBackend::ClickHouse(ch) => ch.cache_write(cache_key, data).await,
+            CacheBackend::Valkey(v) => v.cache_write(cache_key, data).await,
+            CacheBackend::Disabled => Ok(()),
+        }
+    }
+}
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(
@@ -294,14 +332,20 @@ pub struct EmbeddingCacheData {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct NonStreamingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
     pub blocks: Vec<ContentBlockOutput>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct StreamingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
     pub chunks: Vec<CachedProviderInferenceResponseChunk>,
 }
 

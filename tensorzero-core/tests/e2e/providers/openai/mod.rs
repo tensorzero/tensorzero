@@ -9,7 +9,7 @@ use tensorzero::{
     ClientExt, ClientInferenceParams, File, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent, Role, UrlFile,
 };
-use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
+use tensorzero_core::cache::{CacheBackend, CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
@@ -1284,6 +1284,7 @@ async fn test_embedding_request() {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
+        cache_backend: CacheBackend::Disabled,
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
@@ -1435,6 +1436,7 @@ async fn test_embedding_sanity_check() {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
+        cache_backend: CacheBackend::Disabled,
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,

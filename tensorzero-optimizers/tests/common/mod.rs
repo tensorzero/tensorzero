@@ -11,7 +11,7 @@ use tensorzero::{
     ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
-    cache::CacheOptions,
+    cache::{CacheBackend, CacheOptions},
     config::{Config, ConfigFileGlob, provider_types::ProviderTypesConfig},
     db::{
         clickhouse::{ClickHouseConnectionInfo, test_helpers::CLICKHOUSE_URL},
@@ -190,6 +190,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 postgres_connection_info: PostgresConnectionInfo::Disabled,
                 credentials: Arc::new(HashMap::new()),
                 cache_options: CacheOptions::default(),
+                cache_backend: CacheBackend::Disabled,
                 tags: Arc::new(Default::default()),
                 rate_limiting_manager: Arc::new(
                     tensorzero_core::rate_limiting::RateLimitingManager::new(

@@ -106,6 +106,7 @@ impl EvaluationsInferenceExecutor for AppStateInferenceExecutor {
             &self.app_state.http_client,
             self.app_state.clickhouse_connection_info.clone(),
             self.app_state.postgres_connection_info.clone(),
+            self.app_state.cache_backend.clone(),
             self.app_state.deferred_tasks.clone(),
             self.app_state.rate_limiting_manager.clone(),
             endpoint_params,

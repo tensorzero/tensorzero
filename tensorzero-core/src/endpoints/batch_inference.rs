@@ -129,6 +129,7 @@ pub async fn start_batch_inference(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_backend,
         deferred_tasks,
         rate_limiting_manager,
         ..
@@ -238,6 +239,7 @@ pub async fn start_batch_inference(
         postgres_connection_info: database.postgres.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: cache_options.clone(),
+        cache_backend,
         rate_limiting_manager,
         tags: tags.clone(),
         otlp_config: config.gateway.export.otlp.clone(),

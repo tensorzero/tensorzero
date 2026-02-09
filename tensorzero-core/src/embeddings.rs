@@ -185,7 +185,7 @@ impl EmbeddingModelConfig {
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
                     let cache_lookup = embedding_cache_lookup(
-                        &clients.clickhouse_connection_info,
+                        &clients.cache_backend,
                         &provider_request,
                         clients.cache_options.max_age_s,
                     )
@@ -210,7 +210,7 @@ impl EmbeddingModelConfig {
                             .into());
                             };
                             let _ = start_cache_write(
-                                &clients.clickhouse_connection_info,
+                                &clients.cache_backend,
                                 provider_request.get_cache_key()?,
                                 CacheData {
                                     output: EmbeddingCacheData {
@@ -798,7 +798,7 @@ impl<'a> Embedding {
 #[cfg(test)]
 mod tests {
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheBackend, CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         model_table::ProviderTypeDefaultCredentials,
         rate_limiting::{RateLimitingManager, ScopeInfo},
@@ -856,6 +856,7 @@ mod tests {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    cache_backend: CacheBackend::Disabled,
                     tags: Arc::new(Default::default()),
                     rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
                     otlp_config: Default::default(),

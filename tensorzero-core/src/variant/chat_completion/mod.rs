@@ -892,7 +892,7 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::cache::{CacheEnabledMode, CacheOptions};
+    use crate::cache::{CacheBackend, CacheEnabledMode, CacheOptions};
     use crate::config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig};
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
@@ -1302,6 +1302,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_backend: CacheBackend::Disabled,
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -2318,6 +2319,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_backend: CacheBackend::Disabled,
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
