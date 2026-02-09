@@ -91,7 +91,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const env = getEnv();
-  const configWriteEnabled = Boolean(env.TENSORZERO_UI_CONFIG_FILE);
+  const configApplyEnabled = Boolean(env.TENSORZERO_UI_CONFIG_FILE);
 
   // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
@@ -106,7 +106,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
-      configWriteEnabled,
+      configApplyEnabled,
       initialMessage,
     };
   }
@@ -143,7 +143,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     sessionId,
     eventsData: eventsDataPromise,
     isNewSession: false,
-    configWriteEnabled,
+    configApplyEnabled,
     initialMessage: undefined,
   };
 }
@@ -195,7 +195,7 @@ function EventStreamContent({
   onPendingToolCallsChange,
   onErrorChange,
   onHasReachedStartChange,
-  configWriteEnabled,
+  configApplyEnabled,
   pendingToolCallIds,
 }: {
   sessionId: string;
@@ -209,7 +209,7 @@ function EventStreamContent({
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
   onHasReachedStartChange: (hasReachedStart: boolean) => void;
-  configWriteEnabled: boolean;
+  configApplyEnabled: boolean;
   pendingToolCallIds: Set<string>;
 }) {
   const {
@@ -373,7 +373,7 @@ function EventStreamContent({
       pendingToolCallIds={pendingToolCallIds}
       optimisticMessages={visibleOptimisticMessages}
       status={isNewSession ? undefined : status}
-      configWriteEnabled={configWriteEnabled}
+      configApplyEnabled={configApplyEnabled}
       sessionId={sessionId}
     />
   );
@@ -386,7 +386,7 @@ function AutopilotSessionEventsPageContent({
     sessionId,
     eventsData,
     isNewSession,
-    configWriteEnabled,
+    configApplyEnabled,
     initialMessage,
   } = loaderData;
   const { yoloMode, setYoloMode } = useAutopilotSession();
@@ -781,7 +781,7 @@ function AutopilotSessionEventsPageContent({
                 }
               />
               <div className="flex items-center gap-2">
-                {configWriteEnabled && !isNewSession && (
+                {configApplyEnabled && !isNewSession && (
                   <ApplySessionConfigChangesButton
                     sessionId={sessionId}
                     disabled={isEventsLoading || hasLoadError}
@@ -840,7 +840,7 @@ function AutopilotSessionEventsPageContent({
                   onPendingToolCallsChange={handlePendingToolCallsChange}
                   onErrorChange={handleErrorChange}
                   onHasReachedStartChange={handleHasReachedStartChange}
-                  configWriteEnabled={configWriteEnabled}
+                  configApplyEnabled={configApplyEnabled}
                   pendingToolCallIds={pendingToolCallIds}
                 />
               )}

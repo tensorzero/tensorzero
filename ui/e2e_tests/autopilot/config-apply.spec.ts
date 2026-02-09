@@ -19,7 +19,7 @@ const AUTOPILOT_CONFIG_DIR = path.join(
  * Clicks "Apply changes" and waits for the API response to succeed.
  * Returns the parsed TOML config after writing.
  */
-async function writeAllConfigsAndParse(
+async function applyAllConfigsAndParse(
   page: Page,
 ): Promise<Record<string, unknown>> {
   const writeButton = page.getByRole("button", {
@@ -28,7 +28,7 @@ async function writeAllConfigsAndParse(
   await expect(writeButton).toBeVisible({ timeout: 10000 });
 
   const responsePromise = page.waitForResponse(
-    (resp) => resp.url().includes("config-writes/write-all"),
+    (resp) => resp.url().includes("config-apply/apply-all"),
     { timeout: 60000 },
   );
   await writeButton.click();
@@ -48,7 +48,7 @@ async function writeAllConfigsAndParse(
  * Clicks the individual "Apply this configuration change to the local filesystem." button and waits for the API response to succeed.
  * Returns the parsed TOML config after writing.
  */
-async function writeIndividualConfigAndParse(
+async function applyIndividualConfigAndParse(
   page: Page,
 ): Promise<Record<string, unknown>> {
   const writeButton = page.getByRole("button", {
@@ -58,8 +58,8 @@ async function writeIndividualConfigAndParse(
 
   const responsePromise = page.waitForResponse(
     (resp) =>
-      resp.url().includes("config-writes/write") &&
-      !resp.url().includes("config-writes/write-all"),
+      resp.url().includes("config-apply/apply") &&
+      !resp.url().includes("config-apply/apply-all"),
     { timeout: 60000 },
   );
   await writeButton.click();
@@ -76,9 +76,9 @@ async function writeIndividualConfigAndParse(
   return parseToml(configContent) as Record<string, unknown>;
 }
 
-test.describe("Config writing", () => {
+test.describe("Config applying", () => {
   // Tests must run serially because they all write to the same config file.
-  // Parallel execution causes ConfigWriter in one test to overwrite another's changes.
+  // Parallel execution causes ConfigApplier in one test to overwrite another's changes.
   test.describe.configure({ mode: "serial" });
 
   // Clean up after all tests by resetting git state
@@ -157,7 +157,7 @@ test.describe("Config writing", () => {
     await expect(page.getByText("Something went wrong")).not.toBeVisible();
 
     // 7. Write configs and parse TOML
-    const parsedToml = await writeAllConfigsAndParse(page);
+    const parsedToml = await applyAllConfigsAndParse(page);
 
     // 8. Assert variant exists in extract_entities function
     const functionsDefs = parsedToml["functions"] as Record<string, unknown>;
@@ -265,7 +265,7 @@ test.describe("Config writing", () => {
     await expect(page.getByText("Something went wrong")).not.toBeVisible();
 
     // 7. Write configs and parse TOML
-    const parsedToml = await writeAllConfigsAndParse(page);
+    const parsedToml = await applyAllConfigsAndParse(page);
 
     // 8. Assert evaluation exists
     const evaluations = parsedToml["evaluations"] as Record<string, unknown>;
@@ -350,7 +350,7 @@ test.describe("Config writing", () => {
     await expect(page.getByText("Something went wrong")).not.toBeVisible();
 
     // 7. Write configs and parse TOML
-    const parsedToml = await writeAllConfigsAndParse(page);
+    const parsedToml = await applyAllConfigsAndParse(page);
 
     // 8. Assert evaluator exists under haiku evaluation
     const evaluations = parsedToml["evaluations"] as Record<string, unknown>;
@@ -477,7 +477,7 @@ test.describe("Config writing", () => {
     await expect(page.getByText("Something went wrong")).not.toBeVisible();
 
     // 7. Write individual config and parse TOML
-    const parsedToml = await writeIndividualConfigAndParse(page);
+    const parsedToml = await applyIndividualConfigAndParse(page);
 
     // 8. Assert variant exists in extract_entities function
     const functionsDefs = parsedToml["functions"] as Record<string, unknown>;

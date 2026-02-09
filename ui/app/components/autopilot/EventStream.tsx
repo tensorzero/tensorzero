@@ -68,7 +68,7 @@ type EventStreamProps = {
   pendingToolCallIds?: Set<string>;
   optimisticMessages?: OptimisticMessage[];
   status?: AutopilotStatus;
-  configWriteEnabled?: boolean;
+  configApplyEnabled?: boolean;
   sessionId?: string;
 };
 
@@ -511,12 +511,12 @@ class EventErrorBoundary extends Component<
 function EventItem({
   event,
   isPending = false,
-  configWriteEnabled = false,
+  configApplyEnabled = false,
   sessionId,
 }: {
   event: GatewayEvent;
   isPending?: boolean;
-  configWriteEnabled?: boolean;
+  configApplyEnabled?: boolean;
   sessionId?: string;
 }) {
   const { yoloMode } = useAutopilotSession();
@@ -569,7 +569,7 @@ function EventItem({
           label
         )}
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
-          {isConfigWrite && configWriteEnabled && sessionId && (
+          {isConfigWrite && configApplyEnabled && sessionId && (
             <ApplyConfigChangeButton sessionId={sessionId} event={event} />
           )}
           {eventIsToolEvent && (
@@ -721,7 +721,7 @@ export default function EventStream({
   pendingToolCallIds,
   optimisticMessages = [],
   status,
-  configWriteEnabled = false,
+  configApplyEnabled = false,
   sessionId,
 }: EventStreamProps) {
   // Determine what to show at the top: sentinel, error, or session start
@@ -757,7 +757,7 @@ export default function EventStream({
           <EventItem
             event={event}
             isPending={pendingToolCallIds?.has(event.id)}
-            configWriteEnabled={configWriteEnabled}
+            configApplyEnabled={configApplyEnabled}
             sessionId={sessionId}
           />
         </EventErrorBoundary>

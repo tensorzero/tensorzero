@@ -14,12 +14,12 @@ type ApplyConfigChangeResponse =
   | { success: false; error: string };
 
 /**
- * API route for writing a single config write event to the filesystem.
+ * API route for applying a single config change event to the filesystem.
  *
- * Route: POST /api/autopilot/sessions/:session_id/config-writes/write
+ * Route: POST /api/autopilot/sessions/:session_id/config-apply/apply
  *
  * Request body:
- * - event: GatewayEvent - The config write event to write
+ * - event: GatewayEvent - The config change event to apply
  *
  * Response:
  * - { success: true, written_paths: string[] } on success
@@ -101,11 +101,11 @@ export async function action({
 
   try {
     // Create ConfigApplier and apply the edits
-    const configWriter = await ConfigApplier.new(configFile);
+    const configApplier = await ConfigApplier.new(configFile);
     const editPayloads = extractEditPayloadsFromConfigWrite(event);
     const writtenPaths: string[] = [];
     for (const editPayload of editPayloads) {
-      const paths = await configWriter.applyEdit(editPayload);
+      const paths = await configApplier.applyEdit(editPayload);
       writtenPaths.push(...paths);
     }
 

@@ -9,27 +9,27 @@ import {
 } from "~/utils/tensorzero/autopilot-client";
 
 /**
- * Result of writing a config write to file.
+ * Result of applying a config change to file.
  */
-interface ApplyConfigChangeWriteResult {
+interface ApplyConfigResult {
   /** The event ID that was processed */
   eventId: string;
   /** Paths of files that were written */
   writtenPaths: string[];
 }
 
-type WriteAllConfigsResponse =
+type ApplyAllConfigsResponse =
   | {
       success: true;
-      results: ApplyConfigChangeWriteResult[];
+      results: ApplyConfigResult[];
       total_processed: number;
     }
   | { success: false; error: string };
 
 /**
- * API route for writing all config write events from a session to the filesystem.
+ * API route for applying all config change events from a session to the filesystem.
  *
- * Route: POST /api/autopilot/sessions/:session_id/config-writes/write-all
+ * Route: POST /api/autopilot/sessions/:session_id/config-apply/apply-all
  *
  * Request body: {} (empty)
  *
@@ -47,7 +47,7 @@ export async function action({
       {
         success: false,
         error: "Session ID is required",
-      } as WriteAllConfigsResponse,
+      } as ApplyAllConfigsResponse,
       { status: 400 },
     );
   }
@@ -57,7 +57,7 @@ export async function action({
       {
         success: false,
         error: "Method not allowed",
-      } as WriteAllConfigsResponse,
+      } as ApplyAllConfigsResponse,
       { status: 405 },
     );
   }
@@ -70,7 +70,7 @@ export async function action({
         success: false,
         error:
           "Config writing is not enabled. Set TENSORZERO_UI_CONFIG_FILE environment variable.",
-      } as WriteAllConfigsResponse,
+      } as ApplyAllConfigsResponse,
       { status: 400 },
     );
   }
@@ -82,15 +82,15 @@ export async function action({
       sessionId,
     );
 
-    // Create ConfigApplier and write all config writes
-    const configWriter = await ConfigApplier.new(configFile);
-    const results: ApplyConfigChangeWriteResult[] = [];
+    // Create ConfigApplier and apply all config changes
+    const configApplier = await ConfigApplier.new(configFile);
+    const results: ApplyConfigResult[] = [];
 
     for (const event of allConfigWrites) {
       const editPayloads = extractEditPayloadsFromConfigWrite(event);
       const writtenPaths: string[] = [];
       for (const editPayload of editPayloads) {
-        const paths = await configWriter.applyEdit(editPayload);
+        const paths = await configApplier.applyEdit(editPayload);
         writtenPaths.push(...paths);
       }
       results.push({
@@ -103,13 +103,13 @@ export async function action({
       success: true,
       results,
       total_processed: results.length,
-    } as WriteAllConfigsResponse);
+    } as ApplyAllConfigsResponse);
   } catch (error) {
     logger.error("Failed to apply changes to the local filesystem:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
     return Response.json(
-      { success: false, error: errorMessage } as WriteAllConfigsResponse,
+      { success: false, error: errorMessage } as ApplyAllConfigsResponse,
       { status: 500 },
     );
   }

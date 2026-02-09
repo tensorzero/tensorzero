@@ -59,7 +59,7 @@ export function ApplyConfigChangeButton({
       { event: JSON.stringify(event) },
       {
         method: "POST",
-        action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/config-writes/write`,
+        action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/config-apply/apply`,
         encType: "application/json",
       },
     );

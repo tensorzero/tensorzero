@@ -10,19 +10,19 @@ import {
 import { useToast } from "~/hooks/use-toast";
 
 /**
- * Result of writing a config write to file.
+ * Result of applying a config change to file.
  */
-interface ApplyConfigChangeWriteResult {
+interface ApplyConfigResult {
   /** The event ID that was processed */
   eventId: string;
   /** Paths of files that were written */
   writtenPaths: string[];
 }
 
-type WriteAllConfigsResponse =
+type ApplyAllConfigsResponse =
   | {
       success: true;
-      results: ApplyConfigChangeWriteResult[];
+      results: ApplyConfigResult[];
       total_processed: number;
     }
   | { success: false; error: string };
@@ -36,7 +36,7 @@ export function ApplySessionConfigChangesButton({
   sessionId,
   disabled,
 }: ApplySessionConfigChangesButtonProps) {
-  const fetcher = useFetcher<WriteAllConfigsResponse>();
+  const fetcher = useFetcher<ApplyAllConfigsResponse>();
   const { toast } = useToast();
   const hasShownToastRef = useRef(false);
 
@@ -74,7 +74,7 @@ export function ApplySessionConfigChangesButton({
       {},
       {
         method: "POST",
-        action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/config-writes/write-all`,
+        action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/config-apply/apply-all`,
         encType: "application/json",
       },
     );
