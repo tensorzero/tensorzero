@@ -387,13 +387,14 @@ function ResultsContent({
         selectedRows={selectedRows}
         setSelectedRows={setSelectedRows}
       />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={offset <= 0}
-        disableNext={offset + limit >= total_datapoints}
-      />
-      {!has_selected_runs && (
+      {has_selected_runs ? (
+        <PageButtons
+          onPreviousPage={handlePreviousPage}
+          onNextPage={handleNextPage}
+          disablePrevious={offset <= 0}
+          disableNext={offset + limit >= total_datapoints}
+        />
+      ) : (
         <div className="mt-4 text-center text-gray-500">
           Select evaluation run IDs to view results
         </div>
