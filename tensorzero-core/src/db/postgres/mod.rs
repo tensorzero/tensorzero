@@ -115,21 +115,31 @@ impl PostgresConnectionInfo {
         Ok(())
     }
 
+    /// Checks that the set of applied migrations is acceptable for the current gateway version (which contains an expected set of migrations).
+    ///
+    /// During rolling upgrades, the older gateway version will see new database schema, which is expected (so far everything has been backwards
+    /// compatible). However, if the database doesn't contain some migrations the current gateway version requires, we should fail the startup.
+    ///
+    /// TODO(shuyangli): When we need to make backwards incompatible schema changes, properly support expand-contract.
     fn check_applied_expected(
         name: &str,
         applied_migrations: &HashSet<i64>,
         expected_migrations: &HashSet<i64>,
     ) -> Result<(), Error> {
-        // NOTE: this will break old versions of the gateway once new migrations are applied.
-        // We should revisit this behavior prior to releasing a new version of the gateway.
-        if applied_migrations != expected_migrations {
-            return Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: format!(
-                    "Applied `{name}` migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}. {RUN_MIGRATIONS_COMMAND}"
-                ),
-            }));
+        if expected_migrations.is_subset(applied_migrations) {
+            // If expected migrations (what this gateway version expects) is a subset of applied migrations, we are okay - during rolling upgrades
+            // or with optional features, this is expected.
+            return Ok(());
         }
-        Ok(())
+
+        let missing_migrations = expected_migrations
+            .difference(applied_migrations)
+            .collect::<Vec<_>>();
+        Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: format!(
+                "Applied `{name}` migrations do not match expected migrations: {missing_migrations:?} are missing from the database. {RUN_MIGRATIONS_COMMAND}"
+            ),
+        }))
     }
 
     /// Writes retention configuration to the `tensorzero.retention_config` table.
@@ -301,4 +311,74 @@ async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Err
 
 pub fn make_migrator() -> sqlx::migrate::Migrator {
     migrate!("src/db/postgres/migrations")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_check_applied_expected_exact_match() {
+        let applied: HashSet<i64> = [1, 2, 3].into();
+        let expected: HashSet<i64> = [1, 2, 3].into();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect("exact match should succeed");
+    }
+
+    #[test]
+    fn test_check_applied_expected_applied_superset() {
+        // During rolling upgrades, the database may have newer migrations than this gateway version expects.
+        let applied: HashSet<i64> = [1, 2, 3, 4, 5].into();
+        let expected: HashSet<i64> = [1, 2, 3].into();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect("applied superset of expected should succeed");
+    }
+
+    #[test]
+    fn test_check_applied_expected_missing_migrations() {
+        // The database is missing migrations this gateway version requires.
+        let applied: HashSet<i64> = [1, 2].into();
+        let expected: HashSet<i64> = [1, 2, 3].into();
+        let err = PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect_err("missing required migrations should fail");
+        let message = err.to_string();
+        assert!(
+            message.contains("[3]"),
+            "error should report migration 3 as missing, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_check_applied_expected_disjoint_sets() {
+        let applied: HashSet<i64> = [1, 2].into();
+        let expected: HashSet<i64> = [3, 4].into();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect_err("completely disjoint sets should fail");
+    }
+
+    #[test]
+    fn test_check_applied_expected_both_empty() {
+        let applied: HashSet<i64> = HashSet::new();
+        let expected: HashSet<i64> = HashSet::new();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect("both empty should succeed");
+    }
+
+    #[test]
+    fn test_check_applied_expected_empty_expected() {
+        // Gateway expects no migrations (e.g. feature not enabled).
+        let applied: HashSet<i64> = [1, 2, 3].into();
+        let expected: HashSet<i64> = HashSet::new();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect("empty expected should succeed");
+    }
+
+    #[test]
+    fn test_check_applied_expected_empty_applied() {
+        // Database has no migrations but gateway expects some.
+        let applied: HashSet<i64> = HashSet::new();
+        let expected: HashSet<i64> = [1, 2].into();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect_err("empty applied with expected migrations should fail");
+    }
 }
