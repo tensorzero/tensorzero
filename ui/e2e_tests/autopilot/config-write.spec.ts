@@ -16,13 +16,15 @@ const AUTOPILOT_CONFIG_DIR = path.join(
 );
 
 /**
- * Clicks "Write All Configs" and waits for the API response to succeed.
+ * Clicks "Apply changes" and waits for the API response to succeed.
  * Returns the parsed TOML config after writing.
  */
 async function writeAllConfigsAndParse(
   page: Page,
 ): Promise<Record<string, unknown>> {
-  const writeButton = page.getByRole("button", { name: "Write All Configs" });
+  const writeButton = page.getByRole("button", {
+    name: "Apply changes",
+  });
   await expect(writeButton).toBeVisible({ timeout: 10000 });
 
   const responsePromise = page.waitForResponse(
@@ -31,10 +33,8 @@ async function writeAllConfigsAndParse(
   );
   await writeButton.click();
   const apiResponse = await responsePromise;
-  // Status 200 = success, 500 = write failure (error toast would say "Failed to write configs")
-  expect(apiResponse.status(), "Write All Configs API should succeed").toBe(
-    200,
-  );
+  // Status 200 = success, 500 = write failure (error toast would say "Failed to apply changes to the local filesystem")
+  expect(apiResponse.status(), "Apply changes API should succeed").toBe(200);
 
   // Brief pause to ensure filesystem writes are visible to this process
   await page.waitForTimeout(500);
@@ -45,14 +45,14 @@ async function writeAllConfigsAndParse(
 }
 
 /**
- * Clicks the individual "Write config to file" button and waits for the API response to succeed.
+ * Clicks the individual "Apply this configuration change to the local filesystem." button and waits for the API response to succeed.
  * Returns the parsed TOML config after writing.
  */
 async function writeIndividualConfigAndParse(
   page: Page,
 ): Promise<Record<string, unknown>> {
   const writeButton = page.getByRole("button", {
-    name: "Write config to file",
+    name: "Apply this configuration change to the local filesystem.",
   });
   await expect(writeButton).toBeVisible({ timeout: 10000 });
 

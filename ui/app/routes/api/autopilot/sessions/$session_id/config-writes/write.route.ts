@@ -5,11 +5,11 @@ import { getEnv } from "~/utils/env.server";
 import { logger } from "~/utils/logger";
 import { extractEditPayloadsFromConfigWrite } from "~/utils/tensorzero/autopilot-client";
 
-type WriteConfigRequest = {
+type ApplyConfigChangeRequest = {
   event: string;
 };
 
-type WriteConfigResponse =
+type ApplyConfigChangeResponse =
   | { success: true; written_paths: string[] }
   | { success: false; error: string };
 
@@ -35,14 +35,17 @@ export async function action({
       {
         success: false,
         error: "Session ID is required",
-      } as WriteConfigResponse,
+      } as ApplyConfigChangeResponse,
       { status: 400 },
     );
   }
 
   if (request.method !== "POST") {
     return Response.json(
-      { success: false, error: "Method not allowed" } as WriteConfigResponse,
+      {
+        success: false,
+        error: "Method not allowed",
+      } as ApplyConfigChangeResponse,
       { status: 405 },
     );
   }
@@ -55,24 +58,30 @@ export async function action({
         success: false,
         error:
           "Config writing is not enabled. Set TENSORZERO_UI_CONFIG_FILE environment variable.",
-      } as WriteConfigResponse,
+      } as ApplyConfigChangeResponse,
       { status: 400 },
     );
   }
 
-  let body: WriteConfigRequest;
+  let body: ApplyConfigChangeRequest;
   try {
-    body = (await request.json()) as WriteConfigRequest;
+    body = (await request.json()) as ApplyConfigChangeRequest;
   } catch {
     return Response.json(
-      { success: false, error: "Invalid JSON body" } as WriteConfigResponse,
+      {
+        success: false,
+        error: "Invalid JSON body",
+      } as ApplyConfigChangeResponse,
       { status: 400 },
     );
   }
 
   if (!body.event) {
     return Response.json(
-      { success: false, error: "event is required" } as WriteConfigResponse,
+      {
+        success: false,
+        error: "event is required",
+      } as ApplyConfigChangeResponse,
       { status: 400 },
     );
   }
@@ -82,7 +91,10 @@ export async function action({
     event = JSON.parse(body.event) as GatewayEvent;
   } catch {
     return Response.json(
-      { success: false, error: "Invalid event JSON" } as WriteConfigResponse,
+      {
+        success: false,
+        error: "Invalid event JSON",
+      } as ApplyConfigChangeResponse,
       { status: 400 },
     );
   }
@@ -100,13 +112,13 @@ export async function action({
     return Response.json({
       success: true,
       written_paths: writtenPaths,
-    } as WriteConfigResponse);
+    } as ApplyConfigChangeResponse);
   } catch (error) {
-    logger.error("Failed to write config:", error);
+    logger.error("Failed to apply changes to the local filesystem:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
     return Response.json(
-      { success: false, error: errorMessage } as WriteConfigResponse,
+      { success: false, error: errorMessage } as ApplyConfigChangeResponse,
       { status: 500 },
     );
   }

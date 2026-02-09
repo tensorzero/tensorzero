@@ -2,12 +2,17 @@ import { Download, Loader2 } from "lucide-react";
 import { useFetcher } from "react-router";
 import { useEffect, useRef } from "react";
 import { Button } from "~/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { useToast } from "~/hooks/use-toast";
 
 /**
  * Result of writing a config write to file.
  */
-interface WriteConfigWriteResult {
+interface ApplyConfigChangeWriteResult {
   /** The event ID that was processed */
   eventId: string;
   /** Paths of files that were written */
@@ -17,20 +22,20 @@ interface WriteConfigWriteResult {
 type WriteAllConfigsResponse =
   | {
       success: true;
-      results: WriteConfigWriteResult[];
+      results: ApplyConfigChangeWriteResult[];
       total_processed: number;
     }
   | { success: false; error: string };
 
-interface WriteAllConfigsButtonProps {
+interface ApplySessionConfigChangesButtonProps {
   sessionId: string;
   disabled?: boolean;
 }
 
-export function WriteAllConfigsButton({
+export function ApplySessionConfigChangesButton({
   sessionId,
   disabled,
-}: WriteAllConfigsButtonProps) {
+}: ApplySessionConfigChangesButtonProps) {
   const fetcher = useFetcher<WriteAllConfigsResponse>();
   const { toast } = useToast();
   const hasShownToastRef = useRef(false);
@@ -47,12 +52,12 @@ export function WriteAllConfigsButton({
           0,
         );
         toast.success({
-          title: "Configs written",
-          description: `Wrote ${totalFiles} file(s) from ${fetcher.data.total_processed} config(s)`,
+          title: "Applied changes to the local filesystem",
+          description: `Updated ${totalFiles} ${totalFiles === 1 ? "file" : "files"} based on ${fetcher.data.total_processed} configuration ${fetcher.data.total_processed === 1 ? "change" : "changes"}.`,
         });
       } else {
         toast.error({
-          title: "Failed to write configs",
+          title: "Failed to apply changes to the local filesystem",
           description: fetcher.data.error,
         });
       }
@@ -76,23 +81,34 @@ export function WriteAllConfigsButton({
   };
 
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={handleClick}
-      disabled={disabled || isLoading}
-    >
-      {isLoading ? (
-        <>
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Writing...
-        </>
-      ) : (
-        <>
-          <Download className="h-4 w-4" />
-          Write All Configs
-        </>
-      )}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={handleClick}
+          disabled={disabled || isLoading}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Writing...
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" />
+              Apply changes
+            </>
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent
+        className="border-border bg-bg-secondary text-fg-primary border text-xs shadow-lg"
+        sideOffset={5}
+      >
+        Apply all configuration changes from this session to the local
+        filesystem.
+      </TooltipContent>
+    </Tooltip>
   );
 }

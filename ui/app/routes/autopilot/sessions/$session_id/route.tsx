@@ -23,7 +23,7 @@ import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
-import { WriteAllConfigsButton } from "~/components/autopilot/WriteAllConfigsButton";
+import { ApplySessionConfigChangesButton } from "~/components/autopilot/ApplySessionConfigChangesButton";
 import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 import {
   AutopilotStatusBanner,
@@ -775,7 +775,7 @@ function AutopilotSessionEventsPageContent({
               />
               <div className="flex items-center gap-2">
                 {configWriteEnabled && !isNewSession && (
-                  <WriteAllConfigsButton
+                  <ApplySessionConfigChangesButton
                     sessionId={sessionId}
                     disabled={isEventsLoading || hasLoadError}
                   />

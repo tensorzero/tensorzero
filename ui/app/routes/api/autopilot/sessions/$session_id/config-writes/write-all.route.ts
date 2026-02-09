@@ -11,7 +11,7 @@ import {
 /**
  * Result of writing a config write to file.
  */
-interface WriteConfigWriteResult {
+interface ApplyConfigChangeWriteResult {
   /** The event ID that was processed */
   eventId: string;
   /** Paths of files that were written */
@@ -21,7 +21,7 @@ interface WriteConfigWriteResult {
 type WriteAllConfigsResponse =
   | {
       success: true;
-      results: WriteConfigWriteResult[];
+      results: ApplyConfigChangeWriteResult[];
       total_processed: number;
     }
   | { success: false; error: string };
@@ -84,7 +84,7 @@ export async function action({
 
     // Create ConfigWriter and write all config writes
     const configWriter = await ConfigWriter.new(configFile);
-    const results: WriteConfigWriteResult[] = [];
+    const results: ApplyConfigChangeWriteResult[] = [];
 
     for (const event of allConfigWrites) {
       const editPayloads = extractEditPayloadsFromConfigWrite(event);
@@ -105,7 +105,7 @@ export async function action({
       total_processed: results.length,
     } as WriteAllConfigsResponse);
   } catch (error) {
-    logger.error("Failed to write configs:", error);
+    logger.error("Failed to apply changes to the local filesystem:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
     return Response.json(

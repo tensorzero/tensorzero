@@ -31,7 +31,7 @@ import type {
   VisualizationType,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
-import { WriteConfigButton } from "~/components/autopilot/WriteConfigButton";
+import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
 
 /**
@@ -572,7 +572,7 @@ function EventItem({
         )}
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
           {isConfigWrite && configWriteEnabled && sessionId && (
-            <WriteConfigButton sessionId={sessionId} event={event} />
+            <ApplyConfigChangeButton sessionId={sessionId} event={event} />
           )}
           {eventIsToolEvent && (
             <>
