@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from "react-router";
-import { ConfigWriter } from "tensorzero-node";
+import { ConfigApplier } from "tensorzero-node";
 import type { GatewayEvent } from "~/types/tensorzero";
 import { getEnv } from "~/utils/env.server";
 import { logger } from "~/utils/logger";
@@ -100,8 +100,8 @@ export async function action({
   }
 
   try {
-    // Create ConfigWriter and apply the edits
-    const configWriter = await ConfigWriter.new(configFile);
+    // Create ConfigApplier and apply the edits
+    const configWriter = await ConfigApplier.new(configFile);
     const editPayloads = extractEditPayloadsFromConfigWrite(event);
     const writtenPaths: string[] = [];
     for (const editPayload of editPayloads) {

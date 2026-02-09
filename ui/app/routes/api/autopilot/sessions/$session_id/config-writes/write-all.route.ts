@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from "react-router";
-import { ConfigWriter } from "tensorzero-node";
+import { ConfigApplier } from "tensorzero-node";
 import { getEnv } from "~/utils/env.server";
 import { getAutopilotClient } from "~/utils/get-autopilot-client.server";
 import { logger } from "~/utils/logger";
@@ -82,8 +82,8 @@ export async function action({
       sessionId,
     );
 
-    // Create ConfigWriter and write all config writes
-    const configWriter = await ConfigWriter.new(configFile);
+    // Create ConfigApplier and write all config writes
+    const configWriter = await ConfigApplier.new(configFile);
     const results: ApplyConfigChangeWriteResult[] = [];
 
     for (const event of allConfigWrites) {
