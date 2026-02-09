@@ -32,6 +32,10 @@ pub struct GatewayArgs {
     /// These commands trigger some workflow then exit without launching the gateway.
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,
+
+    /// Arguments that control the behavior of Postgres migrations.
+    #[command(flatten)]
+    pub postgres_migration_args: PostgresMigrationArgs,
 }
 
 #[derive(Args, Debug)]
@@ -56,4 +60,11 @@ pub struct EarlyExitCommands {
     /// Validate the config file then exit.
     #[arg(long)]
     pub validate_and_exit: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct PostgresMigrationArgs {
+    /// Run the optimizer Postgres migrations.
+    #[arg(long, default_value_t = false)]
+    pub enable_optimizer_postgres_migrations: bool,
 }
