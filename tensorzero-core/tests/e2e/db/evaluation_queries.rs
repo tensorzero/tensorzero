@@ -503,20 +503,17 @@ async fn test_get_evaluation_results_haiku() {
     let metric_names: std::collections::HashSet<_> = results
         .iter()
         .filter_map(|r| match r {
-            EvaluationResultRow::Chat(row) => row.metric_name.as_ref(),
-            EvaluationResultRow::Json(row) => row.metric_name.as_ref(),
+            EvaluationResultRow::Chat(row) => row.metric_name.as_deref(),
+            EvaluationResultRow::Json(row) => row.metric_name.as_deref(),
         })
         .collect();
     assert!(
-        metric_names.contains(
-            &"tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()
-        ),
+        metric_names.contains("tensorzero::evaluation_name::haiku::evaluator_name::exact_match"),
         "Should have exact_match metric"
     );
     assert!(
-        metric_names.contains(
-            &"tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f".to_string()
-        ),
+        metric_names
+            .contains("tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"),
         "Should have topic_starts_with_f metric"
     );
 
@@ -565,21 +562,19 @@ async fn test_get_evaluation_results_entity_extraction() {
     let metric_names: std::collections::HashSet<_> = results
         .iter()
         .filter_map(|r| match r {
-            EvaluationResultRow::Chat(row) => row.metric_name.as_ref(),
-            EvaluationResultRow::Json(row) => row.metric_name.as_ref(),
+            EvaluationResultRow::Chat(row) => row.metric_name.as_deref(),
+            EvaluationResultRow::Json(row) => row.metric_name.as_deref(),
         })
         .collect();
     assert!(
         metric_names.contains(
-            &"tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
-                .to_string()
+            "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
         ),
         "Should have exact_match metric"
     );
     assert!(
         metric_names.contains(
-            &"tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
-                .to_string()
+            "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
         ),
         "Should have count_sports metric"
     );
@@ -877,18 +872,15 @@ async fn test_get_evaluation_results_chat_datapoint_details() {
     // Verify we have both metrics
     let metric_names: std::collections::HashSet<_> = chat_results
         .iter()
-        .filter_map(|r| r.metric_name.as_ref())
+        .filter_map(|r| r.metric_name.as_deref())
         .collect();
     assert!(
-        metric_names.contains(
-            &"tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string()
-        ),
+        metric_names.contains("tensorzero::evaluation_name::haiku::evaluator_name::exact_match"),
         "Should have exact_match metric"
     );
     assert!(
-        metric_names.contains(
-            &"tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f".to_string()
-        ),
+        metric_names
+            .contains("tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f"),
         "Should have topic_starts_with_f metric"
     );
 
@@ -990,19 +982,17 @@ async fn test_get_evaluation_results_json_datapoint_details() {
     // Verify we have both metrics
     let metric_names: std::collections::HashSet<_> = json_results
         .iter()
-        .filter_map(|r| r.metric_name.as_ref())
+        .filter_map(|r| r.metric_name.as_deref())
         .collect();
     assert!(
         metric_names.contains(
-            &"tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
-                .to_string()
+            "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
         ),
         "Should have exact_match metric"
     );
     assert!(
         metric_names.contains(
-            &"tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
-                .to_string()
+            "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
         ),
         "Should have count_sports metric"
     );
