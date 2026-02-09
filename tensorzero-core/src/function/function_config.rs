@@ -2670,4 +2670,63 @@ mod tests {
             _ => panic!("Expected Thought block"),
         }
     }
+
+    /// Helper: build a minimal FunctionConfigChat with the given experimentation config.
+    fn make_chat_function_config(
+        experimentation: ExperimentationConfigWithNamespaces,
+    ) -> FunctionConfig {
+        FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::default(),
+            parallel_tool_calls: None,
+            description: None,
+            experimentation,
+            all_explicit_templates_names: HashSet::new(),
+        })
+    }
+
+    #[test]
+    fn test_experimentation_for_namespace_none() {
+        let config = make_chat_function_config(ExperimentationConfigWithNamespaces::default());
+        let exp = config.experimentation_for_namespace(None);
+        assert!(
+            matches!(exp, ExperimentationConfig::Uniform(_)),
+            "None namespace should return the base (default uniform) config"
+        );
+    }
+
+    #[test]
+    fn test_experimentation_for_namespace_with_override() {
+        let mut namespaces = HashMap::new();
+        namespaces.insert(
+            "mobile".to_string(),
+            ExperimentationConfig::StaticWeights(
+                serde_json::from_value(serde_json::json!({
+                    "candidate_variants": {"v1": 1.0}
+                }))
+                .unwrap(),
+            ),
+        );
+        let config = make_chat_function_config(ExperimentationConfigWithNamespaces {
+            base: ExperimentationConfig::default(),
+            namespaces,
+        });
+        let exp = config.experimentation_for_namespace(Some("mobile"));
+        assert!(
+            matches!(exp, ExperimentationConfig::StaticWeights(_)),
+            "Known namespace should return the namespace-specific config"
+        );
+    }
+
+    #[test]
+    fn test_experimentation_for_namespace_unknown_returns_base() {
+        let config = make_chat_function_config(ExperimentationConfigWithNamespaces::default());
+        let exp = config.experimentation_for_namespace(Some("nonexistent"));
+        assert!(
+            matches!(exp, ExperimentationConfig::Uniform(_)),
+            "Unknown namespace should fall back to the base config"
+        );
+    }
 }
