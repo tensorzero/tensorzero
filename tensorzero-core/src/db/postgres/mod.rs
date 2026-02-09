@@ -19,6 +19,7 @@ pub mod pgcron;
 pub mod rate_limiting;
 pub mod workflow_evaluation_queries;
 
+mod episode_queries;
 mod inference_filter_helpers;
 
 #[cfg(any(test, feature = "e2e_tests"))]

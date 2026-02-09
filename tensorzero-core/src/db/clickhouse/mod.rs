@@ -32,13 +32,13 @@ mod batching;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
 pub mod dataset_queries;
 pub mod dicl_queries;
+mod episode_queries;
 pub mod evaluation_queries;
 pub mod feedback;
 pub mod inference_queries;
 pub mod migration_manager;
 pub mod model_inferences;
 pub mod query_builder;
-mod select_queries;
 mod table_name;
 pub mod workflow_evaluation_queries;
 
