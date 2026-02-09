@@ -524,7 +524,7 @@ pub async fn setup_postgres(
 
 /// Sets up the Valkey connection from the provided URL.
 ///
-/// Valkey is optional; if no URL is provided, rate limiting will fall back to PostgreSQL.
+/// Valkey is optional; if no URL is provided, rate limiting will fall back to Postgres.
 ///
 /// # Arguments
 /// * `valkey_url` - Optional Valkey URL (from `TENSORZERO_VALKEY_URL` env var)

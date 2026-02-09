@@ -45,19 +45,6 @@ pub trait HealthCheckable {
 
 #[cfg_attr(test, automock)]
 pub trait SelectQueries {
-    fn count_distinct_models_used(&self) -> impl Future<Output = Result<u32, Error>> + Send;
-
-    fn get_model_usage_timeseries(
-        &self,
-        time_window: TimeWindow,
-        max_periods: u32,
-    ) -> impl Future<Output = Result<Vec<ModelUsageTimePoint>, Error>> + Send;
-
-    fn get_model_latency_quantiles(
-        &self,
-        time_window: TimeWindow,
-    ) -> impl Future<Output = Result<Vec<ModelLatencyDatapoint>, Error>> + Send;
-
     fn query_episode_table(
         &self,
         limit: u32,
@@ -97,7 +84,7 @@ impl TimeWindow {
         }
     }
 
-    /// Converts the time window to the PostgreSQL date_trunc time unit.
+    /// Converts the time window to the Postgres date_trunc time unit.
     pub fn to_postgres_time_unit(&self) -> &'static str {
         match self {
             TimeWindow::Minute => "minute",
@@ -137,11 +124,12 @@ pub struct ModelLatencyDatapoint {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EpisodeByIdRow {
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_u64")]
+    #[sqlx(try_from = "i64")]
     pub count: u64,
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
@@ -149,12 +137,13 @@ pub struct EpisodeByIdRow {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TableBoundsWithCount {
     pub first_id: Option<Uuid>,
     pub last_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_u64")]
+    #[sqlx(try_from = "i64")]
     pub count: u64,
 }
 

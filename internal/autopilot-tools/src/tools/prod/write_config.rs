@@ -54,6 +54,10 @@ impl ToolMetadata for WriteConfigTool {
         )
     }
 
+    fn strict(&self) -> bool {
+        false // Config objects have arbitrary nested structures (tools, gateway)
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
@@ -79,7 +83,8 @@ impl ToolMetadata for WriteConfigTool {
                                         "type": "object",
                                         "description": "Map of variant names to variant configurations."
                                     }
-                                }
+                                },
+                                "additionalProperties": false
                             }
                         },
                         "metrics": {
@@ -103,7 +108,8 @@ impl ToolMetadata for WriteConfigTool {
                                         "enum": ["inference", "episode"],
                                         "description": "Whether metric applies to individual inferences or episodes."
                                     }
-                                }
+                                },
+                                "additionalProperties": false
                             }
                         },
                         "tools": {
@@ -114,7 +120,8 @@ impl ToolMetadata for WriteConfigTool {
                             "type": "object",
                             "description": "Gateway configuration settings."
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 },
                 "extra_templates": {
                     "type": "object",

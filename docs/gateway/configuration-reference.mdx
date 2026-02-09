@@ -674,7 +674,28 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-When specified, `secret_access_key` must also be provided. Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+When specified, `secret_access_key` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
+You can't combine this field with `api_key`.
+
+##### `api_key`
+
+- **Type:** string
+- **Required:** no
+
+API key for bearer token authentication. When set, TensorZero uses `Authorization: Bearer <token>` instead of AWS SigV4 signing.
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+
+If neither `api_key` nor IAM credentials are configured, TensorZero checks for `AWS_BEARER_TOKEN_BEDROCK` environment variable first.
+If found, it uses bearer token authentication.
+Otherwise, it falls back to the AWS SDK credential chain.
+
+You can't combine this field with IAM credentials like `access_key_id`.
 
 ##### `endpoint_url`
 
@@ -786,6 +807,11 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
+When specified, `access_key_id` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
+You can't combine this field with `api_key`.
+
 ##### `session_token`
 
 - **Type:** string
@@ -799,7 +825,10 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-Must use the same source type as `access_key_id` and `secret_access_key`.
+When specified, `access_key_id` and `secret_access_key` must also be provided.
+All three fields must use the same source type (all `env::`, all `dynamic::`, or all `sdk`).
+
+You can't combine this field with `api_key`.
 
 </Accordion>
 
@@ -818,7 +847,8 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-When specified, `secret_access_key` must also be provided. Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+When specified, `secret_access_key` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
 
 ##### `endpoint_name`
 
@@ -953,6 +983,9 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
+When specified, `access_key_id` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
 ##### `session_token`
 
 - **Type:** string
@@ -966,7 +999,8 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-Must use the same source type as `access_key_id` and `secret_access_key`.
+When specified, `access_key_id` and `secret_access_key` must also be provided.
+All three fields must use the same source type (all `env::`, all `dynamic::`, or all `sdk`).
 
 </Accordion>
 
@@ -4524,30 +4558,30 @@ There are no additional fields available for this type.
 
 ## `[postgres]`
 
-The `[postgres]` section defines the configuration for PostgreSQL connectivity.
+The `[postgres]` section defines the configuration for Postgres connectivity.
 
-PostgreSQL is required for certain TensorZero features including [adaptive experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
-PostgreSQL can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey-redis) is recommended for high-throughput deployments.
-You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
+Postgres is required for certain TensorZero features including [adaptive experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
+Postgres can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey-redis) is recommended for high-throughput deployments.
+You can connect to Postgres by setting the `TENSORZERO_POSTGRES_URL` environment variable.
 
 ### `connection_pool_size`
 
 - **Type:** integer
 - **Required:** no (default: `20`)
 
-Defines the maximum number of connections in the PostgreSQL connection pool.
+Defines the maximum number of connections in the Postgres connection pool.
 
 ### `enabled`
 
 - **Type:** boolean
 - **Required:** no (default: `null`)
 
-Enable PostgreSQL connectivity.
-If `true`, the gateway will throw an error on startup if it fails to connect to PostgreSQL (requires `TENSORZERO_POSTGRES_URL` environment variable).
-If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
-If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
+Enable Postgres connectivity.
+If `true`, the gateway will throw an error on startup if it fails to connect to Postgres (requires `TENSORZERO_POSTGRES_URL` environment variable).
+If `false`, the gateway will not use Postgres even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
+If omitted, the gateway will connect to Postgres if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable Postgres with a warning.
 
-If you have features that require PostgreSQL (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
+If you have features that require Postgres (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
 
 ## `[rate_limiting]`
 

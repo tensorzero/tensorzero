@@ -391,7 +391,7 @@ pub enum ClientBuilderError {
     NotHTTPGateway,
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
-    #[error("Failed to configure PostgreSQL: {0}")]
+    #[error("Failed to configure Postgres: {0}")]
     Postgres(TensorZeroError),
     #[error("Authentication is not supported in embedded gateway mode: {0}")]
     AuthNotSupportedInEmbeddedMode(TensorZeroError),
@@ -1434,9 +1434,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(PathBuf::from(
-                "../examples/haiku-hidden-preferences/config/tensorzero.toml",
-            )),
+            config_file: Some(PathBuf::from("tests/e2e/config/tensorzero.models.toml")),
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
