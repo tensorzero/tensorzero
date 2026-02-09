@@ -94,6 +94,12 @@ fn handle_gcp_error(
 pub async fn make_gcp_sdk_credentials(
     provider_type: ProviderType,
 ) -> Result<GCPVertexCredentials, Error> {
+    // Skip the (potentially slow) network call to validate GCP credentials
+    // when credential validation is disabled (e.g. e2e tests, relay mode).
+    if skip_credential_validation() {
+        return Ok(GCPVertexCredentials::None);
+    }
+
     let creds_result = google_cloud_auth::credentials::Builder::default().build();
 
     let creds = match creds_result {
