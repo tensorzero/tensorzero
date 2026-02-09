@@ -1700,7 +1700,10 @@ pub struct GCPVertexGeminiContent<'a> {
 }
 
 impl<'a> GCPVertexGeminiContent<'a> {
-    pub async fn from_request_message(message: &'a RequestMessage, provider_type: &str) -> Result<Self, Error> {
+    pub async fn from_request_message(
+        message: &'a RequestMessage,
+        provider_type: &str,
+    ) -> Result<Self, Error> {
         tensorzero_to_gcp_vertex_gemini_content(
             message.role.into(),
             Cow::Borrowed(&message.content),
@@ -2299,29 +2302,35 @@ async fn handle_thought_block<'a>(
         match next_block {
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Thought block with signature must be followed by a content block in {provider_type}"),
+                    message: format!(
+                        "Thought block with signature must be followed by a content block in {provider_type}"
+                    ),
                     provider_type: provider_type.to_string(),
                     raw_request: None,
                     raw_response: None,
-                    }));
+                }));
             }
             Some(Cow::Borrowed(ContentBlock::Thought(_)))
             | Some(Cow::Owned(ContentBlock::Thought(_))) => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Thought block with signature cannot be followed by another thought block in {provider_type}"),
+                    message: format!(
+                        "Thought block with signature cannot be followed by another thought block in {provider_type}"
+                    ),
                     provider_type: provider_type.to_string(),
                     raw_request: None,
                     raw_response: None,
-                    }));
+                }));
             }
             Some(Cow::Borrowed(ContentBlock::Unknown(_)))
             | Some(Cow::Owned(ContentBlock::Unknown(_))) => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-message: format!("Thought block with signature cannot be followed by an unknown block in {provider_type}"),
-provider_type: provider_type.to_string(),
-raw_request: None,
-raw_response: None,
-}));
+                    message: format!(
+                        "Thought block with signature cannot be followed by an unknown block in {provider_type}"
+                    ),
+                    provider_type: provider_type.to_string(),
+                    raw_request: None,
+                    raw_response: None,
+                }));
             }
             Some(next_block) => {
                 let gcp_part = convert_non_thought_content_block(next_block).await?;
