@@ -457,8 +457,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher();
   const killFetcher = useFetcher();
   const isKilling = killFetcher.state !== "idle";
+  const killSucceeded =
+    (killFetcher.data as { success?: boolean } | undefined)?.success === true;
   const any_evaluation_is_running =
-    running_evaluation_run_ids.length > 0 && !isKilling;
+    running_evaluation_run_ids.length > 0 && !isKilling && !killSucceeded;
 
   const [selectedRows, setSelectedRows] = useState<
     Map<string, SelectedRowData>
