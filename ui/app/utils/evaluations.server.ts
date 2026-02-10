@@ -284,8 +284,6 @@ export async function runEvaluation(
       }
     })
     .catch((error) => {
-      // Intentional cancellation via cancelEvaluation() — it already set
-      // completed/cancelled, so just suppress the error.
       if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
