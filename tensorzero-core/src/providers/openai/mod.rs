@@ -6062,4 +6062,56 @@ mod tests {
             "serialized message should not contain reasoning_content when None"
         );
     }
+
+    #[tokio::test]
+    async fn test_tensorzero_to_openai_messages_assistant_with_thought() {
+        // Test the full path: RequestMessage with Thought blocks → tensorzero_to_openai_messages
+        // → output includes reasoning_content. This exercises the multi-turn input path.
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![
+                ContentBlock::Text(Text {
+                    text: "Here's the answer.".to_string(),
+                }),
+                ContentBlock::Thought(Thought {
+                    text: Some("Let me reason about this...".to_string()),
+                    signature: None,
+                    summary: None,
+                    provider_type: Some("openai".to_string()),
+                    extra_data: None,
+                }),
+            ],
+        };
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = tensorzero_to_openai_messages(&message, messages_config)
+            .await
+            .expect("failed to convert messages");
+
+        assert_eq!(result.len(), 1, "should produce one assistant message");
+
+        match &result[0] {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(msg.content.is_some(), "content should be present");
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("Let me reason about this..."),
+                    "reasoning_content should be extracted from Thought block"
+                );
+
+                // Verify the JSON serialization includes reasoning_content
+                let serialized = serde_json::to_string(&result[0]).expect("failed to serialize");
+                assert!(
+                    serialized.contains("\"reasoning_content\""),
+                    "serialized request should include reasoning_content field"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
 }
