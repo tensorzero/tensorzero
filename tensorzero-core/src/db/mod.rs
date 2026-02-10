@@ -187,6 +187,33 @@ pub trait DeploymentIdQueries: Send + Sync {
     async fn get_deployment_id(&self) -> Result<String, Error>;
 }
 
+#[derive(Debug)]
+pub struct HowdyInferenceCounts {
+    pub chat_inference_count: u64,
+    pub json_inference_count: u64,
+}
+
+#[derive(Debug)]
+pub struct HowdyFeedbackCounts {
+    pub boolean_metric_feedback_count: u64,
+    pub float_metric_feedback_count: u64,
+    pub comment_feedback_count: u64,
+    pub demonstration_feedback_count: u64,
+}
+
+#[derive(Debug)]
+pub struct HowdyTokenUsage {
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+}
+
+#[async_trait]
+pub trait HowdyQueries: Send + Sync {
+    async fn count_inferences_for_howdy(&self) -> Result<HowdyInferenceCounts, Error>;
+    async fn count_feedbacks_for_howdy(&self) -> Result<HowdyFeedbackCounts, Error>;
+    async fn get_token_totals_for_howdy(&self) -> Result<HowdyTokenUsage, Error>;
+}
+
 /// A stored DICL (Dynamic In-Context Learning) example.
 #[derive(Debug, Clone)]
 pub struct StoredDICLExample {

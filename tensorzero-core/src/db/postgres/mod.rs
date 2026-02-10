@@ -15,6 +15,7 @@ pub mod dataset_queries;
 pub mod deployment_queries;
 pub mod experimentation;
 pub mod feedback;
+mod howdy_queries;
 pub mod inference_queries;
 pub mod model_inferences;
 pub mod pgcron;
