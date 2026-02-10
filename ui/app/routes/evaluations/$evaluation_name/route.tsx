@@ -28,6 +28,7 @@ import {
   useLocation,
   useNavigate,
   useFetcher,
+  useRevalidator,
 } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
@@ -51,19 +52,6 @@ import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
 import { useReadOnly } from "~/context/read-only";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
-import type { ShouldRevalidateFunctionArgs } from "react-router";
-
-// Prevent fetcher submissions (e.g. kill evaluation) from triggering
-// a full loader revalidation. The auto-refresh interval handles updates.
-export function shouldRevalidate({
-  formAction,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  if (formAction?.includes("/kill")) {
-    return false;
-  }
-  return defaultShouldRevalidate;
-}
 
 type EvaluationData = {
   selected_evaluation_run_infos: Awaited<
@@ -458,12 +446,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const isReadOnly = useReadOnly();
   const { toast } = useToast();
   const fetcher = useFetcher();
-  const killFetcher = useFetcher();
-  const isKilling = killFetcher.state !== "idle";
-  const killSucceeded =
-    (killFetcher.data as { success?: boolean } | undefined)?.success === true;
+  const revalidator = useRevalidator();
+  const [isKilling, setIsKilling] = useState(false);
   const any_evaluation_is_running =
-    running_evaluation_run_ids.length > 0 && !isKilling && !killSucceeded;
+    running_evaluation_run_ids.length > 0 && !isKilling;
 
   const [selectedRows, setSelectedRows] = useState<
     Map<string, SelectedRowData>
@@ -482,29 +468,49 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   useAutoRefresh(any_evaluation_is_running);
 
-  const handleKillEvaluation = useCallback(() => {
-    for (const runId of running_evaluation_run_ids) {
-      killFetcher.submit(null, {
-        method: "POST",
-        action: `/api/evaluations/${encodeURIComponent(runId)}/kill`,
-      });
-    }
-  }, [killFetcher, running_evaluation_run_ids]);
-
+  // Reset kill state once server confirms no more running evaluations
   useEffect(() => {
-    if (killFetcher.state === "idle" && killFetcher.data) {
-      const result = killFetcher.data as {
-        success: boolean;
-        error?: string;
-      };
-      if (!result.success && result.error) {
+    if (isKilling && running_evaluation_run_ids.length === 0) {
+      setIsKilling(false);
+    }
+  }, [isKilling, running_evaluation_run_ids]);
+
+  const handleKillEvaluation = useCallback(async () => {
+    setIsKilling(true);
+    try {
+      const results = await Promise.all(
+        running_evaluation_run_ids.map(async (runId) => {
+          const response = await fetch(
+            `/api/evaluations/${encodeURIComponent(runId)}/kill`,
+            { method: "POST" },
+          );
+          return (await response.json()) as {
+            success: boolean;
+            error?: string;
+          };
+        }),
+      );
+      const failed = results.filter((r) => !r.success && r.error);
+      if (failed.length > 0) {
         toast.error({
           title: "Failed to stop evaluation",
-          description: result.error,
+          description: failed.map((r) => r.error).join(", "),
         });
+        setIsKilling(false);
+        return;
       }
+    } catch (error) {
+      toast.error({
+        title: "Failed to stop evaluation",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+      setIsKilling(false);
+      return;
     }
-  }, [killFetcher.state, killFetcher.data, toast]);
+    // Trigger revalidation — the effect above resets isKilling once
+    // the loader confirms no more running evaluations.
+    revalidator.revalidate();
+  }, [running_evaluation_run_ids, toast, revalidator]);
 
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
