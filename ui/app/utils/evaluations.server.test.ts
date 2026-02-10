@@ -39,13 +39,16 @@ describe("cancelEvaluation", () => {
 
   test("should return already_completed and not abort if evaluation finished naturally", () => {
     const abortController = new AbortController();
-    _test_registerRunningEvaluation("run-2", abortController);
-
-    // Simulate natural completion by cancelling once (which sets completed),
-    // then verify a second cancel returns already_completed.
-    cancelEvaluation("run-2");
+    _test_registerRunningEvaluation("run-2", abortController, {
+      completed: new Date(),
+    });
 
     const result = cancelEvaluation("run-2");
     expect(result).toEqual({ cancelled: false, already_completed: true });
+
+    expect(
+      abortController.signal.aborted,
+      "Should not abort a naturally completed evaluation",
+    ).toBe(false);
   });
 });

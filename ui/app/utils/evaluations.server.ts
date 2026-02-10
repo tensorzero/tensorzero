@@ -55,13 +55,14 @@ export type RunningEvaluationView = Omit<
 export function _test_registerRunningEvaluation(
   id: string,
   abortController: AbortController,
-  variantName = "test-variant",
+  options?: { variantName?: string; completed?: Date },
 ): void {
   runningEvaluations.set(id, {
     abortController,
     errors: [],
-    variantName,
+    variantName: options?.variantName ?? "test-variant",
     started: new Date(),
+    completed: options?.completed,
   });
 }
 
