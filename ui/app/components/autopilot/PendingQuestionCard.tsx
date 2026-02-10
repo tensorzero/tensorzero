@@ -2,6 +2,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Flag,
   MessageSquareMore,
   X,
 } from "lucide-react";
@@ -365,11 +366,13 @@ function HorizontalStepTab({
   label,
   state,
   onClick,
+  icon,
 }: {
   index: number;
   label: string;
   state: "completed" | "active" | "upcoming";
   onClick: () => void;
+  icon?: React.ReactNode;
 }) {
   return (
     <button
@@ -400,7 +403,7 @@ function HorizontalStepTab({
             state === "upcoming" && "border-fg-muted border bg-transparent",
           )}
         >
-          {index + 1}
+          {icon ?? index + 1}
         </span>
       )}
       <span className="truncate">{label}</span>
@@ -616,12 +619,14 @@ export function PendingQuestionCard({
     >
       {/* Header row */}
       <div className="flex items-center justify-between gap-4 px-4 py-3">
-        <span className="text-sm font-medium">Question</span>
+        <span className="text-sm font-medium">
+          {isSingleQuestion ? "Question" : "Questions"}
+        </span>
         {onSkip && (
           <button
             type="button"
             onClick={onSkip}
-            className="text-fg-muted hover:text-fg-primary -mr-1 rounded-sm p-0.5 transition-colors"
+            className="text-purple-400 hover:text-purple-600 dark:text-purple-500 dark:hover:text-purple-300 -mr-1 cursor-pointer rounded-sm p-0.5 transition-colors"
             aria-label="Dismiss questions"
           >
             <X className="h-4 w-4" />
@@ -631,7 +636,7 @@ export function PendingQuestionCard({
 
       {/* Horizontal tabs (top row) */}
       {!isSingleQuestion && tabLayout === "horizontal" && (
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-3">
           {payload.questions.map((q, idx) => (
             <HorizontalStepTab
               key={idx}
@@ -650,6 +655,7 @@ export function PendingQuestionCard({
           <HorizontalStepTab
             index={questionCount}
             label="Review"
+            icon={<Flag className="h-2.5 w-2.5" />}
             state={
               isReviewStep ? "active" : allStepsValid ? "upcoming" : "upcoming"
             }
@@ -711,6 +717,10 @@ export function PendingQuestionCard({
             className="overflow-hidden transition-[height] duration-200 ease-in-out"
             style={{ height: contentHeight }}
           >
+            <div
+              key={activeStep}
+              className="animate-in fade-in duration-150"
+            >
             {isReviewStep ? (
               <div className="flex flex-col gap-3">
                 <span className="text-fg-primary text-sm font-medium">
@@ -737,6 +747,7 @@ export function PendingQuestionCard({
             ) : (
               renderStep(payload.questions[activeStep], activeStep)
             )}
+            </div>
           </div>
 
           {/* Footer: Back / Next / Submit — pinned to bottom */}
