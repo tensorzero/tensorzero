@@ -84,6 +84,24 @@ bind_address = "0.0.0.0:3000"
 # ...
 ```
 
+### `cache.valkey.ttl_s`
+
+- **Type:** integer
+- **Required:** no (default: `86400`)
+
+The time-to-live (TTL) in seconds for inference cache entries stored in Valkey.
+By default, cache entries expire after 24 hours (86400 seconds).
+This setting only applies when Valkey is available (i.e. `TENSORZERO_VALKEY_URL` is set); otherwise, the inference cache uses ClickHouse.
+
+```toml title="tensorzero.toml"
+[gateway.cache.valkey]
+ttl_s = 86400  # 24 hours (default)
+```
+
+If you use a single Valkey instance for both rate limiting and caching, see [Inference Caching](/gateway/guides/inference-caching#cache-backend) for recommended TTL settings.
+
+See [Inference Caching](/gateway/guides/inference-caching) for more details.
+
 ### `debug`
 
 - **Type:** boolean

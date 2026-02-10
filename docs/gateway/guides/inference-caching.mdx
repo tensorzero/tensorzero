@@ -45,6 +45,24 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
 print(response)
 ```
 
+## Cache Backend
+
+If ClickHouse is the primary data store for the gateway, we store cache data in ClickHouse.
+
+If Postgres is configured to be the primary data store for the gateway, and Valkey is available (i.e. `TENSORZERO_VALKEY_URL` is set), we store cache data in Valkey.
+
+Valkey cache entries have a configurable TTL (time-to-live) that defaults to 24 hours (86400 seconds).
+You can change this in `tensorzero.toml`:
+
+```toml title="tensorzero.toml"
+[gateway.cache.valkey]
+ttl_s = 86400  # 24 hours (default)
+```
+
+If you use a single Valkey instance for both rate limiting and caching, we recommend keeping cache TTL under 48 hours.
+Rate limiting keys have a minimum TTL of 48 hours, so the `volatile-ttl` eviction policy will correctly evict cache entries before rate limiting keys under memory pressure.
+See [Deploy Valkey / Redis](/deployment/valkey-redis#eviction-policy) for more details on eviction policies.
+
 ## Technical Notes
 
 - The cache applies to individual model requests, not inference requests.
@@ -54,9 +72,9 @@ print(response)
   individual model requests for inference-time optimizations;
   and so on.
 - The `max_age_s` parameter applies to the retrieval of cached responses.
-  The cache does not automatically delete old entries (i.e. not a TTL).
+  When using ClickHouse, old entries are not automatically deleted.
+  When using Valkey, entries expire according to the configured TTL (`cache.valkey.ttl_s`).
 - When the gateway serves a cached response, the usage fields are set to zero.
-- The cache data is stored in ClickHouse.
 - For batch inference, the gateway only writes to the cache but does not serve cached responses.
 - Inference caching also works for embeddings, using the same cache modes and options as chat completion inference.
   Caching works for single embeddings.
