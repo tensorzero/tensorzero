@@ -39,6 +39,7 @@ pub trait BatchInferenceQueries {
         inference_ids: &[Uuid],
     ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error>;
 
+    // TODO(shuyangli): this should return a strongly typed response with input and output types.
     /// Get completed batch inference responses for Chat functions.
     /// If `inference_id` is Some, fetch only that specific inference. If None, fetch all inferences in the batch.
     async fn get_completed_chat_batch_inferences(
@@ -49,6 +50,7 @@ pub trait BatchInferenceQueries {
         inference_id: Option<Uuid>,
     ) -> Result<Vec<CompletedBatchInferenceRow>, Error>;
 
+    // TODO(shuyangli): this should return a strongly typed response with input and output types.
     /// Get completed batch inference responses for Json functions.
     /// If `inference_id` is Some, fetch only that specific inference. If None, fetch all inferences in the batch.
     async fn get_completed_json_batch_inferences(

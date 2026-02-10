@@ -804,9 +804,8 @@ pub async fn write_batch_request_row(
 ///
 /// Note: only call this function if the batch was Pending prior to being polled.
 /// We don't need to poll if the batch is failed or completed because the status will not change.
-// TODO(#5691): take trait bounds instead of concrete type after implementing batch ModelInference writes for Postgres
 pub async fn write_poll_batch_inference(
-    database: &DelegatingDatabaseConnection,
+    database: &(impl BatchInferenceQueries + InferenceQueries + ModelInferenceQueries + Sync),
     batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
     config: &Config,
@@ -902,9 +901,8 @@ async fn write_batch_request_status_update(
 /// TODO: this function has a large number of Clones that are not necessary.
 /// To avoid these, the types that are calling for clones must be changed to Cows and then the code in the non-batch inference
 /// handler must be adjusted to deal with it and also the lifetimes associated there.
-// TODO(#5691): take trait bounds instead of concrete type after implementing batch ModelInference writes for Postgres
 pub async fn write_completed_batch_inference<'a>(
-    database: &DelegatingDatabaseConnection,
+    database: &(impl BatchInferenceQueries + InferenceQueries + ModelInferenceQueries + Sync),
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
     config: &Config,
