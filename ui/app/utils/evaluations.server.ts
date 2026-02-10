@@ -39,7 +39,7 @@ interface RunningEvaluationInfo {
   errors: DisplayEvaluationError[];
   variantName: string;
   completed?: Date;
-  killed?: boolean;
+  cancelled?: boolean;
   started: Date;
 }
 
@@ -66,25 +66,25 @@ export function getRunningEvaluation(
 }
 
 /**
- * Kills a running evaluation by aborting its HTTP connection to the gateway.
+ * Cancels a running evaluation by aborting its HTTP connection to the gateway.
  * This causes the gateway to cancel all in-flight evaluation tasks.
  * Partial results already written to ClickHouse are preserved.
  */
-export function killEvaluation(evaluationRunId: string): {
-  killed: boolean;
+export function cancelEvaluation(evaluationRunId: string): {
+  cancelled: boolean;
   already_completed: boolean;
 } {
   const evaluation = runningEvaluations.get(evaluationRunId);
   if (!evaluation) {
-    return { killed: false, already_completed: false };
+    return { cancelled: false, already_completed: false };
   }
   if (evaluation.completed) {
-    return { killed: false, already_completed: true };
+    return { cancelled: false, already_completed: true };
   }
   evaluation.abortController.abort();
   evaluation.completed = new Date();
-  evaluation.killed = true;
-  return { killed: true, already_completed: false };
+  evaluation.cancelled = true;
+  return { cancelled: true, already_completed: false };
 }
 
 const evaluationFormDataSchema = z.object({
@@ -272,7 +272,7 @@ export async function runEvaluation(
       }
     })
     .catch((error) => {
-      // Intentional cancellation via killEvaluation() — just mark completed
+      // Intentional cancellation via cancelEvaluation() — just mark completed
       if (error instanceof DOMException && error.name === "AbortError") {
         if (evaluationRunId) {
           const evaluation = runningEvaluations.get(evaluationRunId);
