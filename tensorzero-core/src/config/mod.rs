@@ -383,6 +383,10 @@ pub struct BatchWritesConfig {
     pub flush_interval_ms: u64,
     #[serde(default = "default_max_rows")]
     pub max_rows: usize,
+    /// Optional override for Postgres batch size. Defaults to `max_rows` when unset.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_rows_postgres: Option<usize>,
 }
 
 impl Default for BatchWritesConfig {
@@ -392,6 +396,7 @@ impl Default for BatchWritesConfig {
             __force_allow_embedded_batch_writes: false,
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
+            max_rows_postgres: None,
         }
     }
 }
@@ -1384,6 +1389,14 @@ impl Config {
         if self.gateway.observability.batch_writes.max_rows == 0 {
             return Err(ErrorDetails::Config {
                 message: "Batch writes max rows must be greater than 0".to_string(),
+            }
+            .into());
+        }
+        if let Some(max_rows_postgres) = self.gateway.observability.batch_writes.max_rows_postgres
+            && max_rows_postgres == 0
+        {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes Postgres max rows must be greater than 0".to_string(),
             }
             .into());
         }

@@ -8,10 +8,9 @@ use sqlx::PgPool;
 use tokio::runtime::{Handle, RuntimeFlavor};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
-use tokio::time::Instant;
-use tokio::time::error::Elapsed;
 
 use crate::config::BatchWritesConfig;
+use crate::db::batching::process_channel_with_capacity_and_timeout;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
@@ -31,8 +30,6 @@ pub type PostgresBatchWriterHandle =
 /// processing all outstanding batches once all senders are dropped.
 #[derive(Debug)]
 pub struct PostgresBatchSender {
-    // This needs to be an `Option`, so that we can drop the senders
-    // from outside (signaling to the writer tasks that the channel is closed).
     channels: Option<PostgresBatchChannels>,
     pub writer_handle: PostgresBatchWriterHandle,
 }
@@ -133,11 +130,6 @@ impl PostgresBatchSender {
         }
         Ok(())
     }
-
-    /// Drop the sender channels without dropping self, allowing the writer to drain.
-    pub fn close_channels(&mut self) {
-        self.channels.take();
-    }
 }
 
 struct PostgresBatchWriter {
@@ -149,138 +141,104 @@ struct PostgresBatchWriter {
 impl PostgresBatchWriter {
     async fn process(self, pool: PgPool, config: BatchWritesConfig) {
         let mut join_set = JoinSet::new();
+        let batch_timeout = Duration::from_millis(config.flush_interval_ms);
+        let max_rows = config.max_rows_postgres.unwrap_or(config.max_rows);
 
         // Chat inferences flush task
         {
             let pool = pool.clone();
-            let mut channel = self.chat_inferences_rx;
-            let batch_timeout = Duration::from_millis(config.flush_interval_ms);
-            let max_rows = config.max_rows;
+            let channel = self.chat_inferences_rx;
             join_set.spawn(async move {
-                let mut buffer = Vec::with_capacity(max_rows);
-                while !channel.is_closed() || !channel.is_empty() {
-                    let deadline = Instant::now() + batch_timeout;
-                    while buffer.len() < max_rows {
-                        let remaining = max_rows - buffer.len();
-                        match tokio::time::timeout_at(
-                            deadline,
-                            channel.recv_many(&mut buffer, remaining),
-                        )
-                        .await
-                        {
-                            Ok(0) => break,
-                            Ok(_) => {}
-                            Err(e) => {
-                                let _: Elapsed = e;
-                                break;
-                            }
-                        }
-                    }
-                    if !buffer.is_empty() {
-                        match build_insert_chat_inferences_query(&buffer) {
-                            Ok(mut qb) => {
-                                if let Err(e) = qb.build().execute(&pool).await {
-                                    tracing::error!(
-                                        "Error writing chat inferences to Postgres: {e}"
-                                    );
+                process_channel_with_capacity_and_timeout(
+                    channel,
+                    max_rows,
+                    batch_timeout,
+                    move |buffer| {
+                        let pool = pool.clone();
+                        async move {
+                            // TODO: if this errors, should we retry?
+                            match build_insert_chat_inferences_query(&buffer) {
+                                Ok(mut qb) => {
+                                    if let Err(e) = qb.build().execute(&pool).await {
+                                        tracing::error!(
+                                            "Error writing chat inferences to Postgres: {e}"
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Error building chat inferences query: {e}");
                                 }
                             }
-                            Err(e) => {
-                                tracing::error!("Error building chat inferences query: {e}");
-                            }
+                            buffer
                         }
-                        buffer.clear();
-                    }
-                }
+                    },
+                )
+                .await;
             });
         }
 
         // JSON inferences flush task
         {
             let pool = pool.clone();
-            let mut channel = self.json_inferences_rx;
-            let batch_timeout = Duration::from_millis(config.flush_interval_ms);
-            let max_rows = config.max_rows;
+            let channel = self.json_inferences_rx;
             join_set.spawn(async move {
-                let mut buffer = Vec::with_capacity(max_rows);
-                while !channel.is_closed() || !channel.is_empty() {
-                    let deadline = Instant::now() + batch_timeout;
-                    while buffer.len() < max_rows {
-                        let remaining = max_rows - buffer.len();
-                        match tokio::time::timeout_at(
-                            deadline,
-                            channel.recv_many(&mut buffer, remaining),
-                        )
-                        .await
-                        {
-                            Ok(0) => break,
-                            Ok(_) => {}
-                            Err(e) => {
-                                let _: Elapsed = e;
-                                break;
-                            }
-                        }
-                    }
-                    if !buffer.is_empty() {
-                        match build_insert_json_inferences_query(&buffer) {
-                            Ok(mut qb) => {
-                                if let Err(e) = qb.build().execute(&pool).await {
-                                    tracing::error!(
-                                        "Error writing json inferences to Postgres: {e}"
-                                    );
+                process_channel_with_capacity_and_timeout(
+                    channel,
+                    max_rows,
+                    batch_timeout,
+                    move |buffer| {
+                        let pool = pool.clone();
+                        async move {
+                            // TODO: if this errors, should we retry?
+                            match build_insert_json_inferences_query(&buffer) {
+                                Ok(mut qb) => {
+                                    if let Err(e) = qb.build().execute(&pool).await {
+                                        tracing::error!(
+                                            "Error writing json inferences to Postgres: {e}"
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Error building json inferences query: {e}");
                                 }
                             }
-                            Err(e) => {
-                                tracing::error!("Error building json inferences query: {e}");
-                            }
+                            buffer
                         }
-                        buffer.clear();
-                    }
-                }
+                    },
+                )
+                .await;
             });
         }
 
         // Model inferences flush task
         {
-            let mut channel = self.model_inferences_rx;
-            let batch_timeout = Duration::from_millis(config.flush_interval_ms);
-            let max_rows = config.max_rows;
+            let channel = self.model_inferences_rx;
             join_set.spawn(async move {
-                let mut buffer = Vec::with_capacity(max_rows);
-                while !channel.is_closed() || !channel.is_empty() {
-                    let deadline = Instant::now() + batch_timeout;
-                    while buffer.len() < max_rows {
-                        let remaining = max_rows - buffer.len();
-                        match tokio::time::timeout_at(
-                            deadline,
-                            channel.recv_many(&mut buffer, remaining),
-                        )
-                        .await
-                        {
-                            Ok(0) => break,
-                            Ok(_) => {}
-                            Err(e) => {
-                                let _: Elapsed = e;
-                                break;
-                            }
-                        }
-                    }
-                    if !buffer.is_empty() {
-                        match build_insert_model_inferences_query(&buffer) {
-                            Ok(mut qb) => {
-                                if let Err(e) = qb.build().execute(&pool).await {
-                                    tracing::error!(
-                                        "Error writing model inferences to Postgres: {e}"
-                                    );
+                process_channel_with_capacity_and_timeout(
+                    channel,
+                    max_rows,
+                    batch_timeout,
+                    move |buffer| {
+                        let pool = pool.clone();
+                        async move {
+                            // TODO: if this errors, should we retry?
+                            match build_insert_model_inferences_query(&buffer) {
+                                Ok(mut qb) => {
+                                    if let Err(e) = qb.build().execute(&pool).await {
+                                        tracing::error!(
+                                            "Error writing model inferences to Postgres: {e}"
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Error building model inferences query: {e}");
                                 }
                             }
-                            Err(e) => {
-                                tracing::error!("Error building model inferences query: {e}");
-                            }
+                            buffer
                         }
-                        buffer.clear();
-                    }
-                }
+                    },
+                )
+                .await;
             });
         }
 
