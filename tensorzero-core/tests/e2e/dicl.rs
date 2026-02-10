@@ -355,7 +355,7 @@ async fn embed_insert_example(
         Arc::new(Default::default());
     let clients = InferenceClients {
         http_client: client.clone(),
-        clickhouse_connection_info: clickhouse,
+        clickhouse_connection_info: clickhouse.clone(),
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         credentials: Arc::new(api_keys),
         cache_options: CacheOptions {

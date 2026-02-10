@@ -11,6 +11,7 @@ use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
+use crate::feature_flags::ENABLE_POSTGRES_WRITE;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -39,23 +40,33 @@ impl CacheManager {
         Self { client }
     }
 
-    /// Select the appropriate cache backend: Valkey if enabled, otherwise ClickHouse.
+    /// Select the appropriate cache backend.
+    ///
+    /// When `ENABLE_POSTGRES_WRITE` is off (legacy mode), uses ClickHouse.
+    /// When `ENABLE_POSTGRES_WRITE` is on, uses Valkey if available, otherwise disabled.
     pub fn new_from_connections(
         valkey_connection_info: &ValkeyConnectionInfo,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         cache_config: &ModelInferenceCacheConfig,
     ) -> Self {
+        if !ENABLE_POSTGRES_WRITE.get() {
+            return Self::new(Arc::new(clickhouse_connection_info.clone()));
+        }
         match valkey_connection_info {
             ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
                 ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
             )),
             ValkeyConnectionInfo::Disabled => {
+                tracing::warn!(
+                    "Postgres is used for data writes, but `TENSORZERO_VALKEY_URL` is not set; falling back to ClickHouse for cache writes if configured."
+                );
                 Self::new(Arc::new(clickhouse_connection_info.clone()))
             }
         }
     }
 
     /// Create a disabled cache manager (no-op: lookups return `None`, writes succeed immediately).
+    /// TODO(shuyangli): It's not test-only because tensorzero-optimizers/src/dicl.rs uses it; validate if this is appropriate.
     pub fn disabled() -> Self {
         Self::new(Arc::new(DisabledCacheQueries))
     }
