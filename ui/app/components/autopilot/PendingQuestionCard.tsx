@@ -5,7 +5,7 @@ import {
   MessageSquareMore,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -435,22 +435,34 @@ export function PendingQuestionCard({
     () => new Map(),
   );
 
-  // Track tallest content height so the card never shrinks when switching steps
+  // Animate content area height on step change.
+  // To measure the *natural* height of the new content, temporarily set
+  // height to auto (scrollHeight = max(content, cssHeight), so it can't
+  // measure a shrink without this trick). Then restore and animate.
   const contentRef = useRef<HTMLDivElement>(null);
-  const maxHeightRef = useRef(0);
-  const [minContentHeight, setMinContentHeight] = useState(0);
-  const measureContent = useCallback(() => {
-    if (!contentRef.current) return;
-    const h = contentRef.current.scrollHeight;
-    if (h > maxHeightRef.current) {
-      maxHeightRef.current = h;
-      setMinContentHeight(h);
+  const [contentHeight, setContentHeight] = useState<number | undefined>(
+    undefined,
+  );
+  const isFirstRender = useRef(true);
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    // Temporarily remove explicit height so scrollHeight reflects content
+    const prevHeight = el.style.height;
+    el.style.height = "auto";
+    const naturalHeight = el.scrollHeight;
+    el.style.height = prevHeight; // restore before paint
+
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      setContentHeight(naturalHeight);
+      return;
     }
-  }, []);
-  // Measure after each step change (and on mount)
-  useEffect(() => {
-    measureContent();
-  }, [activeStep, measureContent]);
+    // Force a reflow at the old height so the transition has a start value
+    el.getBoundingClientRect();
+    setContentHeight(naturalHeight);
+  }, [activeStep]);
 
   const questionCount = payload.questions.length;
   const isSingleQuestion = questionCount === 1;
@@ -694,7 +706,11 @@ export function PendingQuestionCard({
         >
           {/* Only render the active step. A ref tracks the tallest
               content seen so the container never shrinks. */}
-          <div ref={contentRef} style={{ minHeight: minContentHeight }}>
+          <div
+            ref={contentRef}
+            className="overflow-hidden transition-[height] duration-200 ease-in-out"
+            style={{ height: contentHeight }}
+          >
             {isReviewStep ? (
               <div className="flex flex-col gap-3">
                 <span className="text-fg-primary text-sm font-medium">
