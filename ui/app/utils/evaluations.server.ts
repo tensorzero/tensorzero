@@ -51,6 +51,20 @@ export type RunningEvaluationView = Omit<
   "abortController"
 >;
 
+/** @internal Exposed for testing only — injects an entry into the in-memory map. */
+export function _test_registerRunningEvaluation(
+  id: string,
+  abortController: AbortController,
+  variantName = "test-variant",
+): void {
+  runningEvaluations.set(id, {
+    abortController,
+    errors: [],
+    variantName,
+    started: new Date(),
+  });
+}
+
 /**
  * Returns the running information for a specific evaluation run.
  * @param evaluationRunId The ID of the evaluation run to retrieve.
