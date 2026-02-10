@@ -603,6 +603,9 @@ function AutopilotSessionEventsPageContent({
     OptimisticMessage[]
   >([]);
 
+  // Preserve chat input draft text across question card visibility changes
+  const [chatDraftText, setChatDraftText] = useState("");
+
   // Track autopilot status for disabling submit
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
     status: "idle",
@@ -842,46 +845,57 @@ function AutopilotSessionEventsPageContent({
       {
         type: "multiple_choice",
         question:
-          "Which optimization strategy should we use for this function?",
+          "The `extract_keywords` function currently uses a single-shot prompt with **GPT-4o**. We've identified that domain-specific documents (medical, legal, financial) consistently score below **0.35** accuracy while general content scores **0.72**. Which optimization strategy would you like to pursue to address this domain-specific performance gap?",
         header: "Strategy",
         options: [
           {
-            label: "Fine-tuning",
+            label: "Domain-specific fine-tuning with curated examples",
             description:
-              "Train on curated examples to improve quality for this specific task",
+              "Collect 500+ labeled examples from each underperforming domain (medical, legal, financial) and fine-tune a dedicated model. Estimated 2-3 weeks of data curation plus 1 week of training and evaluation.",
           },
           {
-            label: "Prompt engineering",
-            description: "Iterate on the system prompt to guide model behavior",
+            label: "Dynamic prompt engineering with domain detection",
+            description:
+              "Add a classification step to detect the document domain, then route to domain-specific system prompts with specialized terminology lists and extraction rules for each vertical.",
           },
           {
-            label: "Best-of-N",
+            label: "Best-of-N sampling with domain-aware scoring",
             description:
-              "Generate multiple candidates and select the highest scoring",
+              "Generate 5 candidate extractions per inference and use a domain-specific scoring function that weights terminology precision. Higher cost per inference but no training data required.",
+          },
+          {
+            label: "Hybrid retrieval-augmented approach",
+            description:
+              "Maintain a vector database of domain-specific keywords and terminology for each vertical. At inference time, retrieve relevant terms and inject them as context into the extraction prompt to guide the model.",
           },
         ],
         multiSelect: false,
       },
       {
         type: "multiple_choice",
-        question: "Which metrics should we optimize for?",
+        question:
+          "Given the current performance characteristics, which metrics should we prioritize when evaluating the optimization? Select all that are important to your use case.",
         header: "Metrics",
         options: [
           {
-            label: "Accuracy",
-            description: "Correctness of the output relative to ground truth",
+            label: "Domain-specific keyword precision",
+            description:
+              "Percentage of extracted keywords that are actually relevant domain terms (currently 0.31 for medical/legal vs 0.72 for general)",
           },
           {
-            label: "Latency",
-            description: "Response time for end users",
+            label: "End-to-end latency (p95)",
+            description:
+              "95th percentile response time including any additional processing steps. Current p95 is 850ms, target is under 500ms for production SLA.",
           },
           {
-            label: "Cost",
-            description: "Token usage and API costs per inference",
+            label: "Cost per 1000 inferences",
+            description:
+              "Total API cost including any additional model calls for classification, retrieval, or scoring. Current cost is $2.40/1k inferences.",
           },
           {
-            label: "Safety",
-            description: "Ensure outputs meet safety guidelines",
+            label: "Cross-domain generalization",
+            description:
+              "Ensure improvements in one domain don't degrade performance in others. Measured as the minimum accuracy across all domains.",
           },
         ],
         multiSelect: true,
@@ -889,19 +903,20 @@ function AutopilotSessionEventsPageContent({
       {
         type: "free_response",
         question:
-          "Are there any additional constraints or requirements we should consider?",
+          "Please describe any additional constraints, requirements, or context that should inform the optimization approach. For example: budget limits, deployment timeline, compliance requirements, specific model preferences, or known edge cases that are particularly important to handle correctly.",
         header: "Constraints",
         placeholder:
-          "e.g., budget limits, deployment timeline, specific model preferences...",
+          "e.g., We need HIPAA compliance for medical documents, budget is capped at $5k/month for inference costs, must deploy within 2 weeks, prefer open-source models where possible...",
       },
       {
         type: "rating",
-        question: "How urgent is this optimization?",
+        question:
+          "On a scale of 1-5, how urgent is this optimization relative to other ongoing work? Consider the business impact of the current low accuracy on domain-specific documents and any customer-facing deadlines.",
         header: "Urgency",
         min: 1,
         max: 5,
-        minLabel: "Low priority",
-        maxLabel: "Urgent",
+        minLabel: "Low priority — can wait for next quarter",
+        maxLabel: "Critical — blocking customer commitments",
       },
     ],
   };
@@ -1197,38 +1212,34 @@ function AutopilotSessionEventsPageContent({
                 />
               )}
               {/* PROTOTYPE: Replace mockQuestionVisible with a real `pendingQuestion`
-                  derived from SSE events. The ternary pattern (question card vs chat input)
-                  is the intended production UX. */}
-              {mockQuestionVisible ? (
-                <div className="flex flex-col gap-6">
-                  <PendingQuestionCard
-                    eventId="mock-question-001"
-                    payload={mockQuestionPayload}
-                    isLoading={false}
-                    onSubmit={handleQuestionSubmit}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleQuestionSkip}
-                    className="text-fg-muted hover:text-fg-primary self-center text-xs underline underline-offset-2"
-                  >
-                    Skip and chat instead
-                  </button>
-                </div>
-              ) : (
-                <ChatInput
-                  sessionId={isNewSession ? NIL_UUID : sessionId}
-                  onMessageSent={handleMessageSent}
-                  onMessageFailed={handleMessageFailed}
-                  isNewSession={isNewSession}
-                  disabled={isEventsLoading || hasLoadError}
-                  submitDisabled={submitDisabled}
-                  isInterruptible={isInterruptible}
-                  isInterrupting={interruptFetcher.state !== "idle"}
-                  onInterrupt={handleInterruptSession}
-                  initialMessage={initialMessage}
+                  derived from SSE events. Question card + chat input shown together —
+                  chat input is editable but submit disabled until questions are
+                  answered or explicitly skipped. */}
+              {mockQuestionVisible && (
+                <PendingQuestionCard
+                  eventId="mock-question-001"
+                  payload={mockQuestionPayload}
+                  isLoading={false}
+                  onSubmit={handleQuestionSubmit}
+                  onSkip={handleQuestionSkip}
                 />
               )}
+              <ChatInput
+                sessionId={isNewSession ? NIL_UUID : sessionId}
+                onMessageSent={handleMessageSent}
+                onMessageFailed={handleMessageFailed}
+                isNewSession={isNewSession}
+                disabled={
+                  isEventsLoading || hasLoadError || mockQuestionVisible
+                }
+                submitDisabled={submitDisabled}
+                isInterruptible={isInterruptible}
+                isInterrupting={interruptFetcher.state !== "idle"}
+                onInterrupt={handleInterruptSession}
+                initialMessage={initialMessage}
+                draftText={chatDraftText}
+                onDraftTextChange={setChatDraftText}
+              />
             </div>
           </div>
         </div>
