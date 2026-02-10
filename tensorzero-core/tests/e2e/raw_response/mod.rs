@@ -1287,3 +1287,260 @@ async fn test_raw_response_mixture_of_n_failed_candidate_streaming() {
             .collect::<Vec<_>>()
     );
 }
+
+// =============================================================================
+// Variant Fallback Tests (raw_response from failed variant attempts)
+// =============================================================================
+
+/// Test that variant fallback captures raw_response from failed variants (non-streaming)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_variant_fallback_non_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_variant_fallback_non_streaming")
+            .await;
+
+    // The `variant_fallback_raw_response` function has:
+    // - `error_variant` (candidate) that always fails with raw_response data
+    // - `success_variant` (fallback) that always succeeds
+    // With uniform experimentation, error_variant is always tried first.
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("variant_fallback_raw_response".to_string()),
+            // Do NOT specify variant_name to trigger the sampling loop
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello variant fallback".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
+
+    let raw_response = response
+        .raw_response()
+        .expect("Response should have raw_response when include_raw_response=true");
+
+    // Should have entries from the successful variant AND the failed variant
+    assert!(
+        raw_response.len() >= 2,
+        "Should have raw_response entries from both successful + failed variant, got {}",
+        raw_response.len()
+    );
+
+    // At least one entry should be from the failed variant (contains test_error)
+    let has_failed_entry = raw_response.iter().any(|e| e.data.contains("test_error"));
+    assert!(
+        has_failed_entry,
+        "Should include raw_response from failed variant containing error data. Entries: {:?}",
+        raw_response.iter().map(|e| &e.data).collect::<Vec<_>>()
+    );
+
+    // At least one entry should be from the successful variant (no error)
+    let has_success_entry = raw_response.iter().any(|e| !e.data.contains("test_error"));
+    assert!(
+        has_success_entry,
+        "Should include raw_response from successful variant"
+    );
+}
+
+/// Test that variant fallback captures raw_response from failed variants (streaming)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_variant_fallback_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_variant_fallback_streaming").await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("variant_fallback_raw_response".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello streaming fallback".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
+
+    let mut raw_response_entries: Vec<RawResponseEntry> = Vec::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+
+        let entries = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_response.as_ref(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_response.as_ref(),
+        };
+        if let Some(entries) = entries {
+            raw_response_entries.extend(entries.iter().cloned());
+        }
+    }
+
+    // Should have entries from the failed variant (error data)
+    let has_failed_entry = raw_response_entries
+        .iter()
+        .any(|e| e.data.contains("test_error"));
+    assert!(
+        has_failed_entry,
+        "Streaming should include raw_response from failed variant. Entries: {:?}",
+        raw_response_entries
+            .iter()
+            .map(|e| &e.data)
+            .collect::<Vec<_>>()
+    );
+}
+
+// =============================================================================
+// Best-of-N Evaluator Retry Tests
+// =============================================================================
+
+/// Test that best-of-n evaluator retries capture raw_response from failed attempts (non-streaming)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_best_of_n_evaluator_retry_non_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_bon_eval_retry_non_streaming").await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("best_of_n_evaluator_retry_raw_response".to_string()),
+            variant_name: Some("best_of_n".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello evaluator retry".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
+
+    let raw_response = response
+        .raw_response()
+        .expect("Response should have raw_response when include_raw_response=true");
+
+    // Should have entries from: 2 candidates + evaluator successful attempt + evaluator failed attempt
+    assert!(
+        raw_response.len() >= 3,
+        "Should have raw_response entries from candidates + evaluator (including failed retry), got {}",
+        raw_response.len()
+    );
+
+    // Should include raw_response from the evaluator's failed retry attempt
+    let has_retry_failure_entry = raw_response
+        .iter()
+        .any(|e| e.data.contains("retry_once_failure"));
+    assert!(
+        has_retry_failure_entry,
+        "Should include raw_response from evaluator's failed retry attempt. Entries: {:?}",
+        raw_response.iter().map(|e| &e.data).collect::<Vec<_>>()
+    );
+}
+
+/// Test that best-of-n evaluator retries capture raw_response from failed attempts (streaming)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_response_best_of_n_evaluator_retry_streaming() {
+    let client =
+        make_embedded_gateway_e2e_with_unique_db("raw_response_bon_eval_retry_streaming").await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("best_of_n_evaluator_retry_raw_response".to_string()),
+            variant_name: Some("best_of_n".to_string()),
+            episode_id: Some(Uuid::now_v7()),
+            input: Input {
+                system: Some(System::Template(Arguments({
+                    let mut args = Map::new();
+                    args.insert("assistant_name".to_string(), json!("TestBot"));
+                    args
+                }))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello evaluator retry streaming".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            include_raw_response: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming response");
+    };
+
+    let mut raw_response_entries: Vec<RawResponseEntry> = Vec::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+
+        let entries = match &chunk {
+            tensorzero::InferenceResponseChunk::Chat(c) => c.raw_response.as_ref(),
+            tensorzero::InferenceResponseChunk::Json(j) => j.raw_response.as_ref(),
+        };
+        if let Some(entries) = entries {
+            raw_response_entries.extend(entries.iter().cloned());
+        }
+    }
+
+    // Should include raw_response from the evaluator's failed retry attempt
+    let has_retry_failure_entry = raw_response_entries
+        .iter()
+        .any(|e| e.data.contains("retry_once_failure"));
+    assert!(
+        has_retry_failure_entry,
+        "Streaming should include raw_response from evaluator's failed retry attempt. Entries: {:?}",
+        raw_response_entries
+            .iter()
+            .map(|e| &e.data)
+            .collect::<Vec<_>>()
+    );
+}

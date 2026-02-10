@@ -795,6 +795,56 @@ candidates = ["working_candidate", "failing_candidate"]
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+# Test function for variant-level fallback to test raw_response capture from failed variants
+[functions.variant_fallback_raw_response]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.variant_fallback_raw_response.experimentation]
+type = "uniform"
+candidate_variants = ["error_variant"]
+fallback_variants = ["success_variant"]
+
+[functions.variant_fallback_raw_response.variants.error_variant]
+type = "chat_completion"
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.variant_fallback_raw_response.variants.success_variant]
+type = "chat_completion"
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+# Test function for best-of-n with evaluator using retry_once_with_raw_response
+[functions.best_of_n_evaluator_retry_raw_response]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.best_of_n_evaluator_retry_raw_response.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.best_of_n_evaluator_retry_raw_response.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.best_of_n_evaluator_retry_raw_response.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.best_of_n_evaluator_retry_raw_response.variants.best_of_n.evaluator]
+model = "retry_once_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 0.1 }
+
 [functions.compact_context]
 type = "chat"
 system_schema = "../../../../ui/fixtures/config/functions/compact_context/system_schema.json"

@@ -328,10 +328,29 @@ pub fn prepare_serialized_openai_compatible_events(
         let mut is_first_chunk = true;
 
         while let Some(chunk) = stream.next().await {
-            // NOTE: in the future, we may want to end the stream early if we get an error
-            // For now, we just ignore the error and try to get more chunks
-            let Ok(chunk) = chunk else {
-                continue;
+            let chunk = match chunk {
+                Ok(c) => c,
+                Err(e) => {
+                    // Emit error event with raw_response data (mirroring the native endpoint pattern)
+                    let mut error_data = serde_json::json!({
+                        "error": {
+                            "message": e.to_string(),
+                        }
+                    });
+                    if include_raw_response {
+                        let raw_responses = e.collect_raw_responses();
+                        if !raw_responses.is_empty() {
+                            error_data["raw_response"] = serde_json::to_value(&raw_responses)
+                                .unwrap_or_else(|err| serde_json::json!(err.to_string()));
+                        }
+                    }
+                    yield Event::default().json_data(&error_data).map_err(|e| {
+                        Error::new(ErrorDetails::Inference {
+                            message: format!("Failed to convert error to Event: {e}"),
+                        })
+                    });
+                    continue;
+                }
             };
 
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(

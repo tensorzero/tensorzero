@@ -4,7 +4,7 @@ use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json, debug_handler};
 use futures::FutureExt;
-use futures::stream::Stream;
+use futures::stream::{self, Stream};
 use futures_core::FusedStream;
 use indexmap::IndexMap;
 use metrics::{Label, counter};
@@ -587,7 +587,36 @@ pub async fn inference(
         .await;
 
         match result {
-            Ok(output) => {
+            Ok(mut output) => {
+                // Inject raw_responses from failed variant attempts into the successful output
+                if params.include_raw_response && !variant_errors.is_empty() {
+                    let failed_raw_responses: Vec<RawResponseEntry> = variant_errors
+                        .values()
+                        .flat_map(|e| e.collect_raw_responses())
+                        .collect();
+                    if !failed_raw_responses.is_empty() {
+                        match &mut output {
+                            InferenceOutput::NonStreaming(response) => {
+                                response.extend_raw_response(failed_raw_responses);
+                            }
+                            InferenceOutput::Streaming(existing_stream) => {
+                                let chunk = create_failed_variant_raw_response_chunk(
+                                    &function,
+                                    inference_id,
+                                    episode_id,
+                                    &variant_name,
+                                    failed_raw_responses,
+                                );
+                                let original_stream =
+                                    std::mem::replace(existing_stream, Box::pin(stream::empty()));
+                                *existing_stream = Box::pin(futures::StreamExt::chain(
+                                    stream::once(async { Ok(chunk) }),
+                                    original_stream,
+                                ));
+                            }
+                        }
+                    }
+                }
                 return Ok(InferenceOutputData {
                     output,
                     exactly_one_variant: if already_sampled {
@@ -1054,6 +1083,44 @@ fn create_previous_raw_response_chunk(
         }),
     };
     Some(chunk)
+}
+
+/// Creates an `InferenceResponseChunk` containing raw_response entries from failed variant
+/// attempts. This is prepended to the stream when a variant succeeds after previous variants
+/// failed, ensuring their raw_response data is not lost.
+fn create_failed_variant_raw_response_chunk(
+    function: &FunctionConfig,
+    inference_id: Uuid,
+    episode_id: Uuid,
+    variant_name: &str,
+    raw_responses: Vec<RawResponseEntry>,
+) -> InferenceResponseChunk {
+    match function {
+        FunctionConfig::Chat(_) => InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
+            inference_id,
+            episode_id,
+            variant_name: variant_name.to_string(),
+            content: vec![],
+            usage: None,
+            raw_usage: None,
+            raw_response: Some(raw_responses),
+            finish_reason: None,
+            original_chunk: None,
+            raw_chunk: None,
+        }),
+        FunctionConfig::Json(_) => InferenceResponseChunk::Json(JsonInferenceResponseChunk {
+            inference_id,
+            episode_id,
+            variant_name: variant_name.to_string(),
+            raw: String::new(),
+            usage: None,
+            raw_usage: None,
+            raw_response: Some(raw_responses),
+            finish_reason: None,
+            original_chunk: None,
+            raw_chunk: None,
+        }),
+    }
 }
 
 /// Transform the response(s) from the model providers for our inference APIs.
@@ -1693,6 +1760,14 @@ impl InferenceResponse {
             InferenceResponse::Chat(c) => c.get_serialized_output(),
             InferenceResponse::Json(j) => j.get_serialized_output(),
         }
+    }
+
+    pub fn extend_raw_response(&mut self, entries: Vec<RawResponseEntry>) {
+        let raw_response = match self {
+            InferenceResponse::Chat(r) => &mut r.raw_response,
+            InferenceResponse::Json(r) => &mut r.raw_response,
+        };
+        raw_response.get_or_insert_with(Vec::new).extend(entries);
     }
 }
 

@@ -560,15 +560,26 @@ async fn inner_select_best_candidate<'a>(
                 name: evaluator.inner.model().to_string(),
             })
         })?;
-    let model_inference_response = evaluator
+    let retry_result = evaluator
         .inner
         .retries()
-        .retry(|| async {
+        .retry_collecting_failures(|| async {
             model_config
                 .infer(&inference_request, clients, evaluator.inner.model())
                 .await
         })
-        .await?;
+        .await;
+    let mut model_inference_response = retry_result.result?;
+
+    // Collect raw_responses from failed retry attempts
+    if clients.include_raw_response {
+        for error in &retry_result.failed_attempts {
+            model_inference_response
+                .failed_raw_responses
+                .extend(error.collect_raw_responses());
+        }
+    }
+
     let model_inference_result = ModelInferenceResponseWithMetadata::new(
         model_inference_response,
         evaluator.inner.model().clone(),

@@ -426,3 +426,88 @@ async fn test_openai_compatible_raw_response_error_streaming() {
         "Provider type should be 'dummy'"
     );
 }
+
+/// Test that mid-stream errors include raw_response in the error event (OAI-compatible endpoint)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openai_compatible_raw_response_mid_stream_error() {
+    let (base_url, _shutdown_handle) =
+        make_http_gateway_with_unique_db("raw_response_openai_mid_stream_error").await;
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // Use fatal_stream_error_with_raw_response model - produces a fatal error mid-stream
+    let payload = json!({
+        "model": "tensorzero::function_name::basic_test",
+        "messages": [{"role": "user", "content": "Hello"}],
+        "stream": true,
+        "tensorzero::variant_name": "fatal_stream_error_with_raw_response",
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::include_raw_response": true
+    });
+
+    let mut chunks = client
+        .post(format!("{base_url}/openai/v1/chat/completions"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .expect("Failed to create eventsource for streaming request");
+
+    let mut found_error_with_raw_response = false;
+    let mut chunks_before_error = 0;
+
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.expect("Failed to receive chunk from stream");
+        let Event::Message(chunk) = chunk else {
+            continue;
+        };
+        if chunk.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value =
+            serde_json::from_str(&chunk.data).expect("Failed to parse chunk as JSON");
+
+        // Check if this is an error event
+        if let Some(error) = chunk_json.get("error") {
+            assert!(
+                error.get("message").is_some(),
+                "Error event should have a message"
+            );
+
+            // Check for raw_response in the error event
+            if let Some(raw_response) = chunk_json.get("raw_response") {
+                found_error_with_raw_response = true;
+                assert!(raw_response.is_array(), "raw_response should be an array");
+                let entries = raw_response.as_array().unwrap();
+                assert!(
+                    !entries.is_empty(),
+                    "raw_response should have at least one entry"
+                );
+
+                // Verify the entry has the expected structure
+                let entry = &entries[0];
+                assert_eq!(
+                    entry.get("provider_type").and_then(|v| v.as_str()),
+                    Some("dummy"),
+                    "Provider type should be 'dummy'"
+                );
+                let data = entry.get("data").and_then(|d| d.as_str()).unwrap();
+                assert!(
+                    data.contains("fatal_stream_error"),
+                    "raw_response data should contain fatal_stream_error info, got: {data}"
+                );
+            }
+        } else {
+            chunks_before_error += 1;
+        }
+    }
+
+    assert!(
+        chunks_before_error > 0,
+        "Should have received some chunks before the mid-stream error"
+    );
+    assert!(
+        found_error_with_raw_response,
+        "Mid-stream error event should include raw_response data"
+    );
+}
