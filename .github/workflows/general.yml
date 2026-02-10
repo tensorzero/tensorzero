@@ -1123,7 +1123,7 @@ jobs:
       # Permission for rust-cache
       actions: read
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
     env:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
@@ -1266,6 +1266,7 @@ jobs:
 
   build-fixtures-container:
     uses: ./.github/workflows/build-fixtures-container.yml
+    if: !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
     permissions:
       # Permission to checkout the repository
       contents: read
