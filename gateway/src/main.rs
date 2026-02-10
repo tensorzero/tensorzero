@@ -59,7 +59,7 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn run_optimizer_postgres_migrations() -> Result<(), Error> {
+async fn run_optimization_postgres_migrations() -> Result<(), Error> {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
         Error::new(ErrorDetails::PostgresConnectionInitialization {
             message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
@@ -75,7 +75,7 @@ async fn run_optimizer_postgres_migrations() -> Result<(), Error> {
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::PostgresMigration {
-                message: format!("Failed to run optimizer migrations: {e}"),
+                message: format!("Failed to run optimization migrations: {e}"),
             })
         })?;
     Ok(())
@@ -144,11 +144,11 @@ async fn run() -> Result<(), ExitCode> {
             .log_err_pretty("Failed to run Postgres migrations")?;
         if args
             .postgres_migration_args
-            .enable_optimizer_postgres_migrations
+            .enable_optimization_postgres_migrations
         {
-            run_optimizer_postgres_migrations()
+            run_optimization_postgres_migrations()
                 .await
-                .log_err_pretty("Failed to run optimizer Postgres migrations")?;
+                .log_err_pretty("Failed to run optimization Postgres migrations")?;
         }
         tracing::info!("Postgres is ready.");
         return Ok(());

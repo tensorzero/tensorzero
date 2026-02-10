@@ -64,7 +64,7 @@ pub struct EarlyExitCommands {
 
 #[derive(Args, Debug)]
 pub struct PostgresMigrationArgs {
-    /// Run the optimizer Postgres migrations.
+    /// Run Postgres migrations for optimizations.
     #[arg(long, default_value_t = false)]
-    pub enable_optimizer_postgres_migrations: bool,
+    pub enable_optimization_postgres_migrations: bool,
 }
