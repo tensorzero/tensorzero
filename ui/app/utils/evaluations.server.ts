@@ -82,24 +82,21 @@ export function getRunningEvaluation(
 
 /**
  * Cancels a running evaluation by aborting its HTTP connection to the gateway.
- * This causes the gateway to cancel all in-flight evaluation tasks.
- * Partial results already written to ClickHouse are preserved.
+ * Idempotent: returns true if the evaluation exists (whether still running or
+ * already completed), false if not found. Calling abort() on an already-finished
+ * controller is a no-op.
  */
-export function cancelEvaluation(evaluationRunId: string): {
-  cancelled: boolean;
-  already_completed: boolean;
-} {
+export function cancelEvaluation(evaluationRunId: string): boolean {
   const evaluation = runningEvaluations.get(evaluationRunId);
   if (!evaluation) {
-    return { cancelled: false, already_completed: false };
+    return false;
   }
-  if (evaluation.completed) {
-    return { cancelled: false, already_completed: true };
+  if (!evaluation.completed) {
+    evaluation.abortController.abort();
+    evaluation.completed = new Date();
+    evaluation.cancelled = true;
   }
-  evaluation.abortController.abort();
-  evaluation.completed = new Date();
-  evaluation.cancelled = true;
-  return { cancelled: true, already_completed: false };
+  return true;
 }
 
 const evaluationFormDataSchema = z.object({
