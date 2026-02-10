@@ -300,8 +300,9 @@ impl GatewayHandle {
             .ok();
 
         for (function_name, function_config) in &config.functions {
-            function_config
-                .experimentation()
+            let experimentation = function_config.experimentation_with_namespaces();
+            experimentation
+                .base
                 .setup(
                     Arc::new(clickhouse_connection_info.clone())
                         as Arc<dyn FeedbackQueries + Send + Sync>,
@@ -310,6 +311,17 @@ impl GatewayHandle {
                     cancel_token.clone(),
                 )
                 .await?;
+            for (namespace, namespace_config) in &experimentation.namespaces {
+                namespace_config
+                    .setup(
+                        Arc::new(clickhouse_connection_info.clone())
+                            as Arc<dyn FeedbackQueries + Send + Sync>,
+                        &format!("{function_name} (namespace: {namespace})"),
+                        &postgres_connection_info,
+                        cancel_token.clone(),
+                    )
+                    .await?;
+            }
         }
         let auth_cache = create_auth_cache_from_config(&config);
 

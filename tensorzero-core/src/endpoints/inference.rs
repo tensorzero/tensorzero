@@ -87,8 +87,7 @@ pub struct Params {
     pub episode_id: Option<Uuid>,
     // The namespace for experimentation. If provided, namespace-specific experimentation
     // configs will be used if available. Stored as a `tensorzero::namespace` tag.
-    // Must match the pattern [a-z][a-z0-9_]* (lowercase letters, digits, and underscores,
-    // starting with a letter).
+    // Must be a non-empty string.
     #[serde(default)]
     pub namespace: Option<Namespace>,
     // the input for the inference
