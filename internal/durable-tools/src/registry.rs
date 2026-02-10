@@ -114,16 +114,7 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
     }
 
     fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
-        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
-            .map_err(|e| NonControlToolError::InvalidParams {
-                message: format!("llm_params: {e}"),
-            })?;
-        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
-            NonControlToolError::InvalidParams {
-                message: format!("side_info: {e}"),
-            }
-        })?;
-        Ok(())
+        self.0.validate_params(llm_params, side_info)
     }
 }
 
@@ -154,16 +145,7 @@ impl<T: SimpleTool> ErasedTool for T {
     }
 
     fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
-        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
-            .map_err(|e| NonControlToolError::InvalidParams {
-                message: format!("llm_params: {e}"),
-            })?;
-        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
-            NonControlToolError::InvalidParams {
-                message: format!("side_info: {e}"),
-            }
-        })?;
-        Ok(())
+        ToolMetadata::validate_params(self, llm_params, side_info)
     }
 }
 

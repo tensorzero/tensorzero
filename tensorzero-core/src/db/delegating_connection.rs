@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
-use crate::db::ConfigQueries;
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -41,6 +40,10 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationQueries, WorkflowEvaluationRunEpisodeWithFeedbackRow,
     WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRow,
     WorkflowEvaluationRunWithEpisodeCountRow,
+};
+use crate::db::{
+    ConfigQueries, DeploymentIdQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries,
+    HowdyTokenUsage,
 };
 use crate::db::{
     EpisodeByIdRow, EpisodeQueries, ModelLatencyDatapoint, ModelUsageTimePoint,
@@ -80,6 +83,8 @@ pub struct DelegatingDatabaseConnection {
 /// via &(dyn DelegatingDatabaseQueries).
 pub trait DelegatingDatabaseQueries:
     ConfigQueries
+    + DeploymentIdQueries
+    + HowdyQueries
     + FeedbackQueries
     + InferenceQueries
     + DatasetQueries
@@ -107,15 +112,6 @@ impl DelegatingDatabaseConnection {
             &self.clickhouse
         }
     }
-
-    /// Gets the deployment ID, trying ClickHouse first, then falling back to Postgres.
-    /// If ClickHouse has a deployment ID and Postgres is enabled, syncs it to Postgres
-    /// to keep both databases consistent.
-    pub async fn get_deployment_id(&self) -> Result<String, ()> {
-        // TODO(#5691): Support reading deployment ID from Postgres, and syncing the deployment ID
-        // from ClickHouse into Postgres if Clickhouse already exists.
-        self.clickhouse.get_deployment_id().await
-    }
 }
 
 #[async_trait]
@@ -139,6 +135,28 @@ impl ConfigQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl DeploymentIdQueries for DelegatingDatabaseConnection {
+    async fn get_deployment_id(&self) -> Result<String, Error> {
+        self.get_read_database().get_deployment_id().await
+    }
+}
+
+#[async_trait]
+impl HowdyQueries for DelegatingDatabaseConnection {
+    async fn count_inferences_for_howdy(&self) -> Result<HowdyInferenceCounts, Error> {
+        self.get_read_database().count_inferences_for_howdy().await
+    }
+
+    async fn count_feedbacks_for_howdy(&self) -> Result<HowdyFeedbackCounts, Error> {
+        self.get_read_database().count_feedbacks_for_howdy().await
+    }
+
+    async fn get_token_totals_for_howdy(&self) -> Result<HowdyTokenUsage, Error> {
+        self.get_read_database().get_token_totals_for_howdy().await
     }
 }
 

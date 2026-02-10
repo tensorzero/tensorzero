@@ -1685,26 +1685,29 @@ pub enum GCPVertexGeminiPartData<'a> {
 #[serde(rename_all = "camelCase")]
 pub struct GCPVertexGeminiContentPart<'a> {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    thought: bool,
+    pub thought: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    thought_signature: Option<String>,
+    pub thought_signature: Option<String>,
     #[serde(flatten)]
     #[serde(default)]
-    data: FlattenUnknown<'a, GCPVertexGeminiPartData<'a>>,
+    pub data: FlattenUnknown<'a, GCPVertexGeminiPartData<'a>>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct GCPVertexGeminiContent<'a> {
-    role: GCPVertexGeminiRole,
-    parts: Vec<GCPVertexGeminiContentPart<'a>>,
+    pub role: GCPVertexGeminiRole,
+    pub parts: Vec<GCPVertexGeminiContentPart<'a>>,
 }
 
 impl<'a> GCPVertexGeminiContent<'a> {
-    async fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
+    pub async fn from_request_message(
+        message: &'a RequestMessage,
+        provider_type: &str,
+    ) -> Result<Self, Error> {
         tensorzero_to_gcp_vertex_gemini_content(
             message.role.into(),
             Cow::Borrowed(&message.content),
-            PROVIDER_TYPE,
+            provider_type,
         )
         .await
     }
@@ -1762,7 +1765,7 @@ struct GCPVertexGeminiFunctionCallingConfig<'a> {
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GCPVertexGeminiToolConfig<'a> {
+pub(super) struct GCPVertexGeminiToolConfig<'a> {
     function_calling_config: GCPVertexGeminiFunctionCallingConfig<'a>,
 }
 
@@ -1911,7 +1914,7 @@ struct GCPVertexGeminiThinkingConfig {
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GCPVertexGeminiGenerationConfig<'a> {
+pub(super) struct GCPVertexGeminiGenerationConfig<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1936,18 +1939,18 @@ struct GCPVertexGeminiGenerationConfig<'a> {
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GCPVertexGeminiRequest<'a> {
-    contents: Vec<GCPVertexGeminiContent<'a>>,
+pub(super) struct GCPVertexGeminiRequest<'a> {
+    pub(super) contents: Vec<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<GCPVertexGeminiTool<'a>>>,
+    pub(super) tools: Option<Vec<GCPVertexGeminiTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
+    pub(super) tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
+    pub(super) generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system_instruction: Option<GCPVertexGeminiContent<'a>>,
+    pub(super) system_instruction: Option<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    labels: HashMap<String, String>,
+    pub(super) labels: HashMap<String, String>,
     // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
@@ -2021,7 +2024,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             request
                 .messages
                 .iter()
-                .map(GCPVertexGeminiContent::from_request_message),
+                .map(|m| GCPVertexGeminiContent::from_request_message(m, PROVIDER_TYPE)),
         )
         .await?
         .into_iter()
@@ -2090,7 +2093,7 @@ pub async fn prepare_gcp_vertex_gemini_messages<'a>(
     let gcp_vertex_gemini_messages = try_join_all(
         messages
             .iter()
-            .map(GCPVertexGeminiContent::from_request_message),
+            .map(|message| GCPVertexGeminiContent::from_request_message(message, PROVIDER_TYPE)),
     )
     .await?;
     Ok(gcp_vertex_gemini_messages)
@@ -2287,11 +2290,6 @@ async fn handle_thought_block<'a>(
     model_content_blocks: &mut Vec<GCPVertexGeminiContentPart<'a>>,
     iter: &mut impl Iterator<Item = Cow<'a, ContentBlock>>,
 ) -> Result<(), Error> {
-    debug_assert!(matches!(
-        thought.provider_type.as_deref(),
-        None | Some(PROVIDER_TYPE)
-    ));
-
     if let Some(text) = &thought.text {
         // Send thought text back with `thought: true` to maintain reasoning context.
         // See: https://ai.google.dev/gemini-api/docs/thinking
@@ -2307,29 +2305,35 @@ async fn handle_thought_block<'a>(
         match next_block {
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "Thought block with signature must be followed by a content block in GCP Vertex Gemini".to_string(),
+                    message: format!(
+                        "Thought block with signature must be followed by a content block in {provider_type}"
+                    ),
                     provider_type: provider_type.to_string(),
                     raw_request: None,
                     raw_response: None,
-                    }));
+                }));
             }
             Some(Cow::Borrowed(ContentBlock::Thought(_)))
             | Some(Cow::Owned(ContentBlock::Thought(_))) => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "Thought block with signature cannot be followed by another thought block in GCP Vertex Gemini".to_string(),
+                    message: format!(
+                        "Thought block with signature cannot be followed by another thought block in {provider_type}"
+                    ),
                     provider_type: provider_type.to_string(),
                     raw_request: None,
                     raw_response: None,
-                    }));
+                }));
             }
             Some(Cow::Borrowed(ContentBlock::Unknown(_)))
             | Some(Cow::Owned(ContentBlock::Unknown(_))) => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-message: "Thought block with signature cannot be followed by an unknown block in GCP Vertex Gemini".to_string(),
-provider_type: provider_type.to_string(),
-raw_request: None,
-raw_response: None,
-}));
+                    message: format!(
+                        "Thought block with signature cannot be followed by an unknown block in {provider_type}"
+                    ),
+                    provider_type: provider_type.to_string(),
+                    raw_request: None,
+                    raw_response: None,
+                }));
             }
             Some(next_block) => {
                 let gcp_part = convert_non_thought_content_block(next_block).await?;
@@ -3199,7 +3203,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::from_request_message(&message)
+        let content = GCPVertexGeminiContent::from_request_message(&message, PROVIDER_TYPE)
             .await
             .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
@@ -3217,7 +3221,7 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::from_request_message(&message)
+        let content = GCPVertexGeminiContent::from_request_message(&message, PROVIDER_TYPE)
             .await
             .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
@@ -3241,7 +3245,7 @@ mod tests {
                 }),
             ],
         };
-        let content = GCPVertexGeminiContent::from_request_message(&message)
+        let content = GCPVertexGeminiContent::from_request_message(&message, PROVIDER_TYPE)
             .await
             .unwrap();
 
@@ -3272,7 +3276,7 @@ mod tests {
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
-        let content = GCPVertexGeminiContent::from_request_message(&message)
+        let content = GCPVertexGeminiContent::from_request_message(&message, PROVIDER_TYPE)
             .await
             .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
