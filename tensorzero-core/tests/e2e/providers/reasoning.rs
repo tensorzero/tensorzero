@@ -1083,7 +1083,8 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 2);
-    let thought = output
+    // Ensure a thought block exists
+    let _thought = output
         .iter()
         .find(|block| matches!(block, StoredContentBlock::Thought(_)))
         .unwrap();
