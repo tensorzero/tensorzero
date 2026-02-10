@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquareMore,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -11,6 +12,58 @@ import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { ToolEventId } from "~/components/autopilot/EventStream";
 import { cn } from "~/utils/common";
+
+// Renders a string with inline markdown (bold, italic, code).
+// Strips all block-level formatting — only inline runs are rendered.
+function InlineMarkdown({ text }: { text: string }) {
+  // Tokenize the text into segments: code, bold, italic, and plain text.
+  // Order matters — code first (so backtick content isn't processed for bold/italic).
+  const TOKEN_RE = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_)/g;
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = TOKEN_RE.exec(text)) !== null) {
+    // Plain text before this token
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    if (token.startsWith("`")) {
+      parts.push(
+        <code
+          key={match.index}
+          className="bg-muted rounded px-1 py-0.5 font-mono text-xs font-medium"
+        >
+          {token.slice(1, -1)}
+        </code>,
+      );
+    } else if (token.startsWith("**")) {
+      parts.push(
+        <strong key={match.index} className="font-semibold">
+          {token.slice(2, -2)}
+        </strong>,
+      );
+    } else if (token.startsWith("*") || token.startsWith("_")) {
+      parts.push(
+        <em key={match.index} className="italic">
+          {token.slice(1, -1)}
+        </em>,
+      );
+    }
+
+    lastIndex = match.index + token.length;
+  }
+
+  // Remaining plain text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return <>{parts}</>;
+}
 
 /**
  * PROTOTYPE: Types for the AskUserQuestion event payload.
@@ -62,6 +115,7 @@ type PendingQuestionCardProps = {
   payload: AskUserQuestionPayload;
   isLoading: boolean;
   onSubmit: (eventId: string, answers: Record<string, string>) => void;
+  onSkip?: () => void;
   className?: string;
 };
 
@@ -85,7 +139,7 @@ function MultipleChoiceStep({
   return (
     <div className="flex flex-col gap-3">
       <span className="text-fg-primary text-sm font-medium">
-        {question.question}
+        <InlineMarkdown text={question.question} />
       </span>
 
       <div className="flex flex-col gap-2">
@@ -111,7 +165,7 @@ function MultipleChoiceStep({
                     : "text-fg-primary",
                 )}
               >
-                {option.label}
+                <InlineMarkdown text={option.label} />
               </span>
               <span
                 className={cn(
@@ -121,7 +175,7 @@ function MultipleChoiceStep({
                     : "text-fg-muted",
                 )}
               >
-                {option.description}
+                <InlineMarkdown text={option.description} />
               </span>
             </button>
           );
@@ -187,7 +241,7 @@ function FreeResponseStep({
   return (
     <div className="flex flex-col gap-3">
       <span className="text-fg-primary text-sm font-medium">
-        {question.question}
+        <InlineMarkdown text={question.question} />
       </span>
       <Textarea
         value={text}
@@ -218,7 +272,7 @@ function RatingStep({
   return (
     <div className="flex flex-col gap-3">
       <span className="text-fg-primary text-sm font-medium">
-        {question.question}
+        <InlineMarkdown text={question.question} />
       </span>
       <div className="flex flex-col gap-1.5">
         <div className="flex gap-1.5">
@@ -309,6 +363,7 @@ export function PendingQuestionCard({
   payload,
   isLoading,
   onSubmit,
+  onSkip,
   className,
 }: PendingQuestionCardProps) {
   const [activeStep, setActiveStep] = useState(0);
@@ -330,7 +385,7 @@ export function PendingQuestionCard({
   const questionCount = payload.questions.length;
   const isSingleQuestion = questionCount === 1;
   const isFirstStep = activeStep === 0;
-  const isLastStep = activeStep === questionCount - 1;
+  const isReviewStep = !isSingleQuestion && activeStep === questionCount;
 
   const handleMcToggle = (questionIndex: number, value: string) => {
     setSelections((prev) => {
@@ -423,6 +478,22 @@ export function PendingQuestionCard({
     onSubmit(eventId, answers);
   };
 
+  const getAnswerText = (idx: number): string => {
+    const question = payload.questions[idx];
+    switch (question.type) {
+      case "multiple_choice": {
+        const selected = selections.get(idx);
+        if (!selected || selected.size === 0) return "";
+        if (selected.has("__other__")) return otherTexts.get(idx) ?? "";
+        return Array.from(selected).join(", ");
+      }
+      case "free_response":
+        return freeTexts.get(idx) ?? "";
+      case "rating":
+        return ratingValues.has(idx) ? String(ratingValues.get(idx)) : "";
+    }
+  };
+
   const currentQuestion = payload.questions[activeStep];
 
   const renderStep = (question: AskUserQuestionItem, idx: number) => {
@@ -466,6 +537,16 @@ export function PendingQuestionCard({
       {/* Header row */}
       <div className="flex items-center justify-between gap-4 px-4 py-3">
         <span className="text-sm font-medium">Question</span>
+        {onSkip && (
+          <button
+            type="button"
+            onClick={onSkip}
+            className="text-fg-muted hover:text-fg-primary -mr-1 rounded-sm p-0.5 transition-colors"
+            aria-label="Dismiss questions"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Body: left tabs + right content */}
@@ -488,12 +569,53 @@ export function PendingQuestionCard({
                 onClick={() => setActiveStep(idx)}
               />
             ))}
+            <StepTab
+              index={questionCount}
+              label="Review"
+              state={
+                isReviewStep
+                  ? "active"
+                  : allStepsValid
+                    ? "upcoming"
+                    : "upcoming"
+              }
+              onClick={() => {
+                if (allStepsValid) setActiveStep(questionCount);
+              }}
+            />
           </nav>
         )}
 
         {/* Right content area — min-h prevents jitter when stepping between question types */}
         <div className="flex min-h-[180px] min-w-0 flex-1 flex-col justify-between gap-3 pr-4 pb-3 pl-2">
-          <div>{renderStep(currentQuestion, activeStep)}</div>
+          <div>
+            {isReviewStep ? (
+              <div className="flex flex-col gap-3">
+                <span className="text-fg-primary text-sm font-medium">
+                  Review your answers
+                </span>
+                <div className="flex flex-col gap-2">
+                  {payload.questions.map((q, idx) => (
+                    <button
+                      key={q.header}
+                      type="button"
+                      onClick={() => setActiveStep(idx)}
+                      className="border-border bg-bg-secondary flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-all hover:border-purple-300 dark:hover:border-purple-600"
+                    >
+                      <span className="text-fg-muted text-xs font-medium">
+                        {q.header}
+                      </span>
+                      <span className="text-fg-primary text-sm">
+                        {getAnswerText(idx) || "—"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              renderStep(currentQuestion, activeStep)
+            )}
+          </div>
 
           {/* Footer: Back / Next / Submit — pinned to bottom */}
           <div className="flex items-center justify-between">
@@ -511,7 +633,7 @@ export function PendingQuestionCard({
               )}
             </div>
             <div>
-              {isSingleQuestion || isLastStep ? (
+              {isSingleQuestion || isReviewStep ? (
                 <Button
                   size="xs"
                   disabled={!allStepsValid || isLoading}
