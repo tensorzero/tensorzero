@@ -348,7 +348,7 @@ impl ModelConfig {
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup(
-                &clients.cache_backend,
+                &clients.cache_manager,
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
@@ -391,7 +391,7 @@ impl ModelConfig {
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup_streaming(
-                &clients.cache_backend,
+                &clients.cache_manager,
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
@@ -517,7 +517,7 @@ impl ModelConfig {
                         // (in case we ever add a blocking cache write option)
                         if !response.cached && clients.cache_options.enabled.write() {
                             let _ = start_cache_write(
-                                &clients.cache_backend,
+                                &clients.cache_manager,
                                 cache_key,
                                 CacheData {
                                     output: NonStreamingCacheData {
@@ -731,7 +731,7 @@ fn wrap_provider_stream(
     let span = stream.span().clone();
     let mut stream = stream.into_inner();
     let cache_key = model_request.get_cache_key()?;
-    let cache_backend = clients.cache_backend.clone();
+    let cache_manager = clients.cache_manager.clone();
     let tool_config = model_request
         .request
         .tool_config
@@ -808,7 +808,7 @@ fn wrap_provider_stream(
 
         if write_to_cache && !errored {
             let _ = start_cache_write_streaming(
-                &cache_backend,
+                &cache_manager,
                 cache_key,
                 buffer,
                 &raw_request,
@@ -2769,7 +2769,7 @@ mod tests {
     use std::borrow::Cow;
     use std::sync::Arc;
 
-    use crate::cache::{CacheBackend, CacheEnabledMode};
+    use crate::cache::{CacheEnabledMode, CacheManager};
     use crate::config::with_skip_credential_validation;
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::ToolCallConfig;
@@ -2832,7 +2832,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -2968,7 +2968,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(tags.clone()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new(
                 Arc::new(rate_limit_config),
@@ -3063,7 +3063,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3203,16 +3203,17 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: TensorzeroHttpClient::new_testing().unwrap(),
-            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             credentials: Arc::new(api_keys.clone()),
             cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::Off,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3379,16 +3380,17 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: TensorzeroHttpClient::new_testing().unwrap(),
-            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             credentials: Arc::new(api_keys.clone()),
             cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::Off,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3485,7 +3487,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3550,7 +3552,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3618,7 +3620,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3682,7 +3684,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            cache_backend: CacheBackend::Disabled,
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),

@@ -6,7 +6,7 @@ use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::{
-    cache::{CacheBackend, CacheParamsOptions},
+    cache::{CacheManager, CacheParamsOptions},
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
@@ -52,7 +52,7 @@ pub async fn embeddings(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
-    cache_backend: CacheBackend,
+    cache_manager: CacheManager,
     deferred_tasks: TaskTracker,
     rate_limiting_manager: std::sync::Arc<RateLimitingManager>,
     params: EmbeddingsParams,
@@ -95,7 +95,7 @@ pub async fn embeddings(
         http_client: http_client.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
-        cache_backend,
+        cache_manager,
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         tags: tags.clone(),
@@ -205,12 +205,13 @@ mod tests {
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let cache_manager = CacheManager::new(Arc::new(clickhouse_connection_info.clone()));
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
-            CacheBackend::Disabled,
+            cache_manager,
             tokio_util::task::TaskTracker::new(),
             Arc::new(RateLimitingManager::new_dummy()),
             params,
@@ -243,13 +244,14 @@ mod tests {
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let cache_manager = CacheManager::new(Arc::new(clickhouse_connection_info.clone()));
 
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
-            CacheBackend::Disabled,
+            cache_manager,
             tokio_util::task::TaskTracker::new(),
             Arc::new(RateLimitingManager::new_dummy()),
             params,

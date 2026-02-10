@@ -1,12 +1,11 @@
 use async_trait::async_trait;
 use redis::AsyncCommands;
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 
 use crate::cache::CacheKey;
 use crate::db::cache::CacheQueries;
 use crate::error::{Error, ErrorDetails};
-
-use super::ValkeyConnectionInfo;
 
 const CACHE_KEY_PREFIX: &str = "tensorzero_cache:";
 
@@ -25,19 +24,31 @@ fn make_valkey_key(cache_key: &CacheKey) -> String {
     format!("{CACHE_KEY_PREFIX}{}", cache_key.get_long_key())
 }
 
+/// Valkey-backed cache client that pairs a connection with a TTL config.
+#[derive(Clone)]
+pub struct ValkeyCacheClient {
+    connection: Box<ConnectionManager>,
+    cache_ttl_s: u64,
+}
+
+impl ValkeyCacheClient {
+    pub fn new(connection: Box<ConnectionManager>, cache_ttl_s: u64) -> Self {
+        Self {
+            connection,
+            cache_ttl_s,
+        }
+    }
+}
+
 #[async_trait]
-impl CacheQueries for ValkeyConnectionInfo {
+impl CacheQueries for ValkeyCacheClient {
     async fn cache_lookup(
         &self,
         cache_key: &CacheKey,
         max_age_s: Option<u32>,
     ) -> Result<Option<String>, Error> {
-        let connection = match self.get_connection() {
-            Some(conn) => conn,
-            None => return Ok(None),
-        };
         let key = make_valkey_key(cache_key);
-        let mut conn = connection.clone();
+        let mut conn = self.connection.clone();
         let result: Option<String> = conn.get(&key).await.map_err(|e| {
             Error::new(ErrorDetails::Cache {
                 message: format!("Valkey GET failed: {e}"),
@@ -67,13 +78,6 @@ impl CacheQueries for ValkeyConnectionInfo {
     }
 
     async fn cache_write(&self, cache_key: &CacheKey, data: &str) -> Result<(), Error> {
-        let (connection, cache_ttl_s) = match self {
-            Self::Enabled {
-                connection,
-                cache_ttl_s,
-            } => (connection, *cache_ttl_s),
-            Self::Disabled => return Ok(()),
-        };
         let key = make_valkey_key(cache_key);
         // Parse the data to wrap it in ValkeyCacheEntry
         let data_value: serde_json::Value = serde_json::from_str(data).map_err(|e| {
@@ -90,25 +94,14 @@ impl CacheQueries for ValkeyConnectionInfo {
                 message: format!("Failed to serialize Valkey cache entry: {e}"),
             })
         })?;
-        let mut conn = connection.clone();
-        match cache_ttl_s {
-            Some(ttl) => {
-                conn.set_ex::<_, _, ()>(&key, &entry_json, ttl)
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::Cache {
-                            message: format!("Valkey SET EX failed: {e}"),
-                        })
-                    })?;
-            }
-            None => {
-                conn.set::<_, _, ()>(&key, &entry_json).await.map_err(|e| {
-                    Error::new(ErrorDetails::Cache {
-                        message: format!("Valkey SET failed: {e}"),
-                    })
-                })?;
-            }
-        }
+        let mut conn = self.connection.clone();
+        conn.set_ex::<_, _, ()>(&key, &entry_json, self.cache_ttl_s)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::Cache {
+                    message: format!("Valkey SET EX failed: {e}"),
+                })
+            })?;
         Ok(())
     }
 }
@@ -181,23 +174,6 @@ mod tests {
             now - old_entry.written_at > 60,
             "10-min-old entry should exceed 60s"
         );
-    }
-
-    #[tokio::test]
-    async fn test_disabled_returns_none() {
-        let conn = ValkeyConnectionInfo::Disabled;
-        let key = CacheKey::from(blake3::hash(b"test"));
-        let result = conn.cache_lookup(&key, None).await.unwrap();
-        assert!(result.is_none(), "disabled backend should return None");
-    }
-
-    #[tokio::test]
-    async fn test_disabled_write_succeeds() {
-        let conn = ValkeyConnectionInfo::Disabled;
-        let key = CacheKey::from(blake3::hash(b"test"));
-        conn.cache_write(&key, r#"{"output":"test"}"#)
-            .await
-            .expect("disabled backend write should succeed");
     }
 
     /// Helper to verify that CacheData<T> roundtrips through JSON serialization
