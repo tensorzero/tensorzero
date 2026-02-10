@@ -29,28 +29,79 @@ use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage
 
 use crate::common::get_gateway_endpoint;
 use tensorzero::test_helpers::{
-    make_embedded_gateway_e2e_with_unique_db, make_http_gateway_with_unique_db,
+    make_embedded_gateway_e2e_with_unique_db,
+    make_embedded_gateway_e2e_with_unique_db_all_backends, make_http_gateway_with_unique_db,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
-#[tokio::test]
-pub async fn test_dont_cache_invalid_tool_call() {
-    let logs_contain = tensorzero_core::utils::testing::capture_logs();
-    let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CacheBackend {
+    Clickhouse,
+    Valkey,
+}
+
+/// Generates test variants for each cache backend (ClickHouse and Valkey).
+macro_rules! make_cache_tests {
+    ($test_name:ident) => {
+        paste::paste! {
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$test_name _clickhouse>]() {
+                $test_name(CacheBackend::Clickhouse).await;
+            }
+
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$test_name _valkey>]() {
+                $test_name(CacheBackend::Valkey).await;
+            }
+        }
+    };
+}
+
+/// Creates a gateway configured to use the specified cache backend.
+///
+/// - `CacheBackend::Clickhouse`: default mode with `ENABLE_POSTGRES_WRITE=false`
+/// - `CacheBackend::Valkey`: sets `ENABLE_POSTGRES_WRITE=true` and `ENABLE_POSTGRES_READ=true`,
+///   uses Postgres + Valkey connections
+async fn make_cache_test_gateway(backend: CacheBackend, db_prefix: &str) -> tensorzero::Client {
+    match backend {
+        CacheBackend::Clickhouse => make_embedded_gateway_e2e_with_unique_db(db_prefix).await,
+        CacheBackend::Valkey => {
+            // Must be set before the first flag access (OnceLock caches on first read)
+            tensorzero_unsafe_helpers::set_env_var_tests_only(
+                "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE",
+                "true",
+            );
+            tensorzero_unsafe_helpers::set_env_var_tests_only(
+                "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ",
+                "true",
+            );
+            make_embedded_gateway_e2e_with_unique_db_all_backends(db_prefix).await
+        }
+    }
+}
+
+fn is_batched_writes_enabled() -> bool {
+    match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
         Ok(value) => value == "true",
         Err(_) => false,
-    };
-    if is_batched_writes {
-        // Skip test if batched writes are enabled
-        // The message is logged from the batch writer tokio task, which may run
-        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured)
-        // We cannot use the single-threaded tokio runtime here, since we need to call 'block_in_place'
-        // from GatewayHandle
+    }
+}
+
+make_cache_tests!(test_dont_cache_invalid_tool_call);
+
+async fn test_dont_cache_invalid_tool_call(backend: CacheBackend) {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
+    if is_batched_writes_enabled() {
+        // Skip test if batched writes are enabled.
+        // The message is logged from the batch writer tokio task, which may run on
+        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured).
+        // We cannot use the single-threaded tokio runtime here, since we need to call `block_in_place`
+        // from `GatewayHandle`.
         return;
     }
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_cache_test_gateway(backend, "dont_cache_invalid_tool_call").await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::invalid_tool_arguments".to_string()),
@@ -72,35 +123,40 @@ pub async fn test_dont_cache_invalid_tool_call() {
     client.inference(params.clone()).await.unwrap();
 
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    let clickhouse = get_clickhouse().await;
-    assert!(logs_contain("Skipping cache write"));
+    assert!(
+        logs_contain("Skipping cache write"),
+        "Expected log message about skipping cache write"
+    );
 
     // Run again, and check that we get a cache miss
     let res = client.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(res) = res else {
         panic!("Expected non-streaming inference response");
     };
-    let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
-        .await
-        .unwrap();
-    assert_eq!(model_inference.get("cached").unwrap(), false);
+
+    // ClickHouse-specific: verify the `cached` column in model_inference
+    if backend == CacheBackend::Clickhouse {
+        let clickhouse = get_clickhouse().await;
+        let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
+            .await
+            .unwrap();
+        assert_eq!(
+            model_inference.get("cached").unwrap(),
+            false,
+            "Second inference should not be cached"
+        );
+    }
 }
-#[tokio::test]
-pub async fn test_dont_cache_tool_call_schema_error() {
+
+make_cache_tests!(test_dont_cache_tool_call_schema_error);
+
+async fn test_dont_cache_tool_call_schema_error(backend: CacheBackend) {
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
-    let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
-        Ok(value) => value == "true",
-        Err(_) => false,
-    };
-    if is_batched_writes {
-        // Skip test if batched writes are enabled
-        // The message is logged from the batch writer tokio task, which may run
-        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured)
-        // We cannot use the single-threaded tokio runtime here, since we need to call 'block_in_place'
-        // from GatewayHandle
+    if is_batched_writes_enabled() {
+        // Skip test if batched writes are enabled (same reason as above)
         return;
     }
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_cache_test_gateway(backend, "dont_cache_tool_call_schema_error").await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::tool".to_string()),
@@ -151,18 +207,29 @@ pub async fn test_dont_cache_tool_call_schema_error() {
     );
 
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    let clickhouse = get_clickhouse().await;
-    assert!(logs_contain("Skipping cache write"));
+    assert!(
+        logs_contain("Skipping cache write"),
+        "Expected log message about skipping cache write"
+    );
 
     // Run again, and check that we get a cache miss
     let res = client.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(res) = res else {
         panic!("Expected non-streaming inference response");
     };
-    let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
-        .await
-        .unwrap();
-    assert_eq!(model_inference.get("cached").unwrap(), false);
+
+    // ClickHouse-specific: verify the `cached` column in model_inference
+    if backend == CacheBackend::Clickhouse {
+        let clickhouse = get_clickhouse().await;
+        let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
+            .await
+            .unwrap();
+        assert_eq!(
+            model_inference.get("cached").unwrap(),
+            false,
+            "Second inference should not be cached"
+        );
+    }
 }
 
 #[tokio::test]
@@ -452,14 +519,14 @@ pub async fn check_test_streaming_cache_with_err(
     full_content
 }
 
-/// Tests that cached streaming responses only have usage on the final chunk (TensorZero native API)
-#[tokio::test(flavor = "multi_thread")]
-async fn test_streaming_cache_usage_only_in_final_chunk_native() {
+make_cache_tests!(test_streaming_cache_usage_only_in_final_chunk_native);
+
+async fn test_streaming_cache_usage_only_in_final_chunk_native(backend: CacheBackend) {
     use serde_json::Map;
     use tensorzero::InferenceResponseChunk;
     use tensorzero_core::inference::types::System;
 
-    let client = make_embedded_gateway_e2e_with_unique_db("cache_usage_final_chunk").await;
+    let client = make_cache_test_gateway(backend, "cache_usage_final_chunk").await;
 
     let input = "cache_usage_test: Tell me a story";
 

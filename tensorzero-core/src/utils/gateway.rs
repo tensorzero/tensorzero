@@ -78,6 +78,12 @@ impl Drop for GatewayHandle {
                 .app_state
                 .clickhouse_connection_info
                 .batcher_join_handle();
+            // Drop the cache manager early to release any ClickHouse references
+            // held by the legacy cache backend. Otherwise the batch writer can
+            // stay alive and block shutdown.
+            let old_cache_manager =
+                std::mem::replace(&mut self.app_state.cache_manager, CacheManager::disabled());
+            drop(old_cache_manager);
             // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
             // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
             self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

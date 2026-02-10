@@ -1,6 +1,5 @@
 use async_trait::async_trait;
-use redis::AsyncCommands;
-use redis::aio::ConnectionManager;
+use redis::aio::ConnectionLike;
 use serde::{Deserialize, Serialize};
 
 use crate::cache::CacheKey;
@@ -24,15 +23,91 @@ fn make_valkey_key(cache_key: &CacheKey) -> String {
     format!("{CACHE_KEY_PREFIX}{}", cache_key.get_long_key())
 }
 
+/// Execute a cache lookup against any async Redis-compatible connection.
+async fn execute_cache_lookup<C: ConnectionLike>(
+    conn: &mut C,
+    cache_key: &CacheKey,
+    max_age_s: Option<u32>,
+) -> Result<Option<String>, Error> {
+    let key = make_valkey_key(cache_key);
+    let result: Option<String> = redis::cmd("GET")
+        .arg(&key)
+        .query_async(conn)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::Cache {
+                message: format!("Valkey GET failed: {e}"),
+            })
+        })?;
+    let Some(raw_json) = result else {
+        return Ok(None);
+    };
+    let entry: ValkeyCacheEntry = serde_json::from_str(&raw_json).map_err(|e| {
+        Error::new(ErrorDetails::Cache {
+            message: format!("Failed to deserialize Valkey cache entry: {e}"),
+        })
+    })?;
+    // Check max_age_s against the stored timestamp
+    if let Some(max_age) = max_age_s {
+        let now = chrono::Utc::now().timestamp();
+        if now - entry.written_at > max_age as i64 {
+            return Ok(None);
+        }
+    }
+    let data_str = serde_json::to_string(&entry.data).map_err(|e| {
+        Error::new(ErrorDetails::Cache {
+            message: format!("Failed to re-serialize Valkey cache data: {e}"),
+        })
+    })?;
+    Ok(Some(data_str))
+}
+
+/// Execute a cache write against any async Redis-compatible connection.
+async fn execute_cache_write<C: ConnectionLike>(
+    conn: &mut C,
+    cache_key: &CacheKey,
+    data: &str,
+    cache_ttl_s: u64,
+    written_at: i64,
+) -> Result<(), Error> {
+    let key = make_valkey_key(cache_key);
+    let data_value: serde_json::Value = serde_json::from_str(data).map_err(|e| {
+        Error::new(ErrorDetails::Cache {
+            message: format!("Failed to parse cache data for Valkey write: {e}"),
+        })
+    })?;
+    let entry = ValkeyCacheEntry {
+        written_at,
+        data: data_value,
+    };
+    let entry_json = serde_json::to_string(&entry).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize Valkey cache entry: {e}"),
+        })
+    })?;
+    redis::cmd("SETEX")
+        .arg(&key)
+        .arg(cache_ttl_s as i64)
+        .arg(&entry_json)
+        .query_async::<()>(conn)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::Cache {
+                message: format!("Valkey SET EX failed: {e}"),
+            })
+        })?;
+    Ok(())
+}
+
 /// Valkey-backed cache client that pairs a connection with a TTL config.
 #[derive(Clone)]
 pub struct ValkeyCacheClient {
-    connection: Box<ConnectionManager>,
+    connection: Box<redis::aio::ConnectionManager>,
     cache_ttl_s: u64,
 }
 
 impl ValkeyCacheClient {
-    pub fn new(connection: Box<ConnectionManager>, cache_ttl_s: u64) -> Self {
+    pub fn new(connection: Box<redis::aio::ConnectionManager>, cache_ttl_s: u64) -> Self {
         Self {
             connection,
             cache_ttl_s,
@@ -47,62 +122,14 @@ impl CacheQueries for ValkeyCacheClient {
         cache_key: &CacheKey,
         max_age_s: Option<u32>,
     ) -> Result<Option<String>, Error> {
-        let key = make_valkey_key(cache_key);
         let mut conn = self.connection.clone();
-        let result: Option<String> = conn.get(&key).await.map_err(|e| {
-            Error::new(ErrorDetails::Cache {
-                message: format!("Valkey GET failed: {e}"),
-            })
-        })?;
-        let Some(raw_json) = result else {
-            return Ok(None);
-        };
-        let entry: ValkeyCacheEntry = serde_json::from_str(&raw_json).map_err(|e| {
-            Error::new(ErrorDetails::Cache {
-                message: format!("Failed to deserialize Valkey cache entry: {e}"),
-            })
-        })?;
-        // Check max_age_s against the stored timestamp
-        if let Some(max_age) = max_age_s {
-            let now = chrono::Utc::now().timestamp();
-            if now - entry.written_at > max_age as i64 {
-                return Ok(None);
-            }
-        }
-        let data_str = serde_json::to_string(&entry.data).map_err(|e| {
-            Error::new(ErrorDetails::Cache {
-                message: format!("Failed to re-serialize Valkey cache data: {e}"),
-            })
-        })?;
-        Ok(Some(data_str))
+        execute_cache_lookup(&mut *conn, cache_key, max_age_s).await
     }
 
     async fn cache_write(&self, cache_key: &CacheKey, data: &str) -> Result<(), Error> {
-        let key = make_valkey_key(cache_key);
-        // Parse the data to wrap it in ValkeyCacheEntry
-        let data_value: serde_json::Value = serde_json::from_str(data).map_err(|e| {
-            Error::new(ErrorDetails::Cache {
-                message: format!("Failed to parse cache data for Valkey write: {e}"),
-            })
-        })?;
-        let entry = ValkeyCacheEntry {
-            written_at: chrono::Utc::now().timestamp(),
-            data: data_value,
-        };
-        let entry_json = serde_json::to_string(&entry).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize Valkey cache entry: {e}"),
-            })
-        })?;
         let mut conn = self.connection.clone();
-        conn.set_ex::<_, _, ()>(&key, &entry_json, self.cache_ttl_s)
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::Cache {
-                    message: format!("Valkey SET EX failed: {e}"),
-                })
-            })?;
-        Ok(())
+        let written_at = chrono::Utc::now().timestamp();
+        execute_cache_write(&mut *conn, cache_key, data, self.cache_ttl_s, written_at).await
     }
 }
 
@@ -114,6 +141,7 @@ mod tests {
     };
     use crate::embeddings::Embedding;
     use crate::inference::types::{ContentBlockOutput, FinishReason};
+    use redis_test::{MockCmd, MockRedisConnection};
     use serde::de::DeserializeOwned;
 
     #[test]
@@ -295,5 +323,141 @@ mod tests {
             extracted_data.raw_request, "req",
             "raw_request should survive the ValkeyCacheEntry wrapping"
         );
+    }
+
+    // ===== MOCK CONNECTION TESTS =====
+
+    #[tokio::test]
+    async fn test_execute_cache_lookup_miss() {
+        let cache_key = CacheKey::from(blake3::hash(b"miss"));
+        let valkey_key = make_valkey_key(&cache_key);
+        let mut mock = MockRedisConnection::new(vec![MockCmd::new(
+            redis::cmd("GET").arg(&valkey_key),
+            Ok(redis::Value::Nil),
+        )])
+        .assert_all_commands_consumed();
+
+        let result = execute_cache_lookup(&mut mock, &cache_key, None)
+            .await
+            .expect("cache lookup should succeed");
+        assert!(result.is_none(), "cache miss should return None");
+    }
+
+    #[tokio::test]
+    async fn test_execute_cache_lookup_hit() {
+        let cache_key = CacheKey::from(blake3::hash(b"hit"));
+        let valkey_key = make_valkey_key(&cache_key);
+
+        let inner_data = serde_json::json!({"output": "\"cached\"", "raw_request": "req", "raw_response": "resp", "input_tokens": 1, "output_tokens": 2, "finish_reason": null});
+        let entry = ValkeyCacheEntry {
+            written_at: chrono::Utc::now().timestamp(),
+            data: inner_data.clone(),
+        };
+        let stored_json = serde_json::to_string(&entry).unwrap();
+
+        let mut mock = MockRedisConnection::new(vec![MockCmd::new(
+            redis::cmd("GET").arg(&valkey_key),
+            Ok(stored_json),
+        )])
+        .assert_all_commands_consumed();
+
+        let result = execute_cache_lookup(&mut mock, &cache_key, None)
+            .await
+            .expect("cache lookup should succeed");
+        assert!(result.is_some(), "cache hit should return Some");
+        let returned: serde_json::Value =
+            serde_json::from_str(&result.unwrap()).expect("returned data should be valid JSON");
+        assert_eq!(
+            returned, inner_data,
+            "returned data should match stored data"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_cache_lookup_expired() {
+        let cache_key = CacheKey::from(blake3::hash(b"expired"));
+        let valkey_key = make_valkey_key(&cache_key);
+
+        let inner_data = serde_json::json!({"output": "\"old\""});
+        let entry = ValkeyCacheEntry {
+            // Written 10 minutes ago
+            written_at: chrono::Utc::now().timestamp() - 600,
+            data: inner_data,
+        };
+        let stored_json = serde_json::to_string(&entry).unwrap();
+
+        let mut mock = MockRedisConnection::new(vec![MockCmd::new(
+            redis::cmd("GET").arg(&valkey_key),
+            Ok(stored_json),
+        )])
+        .assert_all_commands_consumed();
+
+        // max_age_s = 60 means entries older than 60s are expired
+        let result = execute_cache_lookup(&mut mock, &cache_key, Some(60))
+            .await
+            .expect("cache lookup should succeed");
+        assert!(
+            result.is_none(),
+            "expired entry should return None when max_age_s is exceeded"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_cache_write_sends_setex() {
+        let cache_key = CacheKey::from(blake3::hash(b"write"));
+        let valkey_key = make_valkey_key(&cache_key);
+        let data = r#"{"output":"\"test\"","raw_request":"req","raw_response":"resp","input_tokens":1,"output_tokens":2,"finish_reason":null}"#;
+        let written_at = 1700000000i64;
+        let cache_ttl_s = 86400u64;
+
+        // Build the expected entry JSON to match what execute_cache_write will send
+        let data_value: serde_json::Value = serde_json::from_str(data).unwrap();
+        let expected_entry = ValkeyCacheEntry {
+            written_at,
+            data: data_value,
+        };
+        let expected_entry_json = serde_json::to_string(&expected_entry).unwrap();
+
+        let mut mock = MockRedisConnection::new(vec![MockCmd::new(
+            redis::cmd("SETEX")
+                .arg(&valkey_key)
+                .arg(cache_ttl_s as i64)
+                .arg(expected_entry_json),
+            Ok("OK"),
+        )])
+        .assert_all_commands_consumed();
+
+        execute_cache_write(&mut mock, &cache_key, data, cache_ttl_s, written_at)
+            .await
+            .expect("cache write should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_execute_cache_write_with_custom_ttl() {
+        let cache_key = CacheKey::from(blake3::hash(b"custom_ttl"));
+        let valkey_key = make_valkey_key(&cache_key);
+        let data = r#"{"output":"\"test\""}"#;
+        let written_at = 1700000000i64;
+        let cache_ttl_s = 3600u64; // 1 hour
+
+        let data_value: serde_json::Value = serde_json::from_str(data).unwrap();
+        let expected_entry = ValkeyCacheEntry {
+            written_at,
+            data: data_value,
+        };
+        let expected_entry_json = serde_json::to_string(&expected_entry).unwrap();
+
+        let mut mock = MockRedisConnection::new(vec![MockCmd::new(
+            redis::cmd("SETEX")
+                .arg(&valkey_key)
+                .arg(cache_ttl_s as i64)
+                .arg(expected_entry_json),
+            Ok("OK"),
+        )])
+        .assert_all_commands_consumed();
+
+        execute_cache_write(&mut mock, &cache_key, data, cache_ttl_s, written_at)
+            .await
+            .expect("cache write with custom TTL should succeed");
     }
 }
