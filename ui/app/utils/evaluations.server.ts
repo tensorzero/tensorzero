@@ -39,6 +39,7 @@ interface RunningEvaluationInfo {
   errors: DisplayEvaluationError[];
   variantName: string;
   completed?: Date;
+  killed?: boolean;
   started: Date;
 }
 
@@ -74,6 +75,7 @@ export function killEvaluation(evaluationRunId: string): {
   }
   evaluation.abortController.abort();
   evaluation.completed = new Date();
+  evaluation.killed = true;
   return { killed: true, already_completed: false };
 }
 

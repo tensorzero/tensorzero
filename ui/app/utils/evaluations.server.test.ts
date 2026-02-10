@@ -39,10 +39,16 @@ describe("killEvaluation", () => {
       expect(killResult).toEqual({ killed: true, already_completed: false });
     }
 
-    // After killing, the evaluation should be marked as completed
+    // After killing, the evaluation should be marked as completed and killed
     const evaluation = getRunningEvaluation(startInfo.evaluation_run_id);
     expect(evaluation).toBeDefined();
     expect(evaluation?.completed).toBeInstanceOf(Date);
+    if (killResult.killed) {
+      expect(
+        evaluation?.killed,
+        "Killed evaluation should have killed flag set",
+      ).toBe(true);
+    }
   });
 
   test("should return already_completed when killing a completed evaluation", async () => {

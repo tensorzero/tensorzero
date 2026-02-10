@@ -197,6 +197,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       if (!runningEvaluation) {
         return false;
       }
+      if (runningEvaluation.killed) {
+        return false;
+      }
       if (runningEvaluation.completed) {
         // If the evaluation completed more than 5 seconds ago, consider it done
         if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
