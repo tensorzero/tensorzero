@@ -4,11 +4,13 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::types::FunctionType;
+use tensorzero_derive::TensorZeroDeserialize;
 
 /// A single resolved object type for a given UUID.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub enum ResolvedObject {
     Inference {
