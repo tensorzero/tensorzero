@@ -1,20 +1,20 @@
 import { describe, expect, test } from "vitest";
 import {
   runEvaluation,
-  killEvaluation,
+  cancelEvaluation,
   getRunningEvaluation,
 } from "./evaluations.server";
 
-describe("killEvaluation", () => {
+describe("cancelEvaluation", () => {
   test("should return not-found for unknown evaluation run ID", () => {
-    const result = killEvaluation("nonexistent-evaluation-id");
+    const result = cancelEvaluation("nonexistent-evaluation-id");
     expect(result).toEqual({
-      killed: false,
+      cancelled: false,
       already_completed: false,
     });
   });
 
-  test("should kill a running evaluation and mark it as completed", async () => {
+  test("should cancel a running evaluation and mark it as completed", async () => {
     // Launch a real evaluation against the gateway (uses cached results by default)
     const startInfo = await runEvaluation(
       "entity_extraction",
@@ -28,30 +28,36 @@ describe("killEvaluation", () => {
     expect(startInfo.num_datapoints).toBeGreaterThan(0);
 
     // The evaluation may or may not have completed already (cached results are fast).
-    // Either way, killEvaluation should succeed.
-    const killResult = killEvaluation(startInfo.evaluation_run_id);
+    // Either way, cancelEvaluation should succeed.
+    const cancelResult = cancelEvaluation(startInfo.evaluation_run_id);
 
-    if (killResult.already_completed) {
-      // Evaluation completed before we could kill it — that's fine with cached results
-      expect(killResult).toEqual({ killed: false, already_completed: true });
+    if (cancelResult.already_completed) {
+      // Evaluation completed before we could cancel it — that's fine with cached results
+      expect(cancelResult).toEqual({
+        cancelled: false,
+        already_completed: true,
+      });
     } else {
-      // We successfully killed it
-      expect(killResult).toEqual({ killed: true, already_completed: false });
+      // We successfully cancelled it
+      expect(cancelResult).toEqual({
+        cancelled: true,
+        already_completed: false,
+      });
     }
 
-    // After killing, the evaluation should be marked as completed and killed
+    // After cancelling, the evaluation should be marked as completed
     const evaluation = getRunningEvaluation(startInfo.evaluation_run_id);
     expect(evaluation).toBeDefined();
     expect(evaluation?.completed).toBeInstanceOf(Date);
-    if (killResult.killed) {
+    if (cancelResult.cancelled) {
       expect(
-        evaluation?.killed,
-        "Killed evaluation should have killed flag set",
+        evaluation?.cancelled,
+        "Cancelled evaluation should have cancelled flag set",
       ).toBe(true);
     }
   });
 
-  test("should return already_completed when killing a completed evaluation", async () => {
+  test("should return already_completed when cancelling a completed evaluation", async () => {
     // Launch a small evaluation and wait for it to complete
     const startInfo = await runEvaluation(
       "entity_extraction",
@@ -78,9 +84,12 @@ describe("killEvaluation", () => {
       "Evaluation should have completed within timeout",
     ).toBeInstanceOf(Date);
 
-    // Now try to kill the already-completed evaluation
-    const killResult = killEvaluation(startInfo.evaluation_run_id);
-    expect(killResult).toEqual({ killed: false, already_completed: true });
+    // Now try to cancel the already-completed evaluation
+    const cancelResult = cancelEvaluation(startInfo.evaluation_run_id);
+    expect(cancelResult).toEqual({
+      cancelled: false,
+      already_completed: true,
+    });
   });
 
   test("should not expose abortController through getRunningEvaluation", async () => {

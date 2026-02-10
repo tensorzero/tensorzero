@@ -32,8 +32,8 @@ export default [
     ),
 
     route(
-      "evaluations/:evaluation_run_id/kill",
-      "routes/api/evaluations/$evaluation_run_id/kill.route.ts",
+      "evaluations/:evaluation_run_id/cancel",
+      "routes/api/evaluations/$evaluation_run_id/cancel.route.ts",
     ),
 
     route(

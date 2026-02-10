@@ -185,7 +185,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       if (!runningEvaluation) {
         return false;
       }
-      if (runningEvaluation.killed) {
+      if (runningEvaluation.cancelled) {
         return false;
       }
       if (runningEvaluation.completed) {
@@ -339,8 +339,8 @@ function ResultsContent({
   limit,
   selectedRows,
   setSelectedRows,
-  onKill,
-  isKilling,
+  onCancel,
+  isCancelling,
 }: {
   evaluation_name: string;
   data: EvaluationData;
@@ -353,8 +353,8 @@ function ResultsContent({
   setSelectedRows: React.Dispatch<
     React.SetStateAction<Map<string, SelectedRowData>>
   >;
-  onKill: () => void;
-  isKilling: boolean;
+  onCancel: () => void;
+  isCancelling: boolean;
 }) {
   const navigate = useNavigate();
   const {
@@ -390,10 +390,10 @@ function ResultsContent({
             <Button
               variant="outline"
               size="sm"
-              onClick={onKill}
-              disabled={isKilling}
+              onClick={onCancel}
+              disabled={isCancelling}
               slotLeft={
-                isKilling ? (
+                isCancelling ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <StopCircle className="h-3.5 w-3.5" />
@@ -447,9 +447,9 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const { toast } = useToast();
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
-  const [isKilling, setIsKilling] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const any_evaluation_is_running =
-    running_evaluation_run_ids.length > 0 && !isKilling;
+    running_evaluation_run_ids.length > 0 && !isCancelling;
 
   const [selectedRows, setSelectedRows] = useState<
     Map<string, SelectedRowData>
@@ -468,22 +468,22 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   useAutoRefresh(any_evaluation_is_running);
 
-  // Reset kill state once server confirms no more running evaluations
+  // Reset cancel state once server confirms no more running evaluations
   useEffect(() => {
-    if (isKilling && running_evaluation_run_ids.length === 0) {
-      setIsKilling(false);
+    if (isCancelling && running_evaluation_run_ids.length === 0) {
+      setIsCancelling(false);
     }
-  }, [isKilling, running_evaluation_run_ids]);
+  }, [isCancelling, running_evaluation_run_ids]);
 
-  // Direct fetch (not useFetcher) because we may need to kill multiple
+  // Direct fetch (not useFetcher) because we may need to cancel multiple
   // evaluation runs in parallel, and useFetcher only supports one in-flight request.
-  const handleKillEvaluation = useCallback(async () => {
-    setIsKilling(true);
+  const handleCancelEvaluation = useCallback(async () => {
+    setIsCancelling(true);
     try {
       const results = await Promise.all(
         running_evaluation_run_ids.map(async (runId) => {
           const response = await fetch(
-            `/api/evaluations/${encodeURIComponent(runId)}/kill`,
+            `/api/evaluations/${encodeURIComponent(runId)}/cancel`,
             { method: "POST" },
           );
           return (await response.json()) as {
@@ -498,7 +498,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           title: "Failed to stop evaluation",
           description: failed.map((r) => r.error).join(", "),
         });
-        setIsKilling(false);
+        setIsCancelling(false);
         return;
       }
     } catch (error) {
@@ -506,10 +506,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
         title: "Failed to stop evaluation",
         description: error instanceof Error ? error.message : "Unknown error",
       });
-      setIsKilling(false);
+      setIsCancelling(false);
       return;
     }
-    // Trigger revalidation — the effect above resets isKilling once
+    // Trigger revalidation — the effect above resets isCancelling once
     // the loader confirms no more running evaluations.
     revalidator.revalidate();
   }, [running_evaluation_run_ids, toast, revalidator]);
@@ -601,8 +601,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                   limit={limit}
                   selectedRows={selectedRows}
                   setSelectedRows={setSelectedRows}
-                  onKill={handleKillEvaluation}
-                  isKilling={isKilling}
+                  onCancel={handleCancelEvaluation}
+                  isCancelling={isCancelling}
                 />
               )}
             </Await>
