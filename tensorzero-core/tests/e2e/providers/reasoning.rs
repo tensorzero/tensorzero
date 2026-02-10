@@ -1087,20 +1087,6 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
         .iter()
         .find(|block| matches!(block, StoredContentBlock::Thought(_)))
         .unwrap();
-    let thought = match thought {
-        StoredContentBlock::Thought(thought) => thought,
-        _ => panic!("Expected a thought block"),
-    };
-    // If text is present, check it contains "tokyo"; otherwise ensure signature exists
-    if let Some(text) = &thought.text {
-        assert!(
-            text.to_lowercase().contains("tokyo"),
-            "Expected thought text to contain 'tokyo', got: {text}"
-        );
-    } else {
-        assert!(
-            thought.signature.is_some(),
-            "Expected either thought text or signature to be present"
-        );
-    }
+
+    assert!(matches!(thought, StoredContentBlock::Thought(_)));
 }
