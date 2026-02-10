@@ -28,6 +28,7 @@ use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
 
 mod batch_inference;
 mod batching;
+mod cache_queries;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
 pub mod config_queries;
 pub mod dataset_queries;
@@ -189,6 +190,15 @@ impl ClickHouseConnectionInfo {
             })
             .collect();
         self.inner.write_batched_internal(rows_json?, table).await
+    }
+
+    /// Like `write_batched`, but takes pre-serialized JSON strings instead of serializable rows.
+    pub async fn write_batched_raw(
+        &self,
+        rows: Vec<String>,
+        table: TableName,
+    ) -> Result<(), Error> {
+        self.inner.write_batched_internal(rows, table).await
     }
 
     /// Write rows to ClickHouse without, without using our batched write implementation.
