@@ -284,14 +284,9 @@ export async function runEvaluation(
       }
     })
     .catch((error) => {
-      // Intentional cancellation via cancelEvaluation() — just mark completed
+      // Intentional cancellation via cancelEvaluation() — it already set
+      // completed/cancelled, so just suppress the error.
       if (error instanceof DOMException && error.name === "AbortError") {
-        if (evaluationRunId) {
-          const evaluation = runningEvaluations.get(evaluationRunId);
-          if (evaluation && !evaluation.completed) {
-            evaluation.completed = new Date();
-          }
-        }
         return;
       }
       if (!startResolved) {
