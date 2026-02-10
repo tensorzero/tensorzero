@@ -16,7 +16,6 @@ use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::error::warn_discarded_thought_block;
 use crate::error::warn_discarded_unknown_chunk;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
@@ -491,22 +490,26 @@ impl<'a> GeminiContent<'a> {
         let mut iter = message.content.iter();
         while let Some(block) = iter.next() {
             match block {
-                ContentBlock::Thought(
-                    thought @ Thought {
-                        text,
-                        signature,
-                        summary: _,
-                        provider_type: _,
-                        extra_data: _,
-                    },
-                ) => {
-                    // Gemini never produces 'thought: true' at the moment, and there's no documentation
-                    // on whether or not they should be passed back in.
-                    // As a result, we don't attempt to feed `Thought.text` back to Gemini, as this would
-                    // require us to set 'thought: true' in the request.
-                    // Instead, we just warn and discard the content block.
-                    if text.is_some() {
-                        warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                ContentBlock::Thought(Thought {
+                    text,
+                    signature,
+                    summary: _,
+                    provider_type: thought_provider_type,
+                    extra_data: _,
+                }) => {
+                    debug_assert!(matches!(
+                        thought_provider_type.as_deref(),
+                        None | Some(PROVIDER_TYPE)
+                    ));
+
+                    if let Some(text) = text.as_deref() {
+                        // Send thought text back with `thought: true` to maintain reasoning context.
+                        // See: https://ai.google.dev/gemini-api/docs/thinking
+                        output.push(GeminiContentPart {
+                            thought: true,
+                            thought_signature: signature.clone(),
+                            data: FlattenUnknown::Normal(GeminiPartData::Text { text }),
+                        });
                     } else if let Some(signature) = signature {
                         let next_block = iter.next();
                         match next_block {
@@ -3134,5 +3137,141 @@ mod tests {
         assert!(logs_contain(
             "The image detail parameter is not supported by Google AI Studio Gemini"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_google_ai_studio_gemini_thought_text_roundtrip() {
+        // Thought with text only → part with thought: true, text content, no signature
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::Thought(Thought {
+                text: Some("Let me think about this...".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            })],
+        };
+        let content = GeminiContent::from_request_message(&message).await.unwrap();
+        assert_eq!(content.role, GeminiRole::Model);
+        assert_eq!(content.parts.len(), 1, "Should have one thought part");
+        assert_eq!(
+            content.parts[0],
+            GeminiContentPart {
+                thought: true,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text {
+                    text: "Let me think about this...",
+                }),
+            }
+        );
+
+        // Thought with text AND signature → part with thought: true, text, and signature
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::Thought(Thought {
+                text: Some("Reasoning step".to_string()),
+                signature: Some("sig123".to_string()),
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            })],
+        };
+        let content = GeminiContent::from_request_message(&message).await.unwrap();
+        assert_eq!(content.parts.len(), 1, "Should have one thought part");
+        assert_eq!(
+            content.parts[0],
+            GeminiContentPart {
+                thought: true,
+                thought_signature: Some("sig123".to_string()),
+                data: FlattenUnknown::Normal(GeminiPartData::Text {
+                    text: "Reasoning step",
+                }),
+            }
+        );
+
+        // Thought with text + FunctionCall (no signature) → thought part + FunctionCall gets dummy signature
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![
+                ContentBlock::Thought(Thought {
+                    text: Some("I should call a function".to_string()),
+                    signature: None,
+                    summary: None,
+                    provider_type: None,
+                    extra_data: None,
+                }),
+                ContentBlock::ToolCall(ToolCall {
+                    id: "call_1".to_string(),
+                    name: "get_temperature".to_string(),
+                    arguments: r#"{"location": "NYC"}"#.to_string(),
+                }),
+            ],
+        };
+        let content = GeminiContent::from_request_message(&message).await.unwrap();
+        assert_eq!(
+            content.parts.len(),
+            2,
+            "Should have thought part and function call part"
+        );
+        assert_eq!(
+            content.parts[0],
+            GeminiContentPart {
+                thought: true,
+                thought_signature: None,
+                data: FlattenUnknown::Normal(GeminiPartData::Text {
+                    text: "I should call a function",
+                }),
+            }
+        );
+        // FunctionCall without a real signature should get a dummy signature
+        assert_eq!(
+            content.parts[1].thought_signature,
+            Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
+            "FunctionCall should get dummy thought signature when no real signature is present"
+        );
+
+        // Signature-only thought + FunctionCall → existing merge behavior (regression test)
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![
+                ContentBlock::Thought(Thought {
+                    text: None,
+                    signature: Some("real_sig".to_string()),
+                    summary: None,
+                    provider_type: None,
+                    extra_data: None,
+                }),
+                ContentBlock::ToolCall(ToolCall {
+                    id: "call_2".to_string(),
+                    name: "get_temperature".to_string(),
+                    arguments: r#"{"location": "LA"}"#.to_string(),
+                }),
+            ],
+        };
+        let content = GeminiContent::from_request_message(&message).await.unwrap();
+        assert_eq!(
+            content.parts.len(),
+            1,
+            "Signature-only thought should merge with next block"
+        );
+        assert!(
+            !content.parts[0].thought,
+            "Merged part should not be a thought"
+        );
+        assert_eq!(
+            content.parts[0].thought_signature,
+            Some("real_sig".to_string()),
+            "Merged part should carry the real signature"
+        );
+        match &content.parts[0].data {
+            FlattenUnknown::Normal(GeminiPartData::FunctionCall { function_call }) => {
+                assert_eq!(
+                    function_call.name, "get_temperature",
+                    "Should be the merged function call"
+                );
+            }
+            _ => panic!("Expected a function call part"),
+        }
     }
 }
