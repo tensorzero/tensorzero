@@ -451,12 +451,14 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     newFeedbackId,
     newJudgeDemonstrationId,
   } = loaderData;
-  const any_evaluation_is_running = running_evaluation_run_ids.length > 0;
   const location = useLocation();
   const isReadOnly = useReadOnly();
   const { toast } = useToast();
   const fetcher = useFetcher();
   const killFetcher = useFetcher();
+  const isKilling = killFetcher.state !== "idle";
+  const any_evaluation_is_running =
+    running_evaluation_run_ids.length > 0 && !isKilling;
 
   const [selectedRows, setSelectedRows] = useState<
     Map<string, SelectedRowData>
@@ -473,7 +475,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   }
   const function_name = evaluation_config.function_name;
 
-  useAutoRefresh(optimisticIsRunning);
+  useAutoRefresh(any_evaluation_is_running);
 
   const handleKillEvaluation = useCallback(() => {
     for (const runId of running_evaluation_run_ids) {
@@ -498,11 +500,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
       }
     }
   }, [killFetcher.state, killFetcher.data, toast]);
-
-  const isKilling = killFetcher.state !== "idle";
-
-  // Optimistic UI: treat evaluations as stopped immediately when kill is in-flight
-  const optimisticIsRunning = any_evaluation_is_running && !isKilling;
 
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
@@ -585,7 +582,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                   evaluation_name={evaluation_name}
                   data={resolvedData}
                   evaluator_names={evaluator_names}
-                  any_evaluation_is_running={optimisticIsRunning}
+                  any_evaluation_is_running={any_evaluation_is_running}
                   has_selected_runs={has_selected_runs}
                   offset={offset}
                   limit={limit}
