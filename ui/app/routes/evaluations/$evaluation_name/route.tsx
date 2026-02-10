@@ -475,6 +475,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     }
   }, [isKilling, running_evaluation_run_ids]);
 
+  // Direct fetch (not useFetcher) because we may need to kill multiple
+  // evaluation runs in parallel, and useFetcher only supports one in-flight request.
   const handleKillEvaluation = useCallback(async () => {
     setIsKilling(true);
     try {

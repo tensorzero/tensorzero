@@ -9,19 +9,12 @@ import { logger } from "~/utils/logger";
  *
  * Route: POST /api/evaluations/:evaluation_run_id/kill
  */
-export async function action({ params, request }: ActionFunctionArgs) {
+export async function action({ params }: ActionFunctionArgs) {
   const evaluationRunId = params.evaluation_run_id;
   if (!evaluationRunId) {
     return Response.json(
       { success: false, error: "Evaluation run ID is required" },
       { status: 400 },
-    );
-  }
-
-  if (request.method !== "POST") {
-    return Response.json(
-      { success: false, error: "Method not allowed" },
-      { status: 405 },
     );
   }
 

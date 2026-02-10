@@ -83,7 +83,7 @@ describe("killEvaluation", () => {
     expect(killResult).toEqual({ killed: false, already_completed: true });
   });
 
-  test("should abort the AbortController signal when killing", async () => {
+  test("should not expose abortController through getRunningEvaluation", async () => {
     const startInfo = await runEvaluation(
       "entity_extraction",
       "foo",
@@ -94,17 +94,9 @@ describe("killEvaluation", () => {
 
     const evaluation = getRunningEvaluation(startInfo.evaluation_run_id);
     expect(evaluation).toBeDefined();
-
-    // If the evaluation hasn't completed yet, kill it and check the signal
-    if (!evaluation?.completed) {
-      const abortSignal = evaluation!.abortController.signal;
-      expect(abortSignal.aborted).toBe(false);
-
-      killEvaluation(startInfo.evaluation_run_id);
-
-      expect(abortSignal.aborted).toBe(true);
-    }
-    // If already completed (cached), the abort controller signal state doesn't matter
-    // since the evaluation finished normally
+    expect(
+      "abortController" in evaluation!,
+      "abortController should not be exposed",
+    ).toBe(false);
   });
 });

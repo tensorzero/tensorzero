@@ -46,6 +46,11 @@ interface RunningEvaluationInfo {
 // This is a map of evaluation run id to running evaluation info
 const runningEvaluations = new Map<string, RunningEvaluationInfo>();
 
+export type RunningEvaluationView = Omit<
+  RunningEvaluationInfo,
+  "abortController"
+>;
+
 /**
  * Returns the running information for a specific evaluation run.
  * @param evaluationRunId The ID of the evaluation run to retrieve.
@@ -53,8 +58,11 @@ const runningEvaluations = new Map<string, RunningEvaluationInfo>();
  */
 export function getRunningEvaluation(
   evaluationRunId: string,
-): RunningEvaluationInfo | undefined {
-  return runningEvaluations.get(evaluationRunId);
+): RunningEvaluationView | undefined {
+  const info = runningEvaluations.get(evaluationRunId);
+  if (!info) return undefined;
+  const { abortController: _, ...view } = info;
+  return view;
 }
 
 /**
