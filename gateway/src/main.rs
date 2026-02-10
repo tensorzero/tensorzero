@@ -22,7 +22,7 @@ use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_mi
 use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error;
+use tensorzero_core::error::{self, Error, ErrorDetails};
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
@@ -56,6 +56,28 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);
 
+    Ok(())
+}
+
+async fn run_optimization_postgres_migrations() -> Result<(), Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
+        })
+    })?;
+    let pool = sqlx::PgPool::connect(&postgres_url).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: e.to_string(),
+        })
+    })?;
+    tensorzero_optimizers::postgres::make_migrator()
+        .run(&pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresMigration {
+                message: format!("Failed to run optimization migrations: {e}"),
+            })
+        })?;
     Ok(())
 }
 
@@ -116,10 +138,18 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_postgres_migrations {
-        tracing::info!("Applying PostgreSQL migrations...");
+        tracing::info!("Applying Postgres migrations...");
         manual_run_postgres_migrations()
             .await
-            .log_err_pretty("Failed to run PostgreSQL migrations")?;
+            .log_err_pretty("Failed to run Postgres migrations")?;
+        if args
+            .postgres_migration_args
+            .enable_optimization_postgres_migrations
+        {
+            run_optimization_postgres_migrations()
+                .await
+                .log_err_pretty("Failed to run optimization Postgres migrations")?;
+        }
         tracing::info!("Postgres is ready.");
         return Ok(());
     }

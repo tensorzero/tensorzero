@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
+  CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
   SQLX_OFFLINE: 1
@@ -1295,6 +1296,7 @@ jobs:
     needs:
       [
         build-gateway-container,
+        build-gateway-e2e-container,
         build-ui-container,
         build-mock-provider-api-container,
       ]

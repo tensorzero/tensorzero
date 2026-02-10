@@ -24,7 +24,7 @@ pub async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
 
     sqlx::PgPool::connect(&postgres_url)
         .await
-        .expect("Failed to connect to PostgreSQL")
+        .expect("Failed to connect to Postgres")
 }
 
 pub fn gateway_path() -> String {

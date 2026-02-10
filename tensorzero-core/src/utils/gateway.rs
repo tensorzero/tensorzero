@@ -20,6 +20,7 @@ use crate::config::{Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::U
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::valkey::ValkeyConnectionInfo;
@@ -215,8 +216,12 @@ impl GatewayHandle {
         available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let config = Arc::new(Box::pin(config.into_config(&clickhouse_connection_info)).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
+        let db = DelegatingDatabaseConnection::new(
+            clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
+        );
+        let config = Arc::new(Box::pin(config.into_config(&db)).await?);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
@@ -291,13 +296,15 @@ impl GatewayHandle {
         setup_howdy(
             &config,
             clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
             cancel_token.clone(),
         );
 
-        // Fetch the deployment ID from ClickHouse (if available)
-        let deployment_id = crate::howdy::get_deployment_id(&clickhouse_connection_info)
-            .await
-            .ok();
+        // Fetch the deployment ID
+        let deployment_id =
+            crate::howdy::get_deployment_id(&clickhouse_connection_info, &postgres_connection_info)
+                .await
+                .ok();
 
         for (function_name, function_config) in &config.functions {
             function_config
@@ -524,7 +531,7 @@ pub async fn setup_postgres(
 
 /// Sets up the Valkey connection from the provided URL.
 ///
-/// Valkey is optional; if no URL is provided, rate limiting will fall back to PostgreSQL.
+/// Valkey is optional; if no URL is provided, rate limiting will fall back to Postgres.
 ///
 /// # Arguments
 /// * `valkey_url` - Optional Valkey URL (from `TENSORZERO_VALKEY_URL` env var)

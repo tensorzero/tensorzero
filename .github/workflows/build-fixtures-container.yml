@@ -58,6 +58,21 @@ jobs:
       - name: Push `fixtures` container to Docker Hub
         run: docker push tensorzero/fixtures:sha-${{ github.sha }}
 
+      - name: Wait for image to be available on Docker Hub
+        run: |
+          IMAGE="tensorzero/fixtures:sha-${{ github.sha }}"
+          echo "Waiting for ${IMAGE} to be available on Docker Hub..."
+          for i in $(seq 1 30); do
+            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+              echo "Image ${IMAGE} is available on Docker Hub"
+              exit 0
+            fi
+            echo "Attempt ${i}/30: Image not yet available, waiting 10s..."
+            sleep 10
+          done
+          echo "Timed out waiting for ${IMAGE} to appear on Docker Hub"
+          exit 1
+
       - name: Login to Namespace registry
         run: nsc docker login
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}

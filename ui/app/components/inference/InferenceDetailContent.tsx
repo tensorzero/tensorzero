@@ -34,6 +34,7 @@ import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { DemonstrationFeedbackButton } from "~/components/feedback/DemonstrationFeedbackButton";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
@@ -307,6 +308,9 @@ export function InferenceDetailContent({
           />
         </humanFeedbackFetcher.Form>
       </HumanFeedbackModal>
+      <AskAutopilotButton
+        message={`Inference ID: ${inference.inference_id}\n\n`}
+      />
     </ActionBar>
   );
 
