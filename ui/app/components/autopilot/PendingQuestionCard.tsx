@@ -714,12 +714,12 @@ export function PendingQuestionCard({
               content seen so the container never shrinks. */}
           <div
             ref={contentRef}
-            className="overflow-hidden transition-[height] duration-200 ease-in-out"
+            className="overflow-hidden transition-[height] duration-300 ease-in-out"
             style={{ height: contentHeight }}
           >
             <div
               key={activeStep}
-              className="animate-in fade-in duration-150"
+              className="animate-in fade-in duration-300"
             >
             {isReviewStep ? (
               <div className="flex flex-col gap-3">
