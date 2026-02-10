@@ -32,6 +32,11 @@ export default [
     ),
 
     route(
+      "evaluations/:evaluation_run_id/kill",
+      "routes/api/evaluations/$evaluation_run_id/kill.route.ts",
+    ),
+
+    route(
       "function/:function_name/feedback_counts",
       "routes/api/function/$function_name/feedback_counts.route.ts",
     ),
