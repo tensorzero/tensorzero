@@ -1242,6 +1242,7 @@ function AutopilotSessionEventsPageContent({
                   isLoading={false}
                   onSubmit={handleQuestionSubmit}
                   onSkip={handleQuestionSkip}
+                  tabLayout="horizontal"
                 />
               )}
               <ChatInput
