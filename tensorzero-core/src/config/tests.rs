@@ -3512,6 +3512,7 @@ async fn test_experimentation_with_namespaces_valid() {
     );
 }
 
+// TODO: implement track-and-stop for namespaces, delete
 #[tokio::test]
 async fn test_experimentation_namespace_track_and_stop_rejected() {
     let config_str = r#"
