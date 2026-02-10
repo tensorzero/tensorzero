@@ -117,6 +117,8 @@ type PendingQuestionCardProps = {
   onSubmit: (eventId: string, answers: Record<string, string>) => void;
   onSkip?: () => void;
   className?: string;
+  /** Tab layout: "vertical" (left sidebar, default) or "horizontal" (top row) */
+  tabLayout?: "vertical" | "horizontal";
 };
 
 // --- Step renderers ---
@@ -356,6 +358,56 @@ function StepTab({
   );
 }
 
+// --- Horizontal Step Tab (top bar) ---
+
+function HorizontalStepTab({
+  index,
+  label,
+  state,
+  onClick,
+}: {
+  index: number;
+  label: string;
+  state: "completed" | "active" | "upcoming";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all",
+        state === "active" &&
+          "bg-purple-200/70 text-purple-800 dark:bg-purple-800/50 dark:text-purple-200",
+        state === "completed" &&
+          "cursor-pointer text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20",
+        state === "upcoming" &&
+          "text-fg-muted cursor-pointer hover:bg-purple-100/50 dark:hover:bg-purple-900/20",
+      )}
+      aria-label={`Go to question ${index + 1}: ${label}`}
+      aria-current={state === "active" ? "step" : undefined}
+    >
+      {state === "completed" ? (
+        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
+          <Check className="h-2.5 w-2.5" />
+        </span>
+      ) : (
+        <span
+          className={cn(
+            "flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+            state === "active" &&
+              "bg-purple-600 text-white dark:bg-purple-400 dark:text-purple-950",
+            state === "upcoming" && "border-fg-muted border bg-transparent",
+          )}
+        >
+          {index + 1}
+        </span>
+      )}
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
 // --- Main component ---
 
 export function PendingQuestionCard({
@@ -365,6 +417,7 @@ export function PendingQuestionCard({
   onSubmit,
   onSkip,
   className,
+  tabLayout = "vertical",
 }: PendingQuestionCardProps) {
   const [activeStep, setActiveStep] = useState(0);
 
@@ -549,10 +602,41 @@ export function PendingQuestionCard({
         )}
       </div>
 
-      {/* Body: left tabs + right content */}
+      {/* Horizontal tabs (top row) */}
+      {!isSingleQuestion && tabLayout === "horizontal" && (
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
+          {payload.questions.map((q, idx) => (
+            <HorizontalStepTab
+              key={idx}
+              index={idx}
+              label={q.header}
+              state={
+                idx === activeStep
+                  ? "active"
+                  : isStepValid(idx)
+                    ? "completed"
+                    : "upcoming"
+              }
+              onClick={() => setActiveStep(idx)}
+            />
+          ))}
+          <HorizontalStepTab
+            index={questionCount}
+            label="Review"
+            state={
+              isReviewStep ? "active" : allStepsValid ? "upcoming" : "upcoming"
+            }
+            onClick={() => {
+              if (allStepsValid) setActiveStep(questionCount);
+            }}
+          />
+        </nav>
+      )}
+
+      {/* Body */}
       <div className="flex">
-        {/* Left sidebar tabs (only for multi-question) */}
-        {!isSingleQuestion && (
+        {/* Left sidebar tabs (only for multi-question + vertical layout) */}
+        {!isSingleQuestion && tabLayout === "vertical" && (
           <nav className="flex w-32 shrink-0 flex-col gap-0.5 px-2 pb-3">
             {payload.questions.map((q, idx) => (
               <StepTab
@@ -586,8 +670,13 @@ export function PendingQuestionCard({
           </nav>
         )}
 
-        {/* Right content area — min-h prevents jitter when stepping between question types */}
-        <div className="flex min-h-[180px] min-w-0 flex-1 flex-col justify-between gap-3 pr-4 pb-3 pl-2">
+        {/* Content area — min-h prevents jitter when stepping between question types */}
+        <div
+          className={cn(
+            "flex min-h-[180px] min-w-0 flex-1 flex-col justify-between gap-3 pb-3",
+            tabLayout === "vertical" ? "pr-4 pl-2" : "px-4",
+          )}
+        >
           <div>
             {isReviewStep ? (
               <div className="flex flex-col gap-3">
