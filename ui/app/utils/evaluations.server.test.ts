@@ -6,15 +6,11 @@ import {
 } from "./evaluations.server";
 
 describe("cancelEvaluation", () => {
-  test("should return not-found for unknown evaluation run ID", () => {
-    const result = cancelEvaluation("nonexistent-evaluation-id");
-    expect(result).toEqual({
-      cancelled: false,
-      already_completed: false,
-    });
+  test("should return false for unknown evaluation run ID", () => {
+    expect(cancelEvaluation("nonexistent-evaluation-id")).toBe(false);
   });
 
-  test("should abort the controller, mark completed, and set cancelled flag", () => {
+  test("should abort the controller and mark as cancelled", () => {
     const abortController = new AbortController();
     _test_registerRunningEvaluation("run-1", abortController);
 
@@ -23,8 +19,7 @@ describe("cancelEvaluation", () => {
       "Signal should not be aborted before cancel",
     ).toBe(false);
 
-    const result = cancelEvaluation("run-1");
-    expect(result).toEqual({ cancelled: true, already_completed: false });
+    expect(cancelEvaluation("run-1")).toBe(true);
 
     expect(
       abortController.signal.aborted,
@@ -32,19 +27,17 @@ describe("cancelEvaluation", () => {
     ).toBe(true);
 
     const evaluation = getRunningEvaluation("run-1");
-    expect(evaluation).toBeDefined();
     expect(evaluation?.completed).toBeInstanceOf(Date);
     expect(evaluation?.cancelled).toBe(true);
   });
 
-  test("should return already_completed and not abort if evaluation finished naturally", () => {
+  test("should not abort a naturally completed evaluation", () => {
     const abortController = new AbortController();
     _test_registerRunningEvaluation("run-2", abortController, {
       completed: new Date(),
     });
 
-    const result = cancelEvaluation("run-2");
-    expect(result).toEqual({ cancelled: false, already_completed: true });
+    expect(cancelEvaluation("run-2")).toBe(true);
 
     expect(
       abortController.signal.aborted,

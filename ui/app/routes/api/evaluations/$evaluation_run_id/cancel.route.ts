@@ -1,6 +1,5 @@
 import type { ActionFunctionArgs } from "react-router";
 import { cancelEvaluation } from "~/utils/evaluations.server";
-import { logger } from "~/utils/logger";
 
 /**
  * API route for cancelling a running evaluation.
@@ -18,24 +17,12 @@ export async function action({ params }: ActionFunctionArgs) {
     );
   }
 
-  try {
-    const result = cancelEvaluation(evaluationRunId);
-    if (!result.cancelled && !result.already_completed) {
-      return Response.json(
-        { success: false, error: "Evaluation run not found" },
-        { status: 404 },
-      );
-    }
-    return Response.json({
-      success: true,
-      already_completed: result.already_completed,
-    });
-  } catch (error) {
-    logger.error("Failed to cancel evaluation run:", error);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Failed to cancel evaluation run";
-    return Response.json({ success: false, error: message }, { status: 500 });
+  const found = cancelEvaluation(evaluationRunId);
+  if (!found) {
+    return Response.json(
+      { success: false, error: "Evaluation run not found" },
+      { status: 404 },
+    );
   }
+  return Response.json({ success: true });
 }
