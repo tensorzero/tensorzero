@@ -1,7 +1,17 @@
+use async_trait::async_trait;
 use sqlx::Row;
 
+use crate::db::DeploymentIdQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::Error;
+
+#[async_trait]
+impl DeploymentIdQueries for PostgresConnectionInfo {
+    /// Gets or creates a deployment ID in Postgres.
+    async fn get_deployment_id(&self) -> Result<String, Error> {
+        self.get_or_create_deployment_id().await
+    }
+}
 
 impl PostgresConnectionInfo {
     /// Gets or creates a deployment ID in Postgres.
@@ -9,11 +19,11 @@ impl PostgresConnectionInfo {
     /// This is analogous to the ClickHouse `DeploymentID` table. The deployment ID
     /// is a blake3 hash of a UUIDv7, generated once and stored as a singleton row.
     /// Race conditions are handled via `ON CONFLICT DO NOTHING`.
-    pub async fn get_or_create_deployment_id(&self) -> Result<String, Error> {
+    async fn get_or_create_deployment_id(&self) -> Result<String, Error> {
         let pool = self.get_pool_result()?;
 
         // Try to read existing deployment ID
-        let row = sqlx::query("SELECT deployment_id FROM tensorzero.deployment_id WHERE dummy = 0")
+        let row = sqlx::query("SELECT deployment_id FROM tensorzero.deployment_id LIMIT 1")
             .fetch_optional(pool)
             .await?;
 
@@ -43,7 +53,7 @@ impl PostgresConnectionInfo {
         .await?;
 
         // Re-read to get the winner in case of a race
-        let row = sqlx::query("SELECT deployment_id FROM tensorzero.deployment_id WHERE dummy = 0")
+        let row = sqlx::query("SELECT deployment_id FROM tensorzero.deployment_id LIMIT 1")
             .fetch_one(pool)
             .await?;
 

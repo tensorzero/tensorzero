@@ -25,6 +25,7 @@ use reqwest::Client;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::env;
 use tokio::{
+    sync::OnceCell,
     time::{self, Duration},
     try_join,
 };
@@ -33,6 +34,7 @@ use tracing::{debug, info};
 
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::{DeploymentIdQueries, delegating_connection::DelegatingDatabaseConnection};
 use crate::{config::Config, utils::spawn_ignoring_shutdown};
 use crate::{db::clickhouse::ClickHouseConnectionInfo, feature_flags};
 
@@ -116,30 +118,36 @@ async fn send_howdy(
 
 /// Synchronizes the deployment ID from ClickHouse to Postgres if Postgres is enabled.
 /// For existing ClickHouse deployments, we make sure Postgres contains the same deployment ID.
+/// This only executes the actual synchronization once.
 async fn synchronize_deployment_id(
     clickhouse: &ClickHouseConnectionInfo,
     postgres: &PostgresConnectionInfo,
 ) -> Result<(), ()> {
-    if !feature_flags::ENABLE_POSTGRES_WRITE.get() {
-        return Ok(());
-    }
+    static ONCE: OnceCell<Result<(), ()>> = OnceCell::const_new();
+    *ONCE
+        .get_or_init(|| async {
+            // Even though this writes deployment ID to Postgres, we gate it behind ENABLE_POSTGRES_READ
+            // because it's serving a read query.
+            if !feature_flags::ENABLE_POSTGRES_READ.get() {
+                return Ok(());
+            }
+            if clickhouse.client_type() != ClickHouseClientType::Production {
+                return Ok(());
+            }
+            if !matches!(postgres, &PostgresConnectionInfo::Enabled { .. }) {
+                return Ok(());
+            }
+            let id = clickhouse.get_deployment_id().await.map_err(|e| {
+                tracing::debug!("Failed to get deployment ID from ClickHouse: {e}");
+            })?;
 
-    if clickhouse.client_type() != ClickHouseClientType::Production {
-        return Ok(());
-    }
-    if !matches!(postgres, &PostgresConnectionInfo::Enabled { .. }) {
-        return Ok(());
-    }
-    let Ok(id) = clickhouse.get_deployment_id().await else {
-        tracing::debug!("Failed to get deployment ID from ClickHouse");
-        return Err(());
-    };
+            if let Err(e) = &postgres.insert_deployment_id(&id).await {
+                tracing::debug!("Failed to sync deployment ID to Postgres: {e}");
+            }
 
-    if let Err(e) = &postgres.insert_deployment_id(&id).await {
-        tracing::debug!("Failed to sync deployment ID to Postgres: {e}");
-        return Err(());
-    }
-    Ok(())
+            Ok(())
+        })
+        .await
 }
 
 /// Gets the deployment ID.
@@ -149,11 +157,14 @@ pub async fn get_deployment_id(
     postgres: &PostgresConnectionInfo,
 ) -> Result<String, ()> {
     // Make sure deployment ID is consistent between ClickHouse and Postgres
-    // TODO(#5691): This is currently a no-op gated behind ENABLE_POSTGRES_READ.
     synchronize_deployment_id(clickhouse, postgres).await?;
 
-    // TODO(#5691): Support reading deployment ID from Postgres
-    return clickhouse.get_deployment_id().await;
+    DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone())
+        .get_deployment_id()
+        .await
+        .map_err(|e| {
+            tracing::debug!("Failed to get deployment ID: {e}");
+        })
 }
 
 /// Gets the howdy report.

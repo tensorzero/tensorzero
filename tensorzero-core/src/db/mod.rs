@@ -182,6 +182,11 @@ pub trait ConfigQueries: Send + Sync {
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error>;
 }
 
+#[async_trait]
+pub trait DeploymentIdQueries: Send + Sync {
+    async fn get_deployment_id(&self) -> Result<String, Error>;
+}
+
 /// A stored DICL (Dynamic In-Context Learning) example.
 #[derive(Debug, Clone)]
 pub struct StoredDICLExample {

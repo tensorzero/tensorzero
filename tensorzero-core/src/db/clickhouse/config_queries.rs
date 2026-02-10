@@ -111,24 +111,6 @@ FROM new_data"
     }
 }
 
-impl ClickHouseConnectionInfo {
-    /// Gets the deployment ID from ClickHouse.
-    /// It is stored in the `DeploymentID` table as a 64 char hex hash.
-    pub async fn get_deployment_id(&self) -> Result<String, ()> {
-        let response = self
-            .run_query_synchronous_no_params(
-                "SELECT deployment_id FROM DeploymentID LIMIT 1".to_string(),
-            )
-            .await
-            .map_err(|_| ())?;
-        if response.response.is_empty() {
-            tracing::debug!("Failed to get deployment ID from ClickHouse (response was empty)");
-            return Err(());
-        }
-        Ok(response.response.trim().to_string())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;

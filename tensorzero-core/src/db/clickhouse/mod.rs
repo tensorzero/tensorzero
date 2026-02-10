@@ -31,6 +31,7 @@ mod batching;
 mod cache_queries;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
 pub mod config_queries;
+mod deployment_queries;
 pub mod dataset_queries;
 pub mod dicl_queries;
 mod episode_queries;
