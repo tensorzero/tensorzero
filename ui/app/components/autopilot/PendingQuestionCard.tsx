@@ -547,8 +547,6 @@ export function PendingQuestionCard({
     }
   };
 
-  const currentQuestion = payload.questions[activeStep];
-
   const renderStep = (question: AskUserQuestionItem, idx: number) => {
     switch (question.type) {
       case "multiple_choice":
@@ -673,36 +671,55 @@ export function PendingQuestionCard({
         {/* Content area — min-h prevents jitter when stepping between question types */}
         <div
           className={cn(
-            "flex min-h-[180px] min-w-0 flex-1 flex-col justify-between gap-3 pb-3",
+            "flex min-w-0 flex-1 flex-col justify-between gap-3 pb-3",
             tabLayout === "vertical" ? "pr-4 pl-2" : "px-4",
           )}
         >
-          <div>
-            {isReviewStep ? (
-              <div className="flex flex-col gap-3">
-                <span className="text-fg-primary text-sm font-medium">
-                  Review your answers
-                </span>
-                <div className="flex flex-col gap-2">
-                  {payload.questions.map((q, idx) => (
-                    <button
-                      key={q.header}
-                      type="button"
-                      onClick={() => setActiveStep(idx)}
-                      className="border-border bg-bg-secondary flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-all hover:border-purple-300 dark:hover:border-purple-600"
-                    >
-                      <span className="text-fg-muted text-xs font-medium">
-                        {q.header}
-                      </span>
-                      <span className="text-fg-primary text-sm">
-                        {getAnswerText(idx) || "—"}
-                      </span>
-                    </button>
-                  ))}
+          {/* Grid trick: all steps occupy the same cell so the container
+              sizes to the tallest. Non-active steps are invisible (keeps layout). */}
+          <div className="grid min-w-0" style={{ gridTemplateColumns: "1fr" }}>
+            {payload.questions.map((q, idx) => (
+              <div
+                key={idx}
+                className={cn(
+                  "[grid-area:1/1]",
+                  activeStep !== idx && "invisible",
+                )}
+              >
+                {renderStep(q, idx)}
+              </div>
+            ))}
+            {/* Review step (multi-question only) */}
+            {!isSingleQuestion && (
+              <div
+                className={cn(
+                  "[grid-area:1/1]",
+                  !isReviewStep && "invisible",
+                )}
+              >
+                <div className="flex flex-col gap-3">
+                  <span className="text-fg-primary text-sm font-medium">
+                    Review your answers
+                  </span>
+                  <div className="flex flex-col gap-2">
+                    {payload.questions.map((q, idx) => (
+                      <button
+                        key={q.header}
+                        type="button"
+                        onClick={() => setActiveStep(idx)}
+                        className="border-border bg-bg-secondary flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-all hover:border-purple-300 dark:hover:border-purple-600"
+                      >
+                        <span className="text-fg-muted text-xs font-medium">
+                          {q.header}
+                        </span>
+                        <span className="text-fg-primary text-sm">
+                          {getAnswerText(idx) || "—"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            ) : (
-              renderStep(currentQuestion, activeStep)
             )}
           </div>
 
