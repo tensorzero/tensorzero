@@ -386,7 +386,7 @@ function ResultsContent({
           data-running={any_evaluation_is_running}
         >
           <AutoRefreshIndicator isActive={any_evaluation_is_running} />
-          {any_evaluation_is_running && (
+          {(any_evaluation_is_running || isCancelling) && (
             <Button
               variant="outline"
               size="sm"
@@ -400,7 +400,7 @@ function ResultsContent({
                 )
               }
             >
-              Stop
+              {isCancelling ? "Stopping..." : "Stop"}
             </Button>
           )}
         </div>
