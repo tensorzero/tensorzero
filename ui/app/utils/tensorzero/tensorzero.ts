@@ -1864,6 +1864,6 @@ export interface RunEvaluationStreamingParams {
   precisionTargets?: Record<string, number>;
   /** Callback for SSE events */
   onEvent: (event: EvaluationRunEvent) => void;
-  /** Optional abort signal for cancelling the evaluation */
+  /** Optional signal to abort the request */
   signal?: AbortSignal;
 }
