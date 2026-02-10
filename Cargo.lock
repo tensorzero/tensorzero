@@ -6573,6 +6573,8 @@ version = "2026.2.0"
 dependencies = [
  "serde",
  "serde_json",
+ "serde_path_to_error",
+ "tensorzero-derive",
 ]
 
 [[package]]
