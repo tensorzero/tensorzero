@@ -1,5 +1,6 @@
-import { Suspense, useEffect, useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { AlertCircle, Loader2, StopCircle } from "lucide-react";
+import { Button } from "~/components/ui/button";
 import type { Route } from "./+types/route";
 import type { EvaluationResultRow } from "~/types/tensorzero";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
@@ -177,21 +178,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
   );
 
-  const any_evaluation_is_running = Object.values(
-    selected_evaluation_run_ids_array,
-  ).some((evaluationRunId) => {
-    const runningEvaluation = getRunningEvaluation(evaluationRunId);
-    if (!runningEvaluation) {
-      return false;
-    }
-    if (runningEvaluation.completed) {
-      // If the evaluation completed more than 5 seconds ago, consider it done
-      if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
+  const running_evaluation_run_ids = selected_evaluation_run_ids_array.filter(
+    (evaluationRunId) => {
+      const runningEvaluation = getRunningEvaluation(evaluationRunId);
+      if (!runningEvaluation) {
         return false;
       }
-    }
-    return true;
-  });
+      if (runningEvaluation.completed) {
+        // If the evaluation completed more than 5 seconds ago, consider it done
+        if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
+          return false;
+        }
+      }
+      return true;
+    },
+  );
 
   const errors: Record<string, EvaluationErrorDisplayInfo> =
     selected_evaluation_run_ids_array.reduce(
@@ -229,7 +230,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     offset,
     limit,
     evaluator_names,
-    any_evaluation_is_running,
+    running_evaluation_run_ids,
     errors,
     newFeedbackId,
     newJudgeDemonstrationId,
@@ -334,6 +335,8 @@ function ResultsContent({
   limit,
   selectedRows,
   setSelectedRows,
+  onKill,
+  isKilling,
 }: {
   evaluation_name: string;
   data: EvaluationData;
@@ -346,6 +349,8 @@ function ResultsContent({
   setSelectedRows: React.Dispatch<
     React.SetStateAction<Map<string, SelectedRowData>>
   >;
+  onKill: () => void;
+  isKilling: boolean;
 }) {
   const navigate = useNavigate();
   const {
@@ -372,11 +377,28 @@ function ResultsContent({
       <div className="flex items-center">
         <SectionHeader heading="Results" />
         <div
-          className="ml-4"
+          className="ml-4 flex items-center gap-2"
           data-testid="auto-refresh-wrapper"
           data-running={any_evaluation_is_running}
         >
           <AutoRefreshIndicator isActive={any_evaluation_is_running} />
+          {any_evaluation_is_running && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onKill}
+              disabled={isKilling}
+              slotLeft={
+                isKilling ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <StopCircle className="h-3.5 w-3.5" />
+                )
+              }
+            >
+              Stop
+            </Button>
+          )}
         </div>
       </div>
       <EvaluationTable
@@ -411,15 +433,17 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     offset,
     limit,
     evaluator_names,
-    any_evaluation_is_running,
+    running_evaluation_run_ids,
     errors,
     newFeedbackId,
     newJudgeDemonstrationId,
   } = loaderData;
+  const any_evaluation_is_running = running_evaluation_run_ids.length > 0;
   const location = useLocation();
   const isReadOnly = useReadOnly();
   const { toast } = useToast();
   const fetcher = useFetcher();
+  const killFetcher = useFetcher();
 
   const [selectedRows, setSelectedRows] = useState<
     Map<string, SelectedRowData>
@@ -437,6 +461,32 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const function_name = evaluation_config.function_name;
 
   useAutoRefresh(any_evaluation_is_running);
+
+  const handleKillEvaluation = useCallback(() => {
+    for (const runId of running_evaluation_run_ids) {
+      killFetcher.submit(null, {
+        method: "POST",
+        action: `/api/evaluations/${encodeURIComponent(runId)}/kill`,
+      });
+    }
+  }, [killFetcher, running_evaluation_run_ids]);
+
+  useEffect(() => {
+    if (killFetcher.state === "idle" && killFetcher.data) {
+      const result = killFetcher.data as {
+        success: boolean;
+        error?: string;
+      };
+      if (!result.success && result.error) {
+        toast.error({
+          title: "Failed to stop evaluation",
+          description: result.error,
+        });
+      }
+    }
+  }, [killFetcher.state, killFetcher.data, toast]);
+
+  const isKilling = killFetcher.state !== "idle";
 
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
@@ -525,6 +575,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                   limit={limit}
                   selectedRows={selectedRows}
                   setSelectedRows={setSelectedRows}
+                  onKill={handleKillEvaluation}
+                  isKilling={isKilling}
                 />
               )}
             </Await>

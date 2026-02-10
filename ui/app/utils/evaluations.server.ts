@@ -35,6 +35,7 @@ const INFERENCE_CACHE_SETTINGS = [
 export type InferenceCacheSetting = (typeof INFERENCE_CACHE_SETTINGS)[number];
 
 interface RunningEvaluationInfo {
+  abortController: AbortController;
   errors: DisplayEvaluationError[];
   variantName: string;
   completed?: Date;
@@ -53,6 +54,27 @@ export function getRunningEvaluation(
   evaluationRunId: string,
 ): RunningEvaluationInfo | undefined {
   return runningEvaluations.get(evaluationRunId);
+}
+
+/**
+ * Kills a running evaluation by aborting its HTTP connection to the gateway.
+ * This causes the gateway to cancel all in-flight evaluation tasks.
+ * Partial results already written to ClickHouse are preserved.
+ */
+export function killEvaluation(evaluationRunId: string): {
+  killed: boolean;
+  already_completed: boolean;
+} {
+  const evaluation = runningEvaluations.get(evaluationRunId);
+  if (!evaluation) {
+    return { killed: false, already_completed: false };
+  }
+  if (evaluation.completed) {
+    return { killed: false, already_completed: true };
+  }
+  evaluation.abortController.abort();
+  evaluation.completed = new Date();
+  return { killed: true, already_completed: false };
 }
 
 const evaluationFormDataSchema = z.object({
@@ -115,6 +137,7 @@ export async function runEvaluation(
   precisionTargets?: Record<string, number>,
 ): Promise<EvaluationStartInfo> {
   const startTime = new Date();
+  const abortController = new AbortController();
   let evaluationRunId: string | null = null;
   let startResolved = false;
 
@@ -157,6 +180,7 @@ export async function runEvaluation(
 
         evaluationRunId = startInfo.data.evaluation_run_id;
         runningEvaluations.set(evaluationRunId, {
+          abortController,
           variantName,
           errors: [],
           started: startTime,
@@ -225,6 +249,7 @@ export async function runEvaluation(
     maxDatapoints,
     precisionTargets,
     onEvent: handleEvent,
+    signal: abortController.signal,
   });
 
   void evaluationPromise
@@ -237,6 +262,16 @@ export async function runEvaluation(
       }
     })
     .catch((error) => {
+      // Intentional cancellation via killEvaluation() — just mark completed
+      if (error instanceof DOMException && error.name === "AbortError") {
+        if (evaluationRunId) {
+          const evaluation = runningEvaluations.get(evaluationRunId);
+          if (evaluation && !evaluation.completed) {
+            evaluation.completed = new Date();
+          }
+        }
+        return;
+      }
       if (!startResolved) {
         rejectStart(error);
         startResolved = true;

@@ -24,9 +24,10 @@ export class BaseTensorZeroClient {
       method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
       body?: BodyInit;
       headers?: HeadersInit;
+      signal?: AbortSignal;
     },
   ) {
-    const { method } = init;
+    const { method, signal } = init;
     const url = `${this.baseUrl}${path}`;
 
     // For methods which expect payloads, always pass a body value even when it
@@ -45,8 +46,12 @@ export class BaseTensorZeroClient {
     }
 
     try {
-      return await fetch(url, { method, headers, body });
+      return await fetch(url, { method, headers, body, signal });
     } catch (error) {
+      // Re-throw abort errors as-is so callers can distinguish intentional cancellation
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
       // Convert network errors (ECONNREFUSED, fetch failed, etc.) to GatewayConnectionError
       throw new GatewayConnectionError(error);
     }
