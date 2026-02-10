@@ -509,6 +509,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
       setIsCancelling(false);
       return;
     }
+    toast.success({ title: "Evaluation stopped" });
     // Trigger revalidation — the effect above resets isCancelling once
     // the loader confirms no more running evaluations.
     revalidator.revalidate();
