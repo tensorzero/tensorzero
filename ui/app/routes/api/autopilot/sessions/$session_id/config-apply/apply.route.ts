@@ -57,7 +57,7 @@ export async function action({
       {
         success: false,
         error:
-          "Config writing is not enabled. Set TENSORZERO_UI_CONFIG_FILE environment variable.",
+          "Config writing is not enabled. Set `TENSORZERO_UI_CONFIG_FILE` environment variable.",
       } as ApplyConfigChangeResponse,
       { status: 400 },
     );
