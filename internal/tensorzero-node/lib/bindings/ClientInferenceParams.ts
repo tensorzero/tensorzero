@@ -2,6 +2,7 @@
 import type { CacheParamsOptions } from "./CacheParamsOptions";
 import type { InferenceParams } from "./InferenceParams";
 import type { Input } from "./Input";
+import type { Namespace } from "./Namespace";
 import type { ProviderTool } from "./ProviderTool";
 import type { Tool } from "./Tool";
 import type { ToolChoice } from "./ToolChoice";
@@ -15,6 +16,7 @@ export type ClientInferenceParams = {
   function_name?: string;
   model_name?: string;
   episode_id?: string;
+  namespace?: Namespace;
   input: Input;
   stream?: boolean;
   params: InferenceParams;
