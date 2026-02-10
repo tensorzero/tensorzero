@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use futures::future::{join_all, try_join_all};
-use rand::Rng;
+use rand::RngExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;

@@ -294,7 +294,7 @@ impl Optimizer for GEPAConfig {
             let batch_size = self.batch_size.min(train_examples.len());
             let mutation_examples: Vec<RenderedSample> = train_examples
                 .iter()
-                .choose_multiple(&mut rng, batch_size)
+                .sample(&mut rng, batch_size)
                 .into_iter()
                 .cloned()
                 .collect();

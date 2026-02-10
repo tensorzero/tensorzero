@@ -14,7 +14,7 @@ use axum::{
 };
 use futures_util::StreamExt;
 use provider_proxy::{Args, CacheMode, run_server};
-use rand::Rng;
+use rand::RngExt;
 use reqwest_sse_stream::RequestBuilderExt;
 use serde_json::Value;
 use tokio::{sync::oneshot, task::JoinHandle};
