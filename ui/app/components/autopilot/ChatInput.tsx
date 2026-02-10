@@ -38,6 +38,12 @@ type ChatInputProps = {
   isInterrupting?: boolean;
   onInterrupt?: () => void;
   initialMessage?: string;
+  /** Controlled draft text — persists across mount/unmount when lifted to parent */
+  draftText?: string;
+  /** Called when draft text changes so parent can store it */
+  onDraftTextChange?: (text: string) => void;
+  /** Override the default placeholder text */
+  placeholder?: string;
 };
 
 export function ChatInput({
@@ -52,8 +58,19 @@ export function ChatInput({
   isInterrupting = false,
   onInterrupt,
   initialMessage,
+  draftText,
+  onDraftTextChange,
+  placeholder: placeholderOverride,
 }: ChatInputProps) {
-  const [text, setText] = useState(initialMessage ?? "");
+  const [internalText, setInternalText] = useState(initialMessage ?? "");
+  // Use controlled draft if provided, otherwise fall back to internal state
+  const text = draftText ?? internalText;
+  const onDraftTextChangeRef = useRef(onDraftTextChange);
+  onDraftTextChangeRef.current = onDraftTextChange;
+  const setText = useCallback((value: string) => {
+    setInternalText(value);
+    onDraftTextChangeRef.current?.(value);
+  }, []);
   const fetcher = useFetcher<MessageResponse>();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousUserMessageEventIdRef = useRef<string | undefined>(undefined);
@@ -62,7 +79,7 @@ export function ChatInput({
   // Sync text when initialMessage changes (e.g., navigating between ?message= URLs)
   useEffect(() => {
     setText(initialMessage ?? "");
-  }, [initialMessage]);
+  }, [initialMessage, setText]);
 
   // Store callbacks in refs to avoid re-triggering the effect when they change
   const onMessageSentRef = useRef(onMessageSent);
@@ -95,10 +112,11 @@ export function ChatInput({
   // Sample a random placeholder for new sessions, default for existing sessions
   const placeholder = useMemo(
     () =>
-      isNewSession
+      placeholderOverride ??
+      (isNewSession
         ? PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)]
-        : "Send a message...",
-    [isNewSession],
+        : "Send a message..."),
+    [isNewSession, placeholderOverride],
   );
 
   // Auto-resize textarea based on content
@@ -151,7 +169,7 @@ export function ChatInput({
         });
       }
     }
-  }, [fetcher.state, fetcher.data]);
+  }, [fetcher.state, fetcher.data, setText]);
 
   const canSend =
     text.trim().length > 0 && !isSubmitting && !disabled && !submitDisabled;
