@@ -51,6 +51,19 @@ import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
 import { useReadOnly } from "~/context/read-only";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import type { ShouldRevalidateFunctionArgs } from "react-router";
+
+// Prevent fetcher submissions (e.g. kill evaluation) from triggering
+// a full loader revalidation. The auto-refresh interval handles updates.
+export function shouldRevalidate({
+  formAction,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (formAction?.includes("/kill")) {
+    return false;
+  }
+  return defaultShouldRevalidate;
+}
 
 type EvaluationData = {
   selected_evaluation_run_infos: Awaited<
@@ -377,7 +390,7 @@ function ResultsContent({
       <div className="flex items-center">
         <SectionHeader heading="Results" />
         <div
-          className="ml-4 flex items-center gap-2"
+          className="ml-4 flex items-center gap-4"
           data-testid="auto-refresh-wrapper"
           data-running={any_evaluation_is_running}
         >
@@ -460,7 +473,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   }
   const function_name = evaluation_config.function_name;
 
-  useAutoRefresh(any_evaluation_is_running);
+  useAutoRefresh(optimisticIsRunning);
 
   const handleKillEvaluation = useCallback(() => {
     for (const runId of running_evaluation_run_ids) {
@@ -487,6 +500,9 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   }, [killFetcher.state, killFetcher.data, toast]);
 
   const isKilling = killFetcher.state !== "idle";
+
+  // Optimistic UI: treat evaluations as stopped immediately when kill is in-flight
+  const optimisticIsRunning = any_evaluation_is_running && !isKilling;
 
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
@@ -569,7 +585,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                   evaluation_name={evaluation_name}
                   data={resolvedData}
                   evaluator_names={evaluator_names}
-                  any_evaluation_is_running={any_evaluation_is_running}
+                  any_evaluation_is_running={optimisticIsRunning}
                   has_selected_runs={has_selected_runs}
                   offset={offset}
                   limit={limit}
