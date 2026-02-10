@@ -136,17 +136,34 @@ impl MetricsConfig {
     }
 }
 
+// TODO(shuyangli): Move per-request cache config (cache enabled option) here.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct GatewayCacheConfig {
+pub struct ModelInferenceCacheConfig {
     #[serde(default)]
-    pub valkey: GatewayCacheValkeyConfig,
+    pub valkey: ValkeyModelInferenceCacheConfig,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+// By default, cache entries in Valkey are retained for 24 hours.
+const DEFAULT_VALKEY_CACHE_TTL_S: u64 = 86400; // 24 hours
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct GatewayCacheValkeyConfig {
-    pub ttl_s: Option<u64>,
+pub struct ValkeyModelInferenceCacheConfig {
+    #[serde(default = "default_valkey_cache_ttl_s")]
+    pub ttl_s: u64,
+}
+
+fn default_valkey_cache_ttl_s() -> u64 {
+    DEFAULT_VALKEY_CACHE_TTL_S
+}
+
+impl Default for ValkeyModelInferenceCacheConfig {
+    fn default() -> Self {
+        Self {
+            ttl_s: DEFAULT_VALKEY_CACHE_TTL_S,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -186,7 +203,7 @@ pub struct UninitializedGatewayConfig {
     #[serde(default)]
     pub metrics: MetricsConfig,
     #[serde(default)]
-    pub cache: GatewayCacheConfig,
+    pub cache: ModelInferenceCacheConfig,
 }
 
 impl UninitializedGatewayConfig {
@@ -271,7 +288,7 @@ pub struct GatewayConfig {
     #[serde(skip)]
     pub relay: Option<TensorzeroRelay>,
     pub metrics: MetricsConfig,
-    pub cache: GatewayCacheConfig,
+    pub cache: ModelInferenceCacheConfig,
 }
 
 impl Default for GatewayConfig {

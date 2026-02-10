@@ -1,4 +1,4 @@
-mod cache;
+pub mod cache;
 mod rate_limiting;
 
 use std::time::Duration;
@@ -19,15 +19,12 @@ use crate::error::{Error, ErrorDetails};
 /// - No connection pool management needed
 #[derive(Clone)]
 pub enum ValkeyConnectionInfo {
-    Enabled {
-        connection: Box<ConnectionManager>,
-        cache_ttl_s: Option<u64>,
-    },
+    Enabled { connection: Box<ConnectionManager> },
     Disabled,
 }
 
 impl ValkeyConnectionInfo {
-    pub async fn new(valkey_url: &str, cache_ttl_s: Option<u64>) -> Result<Self, Error> {
+    pub async fn new(valkey_url: &str) -> Result<Self, Error> {
         let client = Client::open(valkey_url).map_err(|e| {
             Error::new(ErrorDetails::ValkeyConnection {
                 message: format!("Failed to create Valkey client: {e}"),
@@ -48,7 +45,6 @@ impl ValkeyConnectionInfo {
 
         Ok(Self::Enabled {
             connection: Box::new(connection),
-            cache_ttl_s,
         })
     }
 

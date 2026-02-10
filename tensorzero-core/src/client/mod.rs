@@ -608,7 +608,7 @@ impl ClientBuilder {
                 };
 
                 // Set up Valkey connection from explicit URL
-                let valkey_connection_info = setup_valkey(valkey_url.as_deref(), config.gateway.cache.valkey.ttl_s).await.map_err(|e| {
+                let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
                     ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
                         source: e.into(),
                     })
@@ -782,14 +782,9 @@ impl ClientBuilder {
             })?;
 
         // Setup Valkey with runtime URL
-        let valkey_connection_info =
-            setup_valkey(valkey_url.as_deref(), config.gateway.cache.valkey.ttl_s)
-                .await
-                .map_err(|e| {
-                    ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
-                        source: e.into(),
-                    })
-                })?;
+        let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
+            ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
+        })?;
 
         // Use HTTP client from config (now overlaid from live_config)
         let http_client = config.http_client.clone();
@@ -1152,7 +1147,7 @@ impl Client {
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
-                        gateway.handle.app_state.cache_backend.clone(),
+                        gateway.handle.app_state.cache_manager.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
                         gateway.handle.app_state.rate_limiting_manager.clone(),
                         params.try_into().map_err(err_to_http)?,
