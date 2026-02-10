@@ -34,7 +34,7 @@ pub use rate_limiting::*;
 
 #[async_trait]
 pub trait ClickHouseConnection:
-    SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync
+    EpisodeQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync
 {
 }
 
@@ -44,17 +44,16 @@ pub trait HealthCheckable {
 }
 
 #[cfg_attr(test, automock)]
-pub trait SelectQueries {
-    fn query_episode_table(
+#[async_trait]
+pub trait EpisodeQueries: Send + Sync {
+    async fn query_episode_table(
         &self,
         limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
-    ) -> impl Future<Output = Result<Vec<EpisodeByIdRow>, Error>> + Send;
+    ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
-    fn query_episode_table_bounds(
-        &self,
-    ) -> impl Future<Output = Result<TableBoundsWithCount, Error>> + Send;
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -147,7 +146,7 @@ pub struct TableBoundsWithCount {
     pub count: u64,
 }
 
-impl<T: SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync>
+impl<T: EpisodeQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync>
     ClickHouseConnection for T
 {
 }
@@ -171,12 +170,15 @@ pub trait ExperimentationQueries {
     ) -> Result<String, Error>;
 }
 
+#[async_trait]
 #[cfg_attr(test, automock)]
-pub trait ConfigQueries {
-    fn get_config_snapshot(
+pub trait ConfigQueries: Send + Sync {
+    async fn get_config_snapshot(
         &self,
         snapshot_hash: SnapshotHash,
-    ) -> impl Future<Output = Result<ConfigSnapshot, Error>> + Send;
+    ) -> Result<ConfigSnapshot, Error>;
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error>;
 }
 
 /// A stored DICL (Dynamic In-Context Learning) example.

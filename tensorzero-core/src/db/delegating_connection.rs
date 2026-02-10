@@ -10,8 +10,9 @@ use async_trait::async_trait;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::config::snapshot::SnapshotHash;
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
+use crate::db::ConfigQueries;
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -41,7 +42,10 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRow,
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint};
+use crate::db::{
+    EpisodeByIdRow, EpisodeQueries, ModelLatencyDatapoint, ModelUsageTimePoint,
+    TableBoundsWithCount,
+};
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
@@ -75,12 +79,14 @@ pub struct DelegatingDatabaseConnection {
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
 pub trait DelegatingDatabaseQueries:
-    FeedbackQueries
+    ConfigQueries
+    + FeedbackQueries
     + InferenceQueries
     + DatasetQueries
     + BatchInferenceQueries
     + ModelInferenceQueries
     + WorkflowEvaluationQueries
+    + EpisodeQueries
 {
 }
 impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
@@ -100,6 +106,39 @@ impl DelegatingDatabaseConnection {
         } else {
             &self.clickhouse
         }
+    }
+
+    /// Gets the deployment ID, trying ClickHouse first, then falling back to Postgres.
+    /// If ClickHouse has a deployment ID and Postgres is enabled, syncs it to Postgres
+    /// to keep both databases consistent.
+    pub async fn get_deployment_id(&self) -> Result<String, ()> {
+        // TODO(#5691): Support reading deployment ID from Postgres, and syncing the deployment ID
+        // from ClickHouse into Postgres if Clickhouse already exists.
+        self.clickhouse.get_deployment_id().await
+    }
+}
+
+#[async_trait]
+impl ConfigQueries for DelegatingDatabaseConnection {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        self.get_read_database()
+            .get_config_snapshot(snapshot_hash)
+            .await
+    }
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        self.clickhouse.write_config_snapshot(snapshot).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.write_config_snapshot(snapshot).await
+        {
+            tracing::error!("Error writing config snapshot to Postgres: {e}");
+        }
+
+        Ok(())
     }
 }
 
@@ -860,6 +899,24 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl EpisodeQueries for DelegatingDatabaseConnection {
+    async fn query_episode_table(
+        &self,
+        limit: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error> {
+        self.get_read_database()
+            .query_episode_table(limit, before, after)
+            .await
+    }
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
+        self.get_read_database().query_episode_table_bounds().await
     }
 }
 

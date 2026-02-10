@@ -40,8 +40,10 @@ macro_rules! make_clickhouse_only_test {
 mod bandit_queries;
 mod batch_inference_endpoint_internals;
 mod batch_inference_queries;
+mod config_queries;
 mod dataset_queries;
 mod dicl_queries;
+mod episode_queries;
 mod evaluation_queries;
 mod feedback_queries;
 mod inference_count_queries;
@@ -50,7 +52,6 @@ mod model_inference_queries;
 mod model_provider_statistics_queries;
 mod postgres;
 mod rate_limit_queries;
-mod select_queries;
 mod workflow_evaluation_queries;
 
 // ===== CONNECTION HELPERS =====
