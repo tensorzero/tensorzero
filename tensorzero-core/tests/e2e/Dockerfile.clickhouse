@@ -23,6 +23,7 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
 FROM base AS build-env
 
 WORKDIR /build
+ENV CARGO_INCREMENTAL=0
 
 # Copy the entire project
 COPY . .
