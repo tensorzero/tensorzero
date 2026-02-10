@@ -129,7 +129,7 @@ pub async fn tensorzero_auth_middleware(
 
         let Some(pool) = &state.pool else {
             return Err(TensorZeroAuthError::Middleware {
-                message: "PostgreSQL connection is disabled".to_string(),
+                message: "Postgres connection is disabled".to_string(),
                 key_info: None,
             });
         };

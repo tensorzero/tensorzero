@@ -110,11 +110,15 @@ services:
       - 55679:55679 # ZPages
 
   postgres:
-    image: postgres:14-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    image: tensorzero/postgres-dev:14-trixie-slim
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    command: ["postgres", "-c", "cron.database_name=tensorzero-e2e-tests"]
     ports:
       - "5432:5432"
     healthcheck:

@@ -93,7 +93,6 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
         Ok(rows)
     }
 
-    // TODO(#5691): Need to return this from the backend, so frontend can render correctly.
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         POSTGRES_QUANTILES
     }

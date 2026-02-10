@@ -1,12 +1,12 @@
 # Rate Limiting Load Tests
 
-This directory contains a configurable load testing binary for TensorZero's rate limiting functionality using the `rlt` crate. The test focuses on database-level performance of the PostgreSQL-based rate limiting implementation.
+This directory contains a configurable load testing binary for TensorZero's rate limiting functionality using the `rlt` crate. The test focuses on database-level performance of the Postgres-based rate limiting implementation.
 
 ## Prerequisites
 
 Run all commands below from the root of the repository.
 
-1. **Start PostgreSQL**: The test uses the same PostgreSQL instance as the e2e tests:
+1. **Start Postgres**: The test uses the same Postgres instance as the e2e tests:
 
    ```bash
    docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait

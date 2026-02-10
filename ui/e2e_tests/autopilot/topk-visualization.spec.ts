@@ -71,13 +71,14 @@ test.describe("TopK Evaluation Visualization", () => {
 
     // Create test datapoints dynamically
     // Use deterministic name to enable prompt/model caching
+    // Use 25 datapoints to ensure clear statistical separation between variants
     const datasetName = uniqueDatasetName(testInfo, "topk_viz");
     const datapointIds = await createTestDatapoints(
       gatewayUrl,
       datasetName,
-      10,
+      25,
     );
-    expect(datapointIds.length).toBe(10);
+    expect(datapointIds.length).toBe(25);
 
     // Wait for ClickHouse to commit the datapoints
     await page.waitForTimeout(1000);
@@ -90,10 +91,6 @@ test.describe("TopK Evaluation Visualization", () => {
       page.getByRole("heading", { name: "Autopilot Sessions" }),
     ).toBeVisible();
 
-    // Wait for the page to stabilize (sessions table to finish loading)
-    // The table shows skeleton rows while loading, then actual content or empty state
-    await page.waitForLoadState("networkidle");
-
     // Click to create a new session
     await page.getByRole("button", { name: /new session/i }).click();
 
@@ -103,12 +100,14 @@ test.describe("TopK Evaluation Visualization", () => {
     // Ask the agent to run the topk_evaluation tool with test fixtures
     // Using the test_topk_evaluation_no_error evaluation which uses dummy models
     const messageInput = page.getByRole("textbox");
+    // Wait for the textarea to be enabled before filling
+    await expect(messageInput).toBeEnabled();
     await messageInput.fill(`Call the topk_evaluation tool with:
 - evaluation_name: "test_topk_evaluation_no_error"
 - dataset_name: "${datasetName}"
 - variant_names: ["echo", "empty", "empty2"]
 - k_min: 1
-- max_datapoints: 10`);
+- max_datapoints: 25`);
 
     // Send the message
     await page.getByRole("button", { name: "Send message" }).click();
@@ -180,10 +179,15 @@ test.describe("TopK Evaluation Visualization", () => {
     await secondChart.scrollIntoViewIfNeeded();
 
     // Verify variant names appear on the x-axis (below the second chart)
-    await expect(secondChart.getByText("echo", { exact: true })).toBeVisible();
-    await expect(secondChart.getByText("empty", { exact: true })).toBeVisible();
+    // Use locator('text') to target only SVG <text> elements, not <title> elements
     await expect(
-      secondChart.getByText("empty2", { exact: true }),
+      secondChart.locator("text").filter({ hasText: /^echo$/ }),
+    ).toBeVisible();
+    await expect(
+      secondChart.locator("text").filter({ hasText: /^empty$/ }),
+    ).toBeVisible();
+    await expect(
+      secondChart.locator("text").filter({ hasText: /^empty2$/ }),
     ).toBeVisible();
 
     // Verify SVG chart elements are rendered
@@ -194,6 +198,22 @@ test.describe("TopK Evaluation Visualization", () => {
     // Note the top chart uses custom "bars" which are actually dots
     const bars = page.locator(".recharts-bar-rectangle");
     await expect(bars).toHaveCount(6);
+
+    // Verify separation lines are rendered in the performance chart
+    // With echo (score ≈ 0.667) vs empty/empty2 (score ≈ 0.333), there should be
+    // clear statistical separation showing echo as confidently top-1
+    const separationLines = page.locator(".separation-lines");
+    await expect(separationLines).toBeVisible({ timeout: 5000 });
+
+    // Verify the "top 1" label appears (echo beats both empty variants)
+    const topKLabel = page.getByText("top 1", { exact: true });
+    await expect(topKLabel).toBeVisible();
+
+    // Verify the dashed line element exists (strokeDasharray="4 4")
+    const dashedLine = page.locator(
+      '.separation-lines line[stroke-dasharray="4 4"]',
+    );
+    await expect(dashedLine).toHaveCount(1);
 
     // Verify the final assistant message is still visible at the end of the test
     await expect(lastAssistantMessage).toBeVisible();

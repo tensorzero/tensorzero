@@ -5,6 +5,7 @@ use axum::extract::State;
 use tracing::instrument;
 
 use super::types::GetWorkflowEvaluationProjectCountResponse;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -15,8 +16,11 @@ use crate::utils::gateway::{AppState, AppStateData};
 pub async fn get_workflow_evaluation_project_count_handler(
     State(app_state): AppState,
 ) -> Result<Json<GetWorkflowEvaluationProjectCountResponse>, Error> {
-    let response =
-        get_workflow_evaluation_project_count(&app_state.clickhouse_connection_info).await?;
+    let db = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info,
+        app_state.postgres_connection_info,
+    );
+    let response = get_workflow_evaluation_project_count(&db).await?;
 
     Ok(Json(response))
 }

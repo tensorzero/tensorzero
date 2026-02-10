@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COUNT(DISTINCT project_name)::INT as \"count!\"\n            FROM tensorzero.workflow_evaluation_runs\n            WHERE project_name IS NOT NULL AND staled_at IS NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "296ef2923571cf68e1b2f926b39d5180c3802ac43ec59d436dc5a45e6a4850a3"
+}

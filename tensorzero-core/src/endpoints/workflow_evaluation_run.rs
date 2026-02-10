@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     config::Config,
     db::{
-        clickhouse::ClickHouseConnectionInfo,
+        delegating_connection::DelegatingDatabaseConnection,
         workflow_evaluation_queries::WorkflowEvaluationQueries,
     },
     endpoints::validate_tags,
@@ -55,6 +55,7 @@ pub async fn workflow_evaluation_run(
     AppStateData {
         config,
         clickhouse_connection_info,
+        postgres_connection_info,
         ..
     }: AppStateData,
     params: WorkflowEvaluationRunParams,
@@ -62,16 +63,17 @@ pub async fn workflow_evaluation_run(
     validate_tags(&params.tags, params.internal)?;
     validate_variant_pins(&params.variants, &config)?;
     let run_id = Uuid::now_v7();
-    clickhouse_connection_info
-        .insert_workflow_evaluation_run(
-            run_id,
-            &params.variants,
-            &params.tags,
-            params.project_name.as_deref(),
-            params.display_name.as_deref(),
-            &config.hash,
-        )
-        .await?;
+    let db =
+        DelegatingDatabaseConnection::new(clickhouse_connection_info, postgres_connection_info);
+    db.insert_workflow_evaluation_run(
+        run_id,
+        &params.variants,
+        &params.tags,
+        params.project_name.as_deref(),
+        params.display_name.as_deref(),
+        &config.hash,
+    )
+    .await?;
     Ok(WorkflowEvaluationRunResponse { run_id })
 }
 
@@ -107,6 +109,7 @@ pub async fn workflow_evaluation_run_episode_handler(
 pub async fn workflow_evaluation_run_episode(
     AppStateData {
         clickhouse_connection_info,
+        postgres_connection_info,
         config,
         ..
     }: AppStateData,
@@ -137,15 +140,16 @@ pub async fn workflow_evaluation_run_episode(
         "tensorzero::workflow_evaluation_run_id".to_string(),
         run_id_str,
     );
-    clickhouse_connection_info
-        .insert_workflow_evaluation_run_episode(
-            run_id,
-            episode_id,
-            params.task_name.as_deref(),
-            &tags,
-            &config.hash,
-        )
-        .await?;
+    let db =
+        DelegatingDatabaseConnection::new(clickhouse_connection_info, postgres_connection_info);
+    db.insert_workflow_evaluation_run_episode(
+        run_id,
+        episode_id,
+        params.task_name.as_deref(),
+        &tags,
+        &config.hash,
+    )
+    .await?;
     Ok(WorkflowEvaluationRunEpisodeResponse { episode_id })
 }
 
@@ -178,7 +182,7 @@ pub async fn validate_inference_episode_id_and_apply_workflow_evaluation_run(
     function_name: Option<&String>,
     variant_name: &mut Option<String>,
     tags: &mut HashMap<String, String>,
-    clickhouse: &ClickHouseConnectionInfo,
+    db: &impl WorkflowEvaluationQueries,
 ) -> Result<(), Error> {
     let episode_id_timestamp = episode_id.get_timestamp().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidUuid {
@@ -191,7 +195,7 @@ pub async fn validate_inference_episode_id_and_apply_workflow_evaluation_run(
     if compare_timestamps(episode_id_timestamp, WORKFLOW_EVALUATION_THRESHOLD) {
         return validate_tensorzero_uuid(episode_id, "Episode");
     }
-    let workflow_evaluation_run = clickhouse
+    let workflow_evaluation_run = db
         .get_workflow_evaluation_run_by_episode_id(episode_id)
         .await?;
     let Some(workflow_evaluation_run) = workflow_evaluation_run else {

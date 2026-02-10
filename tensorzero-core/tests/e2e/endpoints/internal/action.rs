@@ -1,7 +1,7 @@
 //! E2E tests for the `/internal/action` endpoint.
 //!
 //! These tests verify that the action endpoint correctly executes inference
-//! using historical config snapshots loaded from ClickHouse.
+//! using historical config snapshots.
 //!
 //! Note: These tests only run in HTTP gateway mode because the Rust SDK's embedded
 //! gateway mode doesn't support the action endpoint (it would require depending on
@@ -15,9 +15,9 @@ use tensorzero::{
     Client, ClientInferenceParams, Input, InputMessage, InputMessageContent, Role, TensorZeroError,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use tensorzero_core::config::write_config_snapshot;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
@@ -69,8 +69,7 @@ async fn call_action(
 /// Test that the action endpoint can execute inference using a historical config
 /// that has a function not present in the running gateway config.
 async fn test_action_with_historical_config_impl(client: Client) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
 
     // Create a historical config with a unique function that doesn't exist in the running gateway.
@@ -102,8 +101,7 @@ Do a historical inference successfully!
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    // Write the historical snapshot to ClickHouse
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Create the action request
@@ -153,7 +151,6 @@ async fn test_action_with_historical_config_impl_http_gateway() {
 
 /// Test that the action endpoint returns an error for a non-existent snapshot hash.
 async fn test_action_nonexistent_snapshot_hash_impl(client: Client) {
-    skip_for_postgres!();
     // Use a properly formatted hash that simply doesn't exist in the database
     let nonexistent_hash = SnapshotHash::new_test();
 
@@ -202,8 +199,7 @@ async fn test_action_nonexistent_snapshot_hash_impl_http_gateway() {
 
 /// Test that the action endpoint rejects streaming requests.
 async fn test_action_streaming_rejected_impl(client: Client) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
 
     // Create a minimal historical config with proper variant structure
@@ -229,7 +225,7 @@ model = "action_test_model_{id}"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let params = ActionInputInfo {
@@ -275,7 +271,7 @@ async fn test_action_streaming_rejected_impl_http_gateway() {
 
 /// Test that the action endpoint returns an error when evaluation is not found in config.
 async fn test_action_run_evaluation_missing_evaluation_impl(client: Client) {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
 
     // Create a historical config WITHOUT any evaluations
@@ -301,7 +297,7 @@ model = "eval_test_model_{id}"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let params = ActionInputInfo {
@@ -344,7 +340,7 @@ async fn test_action_run_evaluation_missing_evaluation_impl_http_gateway() {
 /// Test that the action endpoint returns an error when validation fails
 /// (neither dataset_name nor datapoint_ids provided).
 async fn test_action_run_evaluation_validation_error_impl(client: Client) {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
 
     // Create a historical config with an evaluation
@@ -386,7 +382,7 @@ json_mode = "on"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Neither dataset_name nor datapoint_ids provided
@@ -429,7 +425,7 @@ async fn test_action_run_evaluation_validation_error_impl_http_gateway() {
 
 /// Test that the action endpoint returns an error when both dataset_name AND datapoint_ids are provided.
 async fn test_action_run_evaluation_both_dataset_and_ids_impl(client: Client) {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
 
     // Create a historical config with an evaluation
@@ -471,7 +467,7 @@ json_mode = "on"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Both dataset_name AND datapoint_ids provided - should fail validation
@@ -514,7 +510,7 @@ async fn test_action_run_evaluation_both_dataset_and_ids_impl_http_gateway() {
 
 /// Test that the action endpoint can successfully run an evaluation with a historical config.
 async fn test_action_run_evaluation_basic_impl(client: Client) {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
     let dataset_name = format!("action_eval_dataset_{id}");
     let function_name = format!("eval_func_{id}");
@@ -559,7 +555,7 @@ json_mode = "on"
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
     let snapshot_hash = snapshot.hash.clone();
 
-    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+    database.write_config_snapshot(&snapshot).await.unwrap();
 
     // Create test datapoints for the evaluation
     let datapoint_id_1 = Uuid::now_v7();
@@ -624,7 +620,7 @@ json_mode = "on"
         }),
     ];
 
-    clickhouse.insert_datapoints(&datapoints).await.unwrap();
+    database.insert_datapoints(&datapoints).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Call the action endpoint with RunEvaluation using datapoint_ids

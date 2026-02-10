@@ -37,9 +37,7 @@ use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::span_map::SpanMap;
-use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
-use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, get_function};
@@ -1553,87 +1551,6 @@ pub enum ConfigInput {
         snapshot: Box<ConfigSnapshot>,
         runtime_overlay: Box<RuntimeOverlay>,
     },
-}
-
-/// Writes the config snapshot to the `ConfigSnapshot` table.
-/// Takes special care to retain the created_at if there was already a row
-/// that had the same hash. Tags are merged with existing tags using mapUpdate.
-///
-/// This function is gated behind the `TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1` feature flag.
-/// If the env var is not set to "1", the write is skipped.
-pub async fn write_config_snapshot(
-    clickhouse: &ClickHouseConnectionInfo,
-    snapshot: ConfigSnapshot,
-) -> Result<(), Error> {
-    // Define the row structure for serialization
-    #[derive(Serialize)]
-    struct ConfigSnapshotRow<'a> {
-        config: &'a str,
-        extra_templates: &'a HashMap<String, String>,
-        hash: SnapshotHash,
-        tensorzero_version: &'static str,
-        tags: &'a HashMap<String, String>,
-    }
-
-    // Get the pre-computed hash
-    let version_hash = snapshot.hash.clone();
-
-    // Serialize StoredConfig to TOML for storage
-    let config_string = toml::to_string(&snapshot.config).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize config snapshot: {e}"),
-        })
-    })?;
-
-    // Create the row
-    let row = ConfigSnapshotRow {
-        config: &config_string,
-        extra_templates: &snapshot.extra_templates,
-        hash: version_hash.clone(),
-        tensorzero_version: TENSORZERO_VERSION,
-        tags: &snapshot.tags,
-    };
-
-    // Serialize to JSON
-    let json_data = serde_json::to_string(&row).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize config snapshot: {e}"),
-        })
-    })?;
-
-    // Create the external data info
-    let external_data = ExternalDataInfo {
-        external_data_name: "new_data".to_string(),
-        structure: "config String, extra_templates Map(String, String), hash String, tensorzero_version String, tags Map(String, String)".to_string(),
-        format: "JSONEachRow".to_string(),
-        data: json_data,
-    };
-
-    // Create the query with subquery to preserve created_at and merge tags
-    // We use any() aggregate function to handle the case when no row exists (returns default value)
-    let query = format!(
-        r"INSERT INTO ConfigSnapshot
-(config, extra_templates, hash, tensorzero_version, tags, created_at, last_used)
-SELECT
-    new_data.config,
-    new_data.extra_templates,
-    toUInt256(new_data.hash) as hash,
-    new_data.tensorzero_version,
-    mapUpdate(
-        (SELECT any(tags) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')),
-        new_data.tags
-    ) as tags,
-    ifNull((SELECT any(created_at) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')), now64()) as created_at,
-    now64() as last_used
-FROM new_data"
-    );
-
-    // Execute the query
-    clickhouse
-        .run_query_with_external_data(external_data, query)
-        .await?;
-
-    Ok(())
 }
 
 #[cfg(feature = "pyo3")]

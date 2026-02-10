@@ -71,9 +71,12 @@ pub async fn get_model_latency_handler(
         app_state.postgres_connection_info.clone(),
     );
 
+    let quantiles = database
+        .get_model_latency_quantile_function_inputs()
+        .to_vec();
     let data = database
         .get_model_latency_quantiles(params.time_window)
         .await?;
 
-    Ok(Json(GetModelLatencyResponse { data }))
+    Ok(Json(GetModelLatencyResponse { quantiles, data }))
 }

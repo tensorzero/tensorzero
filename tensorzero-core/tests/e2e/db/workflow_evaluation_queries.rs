@@ -1,15 +1,15 @@
-//! E2E tests for workflow evaluation ClickHouse queries.
+//! E2E tests for workflow evaluation queries (ClickHouse and Postgres).
+//!
+//! Tests verify read operations for workflow evaluation runs and episodes work correctly with both backends.
 
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 
 /// Test using the shared test database with pre-existing fixture data.
 /// This test relies on the fixture data loaded from ui/fixtures/dynamic_evaluation_run_examples.jsonl.
-#[tokio::test]
-async fn test_list_workflow_evaluation_projects_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_list_workflow_evaluation_projects_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn
         .list_workflow_evaluation_projects(100, 0)
         .await
         .unwrap();
@@ -38,29 +38,26 @@ async fn test_list_workflow_evaluation_projects_with_fixture_data() {
         "Expected at least one of the fixture projects to be present. Found: {project_names:?}",
     );
 }
+make_db_test!(test_list_workflow_evaluation_projects_with_fixture_data);
 
-/// Ensures workflow evaluation project counts are returned from ClickHouse.
-#[tokio::test]
-async fn test_count_workflow_evaluation_projects_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
-        .count_workflow_evaluation_projects()
-        .await
-        .unwrap();
+/// Ensures workflow evaluation project counts are returned.
+async fn test_count_workflow_evaluation_projects_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn.count_workflow_evaluation_projects().await.unwrap();
 
     assert!(
         result >= 2,
         "Expected at least 2 workflow evaluation projects from fixtures, got {result}",
     );
 }
+make_db_test!(test_count_workflow_evaluation_projects_with_fixture_data);
 
 /// Test listing workflow evaluation runs with default parameters.
-#[tokio::test]
-async fn test_list_workflow_evaluation_runs_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_list_workflow_evaluation_runs_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn
         .list_workflow_evaluation_runs(100, 0, None, None)
         .await
         .unwrap();
@@ -75,13 +72,13 @@ async fn test_list_workflow_evaluation_runs_with_fixture_data() {
     let first_run = &result[0];
     assert!(!first_run.id.is_nil(), "Run ID should not be nil");
 }
+make_db_test!(test_list_workflow_evaluation_runs_with_fixture_data);
 
 /// Test listing workflow evaluation runs with project_name filter.
-#[tokio::test]
-async fn test_list_workflow_evaluation_runs_with_project_filter() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_list_workflow_evaluation_runs_with_project_filter(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn
         .list_workflow_evaluation_runs(100, 0, None, Some("21_questions"))
         .await
         .unwrap();
@@ -95,13 +92,11 @@ async fn test_list_workflow_evaluation_runs_with_project_filter() {
         );
     }
 }
+make_db_test!(test_list_workflow_evaluation_runs_with_project_filter);
 
 /// Test listing workflow evaluation runs with pagination.
-#[tokio::test]
-async fn test_list_workflow_evaluation_runs_with_pagination() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_list_workflow_evaluation_runs_with_pagination(conn: impl WorkflowEvaluationQueries) {
+    let result = conn
         .list_workflow_evaluation_runs(1, 0, None, None)
         .await
         .unwrap();
@@ -113,26 +108,26 @@ async fn test_list_workflow_evaluation_runs_with_pagination() {
         result.len()
     );
 }
+make_db_test!(test_list_workflow_evaluation_runs_with_pagination);
 
 /// Test counting workflow evaluation runs.
-#[tokio::test]
-async fn test_count_workflow_evaluation_runs_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse.count_workflow_evaluation_runs().await.unwrap();
+async fn test_count_workflow_evaluation_runs_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn.count_workflow_evaluation_runs().await.unwrap();
 
     assert!(
         result >= 1,
         "Expected at least 1 workflow evaluation run from fixtures, got {result}",
     );
 }
+make_db_test!(test_count_workflow_evaluation_runs_with_fixture_data);
 
 /// Test searching workflow evaluation runs with default parameters.
-#[tokio::test]
-async fn test_search_workflow_evaluation_runs_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_search_workflow_evaluation_runs_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn
         .search_workflow_evaluation_runs(100, 0, None, None)
         .await
         .unwrap();
@@ -147,13 +142,13 @@ async fn test_search_workflow_evaluation_runs_with_fixture_data() {
     let first_run = &result[0];
     assert!(!first_run.id.is_nil(), "Run ID should not be nil");
 }
+make_db_test!(test_search_workflow_evaluation_runs_with_fixture_data);
 
 /// Test searching workflow evaluation runs with project_name filter.
-#[tokio::test]
-async fn test_search_workflow_evaluation_runs_with_project_filter() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_search_workflow_evaluation_runs_with_project_filter(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn
         .search_workflow_evaluation_runs(100, 0, Some("21_questions"), None)
         .await
         .unwrap();
@@ -167,13 +162,13 @@ async fn test_search_workflow_evaluation_runs_with_project_filter() {
         );
     }
 }
+make_db_test!(test_search_workflow_evaluation_runs_with_project_filter);
 
 /// Test searching workflow evaluation runs with search query.
-#[tokio::test]
-async fn test_search_workflow_evaluation_runs_with_search_query() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_search_workflow_evaluation_runs_with_search_query(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn
         .search_workflow_evaluation_runs(100, 0, None, Some("baseline"))
         .await
         .unwrap();
@@ -190,13 +185,13 @@ async fn test_search_workflow_evaluation_runs_with_search_query() {
         );
     }
 }
+make_db_test!(test_search_workflow_evaluation_runs_with_search_query);
 
 /// Test searching workflow evaluation runs with pagination.
-#[tokio::test]
-async fn test_search_workflow_evaluation_runs_with_pagination() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_search_workflow_evaluation_runs_with_pagination(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn
         .search_workflow_evaluation_runs(1, 0, None, None)
         .await
         .unwrap();
@@ -208,16 +203,14 @@ async fn test_search_workflow_evaluation_runs_with_pagination() {
         result.len()
     );
 }
+make_db_test!(test_search_workflow_evaluation_runs_with_pagination);
 
 /// Test getting workflow evaluation runs by IDs.
-#[tokio::test]
-async fn test_get_workflow_evaluation_runs_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_runs_with_fixture_data(conn: impl WorkflowEvaluationQueries) {
     // Use a known run ID from the fixture data
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_runs(&[run_id], None)
         .await
         .unwrap();
@@ -231,17 +224,15 @@ async fn test_get_workflow_evaluation_runs_with_fixture_data() {
     );
     assert_eq!(result[0].id, run_id, "Expected run ID to match");
 }
+make_db_test!(test_get_workflow_evaluation_runs_with_fixture_data);
 
 /// Test getting workflow evaluation runs with multiple IDs.
-#[tokio::test]
-async fn test_get_workflow_evaluation_runs_multiple_ids() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_runs_multiple_ids(conn: impl WorkflowEvaluationQueries) {
     // Use known run IDs from the fixture data
     let run_id1 = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
     let run_id2 = uuid::Uuid::parse_str("01968d05-d734-7751-ab33-75dd8b3fb4a3").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_runs(&[run_id1, run_id2], None)
         .await
         .unwrap();
@@ -249,15 +240,15 @@ async fn test_get_workflow_evaluation_runs_multiple_ids() {
     // Should return 2 runs
     assert_eq!(result.len(), 2, "Expected 2 runs, got {}", result.len());
 }
+make_db_test!(test_get_workflow_evaluation_runs_multiple_ids);
 
 /// Test getting workflow evaluation runs with project_name filter.
-#[tokio::test]
-async fn test_get_workflow_evaluation_runs_with_project_filter() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_runs_with_project_filter(
+    conn: impl WorkflowEvaluationQueries,
+) {
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_runs(&[run_id], Some("21_questions"))
         .await
         .unwrap();
@@ -270,16 +261,11 @@ async fn test_get_workflow_evaluation_runs_with_project_filter() {
         "Expected project_name to be '21_questions'"
     );
 }
+make_db_test!(test_get_workflow_evaluation_runs_with_project_filter);
 
 /// Test getting workflow evaluation runs with empty IDs.
-#[tokio::test]
-async fn test_get_workflow_evaluation_runs_empty_ids() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
-        .get_workflow_evaluation_runs(&[], None)
-        .await
-        .unwrap();
+async fn test_get_workflow_evaluation_runs_empty_ids(conn: impl WorkflowEvaluationQueries) {
+    let result = conn.get_workflow_evaluation_runs(&[], None).await.unwrap();
 
     // Should return empty list
     assert_eq!(
@@ -289,17 +275,17 @@ async fn test_get_workflow_evaluation_runs_empty_ids() {
         result.len()
     );
 }
+make_db_test!(test_get_workflow_evaluation_runs_empty_ids);
 
 /// Test getting workflow evaluation run statistics.
 /// Uses fixture data from ui/fixtures/dynamic_evaluation_run_examples.jsonl.
-#[tokio::test]
-async fn test_get_workflow_evaluation_run_statistics_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_run_statistics_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use a known run ID from the fixture data that has feedback
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_run_statistics(run_id, None)
         .await
         .unwrap();
@@ -361,15 +347,15 @@ async fn test_get_workflow_evaluation_run_statistics_with_fixture_data() {
     assert!(solved.ci_lower.is_some());
     assert!(solved.ci_upper.is_some());
 }
+make_db_test!(test_get_workflow_evaluation_run_statistics_with_fixture_data);
 
 /// Test getting workflow evaluation run statistics with metric_name filter.
-#[tokio::test]
-async fn test_get_workflow_evaluation_run_statistics_with_metric_filter() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_run_statistics_with_metric_filter(
+    conn: impl WorkflowEvaluationQueries,
+) {
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_run_statistics(run_id, Some("solved"))
         .await
         .unwrap();
@@ -379,16 +365,16 @@ async fn test_get_workflow_evaluation_run_statistics_with_metric_filter() {
     assert_eq!(result[0].metric_name, "solved");
     assert!(result[0].count >= 49, "Expected at least 49 samples");
 }
+make_db_test!(test_get_workflow_evaluation_run_statistics_with_metric_filter);
 
 /// Test getting workflow evaluation run statistics for nonexistent run.
-#[tokio::test]
-async fn test_get_workflow_evaluation_run_statistics_nonexistent_run() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_run_statistics_nonexistent_run(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use a random UUID that doesn't exist
     let run_id = uuid::Uuid::now_v7();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_run_statistics(run_id, None)
         .await
         .unwrap();
@@ -400,16 +386,16 @@ async fn test_get_workflow_evaluation_run_statistics_nonexistent_run() {
         result.len()
     );
 }
+make_db_test!(test_get_workflow_evaluation_run_statistics_nonexistent_run);
 
 /// Test getting workflow evaluation run statistics with exact value assertions.
 /// This mirrors the TypeScript test for getWorkflowEvaluationRunStatisticsByMetricName.
-#[tokio::test]
-async fn test_get_workflow_evaluation_run_statistics_exact_values() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_run_statistics_exact_values(
+    conn: impl WorkflowEvaluationQueries,
+) {
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_run_statistics(run_id, None)
         .await
         .unwrap();
@@ -425,22 +411,26 @@ async fn test_get_workflow_evaluation_run_statistics_exact_values() {
     assert_eq!(elapsed_ms.count, 49);
     assert!(
         (elapsed_ms.avg_metric - 91678.72114158163).abs() < 0.001,
-        "avg_metric mismatch: {}",
+        "avg_metric mismatch: expected {}, actual {:?}",
+        91678.72114158163,
         elapsed_ms.avg_metric
     );
     assert!(
-        (elapsed_ms.stdev.unwrap() - 21054.80078125).abs() < 0.001,
-        "stdev mismatch: {:?}",
+        (elapsed_ms.stdev.unwrap() - 21054.821617631587).abs() < 0.001,
+        "stdev mismatch: expected {}, actual {:?}",
+        21054.821617631587,
         elapsed_ms.stdev
     );
     assert!(
-        (elapsed_ms.ci_lower.unwrap() - 85783.37692283162).abs() < 0.01,
-        "ci_lower mismatch: {:?}",
+        (elapsed_ms.ci_lower.unwrap() - 85783.37102869578).abs() < 0.001,
+        "ci_lower mismatch: expected {}, actual {:?}",
+        85783.37102869578,
         elapsed_ms.ci_lower
     );
     assert!(
-        (elapsed_ms.ci_upper.unwrap() - 97574.06536033163).abs() < 0.01,
-        "ci_upper mismatch: {:?}",
+        (elapsed_ms.ci_upper.unwrap() - 97574.07113456947).abs() < 0.001,
+        "ci_upper mismatch: expected {}, actual {:?}",
+        97574.07113456947,
         elapsed_ms.ci_upper
     );
 
@@ -452,7 +442,8 @@ async fn test_get_workflow_evaluation_run_statistics_exact_values() {
     assert_eq!(goated.count, 1);
     assert!(
         (goated.avg_metric - 1.0).abs() < 0.001,
-        "avg_metric mismatch: {}",
+        "avg_metric mismatch: expected {}, actual {:?}",
+        1.0,
         goated.avg_metric
     );
     assert!(
@@ -462,12 +453,14 @@ async fn test_get_workflow_evaluation_run_statistics_exact_values() {
     );
     assert!(
         (goated.ci_lower.unwrap() - 0.20654329147389294).abs() < 0.0001,
-        "ci_lower mismatch: {:?}",
+        "ci_lower mismatch: expected {}, actual {:?}",
+        0.20654329147389294,
         goated.ci_lower
     );
     assert!(
         (goated.ci_upper.unwrap() - 1.0).abs() < 0.0001,
-        "ci_upper mismatch: {:?}",
+        "ci_upper mismatch: expected {}, actual {:?}",
+        1.0,
         goated.ci_upper
     );
 
@@ -479,39 +472,43 @@ async fn test_get_workflow_evaluation_run_statistics_exact_values() {
     assert_eq!(solved.count, 49);
     assert!(
         (solved.avg_metric - 0.4489795918367347).abs() < 0.001,
-        "avg_metric mismatch: {}",
+        "avg_metric mismatch: expected {}, actual {:?}",
+        0.4489795918367347,
         solved.avg_metric
     );
     assert!(
-        (solved.stdev.unwrap() - 0.5025445456953674).abs() < 0.001,
-        "stdev mismatch: {:?}",
+        (solved.stdev.unwrap() - 0.5025445456953674).abs() < 0.0001,
+        "stdev mismatch: expected {}, actual {:?}",
+        0.5025445456953674,
         solved.stdev
     );
     assert!(
         (solved.ci_lower.unwrap() - 0.31852624929636336).abs() < 0.0001,
-        "ci_lower mismatch: {:?}",
+        "ci_lower mismatch: expected {}, actual {:?}",
+        0.31852624929636336,
         solved.ci_lower
     );
     assert!(
         (solved.ci_upper.unwrap() - 0.5868513320032188).abs() < 0.0001,
-        "ci_upper mismatch: {:?}",
+        "ci_upper mismatch: expected {}, actual {:?}",
+        0.5868513320032188,
         solved.ci_upper
     );
 }
+make_db_test!(test_get_workflow_evaluation_run_statistics_exact_values);
 
 // =====================================================================
 // Tests for list_workflow_evaluation_run_episodes_by_task_name
 // =====================================================================
 
 /// Test listing workflow evaluation run episodes by task name with fixture data.
-#[tokio::test]
-async fn test_list_workflow_evaluation_run_episodes_by_task_name_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use a known run_id from the fixture data that has episodes with task_names
     let run_id = uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 100, 0)
         .await
         .unwrap();
@@ -532,19 +529,19 @@ async fn test_list_workflow_evaluation_run_episodes_by_task_name_with_fixture_da
         );
     }
 }
+make_db_test!(test_list_workflow_evaluation_run_episodes_by_task_name_with_fixture_data);
 
 /// Test listing workflow evaluation run episodes with multiple run IDs.
-#[tokio::test]
-async fn test_list_workflow_evaluation_run_episodes_by_task_name_multiple_runs() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_multiple_runs(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use multiple run_ids from the fixture data
     let run_ids = vec![
         uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap(),
         uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-dabb145a9dbe").unwrap(),
     ];
 
-    let result = clickhouse
+    let result = conn
         .list_workflow_evaluation_run_episodes_by_task_name(&run_ids, 100, 0)
         .await
         .unwrap();
@@ -552,22 +549,22 @@ async fn test_list_workflow_evaluation_run_episodes_by_task_name_multiple_runs()
     // Should have episodes from both runs
     assert!(!result.is_empty(), "Expected episodes from multiple runs");
 }
+make_db_test!(test_list_workflow_evaluation_run_episodes_by_task_name_multiple_runs);
 
 /// Test listing workflow evaluation run episodes with pagination.
-#[tokio::test]
-async fn test_list_workflow_evaluation_run_episodes_by_task_name_with_pagination() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_with_pagination(
+    conn: impl WorkflowEvaluationQueries,
+) {
     let run_id = uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap();
 
     // Get first page with small limit
-    let first_page = clickhouse
+    let first_page = conn
         .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 3, 0)
         .await
         .unwrap();
 
     // Get a large page to compare
-    let all_groups = clickhouse
+    let all_groups = conn
         .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 1000, 0)
         .await
         .unwrap();
@@ -588,29 +585,29 @@ async fn test_list_workflow_evaluation_run_episodes_by_task_name_with_pagination
         );
     }
 }
+make_db_test!(test_list_workflow_evaluation_run_episodes_by_task_name_with_pagination);
 
 /// Test listing workflow evaluation run episodes with empty run IDs.
-#[tokio::test]
-async fn test_list_workflow_evaluation_run_episodes_by_task_name_empty_run_ids() {
-    let clickhouse = get_clickhouse().await;
-
-    let result = clickhouse
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_empty_run_ids(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let result = conn
         .list_workflow_evaluation_run_episodes_by_task_name(&[], 100, 0)
         .await
         .unwrap();
 
     assert!(result.is_empty(), "Expected empty result for empty run IDs");
 }
+make_db_test!(test_list_workflow_evaluation_run_episodes_by_task_name_empty_run_ids);
 
 /// Test listing workflow evaluation run episodes for a nonexistent run.
-#[tokio::test]
-async fn test_list_workflow_evaluation_run_episodes_by_task_name_nonexistent_run() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_list_workflow_evaluation_run_episodes_by_task_name_nonexistent_run(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use a run_id that doesn't exist
     let nonexistent_run_id = uuid::Uuid::nil();
 
-    let result = clickhouse
+    let result = conn
         .list_workflow_evaluation_run_episodes_by_task_name(&[nonexistent_run_id], 100, 0)
         .await
         .unwrap();
@@ -620,20 +617,20 @@ async fn test_list_workflow_evaluation_run_episodes_by_task_name_nonexistent_run
         "Expected empty result for nonexistent run"
     );
 }
+make_db_test!(test_list_workflow_evaluation_run_episodes_by_task_name_nonexistent_run);
 
 // =====================================================================
 // Tests for count_workflow_evaluation_run_episodes_by_task_name
 // =====================================================================
 
 /// Test counting workflow evaluation run episode groups with fixture data.
-#[tokio::test]
-async fn test_count_workflow_evaluation_run_episodes_by_task_name_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_workflow_evaluation_run_episodes_by_task_name_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use a known run_id from the fixture data
     let run_id = uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap();
 
-    let count = clickhouse
+    let count = conn
         .count_workflow_evaluation_run_episodes_by_task_name(&[run_id])
         .await
         .unwrap();
@@ -644,25 +641,25 @@ async fn test_count_workflow_evaluation_run_episodes_by_task_name_with_fixture_d
         "Expected at least one episode group from fixture data, got {count}"
     );
 }
+make_db_test!(test_count_workflow_evaluation_run_episodes_by_task_name_with_fixture_data);
 
 /// Test counting workflow evaluation run episode groups with multiple run IDs.
-#[tokio::test]
-async fn test_count_workflow_evaluation_run_episodes_by_task_name_multiple_runs() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_workflow_evaluation_run_episodes_by_task_name_multiple_runs(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use multiple run_ids from the fixture data
     let run_ids = vec![
         uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap(),
         uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-dabb145a9dbe").unwrap(),
     ];
 
-    let count = clickhouse
+    let count = conn
         .count_workflow_evaluation_run_episodes_by_task_name(&run_ids)
         .await
         .unwrap();
 
     // Count should be at least as many as for a single run
-    let single_run_count = clickhouse
+    let single_run_count = conn
         .count_workflow_evaluation_run_episodes_by_task_name(&[run_ids[0]])
         .await
         .unwrap();
@@ -672,50 +669,48 @@ async fn test_count_workflow_evaluation_run_episodes_by_task_name_multiple_runs(
         "Expected count for multiple runs ({count}) to be >= single run count ({single_run_count})"
     );
 }
+make_db_test!(test_count_workflow_evaluation_run_episodes_by_task_name_multiple_runs);
 
 /// Test counting workflow evaluation run episode groups with empty run IDs.
-#[tokio::test]
-async fn test_count_workflow_evaluation_run_episodes_by_task_name_empty_run_ids() {
-    let clickhouse = get_clickhouse().await;
-
-    let count = clickhouse
+async fn test_count_workflow_evaluation_run_episodes_by_task_name_empty_run_ids(
+    conn: impl WorkflowEvaluationQueries,
+) {
+    let count = conn
         .count_workflow_evaluation_run_episodes_by_task_name(&[])
         .await
         .unwrap();
 
     assert_eq!(count, 0, "Expected count to be 0 for empty run IDs");
 }
+make_db_test!(test_count_workflow_evaluation_run_episodes_by_task_name_empty_run_ids);
 
 /// Test counting workflow evaluation run episode groups for a nonexistent run.
-#[tokio::test]
-async fn test_count_workflow_evaluation_run_episodes_by_task_name_nonexistent_run() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_workflow_evaluation_run_episodes_by_task_name_nonexistent_run(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use a run_id that doesn't exist
     let nonexistent_run_id = uuid::Uuid::nil();
 
-    let count = clickhouse
+    let count = conn
         .count_workflow_evaluation_run_episodes_by_task_name(&[nonexistent_run_id])
         .await
         .unwrap();
 
     assert_eq!(count, 0, "Expected count to be 0 for nonexistent run");
 }
+make_db_test!(test_count_workflow_evaluation_run_episodes_by_task_name_nonexistent_run);
 
 /// Test that count matches list length (within pagination limits).
-#[tokio::test]
-async fn test_count_matches_list_length() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_matches_list_length(conn: impl WorkflowEvaluationQueries) {
     let run_id = uuid::Uuid::parse_str("0196a0e5-9600-7c83-ab3b-da81097b66cd").unwrap();
 
-    let count = clickhouse
+    let count = conn
         .count_workflow_evaluation_run_episodes_by_task_name(&[run_id])
         .await
         .unwrap();
 
     // Get all groups with a large limit
-    let list = clickhouse
+    let list = conn
         .list_workflow_evaluation_run_episodes_by_task_name(&[run_id], 1000, 0)
         .await
         .unwrap();
@@ -730,16 +725,16 @@ async fn test_count_matches_list_length() {
         unique_groups.len()
     );
 }
+make_db_test!(test_count_matches_list_length);
 
 /// Test getting workflow evaluation run episodes with feedback.
-#[tokio::test]
-async fn test_get_workflow_evaluation_run_episodes_with_feedback() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_run_episodes_with_feedback(
+    conn: impl WorkflowEvaluationQueries,
+) {
     // Use a known run ID from the fixture data
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_run_episodes_with_feedback(run_id, 10, 0)
         .await
         .unwrap();
@@ -773,16 +768,16 @@ async fn test_get_workflow_evaluation_run_episodes_with_feedback() {
         );
     }
 }
+make_db_test!(test_get_workflow_evaluation_run_episodes_with_feedback);
 
 /// Test getting workflow evaluation run episodes with pagination limit.
-#[tokio::test]
-async fn test_get_workflow_evaluation_run_episodes_with_feedback_limit() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_run_episodes_with_feedback_limit(
+    conn: impl WorkflowEvaluationQueries,
+) {
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
     // With limit=1, should get at most 1 episode
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_run_episodes_with_feedback(run_id, 1, 0)
         .await
         .unwrap();
@@ -794,15 +789,15 @@ async fn test_get_workflow_evaluation_run_episodes_with_feedback_limit() {
         result.len()
     );
 }
+make_db_test!(test_get_workflow_evaluation_run_episodes_with_feedback_limit);
 
 /// Test getting workflow evaluation run episodes with offset beyond data.
-#[tokio::test]
-async fn test_get_workflow_evaluation_run_episodes_with_feedback_beyond_data() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_get_workflow_evaluation_run_episodes_with_feedback_beyond_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
-    let result = clickhouse
+    let result = conn
         .get_workflow_evaluation_run_episodes_with_feedback(run_id, 10, 1000)
         .await
         .unwrap();
@@ -815,6 +810,7 @@ async fn test_get_workflow_evaluation_run_episodes_with_feedback_beyond_data() {
         result.len()
     );
 }
+make_db_test!(test_get_workflow_evaluation_run_episodes_with_feedback_beyond_data);
 
 // =====================================================================
 // Count Workflow Evaluation Run Episodes Tests
@@ -822,13 +818,12 @@ async fn test_get_workflow_evaluation_run_episodes_with_feedback_beyond_data() {
 
 /// Test counting workflow evaluation run episodes with fixture data.
 /// This mirrors the TypeScript test for countWorkflowEvaluationRunEpisodes.
-#[tokio::test]
-async fn test_count_workflow_evaluation_run_episodes_with_fixture_data() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_workflow_evaluation_run_episodes_with_fixture_data(
+    conn: impl WorkflowEvaluationQueries,
+) {
     let run_id = uuid::Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
 
-    let count = clickhouse
+    let count = conn
         .count_workflow_evaluation_run_episodes(run_id)
         .await
         .unwrap();
@@ -836,15 +831,15 @@ async fn test_count_workflow_evaluation_run_episodes_with_fixture_data() {
     // The fixture data has exactly 50 episodes for this run
     assert_eq!(count, 50, "Expected 50 episodes for this run, got {count}",);
 }
+make_db_test!(test_count_workflow_evaluation_run_episodes_with_fixture_data);
 
 /// Test counting workflow evaluation run episodes for non-existent run.
-#[tokio::test]
-async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
-    let clickhouse = get_clickhouse().await;
-
+async fn test_count_workflow_evaluation_run_episodes_nonexistent_run(
+    conn: impl WorkflowEvaluationQueries,
+) {
     let non_existent_run_id = uuid::Uuid::now_v7();
 
-    let count = clickhouse
+    let count = conn
         .count_workflow_evaluation_run_episodes(non_existent_run_id)
         .await
         .unwrap();
@@ -854,3 +849,4 @@ async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
         "Expected 0 episodes for non-existent run, got {count}",
     );
 }
+make_db_test!(test_count_workflow_evaluation_run_episodes_nonexistent_run);

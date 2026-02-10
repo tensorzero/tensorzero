@@ -16,6 +16,9 @@ permissions:
   contents: read
   actions: read
 
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
   check-python-client-build:
     if: github.repository == 'tensorzero/tensorzero'

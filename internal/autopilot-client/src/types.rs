@@ -536,6 +536,10 @@ pub struct TopKEvaluationVisualization {
     /// and 5th ranked variants (sorted by lower confidence bound descending).
     #[serde(default)]
     pub confident_top_k_sizes: Vec<usize>,
+    /// Explanation of the results for the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub summary_text: Option<String>,
 }
 
 /// Types of visualizations that can be displayed.

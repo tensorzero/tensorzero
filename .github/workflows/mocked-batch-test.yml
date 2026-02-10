@@ -2,6 +2,7 @@ name: Mocked Batch Tests (for Merge Queue)
 
 # Fake credentials - gateway validates presence but doesn't use them in mock mode
 env:
+  CARGO_INCREMENTAL: 0
   ANTHROPIC_API_KEY: "fake_anthropic_key"
   AWS_ACCESS_KEY_ID: "fake_aws_access_key"
   AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}

@@ -71,7 +71,7 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together-tool".to_string(),
-        model_name: "llama3.1-405b-instruct-turbo-together".into(),
+        model_name: "llama4-maverick-instruct-together".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];

@@ -19,7 +19,6 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { Suspense, useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
-import FunctionVariantTable from "./FunctionVariantTable";
 import {
   PageHeader,
   PageLayout,
@@ -43,6 +42,8 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { fetchVariantsSectionData } from "./variants-data.server";
+import { VariantsSection } from "./VariantsSection";
 
 export type FunctionDetailData = Awaited<
   ReturnType<typeof fetchFunctionDetailData>
@@ -76,39 +77,7 @@ function FunctionDetailPageHeader({
 
 function SectionsSkeleton() {
   return (
-    <SectionsGroup>
-      <SectionLayout>
-        <SectionHeader heading="Variants" />
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Weight</TableHead>
-              <TableHead>Inferences</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {[1, 2, 3].map((i) => (
-              <TableRow key={i}>
-                <TableCell>
-                  <Skeleton className="h-4 w-32" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-24" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-12" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-16" />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </SectionLayout>
-
+    <>
       <SectionLayout>
         <SectionHeader heading="Experimentation" />
         <Skeleton className="h-32 w-full" />
@@ -157,18 +126,16 @@ function SectionsSkeleton() {
           </TableBody>
         </Table>
       </SectionLayout>
-    </SectionsGroup>
+    </>
   );
 }
 
 function SectionsErrorState() {
   const error = useAsyncError();
   return (
-    <SectionsGroup>
-      <SectionLayout>
-        <PageErrorContent error={error} />
-      </SectionLayout>
-    </SectionsGroup>
+    <SectionLayout>
+      <PageErrorContent error={error} />
+    </SectionLayout>
   );
 }
 
@@ -210,12 +177,6 @@ async function fetchFunctionDetailData(params: FetchParams) {
   const tensorZeroClient = getTensorZeroClient();
   const metricsWithFeedbackPromise =
     tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
-  const variantCountsPromise = tensorZeroClient.getInferenceCount(
-    function_name,
-    {
-      groupBy: "variant",
-    },
-  );
   const variantPerformancesPromise =
     // Only get variant performances if metric_name is provided and valid
     metric_name && config.metrics[metric_name]
@@ -264,7 +225,6 @@ async function fetchFunctionDetailData(params: FetchParams) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
-    variant_counts,
     variant_throughput,
     feedback_timeseries,
     variant_sampling_probabilities,
@@ -273,47 +233,10 @@ async function fetchFunctionDetailData(params: FetchParams) {
     numInferencesPromise,
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
-    variantCountsPromise,
     variantThroughputPromise,
     feedbackTimeseriesPromise,
     variantSamplingProbabilitiesPromise,
   ]);
-
-  const observedVariants = new Set<string>();
-  const variant_counts_with_metadata = (
-    variant_counts.count_by_variant ?? []
-  ).map((variant_count) => {
-    observedVariants.add(variant_count.variant_name);
-    const variant_config = function_config.variants[variant_count.variant_name];
-    return {
-      ...variant_count,
-      type:
-        function_name === DEFAULT_FUNCTION
-          ? "chat_completion"
-          : (variant_config?.inner.type ?? "unknown"),
-      weight:
-        function_name === DEFAULT_FUNCTION
-          ? null
-          : (variant_config?.inner.weight ?? null),
-    };
-  });
-
-  // Add configured variants that have no inferences yet
-  if (function_name !== DEFAULT_FUNCTION) {
-    for (const [variant_name, variant_config] of Object.entries(
-      function_config.variants,
-    )) {
-      if (!observedVariants.has(variant_name)) {
-        variant_counts_with_metadata.push({
-          variant_name,
-          inference_count: BigInt(0),
-          last_used_at: "",
-          type: variant_config.inner.type,
-          weight: variant_config.inner.weight,
-        });
-      }
-    }
-  }
 
   // Handle pagination from listInferenceMetadata response
   const {
@@ -334,7 +257,6 @@ async function fetchFunctionDetailData(params: FetchParams) {
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    variant_counts: variant_counts_with_metadata,
     feedback_timeseries,
     variant_sampling_probabilities,
   };
@@ -367,6 +289,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     function_name,
+    variantsData: fetchVariantsSectionData({ function_name, function_config }),
     functionDetailData: fetchFunctionDetailData({
       function_name,
       function_config,
@@ -399,7 +322,6 @@ function SectionsContent({
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    variant_counts,
     feedback_timeseries,
     variant_sampling_probabilities,
   } = data;
@@ -446,15 +368,7 @@ function SectionsContent({
   );
 
   return (
-    <SectionsGroup>
-      <SectionLayout>
-        <SectionHeader heading="Variants" />
-        <FunctionVariantTable
-          variant_counts={variant_counts}
-          function_name={functionName}
-        />
-      </SectionLayout>
-
+    <>
       {functionName !== DEFAULT_FUNCTION && (
         <SectionLayout>
           <SectionHeader heading="Experimentation" />
@@ -502,14 +416,14 @@ function SectionsContent({
           disableNext={!hasNextInferencePage}
         />
       </SectionLayout>
-    </SectionsGroup>
+    </>
   );
 }
 
 export default function FunctionDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { function_name, functionDetailData } = loaderData;
+  const { function_name, variantsData, functionDetailData } = loaderData;
   const location = useLocation();
   const function_config = useFunctionConfig(function_name);
 
@@ -524,20 +438,28 @@ export default function FunctionDetailPage({
         functionConfig={function_config}
       />
 
-      <Suspense key={location.key} fallback={<SectionsSkeleton />}>
-        <Await
-          resolve={functionDetailData}
-          errorElement={<SectionsErrorState />}
-        >
-          {(data) => (
-            <SectionsContent
-              data={data}
-              functionName={function_name}
-              functionConfig={function_config}
-            />
-          )}
-        </Await>
-      </Suspense>
+      <SectionsGroup>
+        <VariantsSection
+          variantsData={variantsData}
+          functionName={function_name}
+          locationKey={location.key}
+        />
+
+        <Suspense key={location.key} fallback={<SectionsSkeleton />}>
+          <Await
+            resolve={functionDetailData}
+            errorElement={<SectionsErrorState />}
+          >
+            {(data) => (
+              <SectionsContent
+                data={data}
+                functionName={function_name}
+                functionConfig={function_config}
+              />
+            )}
+          </Await>
+        </Suspense>
+      </SectionsGroup>
     </PageLayout>
   );
 }

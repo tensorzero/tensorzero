@@ -176,8 +176,8 @@
     -->
     <mysql_port>9004</mysql_port>
 
-    <!-- Compatibility with PostgreSQL protocol.
-         ClickHouse will pretend to be PostgreSQL for applications connecting to this port.
+    <!-- Compatibility with Postgres protocol.
+         ClickHouse will pretend to be Postgres for applications connecting to this port.
     -->
     <postgresql_port>9005</postgresql_port>
 

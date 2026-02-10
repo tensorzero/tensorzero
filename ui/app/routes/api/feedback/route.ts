@@ -3,7 +3,7 @@ import { addHumanFeedback } from "~/utils/tensorzero.server";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 
-type ActionData =
+export type FeedbackActionData =
   | { redirectTo: string; error?: never }
   | { error: string; redirectTo?: never };
 
@@ -37,14 +37,14 @@ export async function action({ request }: ActionFunctionArgs) {
   const hasEpisodeId = episodeId && typeof episodeId === "string";
 
   if (hasInferenceId && hasEpisodeId) {
-    return data<ActionData>(
+    return data<FeedbackActionData>(
       { error: "Only one of inferenceId or episodeId should be provided" },
       { status: 400 },
     );
   }
 
   if (!hasInferenceId && !hasEpisodeId) {
-    return data<ActionData>(
+    return data<FeedbackActionData>(
       { error: "Either inferenceId or episodeId is required" },
       { status: 400 },
     );
@@ -63,16 +63,16 @@ export async function action({ request }: ActionFunctionArgs) {
       redirectTo = `/observability/episodes/${episodeId}?newFeedbackId=${response.feedback_id}`;
     }
 
-    return data<ActionData>({ redirectTo });
+    return data<FeedbackActionData>({ redirectTo });
   } catch (error) {
     if (isTensorZeroServerError(error)) {
-      return data<ActionData>(
+      return data<FeedbackActionData>(
         { error: error.message },
         { status: error.status },
       );
     }
     logger.error("Failed to add feedback:", error);
-    return data<ActionData>(
+    return data<FeedbackActionData>(
       { error: "Unknown server error. Try again." },
       { status: 500 },
     );

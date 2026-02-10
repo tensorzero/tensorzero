@@ -23,42 +23,49 @@ pub struct WorkflowEvaluationRunInfo {
     pub tags: HashMap<String, String>,
 }
 
-/// Database struct for deserializing workflow evaluation project info from ClickHouse.
-#[derive(Debug, Deserialize)]
+/// Database struct for deserializing workflow evaluation project info.
+#[derive(Debug, Deserialize, sqlx::FromRow)]
 pub struct WorkflowEvaluationProjectRow {
     pub name: String,
+    #[sqlx(try_from = "i32")]
     pub count: u32,
     pub last_updated: DateTime<Utc>,
 }
 
-/// Database struct for deserializing workflow evaluation run info from ClickHouse.
-#[derive(Debug, Clone, Deserialize)]
+/// Database struct for deserializing workflow evaluation run info.
+#[derive(Debug, Clone, Deserialize, sqlx::FromRow)]
 pub struct WorkflowEvaluationRunRow {
     pub name: Option<String>,
     pub id: Uuid,
+    #[sqlx(json)]
     pub variant_pins: HashMap<String, String>,
+    #[sqlx(json)]
     pub tags: HashMap<String, String>,
     pub project_name: Option<String>,
     pub timestamp: DateTime<Utc>,
 }
 
-/// Database struct for deserializing workflow evaluation run with episode count from ClickHouse.
-#[derive(Debug, Clone, Deserialize)]
+/// Database struct for deserializing workflow evaluation run with episode count.
+#[derive(Debug, Clone, Deserialize, sqlx::FromRow)]
 pub struct WorkflowEvaluationRunWithEpisodeCountRow {
     pub name: Option<String>,
     pub id: Uuid,
+    #[sqlx(json)]
     pub variant_pins: HashMap<String, String>,
+    #[sqlx(json)]
     pub tags: HashMap<String, String>,
     pub project_name: Option<String>,
+    #[sqlx(try_from = "i32")]
     pub num_episodes: u32,
     pub timestamp: DateTime<Utc>,
 }
 
-/// Internal database struct for deserializing raw statistics from ClickHouse.
+/// Internal database struct for deserializing raw statistics.
 /// This is used before computing confidence intervals in Rust.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, sqlx::FromRow)]
 pub struct WorkflowEvaluationRunStatisticsRaw {
     pub metric_name: String,
+    #[sqlx(try_from = "i32")]
     pub count: u32,
     pub avg_metric: f64,
     pub stdev: Option<f64>,
@@ -208,7 +215,7 @@ pub trait WorkflowEvaluationQueries {
 
 /// A single workflow evaluation run episode with its associated feedback.
 #[cfg_attr(feature = "ts-bindings", derive(TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The episode ID
@@ -218,6 +225,7 @@ pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The run ID this episode belongs to
     pub run_id: Uuid,
     /// Tags associated with this episode
+    #[sqlx(json)]
     pub tags: HashMap<String, String>,
     /// The task name (datapoint_name). NULL for episodes without a task name.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -233,7 +241,7 @@ pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
 ///
 /// The group_key is either the task_name or a generated key for episodes with NULL task_name.
 #[cfg_attr(feature = "ts-bindings", derive(TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The grouping key - either task_name or 'NULL_EPISODE_{episode_id_uint}'
@@ -245,6 +253,7 @@ pub struct GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The run ID this episode belongs to
     pub run_id: Uuid,
     /// Tags associated with this episode
+    #[sqlx(json)]
     pub tags: HashMap<String, String>,
     /// The task name (datapoint_name). NULL for episodes without a task name.
     #[serde(skip_serializing_if = "Option::is_none")]

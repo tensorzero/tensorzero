@@ -274,7 +274,7 @@ impl MetricJoinRegistry {
         let inference_column = level.inference_column_name();
 
         // Use LATERAL join to correlate the subquery with the outer query.
-        // This pushes down the filter on target_id, allowing PostgreSQL to use indexes
+        // This pushes down the filter on target_id, allowing Postgres to use indexes
         // efficiently instead of scanning the entire feedback table.
         //
         // TODO(#5691): there's a small risk of SQL injection here because metric_name is

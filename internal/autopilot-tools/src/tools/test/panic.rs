@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Parameters for the panic tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct PanicToolParams {
     /// The panic message.
     pub panic_message: String,

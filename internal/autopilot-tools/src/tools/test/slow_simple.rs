@@ -5,11 +5,14 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, schema_for};
+
+use crate::fix_strict_tool_schema::fix_strict_tool_schema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the slow simple tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct SlowSimpleParams {
     /// How long to sleep before returning (in milliseconds).
     pub delay_ms: u64,
@@ -38,6 +41,10 @@ impl ToolMetadata for SlowSimpleTool {
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("slow_simple")
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
+        Ok(fix_strict_tool_schema(schema_for!(SlowSimpleParams)))
     }
 
     fn description(&self) -> Cow<'static, str> {

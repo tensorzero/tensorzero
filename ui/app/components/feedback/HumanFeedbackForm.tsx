@@ -17,6 +17,7 @@ import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
 import CommentFeedbackInput from "./CommentFeedbackInput";
 import { isJsonOutput } from "~/utils/clickhouse/inference";
+import { extractDemonstrationValue } from "~/routes/api/tensorzero/inference.utils";
 
 export interface HumanFeedbackFormSharedProps {
   inferenceOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
@@ -145,7 +146,7 @@ export function HumanFeedbackForm({
               type="hidden"
               name="value"
               value={JSON.stringify(
-                getDemonstrationValueToSubmit(demonstrationValue),
+                extractDemonstrationValue(demonstrationValue),
               )}
             />
           </div>
@@ -187,20 +188,4 @@ export function HumanFeedbackForm({
       )}
     </>
   );
-}
-
-/**
- * If the type of the demonstration value is JsonInferenceOutput,
- * we need to submit only demonstrationValue.parsed and not the entire
- * demonstrationValue object.
- * For ContentBlockChatOutput[], we submit the entire object.
- */
-function getDemonstrationValueToSubmit(
-  demonstrationValue: ContentBlockChatOutput[] | JsonInferenceOutput,
-) {
-  if (isJsonOutput(demonstrationValue)) {
-    return demonstrationValue.parsed;
-  } else {
-    return demonstrationValue;
-  }
 }

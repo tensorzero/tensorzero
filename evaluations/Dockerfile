@@ -9,6 +9,7 @@ ARG CARGO_BUILD_FLAGS
 ARG PROFILE
 
 WORKDIR /src
+ENV CARGO_INCREMENTAL=0
 
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 

@@ -230,12 +230,17 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
     }
 }
 
+#[async_trait]
 impl ConfigQueries for MockClickHouseConnectionInfo {
     async fn get_config_snapshot(
         &self,
         snapshot_hash: SnapshotHash,
     ) -> Result<ConfigSnapshot, Error> {
         self.config_queries.get_config_snapshot(snapshot_hash).await
+    }
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        self.config_queries.write_config_snapshot(snapshot).await
     }
 }
 
@@ -282,7 +287,7 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
     }
 
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
-        // Return ClickHouse quantiles since this is a mock for ClickHouse
-        super::migration_manager::migrations::migration_0037::QUANTILES
+        self.model_inference_queries
+            .get_model_latency_quantile_function_inputs()
     }
 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::db::ConfigQueries;
 
 /// A wrapper around `Config` that indicates the config has been loaded and validated,
 /// but has **not yet been written to the database**.
@@ -31,16 +32,16 @@ impl UnwrittenConfig {
         Self { config, snapshot }
     }
 
-    /// Writes the config snapshot to ClickHouse and returns the config with its hash.
+    /// Writes the config snapshot to the database and returns the config with its hash.
     ///
-    /// This consumes the `ConfigLoadInfo` and:
-    /// 1. Writes the `ConfigSnapshot` to the `ConfigSnapshot` table in ClickHouse
-    /// 2. Returns a `ConfigWithHash` containing the config and its hash
+    /// This consumes the `UnwrittenConfig` and:
+    /// 1. Writes the `ConfigSnapshot` to the database via the provided `ConfigQueries` impl
+    /// 2. Returns the `Config`
     ///
     /// The hash is used to track which config version was used for each inference request.
-    pub async fn into_config(self, clickhouse: &ClickHouseConnectionInfo) -> Result<Config, Error> {
+    pub async fn into_config(self, db: &impl ConfigQueries) -> Result<Config, Error> {
         let UnwrittenConfig { config, snapshot } = self;
-        write_config_snapshot(clickhouse, snapshot).await?;
+        db.write_config_snapshot(&snapshot).await?;
         Ok(config)
     }
 

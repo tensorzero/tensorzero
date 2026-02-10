@@ -454,13 +454,13 @@ impl VariantSampler for TrackAndStopConfig {
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
-        // Track-and-Stop requires PostgreSQL for episode-to-variant mapping
+        // Track-and-Stop requires Postgres for episode-to-variant mapping
         match postgres {
             PostgresConnectionInfo::Disabled => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is not available. \
-                        Track-and-Stop requires PostgreSQL for episode-to-variant consistency. \
+                        "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is not available. \
+                        Track-and-Stop requires Postgres for episode-to-variant consistency. \
                         Please set the `TENSORZERO_POSTGRES_URL` environment variable.",
                     ),
                 }));
@@ -475,8 +475,8 @@ impl VariantSampler for TrackAndStopConfig {
         postgres.health().await.map_err(|e| {
             Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is unhealthy: {e}. \
-                    Track-and-Stop requires a healthy PostgreSQL connection for episode-to-variant consistency.",
+                    "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is unhealthy: {e}. \
+                    Track-and-Stop requires a healthy Postgres connection for episode-to-variant consistency.",
                 ),
             })
         })?;
@@ -2174,8 +2174,8 @@ mod tests {
             "Error message should mention Track-and-Stop, got: {err_msg}"
         );
         assert!(
-            err_msg.contains("PostgreSQL"),
-            "Error message should mention PostgreSQL, got: {err_msg}"
+            err_msg.contains("Postgres"),
+            "Error message should mention Postgres, got: {err_msg}"
         );
         assert!(
             err_msg.contains("test_function"),

@@ -13,7 +13,12 @@ exclude = ["tests/", "fixtures/"]
 e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests"]
 optimization_tests = ["e2e_tests"]
 pyo3 = ["dep:pyo3", "tensorzero-types/pyo3"]
-ts-bindings = ["dep:ts-rs", "tensorzero-types/ts-bindings", "autopilot-client/ts-bindings", "tensorzero-auth/ts-bindings"]
+ts-bindings = [
+    "dep:ts-rs",
+    "tensorzero-types/ts-bindings",
+    "autopilot-client/ts-bindings",
+    "tensorzero-auth/ts-bindings",
+]
 
 [[test]]
 name = "e2e"
@@ -109,7 +114,7 @@ thiserror = { workspace = true }
 globset = { workspace = true }
 walkdir = { workspace = true }
 enum-map = "2.7.3"
-tokio-util = { version = "0.7.17", features = ["rt"] }
+tokio-util = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 moka = { workspace = true }
 tonic = { version = "0.14.2", default-features = false }

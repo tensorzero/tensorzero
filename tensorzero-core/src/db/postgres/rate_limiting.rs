@@ -32,7 +32,9 @@ impl RateLimitQueries for PostgresConnectionInfo {
 
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
-                message: "Failed to consume tickets for rate limiting: PostgreSQL connection is disabled.".to_string(),
+                message:
+                    "Failed to consume tickets for rate limiting: Postgres connection is disabled."
+                        .to_string(),
             })
         })?;
 
@@ -76,7 +78,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
 
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresConnection {
-                message: "PostgreSQL connection is disabled".to_string(),
+                message: "Postgres connection is disabled".to_string(),
             })
         })?;
 
@@ -127,7 +129,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
     ) -> Result<u64, Error> {
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
-                message: "PostgreSQL connection is disabled".to_string(),
+                message: "Postgres connection is disabled".to_string(),
             })
         })?;
 

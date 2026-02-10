@@ -7,6 +7,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use super::types::{GetWorkflowEvaluationRunStatisticsResponse, WorkflowEvaluationRunStatistics};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -37,12 +38,12 @@ pub async fn get_workflow_evaluation_run_statistics_handler(
         })
     })?;
 
-    let response = get_workflow_evaluation_run_statistics(
-        &app_state.clickhouse_connection_info,
-        run_id,
-        params.metric_name.as_deref(),
-    )
-    .await?;
+    let db = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info,
+        app_state.postgres_connection_info,
+    );
+    let response =
+        get_workflow_evaluation_run_statistics(&db, run_id, params.metric_name.as_deref()).await?;
 
     Ok(Json(response))
 }

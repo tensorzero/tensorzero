@@ -14,7 +14,6 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_projects_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/projects");
 
@@ -47,7 +46,6 @@ async fn test_get_workflow_evaluation_projects_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_projects_with_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/projects?limit=1&offset=0");
 
@@ -70,7 +68,6 @@ async fn test_get_workflow_evaluation_projects_with_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_project_count_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/projects/count");
 
@@ -91,7 +88,6 @@ async fn test_get_workflow_evaluation_project_count_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_workflow_evaluation_runs_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/list_runs");
 
@@ -117,7 +113,6 @@ async fn test_list_workflow_evaluation_runs_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_workflow_evaluation_runs_with_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/list_runs?limit=1&offset=0");
 
@@ -140,7 +135,6 @@ async fn test_list_workflow_evaluation_runs_with_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_workflow_evaluation_runs_with_project_filter() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url =
         get_gateway_endpoint("/internal/workflow_evaluations/list_runs?project_name=21_questions");
@@ -166,7 +160,6 @@ async fn test_list_workflow_evaluation_runs_with_project_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_workflow_evaluation_runs_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/runs/count");
 
@@ -187,7 +180,6 @@ async fn test_count_workflow_evaluation_runs_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_workflow_evaluation_runs_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/runs/search");
 
@@ -209,7 +201,6 @@ async fn test_search_workflow_evaluation_runs_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_workflow_evaluation_runs_with_project_filter() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint(
         "/internal/workflow_evaluations/runs/search?project_name=21_questions",
@@ -236,7 +227,6 @@ async fn test_search_workflow_evaluation_runs_with_project_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_workflow_evaluation_runs_with_search_query() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/runs/search?q=baseline");
 
@@ -264,7 +254,6 @@ async fn test_search_workflow_evaluation_runs_with_search_query() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_workflow_evaluation_runs_with_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/runs/search?limit=1&offset=0");
 
@@ -287,7 +276,6 @@ async fn test_search_workflow_evaluation_runs_with_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_runs_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use a known run ID from the fixture data
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
@@ -320,7 +308,6 @@ async fn test_get_workflow_evaluation_runs_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_runs_multiple_ids() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use known run IDs from the fixture data
     let run_id1 = "01968d04-142c-7e53-8ea7-3a3255b518dc";
@@ -349,7 +336,6 @@ async fn test_get_workflow_evaluation_runs_multiple_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_runs_with_project_filter() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
@@ -380,7 +366,6 @@ async fn test_get_workflow_evaluation_runs_with_project_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_runs_empty_ids() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/get_runs?run_ids=");
 
@@ -408,7 +393,6 @@ async fn test_get_workflow_evaluation_runs_empty_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_episodes_by_task_name_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use a known run_id from the fixture data
     let run_id = "0196a0e5-9600-7c83-ab3b-da81097b66cd";
@@ -450,7 +434,6 @@ async fn test_list_episodes_by_task_name_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_episodes_by_task_name_with_multiple_run_ids() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use multiple run_ids from the fixture data
     let run_ids = "0196a0e5-9600-7c83-ab3b-da81097b66cd,0196a0e5-9600-7c83-ab3b-dabb145a9dbe";
@@ -476,7 +459,6 @@ async fn test_list_episodes_by_task_name_with_multiple_run_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_episodes_by_task_name_with_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let run_id = "0196a0e5-9600-7c83-ab3b-da81097b66cd";
     let url = get_gateway_endpoint(&format!(
@@ -502,7 +484,6 @@ async fn test_list_episodes_by_task_name_with_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_episodes_by_task_name_empty_run_ids() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/episodes_by_task_name");
 
@@ -524,7 +505,6 @@ async fn test_list_episodes_by_task_name_empty_run_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_episode_groups_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use a known run_id from the fixture data
     let run_id = "0196a0e5-9600-7c83-ab3b-da81097b66cd";
@@ -551,7 +531,6 @@ async fn test_count_episode_groups_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_episode_groups_with_multiple_run_ids() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use multiple run_ids from the fixture data
     let run_ids = "0196a0e5-9600-7c83-ab3b-da81097b66cd,0196a0e5-9600-7c83-ab3b-dabb145a9dbe";
@@ -578,7 +557,6 @@ async fn test_count_episode_groups_with_multiple_run_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_episode_groups_empty_run_ids() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/episodes_by_task_name/count");
 
@@ -597,7 +575,6 @@ async fn test_count_episode_groups_empty_run_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_matches_list_length_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let run_id = "0196a0e5-9600-7c83-ab3b-da81097b66cd";
 
@@ -629,7 +606,6 @@ async fn test_count_matches_list_length_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_run_episodes_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use a known run ID from the fixture data
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
@@ -667,7 +643,6 @@ async fn test_get_workflow_evaluation_run_episodes_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_run_episodes_with_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
@@ -693,7 +668,6 @@ async fn test_get_workflow_evaluation_run_episodes_with_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_workflow_evaluation_run_episodes_beyond_offset() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
@@ -724,7 +698,6 @@ async fn test_get_workflow_evaluation_run_episodes_beyond_offset() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_workflow_evaluation_run_episodes_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let run_id = "01968d04-142c-7e53-8ea7-3a3255b518dc";
     let url = get_gateway_endpoint(&format!(
@@ -750,7 +723,6 @@ async fn test_count_workflow_evaluation_run_episodes_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use a valid but non-existent UUIDv7
     let run_id = "01942e26-4693-7e80-8591-47b98e25d999";
@@ -777,7 +749,6 @@ async fn test_count_workflow_evaluation_run_episodes_nonexistent_run() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_workflow_evaluation_run_episodes_missing_run_id() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/workflow_evaluations/run_episodes/count");
 

@@ -4,13 +4,15 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
+use schemars::{JsonSchema, Schema, schema_for};
+use serde::{Deserialize, Serialize};
 
 use crate::error::AutopilotToolError;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use crate::fix_strict_tool_schema::fix_strict_tool_schema;
 
 /// Parameters for the flaky tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct FlakyToolParams {
     /// Fail when attempt_number % fail_on_attempt == 0.
     pub fail_on_attempt: u32,
@@ -41,6 +43,10 @@ impl ToolMetadata for FlakyTool {
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("flaky")
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
+        Ok(fix_strict_tool_schema(schema_for!(FlakyToolParams)))
     }
 
     fn description(&self) -> Cow<'static, str> {

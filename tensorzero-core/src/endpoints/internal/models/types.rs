@@ -43,6 +43,8 @@ pub struct GetModelLatencyQueryParams {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetModelLatencyResponse {
+    /// The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) used to compute the distributions.
+    pub quantiles: Vec<f64>,
     /// The model latency data points with quantile distributions.
     pub data: Vec<ModelLatencyDatapoint>,
 }

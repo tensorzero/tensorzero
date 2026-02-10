@@ -18,6 +18,24 @@ import { cn } from "~/utils/common";
 import { Badge } from "../ui/badge";
 import { useMemo } from "react";
 
+/**
+ * Table headers for feedback skeleton and error states.
+ * Shows the base 5 columns (without the dynamic "overwrites" column).
+ */
+export function FeedbackTableHeaders() {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead>ID</TableHead>
+        <TableHead>Metric</TableHead>
+        <TableHead>Value</TableHead>
+        <TableHead>Tags</TableHead>
+        <TableHead>Time</TableHead>
+      </TableRow>
+    </TableHeader>
+  );
+}
+
 export default function FeedbackTable({
   feedback,
   latestCommentId,
