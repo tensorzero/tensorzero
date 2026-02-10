@@ -14,6 +14,7 @@ mod common;
 mod config;
 mod datasets;
 mod db;
+mod dicl;
 mod dynamic_variants;
 mod endpoints;
 mod evaluations;

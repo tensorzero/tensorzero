@@ -41,14 +41,10 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRow,
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
-use crate::db::{DICLExampleWithDistance, DICLQueries, StoredDICLExample};
 use crate::db::{
-    ConfigQueries, DeploymentIdQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries,
-    HowdyTokenUsage,
-};
-use crate::db::{
-    EpisodeByIdRow, EpisodeQueries, ModelLatencyDatapoint, ModelUsageTimePoint,
-    TableBoundsWithCount,
+    ConfigQueries, DICLExampleWithDistance, DICLQueries, DeploymentIdQueries, EpisodeByIdRow,
+    EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
+    ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
 };
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
