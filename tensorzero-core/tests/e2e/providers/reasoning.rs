@@ -1087,6 +1087,4 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
         .iter()
         .find(|block| matches!(block, StoredContentBlock::Thought(_)))
         .unwrap();
-
-    assert!(matches!(thought, StoredContentBlock::Thought(_)));
 }
