@@ -2606,12 +2606,28 @@ pub async fn test_warn_ignored_thought_block_with_provider(
         // OpenAI Responses rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
+    } else if provider.model_provider_name.as_str() == "gcp_vertex_gemini"
+        || provider.model_provider_name.as_str() == "google_ai_studio_gemini"
+    {
+        // Gemini passes thought blocks through and requires valid Base64 for thought_signature
+        let err = res.unwrap_err();
+        assert!(
+            err.to_string().contains("signature"),
+            "Expected signature error for Gemini provider, got: {err}"
+        );
     } else {
         let _ = res.unwrap();
     }
 
-    if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic", "xai"]
-        .contains(&provider.model_provider_name.as_str())
+    if [
+        "anthropic",
+        "aws-bedrock",
+        "gcp_vertex_anthropic",
+        "gcp_vertex_gemini",
+        "google_ai_studio_gemini",
+        "xai",
+    ]
+    .contains(&provider.model_provider_name.as_str())
         || ["openai-responses"].contains(&provider.variant_name.as_str())
     {
         assert!(
