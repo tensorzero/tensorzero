@@ -5,7 +5,7 @@ import {
   MessageSquareMore,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -435,6 +435,23 @@ export function PendingQuestionCard({
     () => new Map(),
   );
 
+  // Track tallest content height so the card never shrinks when switching steps
+  const contentRef = useRef<HTMLDivElement>(null);
+  const maxHeightRef = useRef(0);
+  const [minContentHeight, setMinContentHeight] = useState(0);
+  const measureContent = useCallback(() => {
+    if (!contentRef.current) return;
+    const h = contentRef.current.scrollHeight;
+    if (h > maxHeightRef.current) {
+      maxHeightRef.current = h;
+      setMinContentHeight(h);
+    }
+  }, []);
+  // Measure after each step change (and on mount)
+  useEffect(() => {
+    measureContent();
+  }, [activeStep, measureContent]);
+
   const questionCount = payload.questions.length;
   const isSingleQuestion = questionCount === 1;
   const isFirstStep = activeStep === 0;
@@ -675,51 +692,34 @@ export function PendingQuestionCard({
             tabLayout === "vertical" ? "pr-4 pl-2" : "px-4",
           )}
         >
-          {/* Grid trick: all steps occupy the same cell so the container
-              sizes to the tallest. Non-active steps are invisible (keeps layout). */}
-          <div className="grid min-w-0" style={{ gridTemplateColumns: "1fr" }}>
-            {payload.questions.map((q, idx) => (
-              <div
-                key={idx}
-                className={cn(
-                  "[grid-area:1/1]",
-                  activeStep !== idx && "invisible",
-                )}
-              >
-                {renderStep(q, idx)}
-              </div>
-            ))}
-            {/* Review step (multi-question only) */}
-            {!isSingleQuestion && (
-              <div
-                className={cn(
-                  "[grid-area:1/1]",
-                  !isReviewStep && "invisible",
-                )}
-              >
-                <div className="flex flex-col gap-3">
-                  <span className="text-fg-primary text-sm font-medium">
-                    Review your answers
-                  </span>
-                  <div className="flex flex-col gap-2">
-                    {payload.questions.map((q, idx) => (
-                      <button
-                        key={q.header}
-                        type="button"
-                        onClick={() => setActiveStep(idx)}
-                        className="border-border bg-bg-secondary flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-all hover:border-purple-300 dark:hover:border-purple-600"
-                      >
-                        <span className="text-fg-muted text-xs font-medium">
-                          {q.header}
-                        </span>
-                        <span className="text-fg-primary text-sm">
-                          {getAnswerText(idx) || "—"}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+          {/* Only render the active step. A ref tracks the tallest
+              content seen so the container never shrinks. */}
+          <div ref={contentRef} style={{ minHeight: minContentHeight }}>
+            {isReviewStep ? (
+              <div className="flex flex-col gap-3">
+                <span className="text-fg-primary text-sm font-medium">
+                  Review your answers
+                </span>
+                <div className="flex flex-col gap-2">
+                  {payload.questions.map((q, idx) => (
+                    <button
+                      key={q.header}
+                      type="button"
+                      onClick={() => setActiveStep(idx)}
+                      className="border-border bg-bg-secondary flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-all hover:border-purple-300 dark:hover:border-purple-600"
+                    >
+                      <span className="text-fg-muted text-xs font-medium">
+                        {q.header}
+                      </span>
+                      <span className="text-fg-primary text-sm">
+                        {getAnswerText(idx) || "—"}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
+            ) : (
+              renderStep(payload.questions[activeStep], activeStep)
             )}
           </div>
 
