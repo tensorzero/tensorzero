@@ -2564,8 +2564,8 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     Ok(message)
 }
 
-/// Recursively removes `$schema` and `additionalProperties` from JSON schemas
-/// for GCP Vertex API compatibility.
+/// Recursively removes fields unsupported by Google's Schema spec
+/// (`$schema`, `additionalProperties`, bare `ref`) from JSON schemas.
 pub(crate) fn process_jsonschema_for_gcp_vertex_gemini(schema: &Value) -> Value {
     let mut schema = schema.clone();
 
@@ -2574,6 +2574,8 @@ pub(crate) fn process_jsonschema_for_gcp_vertex_gemini(schema: &Value) -> Value 
             Value::Object(obj) => {
                 obj.remove("additionalProperties");
                 obj.remove("$schema");
+                // Bare "ref" (without $) is not a valid Google Schema field
+                obj.remove("ref");
                 for (_, v) in obj.iter_mut() {
                     remove_properties(v);
                 }
