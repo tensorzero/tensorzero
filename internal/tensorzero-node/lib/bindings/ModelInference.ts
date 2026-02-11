@@ -68,4 +68,9 @@ export type ModelInference = {
    * Whether the inference was cached.
    */
   cached: boolean;
+  /**
+   * Cost of this inference in dollars.
+   * `undefined` means cost tracking was not configured for this provider.
+   */
+  cost?: number;
 };

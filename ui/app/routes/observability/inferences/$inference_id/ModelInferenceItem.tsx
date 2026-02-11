@@ -19,8 +19,10 @@ import {
   Output,
   Calendar,
   Cached,
+  CostIcon,
 } from "~/components/icons/Icons";
 import Chip from "~/components/ui/Chip";
+import { formatCost } from "~/utils/clickhouse/helpers";
 import { formatDateWithSeconds } from "~/utils/date";
 import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import {
@@ -72,6 +74,13 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
                     icon={<Timer className="text-fg-tertiary" />}
                     label={`${inference.response_time_ms} ms`}
                     tooltip="Response Time"
+                  />
+                )}
+                {inference.cost != null && (
+                  <Chip
+                    icon={<CostIcon className="text-fg-tertiary" />}
+                    label={formatCost(inference.cost)}
+                    tooltip="Cost"
                   />
                 )}
                 {inference.cached && (

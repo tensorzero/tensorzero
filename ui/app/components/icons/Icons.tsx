@@ -654,6 +654,17 @@ export const SequenceChecks: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
+export const CostIcon: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M8.75 1.5C8.75 1.08579 8.41421 0.75 8 0.75C7.58579 0.75 7.25 1.08579 7.25 1.5V2.29167C5.3293 2.63498 4 4.10491 4 5.5C4 7.16095 5.56606 8.5 7.25 8.88197V11.6597C6.29171 11.3539 5.5 10.5986 5.5 9.75C5.5 9.33579 5.16421 9 4.75 9C4.33579 9 4 9.33579 4 9.75C4 11.3951 5.3293 12.865 7.25 13.2083V14.5C7.25 14.9142 7.58579 15.25 8 15.25C8.41421 15.25 8.75 14.9142 8.75 14.5V13.2083C10.6707 12.865 12 11.3951 12 10C12 8.33905 10.4339 7 8.75 6.61803V3.84035C9.70829 4.14609 10.5 4.90139 10.5 5.75C10.5 6.16421 10.8358 6.5 11.25 6.5C11.6642 6.5 12 6.16421 12 5.75C12 4.10491 10.6707 2.63498 8.75 2.29167V1.5ZM7.25 3.84035C6.29171 4.14609 5.5 4.90139 5.5 5.75C5.5 6.59861 6.29171 7.35391 7.25 7.65965V3.84035ZM8.75 8.34035V12.1597C9.70829 11.8539 10.5 11.0986 10.5 10.25C10.5 9.40139 9.70829 8.64609 8.75 8.34035Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
 export const UserFeedback: React.FC = () => <UserPen size={12} />;
 
 export const Refresh: React.FC<IconProps> = (props) => (
@@ -705,4 +716,5 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   Evaluation,
   Plus,
   PlusSquare,
+  CostIcon,
 };

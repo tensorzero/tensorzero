@@ -3,7 +3,7 @@ import { Await } from "react-router";
 import type { StoredInference } from "~/types/tensorzero";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { useFunctionConfig } from "~/context/config";
-import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import { getTotalInferenceUsage, formatCost } from "~/utils/clickhouse/helpers";
 import {
   BasicInfoLayout,
   BasicInfoLayoutSkeleton,
@@ -18,6 +18,7 @@ import {
   InputIcon,
   Output,
   Cached,
+  CostIcon,
 } from "~/components/icons/Icons";
 import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
 import { formatDateWithSeconds } from "~/utils/date";
@@ -134,6 +135,13 @@ export function BasicInfo({ inference, modelInferences = [] }: BasicInfoProps) {
             label={`${inference.processing_time_ms} ms`}
             tooltip="Processing Time"
           />
+          {inferenceUsage.cost != null && (
+            <Chip
+              icon={<CostIcon className="text-fg-tertiary" />}
+              label={formatCost(inferenceUsage.cost)}
+              tooltip="Total Cost"
+            />
+          )}
           {(cacheStatus === "FULL" || cacheStatus === "PARTIAL") && (
             <Chip
               icon={<Cached className="text-fg-tertiary" />}
