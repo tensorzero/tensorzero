@@ -257,7 +257,7 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
     case "user_questions_answers":
     case "unknown":
       // Visualization events render their own content, no text description needed
-      // TODO (#6270): add a real component for user_questions and user_responses
+      // TODO (#6270): add a real component for `user_questions` and `user_responses`
       return {};
   }
 }

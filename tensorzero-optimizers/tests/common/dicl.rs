@@ -642,6 +642,7 @@ fn create_inference_params(
         function_name: Some(function_name.to_string()),
         model_name: None,
         episode_id: Some(episode_id),
+        namespace: None,
         input,
         stream: Some(stream),
         params: Default::default(),
