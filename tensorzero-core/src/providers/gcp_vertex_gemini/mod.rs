@@ -38,7 +38,7 @@ use crate::config::provider_types::{
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
     DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE,
-    warn_discarded_thought_block, warn_discarded_unknown_chunk,
+    warn_discarded_unknown_chunk,
 };
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
@@ -2290,13 +2290,16 @@ async fn handle_thought_block<'a>(
     model_content_blocks: &mut Vec<GCPVertexGeminiContentPart<'a>>,
     iter: &mut impl Iterator<Item = Cow<'a, ContentBlock>>,
 ) -> Result<(), Error> {
-    // GCP Vertex Gemini never produces 'thought: true' at the moment, and there's no documentation
-    // on whether or not they should be passed back in.;
-    // As a result, we don't attempt to feed `Thought.text` back to GCP, as this would
-    // require us to set 'thought: true' in the request.
-    // Instead, we just warn and discard the content block if it has text.
-    if thought.text.is_some() {
-        warn_discarded_thought_block(provider_type, thought);
+    if let Some(text) = &thought.text {
+        // Send thought text back with `thought: true` to maintain reasoning context.
+        // See: https://ai.google.dev/gemini-api/docs/thinking
+        model_content_blocks.push(GCPVertexGeminiContentPart {
+            thought: true,
+            thought_signature: thought.signature.clone(),
+            data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                text: Cow::Owned(text.clone()),
+            }),
+        });
     } else if let Some(signature) = &thought.signature {
         let next_block = iter.next();
         match next_block {
@@ -5511,5 +5514,168 @@ mod tests {
         assert!(logs_contain(
             "GCP Vertex Gemini does not support the inference parameter `verbosity`"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_gcp_vertex_thought_text_roundtrip() {
+        // Thought with text only → part with thought: true, text content, no signature
+        let content_blocks = vec![ContentBlock::Thought(Thought {
+            text: Some("Let me think about this...".to_string()),
+            signature: None,
+            summary: None,
+            provider_type: None,
+            extra_data: None,
+        })];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .await
+        .unwrap();
+        assert_eq!(gcp_content.parts.len(), 1, "Should have one thought part");
+        assert!(
+            gcp_content.parts[0].thought,
+            "Part should have thought: true"
+        );
+        assert_eq!(
+            gcp_content.parts[0].thought_signature, None,
+            "Thought with no signature should have no thought_signature"
+        );
+        match &gcp_content.parts[0].data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
+                assert_eq!(
+                    text, "Let me think about this...",
+                    "Thought text should be preserved"
+                );
+            }
+            _ => panic!("Expected a text part"),
+        }
+
+        // Thought with text AND signature → part with thought: true, text, and signature
+        let content_blocks = vec![ContentBlock::Thought(Thought {
+            text: Some("Reasoning step".to_string()),
+            signature: Some("sig123".to_string()),
+            summary: None,
+            provider_type: None,
+            extra_data: None,
+        })];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .await
+        .unwrap();
+        assert_eq!(gcp_content.parts.len(), 1, "Should have one thought part");
+        assert!(
+            gcp_content.parts[0].thought,
+            "Part should have thought: true"
+        );
+        assert_eq!(
+            gcp_content.parts[0].thought_signature,
+            Some("sig123".to_string()),
+            "Thought with signature should preserve it"
+        );
+        match &gcp_content.parts[0].data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
+                assert_eq!(text, "Reasoning step", "Thought text should be preserved");
+            }
+            _ => panic!("Expected a text part"),
+        }
+
+        // Thought with text + FunctionCall (no signature) → thought part + FunctionCall gets dummy signature
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("I should call a function".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            ContentBlock::ToolCall(ToolCall {
+                id: "call_1".to_string(),
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "NYC"}"#.to_string(),
+            }),
+        ];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            gcp_content.parts.len(),
+            2,
+            "Should have thought part and function call part"
+        );
+        assert!(
+            gcp_content.parts[0].thought,
+            "First part should be a thought"
+        );
+        match &gcp_content.parts[0].data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
+                assert_eq!(
+                    text, "I should call a function",
+                    "Thought text should be preserved"
+                );
+            }
+            _ => panic!("Expected a text part for thought"),
+        }
+        // FunctionCall without a real signature should get a dummy signature
+        assert_eq!(
+            gcp_content.parts[1].thought_signature,
+            Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
+            "FunctionCall should get dummy thought signature when no real signature is present"
+        );
+
+        // Signature-only thought + FunctionCall → existing merge behavior (regression test)
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: None,
+                signature: Some("real_sig".to_string()),
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            ContentBlock::ToolCall(ToolCall {
+                id: "call_2".to_string(),
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "LA"}"#.to_string(),
+            }),
+        ];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            gcp_content.parts.len(),
+            1,
+            "Signature-only thought should merge with next block"
+        );
+        assert!(
+            !gcp_content.parts[0].thought,
+            "Merged part should not be a thought"
+        );
+        assert_eq!(
+            gcp_content.parts[0].thought_signature,
+            Some("real_sig".to_string()),
+            "Merged part should carry the real signature"
+        );
+        match &gcp_content.parts[0].data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { function_call }) => {
+                assert_eq!(
+                    function_call.name,
+                    Cow::Borrowed("get_temperature"),
+                    "Should be the merged function call"
+                );
+            }
+            _ => panic!("Expected a function call part"),
+        }
     }
 }
