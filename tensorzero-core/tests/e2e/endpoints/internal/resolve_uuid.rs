@@ -101,12 +101,13 @@ async fn test_resolve_uuid_inference() {
         "Response ID should match the queried inference ID"
     );
 
-    let has_inference = response
-        .object_types
-        .iter()
-        .any(|obj| matches!(obj, ResolvedObject::Inference { .. }));
+    assert_eq!(
+        response.object_types.len(),
+        1,
+        "Expected exactly one object type in resolve_uuid response"
+    );
     assert!(
-        has_inference,
+        matches!(&response.object_types[0], ResolvedObject::Inference { .. }),
         "Expected inference type in resolve_uuid response"
     );
 }
@@ -122,13 +123,10 @@ async fn test_resolve_uuid_episode() {
         "Response ID should match the queried episode ID"
     );
 
-    let has_episode = response
-        .object_types
-        .iter()
-        .any(|obj| matches!(obj, ResolvedObject::Episode));
-    assert!(
-        has_episode,
-        "Expected episode type in resolve_uuid response"
+    assert_eq!(
+        response.object_types,
+        vec![ResolvedObject::Episode],
+        "Expected exactly [Episode] in resolve_uuid response"
     );
 }
 
@@ -150,13 +148,10 @@ async fn test_resolve_uuid_boolean_feedback() {
         "Response ID should match the queried feedback ID"
     );
 
-    let has_boolean = response
-        .object_types
-        .iter()
-        .any(|obj| matches!(obj, ResolvedObject::BooleanFeedback));
-    assert!(
-        has_boolean,
-        "Expected boolean feedback type in resolve_uuid response"
+    assert_eq!(
+        response.object_types,
+        vec![ResolvedObject::BooleanFeedback],
+        "Expected exactly [BooleanFeedback] in resolve_uuid response"
     );
 }
 
@@ -178,13 +173,10 @@ async fn test_resolve_uuid_float_feedback() {
         "Response ID should match the queried feedback ID"
     );
 
-    let has_float = response
-        .object_types
-        .iter()
-        .any(|obj| matches!(obj, ResolvedObject::FloatFeedback));
-    assert!(
-        has_float,
-        "Expected float feedback type in resolve_uuid response"
+    assert_eq!(
+        response.object_types,
+        vec![ResolvedObject::FloatFeedback],
+        "Expected exactly [FloatFeedback] in resolve_uuid response"
     );
 }
 
@@ -206,13 +198,10 @@ async fn test_resolve_uuid_comment_feedback() {
         "Response ID should match the queried feedback ID"
     );
 
-    let has_comment = response
-        .object_types
-        .iter()
-        .any(|obj| matches!(obj, ResolvedObject::CommentFeedback));
-    assert!(
-        has_comment,
-        "Expected comment feedback type in resolve_uuid response"
+    assert_eq!(
+        response.object_types,
+        vec![ResolvedObject::CommentFeedback],
+        "Expected exactly [CommentFeedback] in resolve_uuid response"
     );
 }
 
@@ -234,13 +223,10 @@ async fn test_resolve_uuid_demonstration_feedback() {
         "Response ID should match the queried feedback ID"
     );
 
-    let has_demonstration = response
-        .object_types
-        .iter()
-        .any(|obj| matches!(obj, ResolvedObject::DemonstrationFeedback));
-    assert!(
-        has_demonstration,
-        "Expected demonstration feedback type in resolve_uuid response"
+    assert_eq!(
+        response.object_types,
+        vec![ResolvedObject::DemonstrationFeedback],
+        "Expected exactly [DemonstrationFeedback] in resolve_uuid response"
     );
 }
 
@@ -283,12 +269,16 @@ async fn test_resolve_uuid_chat_datapoint() {
         "Response ID should match the queried datapoint ID"
     );
 
-    let has_chat_datapoint = response
-        .object_types
-        .iter()
-        .any(|obj| matches!(obj, ResolvedObject::ChatDatapoint { .. }));
+    assert_eq!(
+        response.object_types.len(),
+        1,
+        "Expected exactly one object type in resolve_uuid response"
+    );
     assert!(
-        has_chat_datapoint,
+        matches!(
+            &response.object_types[0],
+            ResolvedObject::ChatDatapoint { .. }
+        ),
         "Expected chat datapoint type in resolve_uuid response"
     );
 }
@@ -333,12 +323,16 @@ async fn test_resolve_uuid_json_datapoint() {
         "Response ID should match the queried datapoint ID"
     );
 
-    let has_json_datapoint = response
-        .object_types
-        .iter()
-        .any(|obj| matches!(obj, ResolvedObject::JsonDatapoint { .. }));
+    assert_eq!(
+        response.object_types.len(),
+        1,
+        "Expected exactly one object type in resolve_uuid response"
+    );
     assert!(
-        has_json_datapoint,
+        matches!(
+            &response.object_types[0],
+            ResolvedObject::JsonDatapoint { .. }
+        ),
         "Expected json datapoint type in resolve_uuid response"
     );
 }

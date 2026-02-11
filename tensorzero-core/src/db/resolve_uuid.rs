@@ -8,7 +8,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 
 /// A single resolved object type for a given UUID.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[derive(Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
