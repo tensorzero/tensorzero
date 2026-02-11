@@ -55,7 +55,7 @@ dev = [
     "mypy",
     "pyright",
     "pytest-asyncio",
-    "pytest-xdist",
+    # "pytest-xdist",
     "pytest-rerunfailures",
     "pytest",
     "pytest-httpserver",

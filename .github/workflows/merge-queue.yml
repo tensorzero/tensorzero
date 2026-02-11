@@ -509,7 +509,7 @@ jobs:
         working-directory: clients/python
         run: |
           # Start the test in background and capture its PID
-          bash ./test.sh --verbose -n 8 -m "not mock" &
+          bash ./test.sh --verbose -m "not mock" &
           TEST_PID=$!
           echo "Started test.sh with PID: $TEST_PID"
 
@@ -553,7 +553,7 @@ jobs:
         env:
           TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://localhost:3030
         run: |
-          bash ./test.sh --verbose -n 8 -m mock
+          bash ./test.sh --verbose -m mock
 
       - name: "Node.js: OpenAI Client: test"
         working-directory: clients/openai-node
