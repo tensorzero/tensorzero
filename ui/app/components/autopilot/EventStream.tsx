@@ -34,6 +34,12 @@ import { cn } from "~/utils/common";
 import TopKEvaluationViz from "./TopKEvaluationViz";
 
 /**
+ * Max height for expandable tool content (tool call arguments, tool results, errors).
+ * Keeps long content from dominating the chat view by making it scrollable.
+ */
+export const TOOL_CONTENT_MAX_HEIGHT = "400px";
+
+/**
  * Optimistic messages are shown after the API confirms receipt but before
  * SSE delivers the real event.
  *
@@ -573,8 +579,14 @@ function EventItem({
                 "text-fg-secondary text-sm whitespace-pre-wrap",
                 (event.payload.type === "tool_result" ||
                   event.payload.type === "error") &&
-                  "font-mono",
+                  "overflow-y-auto font-mono",
               )}
+              style={
+                event.payload.type === "tool_result" ||
+                event.payload.type === "error"
+                  ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
+                  : undefined
+              }
             >
               {summary.description}
             </p>
