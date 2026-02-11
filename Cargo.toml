@@ -23,7 +23,7 @@ members = [
     "internal/tensorzero-types-providers",
     "internal/autopilot-worker",
     "internal/reqwest-sse-stream",
-    "internal/config-writer",
+    "internal/config-applier",
     "internal/tensorzero-config-paths",
 ]
 resolver = "2"
@@ -53,6 +53,7 @@ http = "1.4.0"
 infer = "0.19.0"
 tokio-stream = "0.1.15"
 tokio = { version = "1.48.0", features = ["full"] }
+tokio-util = { version = "0.7.17", features = ["rt"] }
 tracing = { version = "0.1.43", features = ["log"] }
 pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
@@ -110,12 +111,17 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 blake3 = "1.8.3"
 moka = { version = "0.12.13", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "5e0e7863a725f656ddd6b1ff3ea5b00594c203db" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "3884f0d875130c1854a6eee8557ff8bd04b0b683" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
-redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager", "tls-rustls", "tokio-rustls-comp"] }
+redis = { version = "1.0.2", features = [
+    "tokio-comp",
+    "connection-manager",
+    "tls-rustls",
+    "tokio-rustls-comp",
+] }
 redis-test = { version = "1.0.1", features = ["aio"] }
 globset = "0.4.18"
 walkdir = "2.5.0"

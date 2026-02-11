@@ -14,7 +14,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
-use crate::config::UninitializedVariantInfo;
+use crate::config::{Namespace, UninitializedVariantInfo};
 use crate::endpoints::inference::{
     ChatCompletionInferenceParams, InferenceCredentials, InferenceParams, InferenceResponse, Params,
 };
@@ -136,6 +136,8 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_dryrun: Option<bool>,
     #[serde(rename = "tensorzero::episode_id")]
     pub tensorzero_episode_id: Option<Uuid>,
+    #[serde(rename = "tensorzero::namespace")]
+    pub tensorzero_namespace: Option<Namespace>,
     #[serde(rename = "tensorzero::cache_options")]
     pub tensorzero_cache_options: Option<CacheParamsOptions>,
     #[serde(default, rename = "tensorzero::extra_body")]
@@ -462,6 +464,7 @@ impl Params {
             function_name,
             model_name,
             episode_id: openai_compatible_params.tensorzero_episode_id,
+            namespace: openai_compatible_params.tensorzero_namespace,
             input,
             stream: openai_compatible_params.stream,
             params: inference_params,

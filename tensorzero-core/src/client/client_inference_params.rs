@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Deref};
 
 use crate::{
     cache::CacheParamsOptions,
-    config::UninitializedVariantInfo,
+    config::{Namespace, UninitializedVariantInfo},
     endpoints::inference::{InferenceParams, Params},
     error::Error,
     inference::types::{
@@ -30,6 +30,11 @@ pub struct ClientInferenceParams {
     // the episode ID (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     pub episode_id: Option<Uuid>,
+    // The namespace for experimentation. If provided, namespace-specific experimentation
+    // configs will be used if available. Stored as a `tensorzero::namespace` tag.
+    // Must be a non-empty string.
+    #[serde(default)]
+    pub namespace: Option<Namespace>,
     // the input for the inference
     pub input: Input,
     // default False
@@ -130,6 +135,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             function_name: this.function_name,
             model_name: this.model_name,
             episode_id: this.episode_id,
+            namespace: this.namespace,
             input: this.input,
             stream: this.stream,
             params: this.params,
@@ -166,6 +172,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         function_name,
         model_name,
         episode_id,
+        namespace,
         input,
         stream,
         params,
@@ -193,6 +200,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         function_name,
         model_name,
         episode_id,
+        namespace,
         input,
         stream,
         params,

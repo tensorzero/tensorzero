@@ -31,7 +31,7 @@ use python_helpers::{
 
 use crate::gil_helpers::in_tokio_runtime_no_gil;
 use tensorzero_core::{
-    config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
+    config::{ConfigPyClass, FunctionsConfigPyClass, Namespace, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
@@ -309,7 +309,7 @@ const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -317,6 +317,7 @@ impl BaseTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -348,6 +349,7 @@ impl BaseTensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,
@@ -426,6 +428,7 @@ impl BaseTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -453,6 +456,13 @@ impl BaseTensorZeroGateway {
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
             .map(|id| python_uuid_to_uuid("episode_id", id))
+            .transpose()?;
+
+        let namespace = namespace
+            .map(|ns| {
+                Namespace::new(ns)
+                    .map_err(|e| PyValueError::new_err(format!("Invalid namespace: {e}")))
+            })
             .transpose()?;
 
         let params: Option<InferenceParams> = if let Some(params) = params {
@@ -538,6 +548,7 @@ impl BaseTensorZeroGateway {
             model_name,
             stream,
             episode_id,
+            namespace,
             variant_name,
             dryrun,
             tags: tags.unwrap_or_default(),
@@ -763,7 +774,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -816,6 +827,7 @@ impl TensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -848,6 +860,7 @@ impl TensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,
@@ -1949,7 +1962,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1996,6 +2009,7 @@ impl AsyncTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -2027,6 +2041,7 @@ impl AsyncTensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,

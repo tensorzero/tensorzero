@@ -10,7 +10,8 @@ use url::Url;
 
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
-    OpenAITool, OpenAIToolChoice, StreamOptions, get_chat_url, handle_openai_error, stream_openai,
+    OpenAITool, OpenAIToolChoice, StreamOptions, get_chat_url, handle_openai_error,
+    openai_response_tool_call_to_tensorzero_tool_call, stream_openai,
     tensorzero_to_openai_messages,
 };
 use crate::cache::ModelProviderRequest;
@@ -523,7 +524,9 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
         let raw_usage = vllm_usage_from_raw_response(&raw_response).map(|usage| {

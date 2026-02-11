@@ -899,7 +899,7 @@ mod tests {
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::Template;
@@ -1359,7 +1359,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1873,7 +1873,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let inference_config = InferenceConfig {
             templates: templates.clone(),
@@ -2062,7 +2062,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -2194,7 +2194,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -2349,7 +2349,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
 
         let system_template = get_system_template();
@@ -2649,7 +2649,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {

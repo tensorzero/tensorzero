@@ -7,10 +7,13 @@ use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashMap;
 
+use async_trait::async_trait;
+
 use super::{ClickHouseConnectionInfo, ExternalDataInfo};
 use crate::db::{DICLExampleWithDistance, DICLQueries, StoredDICLExample};
 use crate::error::{Error, ErrorDetails};
 
+#[async_trait]
 impl DICLQueries for ClickHouseConnectionInfo {
     async fn insert_dicl_example(&self, example: &StoredDICLExample) -> Result<(), Error> {
         self.insert_dicl_examples(std::slice::from_ref(example))
