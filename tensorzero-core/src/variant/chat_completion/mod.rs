@@ -1313,6 +1313,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let system_template = get_system_template();
@@ -2329,6 +2330,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let templates = Box::leak(Box::new(get_test_template_config().await));
         let schema_any = JSONSchema::from_value(json!({ "type": "object" })).unwrap();

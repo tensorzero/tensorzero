@@ -246,6 +246,7 @@ pub async fn start_batch_inference(
         relay: config.gateway.relay.clone(),
         include_raw_usage: false, // batch inference does not support include_raw_usage (#5452)
         include_raw_response: false, // batch inference does not support include_raw_response
+        include_aggregated_response: false, // batch inference does not support include_aggregated_response
     };
 
     let inference_models = InferenceModels {

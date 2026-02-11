@@ -104,6 +104,7 @@ pub async fn embeddings(
         relay: None,
         include_raw_usage: false, // not supported for embeddings endpoint (#5451)
         include_raw_response: params.include_raw_response,
+        include_aggregated_response: false, // not supported for embeddings endpoint
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)

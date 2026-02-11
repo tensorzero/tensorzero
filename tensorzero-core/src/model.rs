@@ -2838,6 +2838,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
 
         // Try inferring the good model only
@@ -2976,6 +2977,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -3067,6 +3069,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -3215,6 +3218,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let StreamResponseAndMessages {
             response:
@@ -3390,6 +3394,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let StreamResponseAndMessages {
             response:
@@ -3486,6 +3491,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3550,6 +3556,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3617,6 +3624,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3680,6 +3688,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)

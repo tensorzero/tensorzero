@@ -1298,6 +1298,7 @@ async fn test_embedding_request() {
         relay: None,
         include_raw_usage: false,
         include_raw_response: false,
+        include_aggregated_response: false,
     };
     let response = model_config
         .embed(&request, &model_name, &clients)
@@ -1449,6 +1450,7 @@ async fn test_embedding_sanity_check() {
         relay: None,
         include_raw_usage: false,
         include_raw_response: false,
+        include_aggregated_response: false,
     };
 
     // Compute all 3 embeddings concurrently

@@ -138,7 +138,7 @@ pub struct Params {
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
-    /// If `true`, include the collected chunks in the response.
+    /// If `true`, include an `aggregated_response` field in the final chunk in the stream
     #[serde(default)]
     pub include_aggregated_response: bool,
     #[serde(default)]
@@ -469,6 +469,7 @@ pub async fn inference(
         relay: config.gateway.relay.clone(),
         include_raw_usage: params.include_raw_usage,
         include_raw_response: params.include_raw_response,
+        include_aggregated_response: params.include_aggregated_response,
     };
 
     let inference_models = InferenceModels {
@@ -1939,6 +1940,7 @@ pub struct InferenceClients {
     pub relay: Option<TensorzeroRelay>,
     pub include_raw_usage: bool,
     pub include_raw_response: bool,
+    pub include_aggregated_response: bool,
 }
 
 // Carryall struct for models used in inference

@@ -1494,6 +1494,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let input = LazyResolvedInput {
             system: None,

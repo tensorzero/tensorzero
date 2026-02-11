@@ -663,6 +663,7 @@ fn create_inference_params(
         otlp_traces_extra_resources: Default::default(),
         api_key: None,
         include_raw_usage: false,
+        include_aggregated_response: false,
     }
 }
 

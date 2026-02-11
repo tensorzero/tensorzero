@@ -782,6 +782,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         include_original_response: false,
         include_raw_response: false,
         include_raw_usage: false,
+        include_aggregated_response: false,
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
