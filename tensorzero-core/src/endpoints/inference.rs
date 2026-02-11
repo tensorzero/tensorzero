@@ -140,7 +140,7 @@ pub struct Params {
     pub include_raw_usage: bool,
     /// If `true`, include the collected chunks in the response.
     #[serde(default)]
-    pub include_collected_chunks: bool,
+    pub include_aggregated_response: bool,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
@@ -177,7 +177,7 @@ struct InferenceMetadata {
     pub include_original_response: bool,
     pub include_raw_response: bool,
     pub include_raw_usage: bool,
-    pub include_collected_chunks: bool,
+    pub include_aggregated_response: bool,
     pub model_inference_id: Uuid,
 }
 
@@ -439,9 +439,10 @@ pub async fn inference(
     // Should we stream the inference?
     let stream = params.stream.unwrap_or(false);
 
-    if params.include_collected_chunks && !stream {
+    if params.include_aggregated_response && !stream {
         return Err(ErrorDetails::InvalidRequest {
-            message: "`include_collected_chunks` is only supported in streaming mode".to_string(),
+            message: "`include_aggregated_response` is only supported in streaming mode"
+                .to_string(),
         }
         .into());
     }
@@ -518,7 +519,7 @@ pub async fn inference(
             include_original_response: params.include_original_response,
             include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
-            include_collected_chunks: params.include_collected_chunks,
+            include_aggregated_response: params.include_aggregated_response,
         }))
         .await?;
         return Ok(InferenceOutputData {
@@ -578,7 +579,7 @@ pub async fn inference(
             include_original_response: params.include_original_response,
             include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
-            include_collected_chunks: params.include_collected_chunks,
+            include_aggregated_response: params.include_aggregated_response,
         }))
         .await;
 
@@ -639,7 +640,7 @@ struct InferVariantArgs<'a> {
     include_original_response: bool,
     include_raw_response: bool,
     include_raw_usage: bool,
-    include_collected_chunks: bool,
+    include_aggregated_response: bool,
 }
 
 async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Error> {
@@ -669,7 +670,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         include_original_response,
         include_raw_response,
         include_raw_usage,
-        include_collected_chunks,
+        include_aggregated_response,
     } = args;
 
     // Will be edited by the variant as part of making the request so we must clone here
@@ -744,7 +745,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
             model_inference_id: model_used_info.model_inference_id,
-            include_collected_chunks,
+            include_aggregated_response,
         };
 
         let stream = create_stream(
@@ -1159,14 +1160,14 @@ fn create_stream(
             }),
         };
 
-        if metadata.include_collected_chunks {
-            let collected_chunks = collect_chunks_future.clone().await?;
-            match (&mut chunk, collected_chunks) {
+        if metadata.include_aggregated_response {
+            let aggregated_response = collect_chunks_future.clone().await?;
+            match (&mut chunk, aggregated_response) {
                 (InferenceResultChunk::Chat(c), InferenceResult::Chat(chat_result)) => {
-                    c.collected_chunks = Some(chat_result.content);
+                    c.aggregated_response = Some(chat_result.content);
                 }
                 (InferenceResultChunk::Json(c), InferenceResult::Json(json_result)) => {
-                    c.collected_chunks = Some(JsonInferenceOutput {
+                    c.aggregated_response = Some(JsonInferenceOutput {
                         raw: json_result.output.raw,
                         parsed: json_result.output.parsed,
                     });
@@ -1214,7 +1215,7 @@ fn create_stream(
                 include_original_response: _,
                 include_raw_response: _,
                 include_raw_usage: _,
-                include_collected_chunks: _,
+                include_aggregated_response: _,
                 model_inference_id: _,
             } = metadata;
 
@@ -1308,7 +1309,7 @@ fn should_stream_chunk_in_create_stream(
                 raw_chunk: _,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
-                collected_chunks: _,
+                aggregated_response: _,
             } = c;
 
             // We want to stream the chunk if `raw_usage` is relevant
@@ -1340,7 +1341,7 @@ fn should_stream_chunk_in_create_stream(
                 thought_chunks: _,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
-                collected_chunks: _,
+                aggregated_response: _,
             } = c;
 
             // We want to stream the chunk if `raw_usage` is relevant
@@ -1374,7 +1375,7 @@ fn prepare_response_chunk(
         metadata.include_raw_response,
         metadata.json_mode,
         metadata.include_raw_usage,
-        metadata.include_collected_chunks,
+        metadata.include_aggregated_response,
     )
 }
 
@@ -1725,7 +1726,7 @@ pub struct ChatInferenceResponseChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub collected_chunks: Option<Vec<ContentBlockChatOutput>>,
+    pub aggregated_response: Option<Vec<ContentBlockChatOutput>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1750,7 +1751,7 @@ pub struct JsonInferenceResponseChunk {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub collected_chunks: Option<JsonInferenceOutput>,
+    pub aggregated_response: Option<JsonInferenceOutput>,
 }
 
 impl InferenceResponseChunk {
@@ -1765,7 +1766,7 @@ impl InferenceResponseChunk {
         include_raw_response: bool,
         json_mode: Option<JsonMode>,
         include_raw_usage: bool,
-        include_collected_chunks: bool,
+        include_aggregated_response: bool,
     ) -> Self {
         // Compute the usage
         let usage = if cached {
@@ -1823,8 +1824,8 @@ impl InferenceResponseChunk {
                     include_raw_response,
                 );
 
-                let collected_chunks = if include_collected_chunks {
-                    result.collected_chunks
+                let aggregated_response = if include_aggregated_response {
+                    result.aggregated_response
                 } else {
                     None
                 };
@@ -1842,7 +1843,7 @@ impl InferenceResponseChunk {
                     finish_reason: result.finish_reason,
                     original_chunk,
                     raw_chunk,
-                    collected_chunks,
+                    aggregated_response,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -1853,8 +1854,8 @@ impl InferenceResponseChunk {
                     include_raw_response,
                 );
 
-                let collected_chunks = if include_collected_chunks {
-                    result.collected_chunks
+                let aggregated_response = if include_aggregated_response {
+                    result.aggregated_response
                 } else {
                     None
                 };
@@ -1872,7 +1873,7 @@ impl InferenceResponseChunk {
                     finish_reason: result.finish_reason,
                     original_chunk,
                     raw_chunk,
-                    collected_chunks,
+                    aggregated_response,
                 })
             }
         }
@@ -2159,7 +2160,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
-            collected_chunks: None,
+            aggregated_response: None,
         });
         let raw_request = "raw request".to_string();
         let inference_metadata = InferenceMetadata {
@@ -2193,7 +2194,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
-            include_collected_chunks: false,
+            include_aggregated_response: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2229,7 +2230,7 @@ mod tests {
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
-            collected_chunks: None,
+            aggregated_response: None,
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -2262,7 +2263,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
-            include_collected_chunks: false,
+            include_aggregated_response: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2657,7 +2658,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: true,
             model_inference_id: Uuid::now_v7(),
-            include_collected_chunks: false,
+            include_aggregated_response: false,
         }
     }
 
@@ -2688,7 +2689,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2740,7 +2741,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2776,7 +2777,7 @@ mod tests {
             finish_reason: None,
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(50)),
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2809,7 +2810,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2856,7 +2857,7 @@ mod tests {
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2892,7 +2893,7 @@ mod tests {
             finish_reason: None,
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(50)),
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);

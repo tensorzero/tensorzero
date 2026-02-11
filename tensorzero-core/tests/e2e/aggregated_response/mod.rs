@@ -1,7 +1,7 @@
-//! E2E tests for `include_collected_chunks` parameter.
+//! E2E tests for `include_aggregated_response` parameter.
 //!
 //! Tests that the final streaming chunk includes the fully assembled inference result
-//! when `include_collected_chunks` is set to `true`.
+//! when `include_aggregated_response` is set to `true`.
 
 use futures::StreamExt;
 use reqwest::Client;
@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
-async fn test_collected_chunks_chat_streaming() {
+async fn test_aggregated_response_chat_streaming() {
     let episode_id = Uuid::now_v7();
     let random_suffix = Uuid::now_v7();
 
@@ -31,7 +31,7 @@ async fn test_collected_chunks_chat_streaming() {
             ]
         },
         "stream": true,
-        "include_collected_chunks": true
+        "include_aggregated_response": true
     });
 
     let mut chunks = Client::new()
@@ -41,7 +41,7 @@ async fn test_collected_chunks_chat_streaming() {
         .await
         .expect("Failed to create eventsource for streaming request");
 
-    let mut found_collected_chunks = false;
+    let mut found_aggregated_response = false;
     let mut all_chunks: Vec<Value> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
@@ -58,18 +58,18 @@ async fn test_collected_chunks_chat_streaming() {
 
         all_chunks.push(chunk_json.clone());
 
-        if let Some(collected) = chunk_json.get("collected_chunks") {
-            found_collected_chunks = true;
+        if let Some(collected) = chunk_json.get("aggregated_response") {
+            found_aggregated_response = true;
 
             assert!(
                 collected.is_array(),
-                "collected_chunks should be an array for chat functions, got: {collected:?}"
+                "aggregated_response should be an array for chat functions, got: {collected:?}"
             );
 
             let collected_array = collected.as_array().unwrap();
             assert!(
                 !collected_array.is_empty(),
-                "collected_chunks should have at least one content block"
+                "aggregated_response should have at least one content block"
             );
 
             // Verify at least one text block exists
@@ -82,14 +82,14 @@ async fn test_collected_chunks_chat_streaming() {
             });
             assert!(
                 has_text_block,
-                "collected_chunks should contain at least one text block with non-empty text. Got: {collected_array:?}"
+                "aggregated_response should contain at least one text block with non-empty text. Got: {collected_array:?}"
             );
         }
     }
 
     assert!(
-        found_collected_chunks,
-        "Streaming response should include collected_chunks in a chunk when include_collected_chunks=true.\n\
+        found_aggregated_response,
+        "Streaming response should include aggregated_response in a chunk when include_aggregated_response=true.\n\
         Total chunks received: {}\n\
         Last few chunks:\n{:#?}",
         all_chunks.len(),
@@ -98,7 +98,7 @@ async fn test_collected_chunks_chat_streaming() {
 }
 
 #[tokio::test]
-async fn test_collected_chunks_json_streaming() {
+async fn test_aggregated_response_json_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -115,7 +115,7 @@ async fn test_collected_chunks_json_streaming() {
             ]
         },
         "stream": true,
-        "include_collected_chunks": true
+        "include_aggregated_response": true
     });
 
     let mut chunks = Client::new()
@@ -125,7 +125,7 @@ async fn test_collected_chunks_json_streaming() {
         .await
         .expect("Failed to create eventsource for streaming request");
 
-    let mut found_collected_chunks = false;
+    let mut found_aggregated_response = false;
     let mut all_chunks: Vec<Value> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
@@ -142,37 +142,37 @@ async fn test_collected_chunks_json_streaming() {
 
         all_chunks.push(chunk_json.clone());
 
-        if let Some(collected) = chunk_json.get("collected_chunks") {
-            found_collected_chunks = true;
+        if let Some(collected) = chunk_json.get("aggregated_response") {
+            found_aggregated_response = true;
 
             assert!(
                 collected.is_object(),
-                "collected_chunks should be an object for JSON functions, got: {collected:?}"
+                "aggregated_response should be an object for JSON functions, got: {collected:?}"
             );
 
             // Verify `raw` field is a non-empty string
             let raw = collected
                 .get("raw")
-                .expect("collected_chunks should have a `raw` field");
+                .expect("aggregated_response should have a `raw` field");
             assert!(
                 raw.as_str().is_some_and(|s| !s.is_empty()),
-                "collected_chunks.raw should be a non-empty string, got: {raw:?}"
+                "aggregated_response.raw should be a non-empty string, got: {raw:?}"
             );
 
             // Verify `parsed` field is a valid JSON object
             let parsed = collected
                 .get("parsed")
-                .expect("collected_chunks should have a `parsed` field");
+                .expect("aggregated_response should have a `parsed` field");
             assert!(
                 parsed.is_object(),
-                "collected_chunks.parsed should be a JSON object, got: {parsed:?}"
+                "aggregated_response.parsed should be a JSON object, got: {parsed:?}"
             );
         }
     }
 
     assert!(
-        found_collected_chunks,
-        "Streaming JSON response should include collected_chunks in a chunk when include_collected_chunks=true.\n\
+        found_aggregated_response,
+        "Streaming JSON response should include aggregated_response in a chunk when include_aggregated_response=true.\n\
         Total chunks received: {}\n\
         Last few chunks:\n{:#?}",
         all_chunks.len(),
@@ -181,7 +181,7 @@ async fn test_collected_chunks_json_streaming() {
 }
 
 #[tokio::test]
-async fn test_collected_chunks_rejected_in_non_stream_mode() {
+async fn test_aggregated_response_rejected_in_non_stream_mode() {
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": "openai",
@@ -196,7 +196,7 @@ async fn test_collected_chunks_rejected_in_non_stream_mode() {
             ]
         },
         "stream": false,
-        "include_collected_chunks": true
+        "include_aggregated_response": true
     });
 
     let response = Client::new()
@@ -209,7 +209,7 @@ async fn test_collected_chunks_rejected_in_non_stream_mode() {
     assert_eq!(
         response.status(),
         StatusCode::BAD_REQUEST,
-        "`include_collected_chunks` with `stream: false` should return 400"
+        "`include_aggregated_response` with `stream: false` should return 400"
     );
     let response_json: Value = response
         .json()
@@ -218,13 +218,13 @@ async fn test_collected_chunks_rejected_in_non_stream_mode() {
     assert_eq!(
         response_json,
         json!({
-            "error": "`include_collected_chunks` is only supported in streaming mode",
+            "error": "`include_aggregated_response` is only supported in streaming mode",
             "error_json": {
                 "InvalidRequest": {
-                    "message": "`include_collected_chunks` is only supported in streaming mode"
+                    "message": "`include_aggregated_response` is only supported in streaming mode"
                 }
             }
         }),
-        "Error response should indicate that `include_collected_chunks` requires streaming"
+        "Error response should indicate that `include_aggregated_response` requires streaming"
     );
 }

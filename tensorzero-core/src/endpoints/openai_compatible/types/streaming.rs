@@ -386,7 +386,7 @@ mod tests {
             original_chunk: None,
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
@@ -443,7 +443,7 @@ mod tests {
             original_chunk: None,
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
@@ -491,7 +491,7 @@ mod tests {
             original_chunk: None,
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
@@ -549,7 +549,7 @@ mod tests {
             original_chunk: None,
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
@@ -590,7 +590,7 @@ mod tests {
             original_chunk: None,
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
@@ -642,7 +642,7 @@ mod tests {
             original_chunk: None,
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
@@ -685,7 +685,7 @@ mod tests {
             original_chunk: Some(raw_response.clone()),
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
@@ -733,7 +733,7 @@ mod tests {
             original_chunk: Some(raw_response),
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
@@ -773,7 +773,7 @@ mod tests {
             original_chunk: Some(raw_response.clone()),
             raw_chunk: None,
             raw_response: None,
-            collected_chunks: None,
+            aggregated_response: None,
         });
 
         let mut state = StreamingContentState::default();
