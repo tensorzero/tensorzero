@@ -597,7 +597,7 @@ pub struct EventPayloadUserQuestion {
 /// The format of a user question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "format", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
     feature = "ts-bindings",
     ts(export, tag = "format", rename_all = "snake_case")
