@@ -5,6 +5,8 @@ import type { EventPayloadStatusUpdate } from "./EventPayloadStatusUpdate";
 import type { EventPayloadToolCall } from "./EventPayloadToolCall";
 import type { EventPayloadToolCallAuthorization } from "./EventPayloadToolCallAuthorization";
 import type { EventPayloadToolResult } from "./EventPayloadToolResult";
+import type { EventPayloadUserQuestions } from "./EventPayloadUserQuestions";
+import type { EventPayloadUserResponses } from "./EventPayloadUserResponses";
 import type { EventPayloadVisualization } from "./EventPayloadVisualization";
 
 /**
@@ -20,4 +22,6 @@ export type EventPayload =
   | ({ type: "tool_call_authorization" } & EventPayloadToolCallAuthorization)
   | ({ type: "tool_result" } & EventPayloadToolResult)
   | ({ type: "visualization" } & EventPayloadVisualization)
+  | ({ type: "user_questions" } & EventPayloadUserQuestions)
+  | ({ type: "user_responses" } & EventPayloadUserResponses)
   | { type: "unknown" };

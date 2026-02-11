@@ -217,6 +217,8 @@ pub enum EventPayload {
     ToolCallAuthorization(EventPayloadToolCallAuthorization),
     ToolResult(EventPayloadToolResult),
     Visualization(EventPayloadVisualization),
+    UserQuestions(EventPayloadUserQuestions),
+    UserResponses(EventPayloadUserResponses),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -229,7 +231,9 @@ impl EventPayload {
         matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
             || matches!(
                 self,
-                EventPayload::ToolCallAuthorization(_) | EventPayload::ToolResult(_)
+                EventPayload::ToolCallAuthorization(_)
+                    | EventPayload::ToolResult(_)
+                    | EventPayload::UserResponses(_)
             )
     }
 }
@@ -252,6 +256,8 @@ pub enum GatewayEventPayload {
     ToolCallAuthorization(GatewayEventPayloadToolCallAuthorization),
     ToolResult(EventPayloadToolResult),
     Visualization(EventPayloadVisualization),
+    UserQuestions(EventPayloadUserQuestions),
+    UserResponses(EventPayloadUserResponses),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -271,6 +277,8 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             }
             EventPayload::ToolResult(r) => Ok(GatewayEventPayload::ToolResult(r)),
             EventPayload::Visualization(v) => Ok(GatewayEventPayload::Visualization(v)),
+            EventPayload::UserQuestions(q) => Ok(GatewayEventPayload::UserQuestions(q)),
+            EventPayload::UserResponses(r) => Ok(GatewayEventPayload::UserResponses(r)),
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
     }
@@ -570,6 +578,105 @@ pub struct EventPayloadVisualization {
     pub tool_execution_id: Uuid,
     /// The visualization data.
     pub visualization: VisualizationType,
+}
+
+// =============================================================================
+// Question Types
+// =============================================================================
+
+/// Questions payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadUserQuestions {
+    pub questions: Vec<EventPayloadUserQuestion>,
+}
+
+/// A single question to display to the user.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadUserQuestion {
+    pub id: Uuid,
+    /// Very short label displayed as a chip/tag (max 12 chars). Examples: "Auth method", "Library", "Approach".
+    pub header: String,
+    /// The complete question to ask the user. Should be clear, specific, and end with a question mark.
+    pub question: String,
+    #[serde(flatten)]
+    pub inner: EventPayloadUserQuestionInner,
+}
+
+/// The format of a user question.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "format", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "format", rename_all = "snake_case")
+)]
+pub enum EventPayloadUserQuestionInner {
+    MultipleChoice(MultipleChoiceQuestion),
+    FreeResponse,
+}
+
+/// A multiple choice question with options.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct MultipleChoiceQuestion {
+    /// Should be 2-4 options.
+    pub options: Vec<MultipleChoiceOption>,
+    /// Set to true to allow the user to select multiple options instead of just one.
+    pub multi_select: bool,
+}
+
+/// An option in a multiple choice question.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct MultipleChoiceOption {
+    pub id: Uuid,
+    /// The display text for this option that the user will see and select. Should be concise (1-5 words).
+    pub label: String,
+    /// Explanation of what this option means or what will happen if chosen.
+    pub description: String,
+}
+
+/// User responses payload for an event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadUserResponses {
+    /// Map from question UUID to response.
+    pub responses: HashMap<Uuid, UserQuestionResponse>,
+    pub user_questions_event_id: Uuid,
+}
+
+/// A user's response to a question.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum UserQuestionResponse {
+    MultipleChoice(MultipleChoiceAnswer),
+    FreeResponse(FreeResponseAnswer),
+    Skipped,
+}
+
+/// A user's answer to a multiple choice question.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct MultipleChoiceAnswer {
+    /// IDs of the selected options.
+    pub selected: Vec<Uuid>,
+}
+
+/// A user's free-form text answer.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct FreeResponseAnswer {
+    pub text: String,
 }
 
 // =============================================================================

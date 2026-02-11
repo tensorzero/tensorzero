@@ -255,6 +255,12 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
     case "visualization":
       // Visualization events render their own content, no text description needed
       return {};
+    case "user_questions":
+      // TODO (#6270): add a real component
+      return {};
+    case "user_responses":
+      // TODO (#6270): add a real component
+      return {};
     case "unknown":
       return {};
     default:
@@ -418,6 +424,12 @@ function renderEventTitle(event: GatewayEvent) {
           <span>{getVisualizationTitle(payload.visualization)}</span>
         </span>
       );
+    case "user_questions":
+      // TODO (#6270): add a real component
+      return "User Questions";
+    case "user_responses":
+      // TODO (#6270): add a real component
+      return "User Responses";
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
