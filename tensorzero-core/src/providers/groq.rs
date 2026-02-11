@@ -3,11 +3,14 @@ use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
-use serde::de::IntoDeserializer;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::borrow::Cow;
 use std::time::Duration;
+use tensorzero_types_providers::groq::{
+    GroqChatChunk, GroqFinishReason, GroqResponse, GroqResponseChoice, GroqResponseFormat,
+    GroqResponseToolCall, GroqToolType, GroqUsage,
+};
 use tokio::time::Instant;
 
 use crate::cache::ModelProviderRequest;
@@ -877,38 +880,21 @@ async fn tensorzero_to_groq_assistant_messages(
     Ok(vec![message])
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum GroqResponseFormat {
-    #[default]
-    Text,
-    JsonObject,
-    JsonSchema {
-        json_schema: Value,
-    },
-}
-
-impl GroqResponseFormat {
-    fn new(json_mode: ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
-        match json_mode {
-            ModelInferenceRequestJsonMode::On => GroqResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => GroqResponseFormat::Text,
-            ModelInferenceRequestJsonMode::Strict => match output_schema {
-                Some(schema) => {
-                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    GroqResponseFormat::JsonSchema { json_schema }
-                }
-                None => GroqResponseFormat::JsonObject,
-            },
-        }
+fn groq_response_format(
+    json_mode: ModelInferenceRequestJsonMode,
+    output_schema: Option<&Value>,
+) -> GroqResponseFormat {
+    match json_mode {
+        ModelInferenceRequestJsonMode::On => GroqResponseFormat::JsonObject,
+        ModelInferenceRequestJsonMode::Off => GroqResponseFormat::Text,
+        ModelInferenceRequestJsonMode::Strict => match output_schema {
+            Some(schema) => {
+                let json_schema = json!({"name": "response", "strict": true, "schema": schema});
+                GroqResponseFormat::JsonSchema { json_schema }
+            }
+            None => GroqResponseFormat::JsonObject,
+        },
     }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum GroqToolType {
-    Function,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -1144,7 +1130,7 @@ impl<'a> GroqRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<GroqRequest<'a>, Error> {
-        let response_format = Some(GroqResponseFormat::new(
+        let response_format = Some(groq_response_format(
             request.json_mode,
             request.output_schema,
         ));
@@ -1198,91 +1184,30 @@ impl<'a> GroqRequest<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct GroqUsage {
-    pub prompt_tokens: u32,
-    #[serde(default)]
-    pub completion_tokens: u32,
-}
-
-impl From<GroqUsage> for Usage {
-    fn from(usage: GroqUsage) -> Self {
-        Usage {
-            input_tokens: Some(usage.prompt_tokens),
-            output_tokens: Some(usage.completion_tokens),
-        }
+fn groq_usage_to_tensorzero_usage(usage: GroqUsage) -> Usage {
+    Usage {
+        input_tokens: Some(usage.prompt_tokens),
+        output_tokens: Some(usage.completion_tokens),
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct GroqResponseFunctionCall {
-    name: String,
-    arguments: String,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct GroqResponseToolCall {
-    id: String,
-    r#type: GroqToolType,
-    function: GroqResponseFunctionCall,
-}
-
-impl From<GroqResponseToolCall> for ToolCall {
-    fn from(groq_tool_call: GroqResponseToolCall) -> Self {
-        ToolCall {
-            id: groq_tool_call.id,
-            name: groq_tool_call.function.name,
-            arguments: groq_tool_call.function.arguments,
-        }
+fn groq_response_tool_call_to_tensorzero_tool_call(tool_call: GroqResponseToolCall) -> ToolCall {
+    ToolCall {
+        id: tool_call.id,
+        name: tool_call.function.name,
+        arguments: tool_call.function.arguments,
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct GroqResponseMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) tool_calls: Option<Vec<GroqResponseToolCall>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum GroqFinishReason {
-    Stop,
-    Length,
-    ContentFilter,
-    ToolCalls,
-    FunctionCall,
-    #[serde(other)]
-    Unknown,
-}
-
-impl From<GroqFinishReason> for FinishReason {
-    fn from(finish_reason: GroqFinishReason) -> Self {
-        match finish_reason {
-            GroqFinishReason::Stop => FinishReason::Stop,
-            GroqFinishReason::Length => FinishReason::Length,
-            GroqFinishReason::ContentFilter => FinishReason::ContentFilter,
-            GroqFinishReason::ToolCalls => FinishReason::ToolCall,
-            GroqFinishReason::FunctionCall => FinishReason::ToolCall,
-            GroqFinishReason::Unknown => FinishReason::Unknown,
-        }
+fn groq_finish_reason_to_tensorzero_finish_reason(finish_reason: GroqFinishReason) -> FinishReason {
+    match finish_reason {
+        GroqFinishReason::Stop => FinishReason::Stop,
+        GroqFinishReason::Length => FinishReason::Length,
+        GroqFinishReason::ContentFilter => FinishReason::ContentFilter,
+        GroqFinishReason::ToolCalls => FinishReason::ToolCall,
+        GroqFinishReason::FunctionCall => FinishReason::ToolCall,
+        GroqFinishReason::Unknown => FinishReason::Unknown,
     }
-}
-
-// Leaving out logprobs and finish_reason for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct GroqResponseChoice {
-    pub(super) index: u8,
-    pub(super) message: GroqResponseMessage,
-    pub(super) finish_reason: GroqFinishReason,
-}
-
-// Leaving out id, created, model, service_tier, system_fingerprint, object for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) struct GroqResponse {
-    pub(super) choices: Vec<GroqResponseChoice>,
-    pub(super) usage: GroqUsage,
 }
 
 struct GroqResponseWithMetadata<'a> {
@@ -1336,7 +1261,9 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    groq_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         };
         let raw_usage = groq_usage_from_raw_response(&raw_response).map(|usage| {
@@ -1347,7 +1274,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = groq_usage_to_tensorzero_usage(response.usage);
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -1361,78 +1288,16 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 relay_raw_response: None,
                 usage,
                 provider_latency: latency,
-                finish_reason: Some(finish_reason.into()),
+                finish_reason: Some(groq_finish_reason_to_tensorzero_finish_reason(
+                    finish_reason,
+                )),
                 id: model_inference_id,
             },
         ))
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GroqFunctionCallChunk {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    arguments: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GroqToolCallChunk {
-    index: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
-    // If we were to do this better, we would need to check the `type` field
-    function: GroqFunctionCallChunk,
-}
-
-// This doesn't include role
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GroqDelta {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<GroqToolCallChunk>>,
-}
-
-// Custom deserializer function for empty string to None
-// This is required because SGLang (which depends on this code) returns "" in streaming chunks instead of null
-fn empty_string_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    let opt = Option::<String>::deserialize(deserializer)?;
-    if let Some(s) = opt {
-        if s.is_empty() {
-            return Ok(None);
-        }
-        // Convert serde_json::Error to D::Error
-        Ok(Some(
-            T::deserialize(serde_json::Value::String(s).into_deserializer())
-                .map_err(|e| serde::de::Error::custom(e.to_string()))?,
-        ))
-    } else {
-        Ok(None)
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GroqChatChunkChoice {
-    delta: GroqDelta,
-    #[serde(default)]
-    #[serde(deserialize_with = "empty_string_as_none")]
-    finish_reason: Option<GroqFinishReason>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GroqChatChunk {
-    choices: Vec<GroqChatChunkChoice>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<GroqUsage>,
-}
-
-/// Maps an Groq chunk to a TensorZero chunk for streaming inferences
+/// Maps a Groq chunk to a TensorZero chunk for streaming inferences
 fn groq_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: GroqChatChunk,
@@ -1457,12 +1322,14 @@ fn groq_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(Into::into);
+    let usage = chunk.usage.map(groq_usage_to_tensorzero_usage);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
         if let Some(choice_finish_reason) = choice.finish_reason {
-            finish_reason = Some(choice_finish_reason.into());
+            finish_reason = Some(groq_finish_reason_to_tensorzero_finish_reason(
+                choice_finish_reason,
+            ));
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
@@ -1536,6 +1403,10 @@ mod tests {
     };
     use crate::tool::ToolCallConfig;
     use crate::utils::testing::capture_logs;
+    use tensorzero_types_providers::groq::{
+        GroqChatChunkChoice, GroqDelta, GroqFunctionCallChunk, GroqResponseFunctionCall,
+        GroqResponseMessage, GroqToolCallChunk,
+    };
 
     #[test]
     fn test_handle_groq_error() {
@@ -2582,17 +2453,17 @@ mod tests {
         // Test JSON mode On
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
-        let format = GroqResponseFormat::new(json_mode, output_schema);
+        let format = groq_response_format(json_mode, output_schema);
         assert_eq!(format, GroqResponseFormat::JsonObject);
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
-        let format = GroqResponseFormat::new(json_mode, output_schema);
+        let format = groq_response_format(json_mode, output_schema);
         assert_eq!(format, GroqResponseFormat::Text);
 
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let format = GroqResponseFormat::new(json_mode, output_schema);
+        let format = groq_response_format(json_mode, output_schema);
         assert_eq!(format, GroqResponseFormat::JsonObject);
 
         // Test JSON mode Strict with schema
@@ -2604,7 +2475,7 @@ mod tests {
             }
         });
         let output_schema = Some(&schema);
-        let format = GroqResponseFormat::new(json_mode, output_schema);
+        let format = groq_response_format(json_mode, output_schema);
         match format {
             GroqResponseFormat::JsonSchema { json_schema } => {
                 assert_eq!(json_schema["schema"], schema);
@@ -2622,7 +2493,7 @@ mod tests {
                 "foo": {"type": "string"}
             }
         });
-        let format = GroqResponseFormat::new(json_mode, Some(&schema));
+        let format = groq_response_format(json_mode, Some(&schema));
         let serialized = serde_json::to_value(&format).unwrap();
         assert_eq!(serialized["type"], "json_schema");
         assert_eq!(serialized["json_schema"]["name"], "response");

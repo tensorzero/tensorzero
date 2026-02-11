@@ -4,10 +4,11 @@ use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
-use serde::de::IntoDeserializer;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::borrow::Cow;
+// TODO: Remove this import after migrating OpenRouter streaming chunk types to `tensorzero-types-providers`
+use tensorzero_types_providers::serde_util::empty_string_as_none;
 
 use crate::http::TensorzeroHttpClient;
 use std::time::Duration;
@@ -1928,28 +1929,6 @@ struct OpenRouterDelta {
     /// Reasoning details for streaming responses from models that support reasoning tokens
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_details: Option<Vec<OpenRouterReasoningDetail>>,
-}
-
-// Custom deserializer function for empty string to None
-// This is required because SGLang (which depends on this code) returns "" in streaming chunks instead of null
-fn empty_string_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    let opt = Option::<String>::deserialize(deserializer)?;
-    if let Some(s) = opt {
-        if s.is_empty() {
-            return Ok(None);
-        }
-        // Convert serde_json::Error to D::Error
-        Ok(Some(
-            T::deserialize(serde_json::Value::String(s).into_deserializer())
-                .map_err(|e| serde::de::Error::custom(e.to_string()))?,
-        ))
-    } else {
-        Ok(None)
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

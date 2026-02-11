@@ -3,10 +3,12 @@ use lazy_static::lazy_static;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
+use serde_json::Value;
 use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
+use uuid::Uuid;
 
 use super::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
@@ -41,11 +43,9 @@ use crate::providers::openai::{
     tensorzero_to_openai_messages,
 };
 use crate::tool::ToolCallChunk;
-use serde_json::Value;
 use tensorzero_types_providers::deepseek::{
     DeepSeekChatChunk, DeepSeekResponse, DeepSeekResponseChoice, DeepSeekResponseFormat,
 };
-use uuid::Uuid;
 
 lazy_static! {
     static ref DEEPSEEK_DEFAULT_BASE_URL: Url = {
