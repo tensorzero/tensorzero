@@ -18,14 +18,13 @@ import {
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { datapointInputToZodInput } from "~/routes/api/tensorzero/inference.utils";
-import { resolveInput } from "~/utils/resolve.server";
+import { loadFileDataForInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
 import type { GetDatapointsResponse, Datapoint } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
-import Input from "~/components/inference/Input";
+import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Label } from "~/components/ui/label";
@@ -187,8 +186,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inputs = getDatapointsResponse
       ? await Promise.all(
           datapoints.map(async (datapoint) => {
-            const inputData = datapointInputToZodInput(datapoint.input);
-            return await resolveInput(inputData, functionConfig ?? null);
+            return await loadFileDataForInput(datapoint.input);
           }),
         )
       : undefined;
@@ -455,11 +453,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                           <h3 className="mb-2 text-sm font-medium text-gray-500">
                             Input
                           </h3>
-                          <Input
-                            messages={inputs[index].messages}
-                            system={inputs[index].system}
-                            maxHeight={150}
-                          />
+                          <InputElement input={inputs[index]} maxHeight={150} />
                         </div>
                         <div>
                           <h3 className="mb-2 text-sm font-medium text-gray-500">
