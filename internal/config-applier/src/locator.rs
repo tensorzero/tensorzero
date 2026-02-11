@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use toml_edit::DocumentMut;
 
-use crate::error::ConfigWriterError;
+use crate::error::ConfigApplierError;
 
 // =============================================================================
 // Public Types
@@ -52,12 +52,12 @@ pub struct EvaluationLocation<'a> {
 pub fn locate_function<'a>(
     files: &'a mut [LoadedConfigFile],
     function_name: &str,
-) -> Result<FunctionLocation<'a>, ConfigWriterError> {
+) -> Result<FunctionLocation<'a>, ConfigApplierError> {
     match find_entity_index(files, "functions", function_name) {
         Some(index) => Ok(FunctionLocation {
             file: &mut files[index],
         }),
-        None => Err(ConfigWriterError::FunctionNotFound {
+        None => Err(ConfigApplierError::FunctionNotFound {
             function_name: function_name.to_string(),
         }),
     }
@@ -72,7 +72,7 @@ pub fn locate_function<'a>(
 pub fn locate_evaluation<'a>(
     files: &'a mut [LoadedConfigFile],
     evaluation_name: &str,
-) -> Result<(EvaluationLocation<'a>, bool), ConfigWriterError> {
+) -> Result<(EvaluationLocation<'a>, bool), ConfigApplierError> {
     match find_entity_index(files, "evaluations", evaluation_name) {
         Some(index) => Ok((
             EvaluationLocation {
@@ -86,7 +86,7 @@ pub fn locate_evaluation<'a>(
             },
             true,
         )),
-        None => Err(ConfigWriterError::EvaluationNotFound {
+        None => Err(ConfigApplierError::EvaluationNotFound {
             evaluation_name: evaluation_name.to_string(),
         }),
     }
@@ -100,12 +100,12 @@ pub fn locate_evaluation<'a>(
 pub fn locate_evaluation_required<'a>(
     files: &'a mut [LoadedConfigFile],
     evaluation_name: &str,
-) -> Result<EvaluationLocation<'a>, ConfigWriterError> {
+) -> Result<EvaluationLocation<'a>, ConfigApplierError> {
     match find_entity_index(files, "evaluations", evaluation_name) {
         Some(index) => Ok(EvaluationLocation {
             file: &mut files[index],
         }),
-        None => Err(ConfigWriterError::EvaluationNotFound {
+        None => Err(ConfigApplierError::EvaluationNotFound {
             evaluation_name: evaluation_name.to_string(),
         }),
     }
@@ -204,7 +204,7 @@ type = "chat"
         assert!(
             matches!(
                 result,
-                Err(ConfigWriterError::FunctionNotFound { function_name }) if function_name == "my_function"
+                Err(ConfigApplierError::FunctionNotFound { function_name }) if function_name == "my_function"
             ),
             "should return FunctionNotFound error"
         );
@@ -224,7 +224,7 @@ description = "A function without a type key"
         assert!(
             matches!(
                 result,
-                Err(ConfigWriterError::FunctionNotFound { function_name }) if function_name == "my_function"
+                Err(ConfigApplierError::FunctionNotFound { function_name }) if function_name == "my_function"
             ),
             "should not match function without type key"
         );
@@ -236,7 +236,7 @@ description = "A function without a type key"
 
         let result = locate_function(&mut files, "my_function");
         assert!(
-            matches!(result, Err(ConfigWriterError::FunctionNotFound { .. })),
+            matches!(result, Err(ConfigApplierError::FunctionNotFound { .. })),
             "should return FunctionNotFound for empty files"
         );
     }
@@ -338,7 +338,7 @@ type = "exact_match"
         assert!(
             matches!(
                 result,
-                Err(ConfigWriterError::EvaluationNotFound { evaluation_name }) if evaluation_name == "my_eval"
+                Err(ConfigApplierError::EvaluationNotFound { evaluation_name }) if evaluation_name == "my_eval"
             ),
             "should return EvaluationNotFound error"
         );
@@ -358,7 +358,7 @@ description = "An evaluation without a type key"
         assert!(
             matches!(
                 result,
-                Err(ConfigWriterError::EvaluationNotFound { evaluation_name }) if evaluation_name == "my_eval"
+                Err(ConfigApplierError::EvaluationNotFound { evaluation_name }) if evaluation_name == "my_eval"
             ),
             "should not match evaluation without type key"
         );

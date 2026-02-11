@@ -1,4 +1,4 @@
-//! TensorZero Config Writer
+//! TensorZero Config Applier
 //!
 //! A crate for applying targeted edits to TensorZero config TOML files while preserving formatting.
 //! Supports 4 operations: upsert variant, upsert experimentation config, upsert evaluation, upsert evaluator.
@@ -13,7 +13,7 @@ pub use edit::{
     EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
     UpsertVariantPayload,
 };
-pub use error::ConfigWriterError;
+pub use error::ConfigApplierError;
 
 use std::path::{Path, PathBuf};
 
@@ -22,19 +22,19 @@ use path_resolver::FileToWrite;
 use tensorzero_core::config::ConfigFileGlob;
 use toml_edit::DocumentMut;
 
-/// ConfigWriter handles applying edits to TensorZero config files.
-pub struct ConfigWriter {
+/// ConfigApplier handles applying edits to TensorZero config files.
+pub struct ConfigApplier {
     /// The base directory extracted from the glob pattern
     glob_base: PathBuf,
     /// The loaded config files with their parsed TOML documents
     files: Vec<LoadedConfigFile>,
 }
 
-impl ConfigWriter {
-    /// Create a new ConfigWriter by loading all config files matching the glob pattern.
-    pub async fn new(glob_pattern: &str) -> Result<Self, ConfigWriterError> {
+impl ConfigApplier {
+    /// Create a new ConfigApplier by loading all config files matching the glob pattern.
+    pub async fn new(glob_pattern: &str) -> Result<Self, ConfigApplierError> {
         let config_glob = ConfigFileGlob::new(glob_pattern.to_string()).map_err(|e| {
-            ConfigWriterError::InvalidGlob {
+            ConfigApplierError::InvalidGlob {
                 pattern: glob_pattern.to_string(),
                 message: e.to_string(),
             }
@@ -53,11 +53,11 @@ impl ConfigWriter {
         for path in &config_glob.paths {
             let content = tokio::fs::read_to_string(path)
                 .await
-                .map_err(|e| ConfigWriterError::io(path, e))?;
+                .map_err(|e| ConfigApplierError::io(path, e))?;
 
             let document: DocumentMut = content
                 .parse()
-                .map_err(|e: toml_edit::TomlError| ConfigWriterError::toml_parse(path, e))?;
+                .map_err(|e: toml_edit::TomlError| ConfigApplierError::toml_parse(path, e))?;
 
             files.push(LoadedConfigFile::new(path.clone(), document));
         }
@@ -70,7 +70,7 @@ impl ConfigWriter {
     pub async fn apply_edit(
         &mut self,
         edit: &EditPayload,
-    ) -> Result<Vec<PathBuf>, ConfigWriterError> {
+    ) -> Result<Vec<PathBuf>, ConfigApplierError> {
         let files_to_write = match edit {
             EditPayload::UpsertVariant(payload) => self.apply_upsert_variant(payload)?,
             EditPayload::UpsertExperimentation(payload) => {
@@ -87,12 +87,12 @@ impl ConfigWriter {
             if let Some(parent) = file_to_write.absolute_path.parent() {
                 tokio::fs::create_dir_all(parent)
                     .await
-                    .map_err(|e| ConfigWriterError::io(&file_to_write.absolute_path, e))?;
+                    .map_err(|e| ConfigApplierError::io(&file_to_write.absolute_path, e))?;
             }
 
             tokio::fs::write(&file_to_write.absolute_path, &file_to_write.content)
                 .await
-                .map_err(|e| ConfigWriterError::io(&file_to_write.absolute_path, e))?;
+                .map_err(|e| ConfigApplierError::io(&file_to_write.absolute_path, e))?;
 
             written_paths.push(file_to_write.absolute_path);
         }
@@ -103,7 +103,7 @@ impl ConfigWriter {
     fn apply_upsert_variant(
         &mut self,
         payload: &UpsertVariantPayload,
-    ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+    ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
         path_resolver::validate_path_component(&payload.function_name, "function_name")?;
         path_resolver::validate_path_component(&payload.variant_name, "variant_name")?;
 
@@ -152,7 +152,7 @@ impl ConfigWriter {
     fn apply_upsert_experimentation(
         &mut self,
         payload: &UpsertExperimentationPayload,
-    ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+    ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
         path_resolver::validate_path_component(&payload.function_name, "function_name")?;
 
         let location = locator::locate_function(&mut self.files, &payload.function_name)?;
@@ -179,7 +179,7 @@ impl ConfigWriter {
     fn apply_upsert_evaluation(
         &mut self,
         payload: &UpsertEvaluationPayload,
-    ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+    ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
         path_resolver::validate_path_component(&payload.evaluation_name, "evaluation_name")?;
 
         let (location, _is_new) =
@@ -222,7 +222,7 @@ impl ConfigWriter {
     fn apply_upsert_evaluator(
         &mut self,
         payload: &UpsertEvaluatorPayload,
-    ) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+    ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
         path_resolver::validate_path_component(&payload.evaluation_name, "evaluation_name")?;
         path_resolver::validate_path_component(&payload.evaluator_name, "evaluator_name")?;
 
@@ -339,7 +339,7 @@ type = "exact_match"
         setup_test_config(tmp.path());
 
         let glob = format!("{}/**/*.toml", tmp.path().display());
-        let writer = ConfigWriter::new(&glob)
+        let writer = ConfigApplier::new(&glob)
             .await
             .expect("failed to create writer");
 
@@ -351,10 +351,10 @@ type = "exact_match"
         let tmp = TempDir::new().expect("failed to create temp dir");
 
         let glob = format!("{}/**/*.toml", tmp.path().display());
-        let result = ConfigWriter::new(&glob).await;
+        let result = ConfigApplier::new(&glob).await;
 
         assert!(result.is_err());
-        if let Err(ConfigWriterError::InvalidGlob { pattern, .. }) = result {
+        if let Err(ConfigApplierError::InvalidGlob { pattern, .. }) = result {
             assert_eq!(pattern, glob);
         } else {
             panic!("expected InvalidGlob error");
@@ -367,7 +367,7 @@ type = "exact_match"
         setup_test_config(tmp.path());
 
         let glob = format!("{}/**/*.toml", tmp.path().display());
-        let mut writer = ConfigWriter::new(&glob)
+        let mut writer = ConfigApplier::new(&glob)
             .await
             .expect("failed to create writer");
 
@@ -386,7 +386,7 @@ type = "exact_match"
         setup_test_config_with_evaluation(tmp.path());
 
         let glob = format!("{}/**/*.toml", tmp.path().display());
-        let mut writer = ConfigWriter::new(&glob)
+        let mut writer = ConfigApplier::new(&glob)
             .await
             .expect("failed to create writer");
 
@@ -397,7 +397,7 @@ type = "exact_match"
         assert!(location.file.path.ends_with("tensorzero.toml"));
 
         // Test that a new evaluation returns is_new=true and uses the first file
-        let mut writer = ConfigWriter::new(&glob)
+        let mut writer = ConfigApplier::new(&glob)
             .await
             .expect("failed to create writer");
         let (location, is_new) = locator::locate_evaluation(&mut writer.files, "new_evaluation")
@@ -413,7 +413,7 @@ type = "exact_match"
 
         let config_path = tmp.path().join("tensorzero.toml");
         let glob = config_path.display().to_string();
-        let writer = ConfigWriter::new(&glob)
+        let writer = ConfigApplier::new(&glob)
             .await
             .expect("failed to create writer");
 
@@ -434,7 +434,7 @@ type = "exact_match"
         setup_test_config(tmp.path());
 
         let glob = format!("{}/tensorzero.toml", tmp.path().display());
-        let mut writer = ConfigWriter::new(&glob)
+        let mut writer = ConfigApplier::new(&glob)
             .await
             .expect("failed to create writer");
 
