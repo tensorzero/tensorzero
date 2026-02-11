@@ -66,15 +66,12 @@ services:
   ui:
     image: tensorzero/ui
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_API_KEY: $TENSORZERO_API_KEY
     ports:
       - "4000:4000"
     depends_on:
-      clickhouse:
-        condition: service_healthy
       gateway:
         condition: service_healthy
       postgres:
