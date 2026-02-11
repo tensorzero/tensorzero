@@ -225,7 +225,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
 
@@ -240,7 +240,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
 
@@ -350,7 +350,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
 
@@ -365,7 +365,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
 

@@ -710,7 +710,7 @@ async fn convert_content_block_to_bedrock(
                     Error::new(ErrorDetails::InferenceClient {
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!(
                             "Error parsing tool call arguments as JSON: {}",

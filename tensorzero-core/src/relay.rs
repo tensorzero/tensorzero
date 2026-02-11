@@ -141,7 +141,7 @@ impl TensorzeroRelay {
 
 /// Extracts raw_response entries from a downstream error response body.
 /// The downstream error body has the format: {"error": "...", "raw_response": [...]}
-fn extract_raw_responses_from_error(error: &TensorZeroError) -> Option<Vec<RawResponseEntry>> {
+fn extract_raw_response_from_error(error: &TensorZeroError) -> Option<Vec<RawResponseEntry>> {
     match error {
         TensorZeroError::Http {
             text: Some(body), ..
@@ -198,7 +198,7 @@ impl TensorzeroRelay {
             .http_embeddings(params, api_key)
             .await
             .map_err(|e| {
-                let relay_raw_responses = extract_raw_responses_from_error(&e);
+                let relay_raw_response = extract_raw_response_from_error(&e);
                 let status_code = extract_status_code_from_error(&e);
                 Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
@@ -207,7 +207,7 @@ impl TensorzeroRelay {
                     api_type: ApiType::Embeddings,
                     raw_request: None,
                     raw_response: None,
-                    relay_raw_responses,
+                    relay_raw_response,
                 })
             })?;
         match res.response {
@@ -256,7 +256,7 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                let relay_raw_responses = extract_raw_responses_from_error(&e);
+                let relay_raw_response = extract_raw_response_from_error(&e);
                 let status_code = extract_status_code_from_error(&e);
                 Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
@@ -265,7 +265,7 @@ impl TensorzeroRelay {
                     api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: None,
-                    relay_raw_responses,
+                    relay_raw_response,
                 })
             })?;
 
@@ -335,7 +335,7 @@ impl TensorzeroRelay {
             .http_inference(client_inference_params)
             .await
             .map_err(|e| {
-                let relay_raw_responses = extract_raw_responses_from_error(&e);
+                let relay_raw_response = extract_raw_response_from_error(&e);
                 let status_code = extract_status_code_from_error(&e);
                 Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
@@ -344,7 +344,7 @@ impl TensorzeroRelay {
                     api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: None,
-                    relay_raw_responses,
+                    relay_raw_response,
                 })
             })?;
 

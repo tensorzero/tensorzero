@@ -1370,7 +1370,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
-                    relay_raw_responses: None,
+                    relay_raw_response: None,
                 })
             })?;
 
@@ -1492,7 +1492,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
-                    relay_raw_responses: None,
+                    relay_raw_response: None,
                 })
             })?;
 
@@ -2175,7 +2175,7 @@ async fn convert_non_thought_content_block<'a>(
                     api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
-                    relay_raw_responses: None,
+                    relay_raw_response: None,
                 })
             })?;
 
@@ -2187,7 +2187,7 @@ async fn convert_non_thought_content_block<'a>(
                     api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
-                    relay_raw_responses: None,
+                    relay_raw_response: None,
                 }
                 .into());
             }
@@ -2213,7 +2213,7 @@ async fn convert_non_thought_content_block<'a>(
                     api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
-                    relay_raw_responses: None,
+                    relay_raw_response: None,
                 })
             })?;
 
@@ -2225,7 +2225,7 @@ async fn convert_non_thought_content_block<'a>(
                     api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
-                    relay_raw_responses: None,
+                    relay_raw_response: None,
                 }
                 .into());
             }
@@ -2424,7 +2424,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                         api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     })
                 })?;
 
@@ -2436,7 +2436,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                         api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     }
                     .into());
                 }
@@ -2465,7 +2465,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                         api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     })
                 })?;
 
@@ -2477,7 +2477,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                         api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     }
                     .into());
                 }
@@ -3216,7 +3216,7 @@ fn handle_gcp_vertex_gemini_error(
             status_code: Some(response_code),
             raw_request: Some(raw_request),
             raw_response: Some(response_body.clone()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
             provider_type: PROVIDER_TYPE.to_string(),
             api_type: ApiType::ChatCompletions,
         }),

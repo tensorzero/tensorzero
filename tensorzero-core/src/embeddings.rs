@@ -532,7 +532,7 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             finish_reason: None,
             raw_usage: response.raw_usage,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(), // embeddings don't track failed attempts
+            failed_raw_response: Vec::new(), // embeddings don't track failed attempts
         })
     }
 }

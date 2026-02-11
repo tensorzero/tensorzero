@@ -404,7 +404,7 @@ pub(super) fn handle_groq_error(
             message: response_body.to_string(),
             raw_request: None,
             raw_response: Some(response_body.to_string()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
             provider_type: provider_type.to_string(),
             api_type: ApiType::ChatCompletions,
         }

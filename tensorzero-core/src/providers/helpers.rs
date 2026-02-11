@@ -319,7 +319,7 @@ pub async fn inject_extra_request_data_and_send_with_headers(
                     api_type,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
-                    relay_raw_responses: None,
+                    relay_raw_response: None,
                 }),
                 None,
             )

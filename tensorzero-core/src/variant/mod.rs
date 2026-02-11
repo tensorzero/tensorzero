@@ -209,7 +209,7 @@ pub struct ModelUsedInfo {
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts before this successful one.
-    pub failed_raw_responses: Vec<RawResponseEntry>,
+    pub failed_raw_response: Vec<RawResponseEntry>,
     /// Passed-through raw response entries from downstream (for relay mode).
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
     /// Raw usage entries from the current model inference, used for `api_type` derivation
@@ -804,13 +804,13 @@ async fn infer_model_request(
         }
     };
 
-    // Collect raw_responses from failed retry attempts
+    // Collect raw_response from failed retry attempts
     if clients.include_raw_response {
         for error in &retry_result.failed_attempts {
-            let retry_failed_raw_responses = error.collect_raw_responses();
+            let retry_failed_raw_response = error.collect_raw_response();
             model_inference_response
-                .failed_raw_responses
-                .extend(retry_failed_raw_responses);
+                .failed_raw_response
+                .extend(retry_failed_raw_response);
         }
     }
 
@@ -862,7 +862,7 @@ async fn infer_model_request_stream<'request>(
                 model_provider_name,
                 cached,
                 model_inference_id,
-                mut failed_raw_responses,
+                mut failed_raw_response,
             },
         messages: input_messages,
     } = match retry_result.result {
@@ -882,11 +882,11 @@ async fn infer_model_request_stream<'request>(
         }
     };
 
-    // Collect raw_responses from failed retry attempts
+    // Collect raw_response from failed retry attempts
     if clients.include_raw_response {
         for error in &retry_result.failed_attempts {
-            let retry_failed_raw_responses = error.collect_raw_responses();
-            failed_raw_responses.extend(retry_failed_raw_responses);
+            let retry_failed_raw_response = error.collect_raw_response();
+            failed_raw_response.extend(retry_failed_raw_response);
         }
     }
 
@@ -902,7 +902,7 @@ async fn infer_model_request_stream<'request>(
         input_messages,
         cached,
         model_inference_id,
-        failed_raw_responses,
+        failed_raw_response,
         relay_raw_response: None,
         raw_usage: None,
     };
@@ -2200,13 +2200,13 @@ mod tests {
 
         // With include_raw_response=true and failed attempts, the error should be
         // ModelProvidersExhausted wrapping both the retry attempt and the final attempt
-        let raw_responses = err.collect_raw_responses();
+        let raw_response = err.collect_raw_response();
         assert!(
-            raw_responses.len() >= 2,
+            raw_response.len() >= 2,
             "Expected at least 2 raw response entries (retry attempt + final), got {}",
-            raw_responses.len()
+            raw_response.len()
         );
-        for entry in &raw_responses {
+        for entry in &raw_response {
             assert_eq!(
                 entry.data, "error raw response",
                 "Each failed attempt should include its raw response"

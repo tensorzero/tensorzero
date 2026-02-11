@@ -147,7 +147,7 @@ impl Optimizer for OpenAISFTConfig {
                 api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
 
@@ -162,7 +162,7 @@ impl Optimizer for OpenAISFTConfig {
                 api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
         let job: OpenAIFineTuningJob = serde_json::from_str(&raw_response).map_err(|e| {
@@ -226,7 +226,7 @@ impl JobHandle for OpenAISFTJobHandle {
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
         let raw_response = res.text().await.map_err(|e| {
@@ -240,7 +240,7 @@ impl JobHandle for OpenAISFTJobHandle {
                 api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
         let job: OpenAIFineTuningJob = serde_json::from_str(&raw_response).map_err(|e| {

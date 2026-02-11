@@ -1250,7 +1250,7 @@ fn handle_google_ai_studio_error(
             message: response_body.clone(),
             raw_request: None,
             raw_response: Some(response_body.clone()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
             provider_type: PROVIDER_TYPE.to_string(),
             api_type: ApiType::ChatCompletions,
         }

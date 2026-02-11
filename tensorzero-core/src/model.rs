@@ -170,7 +170,7 @@ pub struct StreamResponse {
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts before this successful one.
     /// Used when `include_raw_response` is true and some providers failed before success.
-    pub failed_raw_responses: Vec<RawResponseEntry>,
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 impl StreamResponse {
@@ -218,7 +218,7 @@ impl StreamResponse {
             model_provider_name,
             cached: true,
             model_inference_id,
-            failed_raw_responses: Vec::new(), // cache hits don't have failed attempts
+            failed_raw_response: Vec::new(), // cache hits don't have failed attempts
         }
     }
 }
@@ -450,7 +450,7 @@ impl ModelConfig {
                 model_provider_name: model_provider_request.provider_name.into(),
                 cached: false,
                 model_inference_id: model_provider_request.model_inference_id,
-                failed_raw_responses: Vec::new(), // populated by caller if needed
+                failed_raw_response: Vec::new(), // populated by caller if needed
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -475,16 +475,16 @@ impl ModelConfig {
                     .relay_non_streaming(model_name, request, clients)
                     .await
                     .map_err(|e| {
-                        // Collect raw_responses from the error for passthrough
-                        let relay_raw_responses = e.collect_raw_responses();
-                        let relay_raw_responses = if relay_raw_responses.is_empty() {
+                        // Collect raw_response from the error for passthrough
+                        let relay_raw_response = e.collect_raw_response();
+                        let relay_raw_response = if relay_raw_response.is_empty() {
                             None
                         } else {
-                            Some(relay_raw_responses)
+                            Some(relay_raw_response)
                         };
                         Error::new(ErrorDetails::Relay {
                             message: e.to_string(),
-                            relay_raw_responses,
+                            relay_raw_response,
                         })
                     })?;
                 return Ok(ModelInferenceResponse::new(
@@ -557,8 +557,8 @@ impl ModelConfig {
                         // Collect raw responses from failed providers before returning success
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                let failed_raw_responses = error.collect_raw_responses();
-                                response.failed_raw_responses.extend(failed_raw_responses);
+                                let failed_raw_response = error.collect_raw_response();
+                                response.failed_raw_response.extend(failed_raw_response);
                             }
                         }
 
@@ -616,16 +616,16 @@ impl ModelConfig {
                     .relay_streaming(model_name, request, clients)
                     .await
                     .map_err(|e| {
-                        // Collect raw_responses from the error for passthrough
-                        let relay_raw_responses = e.collect_raw_responses();
-                        let relay_raw_responses = if relay_raw_responses.is_empty() {
+                        // Collect raw_response from the error for passthrough
+                        let relay_raw_response = e.collect_raw_response();
+                        let relay_raw_response = if relay_raw_response.is_empty() {
                             None
                         } else {
-                            Some(relay_raw_responses)
+                            Some(relay_raw_response)
                         };
                         Error::new(ErrorDetails::Relay {
                             message: e.to_string(),
-                            relay_raw_responses,
+                            relay_raw_response,
                         })
                     })?;
                 return Ok(StreamResponseAndMessages {
@@ -635,7 +635,7 @@ impl ModelConfig {
                         model_provider_name: "tensorzero::relay".into(),
                         cached: false,
                         model_inference_id: Uuid::now_v7(),
-                        failed_raw_responses: Vec::new(), // relay doesn't track failed attempts
+                        failed_raw_response: Vec::new(), // relay doesn't track failed attempts
                     },
                     messages: request.messages.clone(),
                 });
@@ -678,11 +678,11 @@ impl ModelConfig {
                         // Collect raw responses from failed providers before returning success
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                let failed_raw_responses = error.collect_raw_responses();
+                                let failed_raw_response = error.collect_raw_response();
                                 response
                                     .response
-                                    .failed_raw_responses
-                                    .extend(failed_raw_responses);
+                                    .failed_raw_response
+                                    .extend(failed_raw_response);
                             }
                         }
                         return Ok(response);
@@ -2965,7 +2965,7 @@ mod tests {
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: Some("error raw response".to_string()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     }
                     .into()
                 )])
@@ -3276,7 +3276,7 @@ mod tests {
                     model_provider_name,
                     cached: _,
                     model_inference_id: _,
-                    failed_raw_responses: _,
+                    failed_raw_response: _,
                 },
             messages: _input,
         } = model_config
@@ -3353,7 +3353,7 @@ mod tests {
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: Some("error raw response".to_string()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     }
                     .into()
                 )])
@@ -3454,7 +3454,7 @@ mod tests {
                     model_provider_name,
                     cached: _,
                     model_inference_id: _,
-                    failed_raw_responses: _,
+                    failed_raw_response: _,
                 },
             messages: _,
         } = model_config
@@ -3623,7 +3623,7 @@ mod tests {
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     }
                     .into()
                 )])

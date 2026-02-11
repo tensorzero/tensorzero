@@ -183,7 +183,7 @@ struct InferenceMetadata {
     pub include_raw_usage: bool,
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts before the successful one.
-    pub failed_raw_responses: Vec<RawResponseEntry>,
+    pub failed_raw_response: Vec<RawResponseEntry>,
     /// Passed-through raw response entries from downstream (for relay mode streaming).
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
     /// Raw usage entries from the current model inference, used for `api_type` derivation
@@ -255,10 +255,10 @@ pub async fn inference_handler(
         }
         Err(e) => {
             if include_raw_response {
-                let raw_responses = e.collect_raw_responses();
+                let raw_response = e.collect_raw_response();
                 ErrorWithRawResponse {
                     error: e,
-                    raw_responses,
+                    raw_response,
                 }
                 .into_response()
             } else {
@@ -609,16 +609,16 @@ pub async fn inference(
 
         match result {
             Ok(mut output) => {
-                // Inject raw_responses from failed variant attempts into the successful output
+                // Inject raw_response from failed variant attempts into the successful output
                 if params.include_raw_response && !variant_errors.is_empty() {
-                    let failed_raw_responses: Vec<RawResponseEntry> = variant_errors
+                    let failed_raw_response: Vec<RawResponseEntry> = variant_errors
                         .values()
-                        .flat_map(|e| e.collect_raw_responses())
+                        .flat_map(|e| e.collect_raw_response())
                         .collect();
-                    if !failed_raw_responses.is_empty() {
+                    if !failed_raw_response.is_empty() {
                         match &mut output {
                             InferenceOutput::NonStreaming(response) => {
-                                response.extend_raw_response(failed_raw_responses);
+                                response.extend_raw_response(failed_raw_response);
                             }
                             InferenceOutput::Streaming(existing_stream) => {
                                 let chunk = create_failed_variant_raw_response_chunk(
@@ -626,7 +626,7 @@ pub async fn inference(
                                     inference_id,
                                     episode_id,
                                     &variant_name,
-                                    failed_raw_responses,
+                                    failed_raw_response,
                                 );
                                 let original_stream =
                                     std::mem::replace(existing_stream, Box::pin(stream::empty()));
@@ -796,7 +796,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
             model_inference_id: model_used_info.model_inference_id,
-            failed_raw_responses: model_used_info.failed_raw_responses,
+            failed_raw_response: model_used_info.failed_raw_response,
             relay_raw_response: model_used_info.relay_raw_response,
             raw_usage: model_used_info.raw_usage,
         };
@@ -1035,7 +1035,7 @@ fn create_previous_raw_response_chunk(
     }
 
     // Start with failed raw responses (from failed provider attempts)
-    let mut entries: Vec<RawResponseEntry> = metadata.failed_raw_responses.clone();
+    let mut entries: Vec<RawResponseEntry> = metadata.failed_raw_response.clone();
 
     // Add raw response entries from previous model inferences (e.g. best-of-N candidates)
     entries.extend(
@@ -1045,7 +1045,7 @@ fn create_previous_raw_response_chunk(
             .flat_map(|r| {
                 // Always start with failed raw responses from the previous model inference
                 // (these are populated even for cache hits when earlier providers failed)
-                let mut result = r.failed_raw_responses.clone();
+                let mut result = r.failed_raw_response.clone();
                 // For non-cached results, also include the successful response
                 if !r.cached {
                     // If there are passed-through relay_raw_response (from relay), use them
@@ -1121,7 +1121,7 @@ fn create_failed_variant_raw_response_chunk(
     inference_id: Uuid,
     episode_id: Uuid,
     variant_name: &str,
-    raw_responses: Vec<RawResponseEntry>,
+    raw_response: Vec<RawResponseEntry>,
 ) -> InferenceResponseChunk {
     match function {
         FunctionConfig::Chat(_) => InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
@@ -1131,7 +1131,7 @@ fn create_failed_variant_raw_response_chunk(
             content: vec![],
             usage: None,
             raw_usage: None,
-            raw_response: Some(raw_responses),
+            raw_response: Some(raw_response),
             finish_reason: None,
             original_chunk: None,
             raw_chunk: None,
@@ -1143,7 +1143,7 @@ fn create_failed_variant_raw_response_chunk(
             raw: String::new(),
             usage: None,
             raw_usage: None,
-            raw_response: Some(raw_responses),
+            raw_response: Some(raw_response),
             finish_reason: None,
             original_chunk: None,
             raw_chunk: None,
@@ -1290,7 +1290,7 @@ fn create_stream(
                 include_raw_response: _,
                 include_raw_usage: _,
                 model_inference_id,
-                failed_raw_responses: _,
+                failed_raw_response: _,
                 relay_raw_response: _,
                 raw_usage: _,
             } = metadata;
@@ -1499,9 +1499,9 @@ fn prepare_serialized_events(
                     // NOTE - in the future, we may want to end the stream early if we get an error
                     let mut error_json = serde_json::json!({"error": e.to_string()});
                     if include_raw_response {
-                        let raw_responses = e.collect_raw_responses();
-                        if !raw_responses.is_empty() {
-                            error_json["raw_response"] = serde_json::to_value(&raw_responses)
+                        let raw_response = e.collect_raw_response();
+                        if !raw_response.is_empty() {
+                            error_json["raw_response"] = serde_json::to_value(&raw_response)
                                 .unwrap_or_else(|err| serde_json::json!(err.to_string()));
                         }
                     }
@@ -1661,7 +1661,7 @@ impl InferenceResponse {
                 .flat_map(|r| {
                     // Always start with failed raw responses from this model inference
                     // (these are populated even for cache hits when earlier providers failed)
-                    let mut result = r.failed_raw_responses.clone();
+                    let mut result = r.failed_raw_response.clone();
                     // For non-cached results, also include the successful response
                     if !r.cached {
                         // If there are passed-through relay_raw_response (from relay), use them
@@ -2298,7 +2298,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
             relay_raw_response: None,
             raw_usage: None,
         };
@@ -2368,7 +2368,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
             relay_raw_response: None,
             raw_usage: None,
         };
@@ -2765,7 +2765,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: true,
             model_inference_id: Uuid::now_v7(),
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
             relay_raw_response: None,
             raw_usage: None,
         }
@@ -3053,7 +3053,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(raw_usage_entries.clone()),
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let mut metadata = create_test_metadata();
@@ -3152,7 +3152,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(cached_raw_usage),
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let mut metadata = create_test_metadata();
@@ -3233,7 +3233,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(raw_usage_entries),
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let mut metadata = create_test_metadata();
@@ -3281,11 +3281,11 @@ mod tests {
         }
     }
 
-    /// Test that failed_raw_responses from cached inferences ARE preserved in raw_response
+    /// Test that failed_raw_response from cached inferences ARE preserved in raw_response
     /// This covers the case where provider A fails, provider B succeeds from cache,
     /// and we still want to return provider A's failed raw response.
     #[tokio::test]
-    async fn test_create_stream_preserves_failed_raw_responses_from_cached() {
+    async fn test_create_stream_preserves_failed_raw_response_from_cached() {
         // Create a failed raw response entry (from a provider that failed before the cache hit)
         let failed_raw_response = RawResponseEntry {
             model_inference_id: None, // Failed attempts don't have model_inference_id
@@ -3294,7 +3294,7 @@ mod tests {
             data: r#"{"error": "provider failed"}"#.to_string(),
         };
 
-        // Create a CACHED inference that has failed_raw_responses from earlier provider attempts
+        // Create a CACHED inference that has failed_raw_response from earlier provider attempts
         let cached_inference = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             output: vec![ContentBlockOutput::Text(Text {
@@ -3317,7 +3317,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_usage: None, // Cache hits don't have raw_usage
             relay_raw_response: None,
-            failed_raw_responses: vec![failed_raw_response], // But they DO have failed_raw_responses
+            failed_raw_response: vec![failed_raw_response], // But they DO have failed_raw_response
         };
 
         let mut metadata = create_test_metadata();
@@ -3372,7 +3372,7 @@ mod tests {
 
         assert!(
             found_failed_provider,
-            "failed_raw_responses from cached inference should be preserved"
+            "failed_raw_response from cached inference should be preserved"
         );
         assert!(
             !found_cached_provider,
@@ -3380,10 +3380,10 @@ mod tests {
         );
     }
 
-    /// Test that failed_raw_responses from cached inferences ARE preserved in raw_response
+    /// Test that failed_raw_response from cached inferences ARE preserved in raw_response
     /// (non-streaming path via InferenceResponse::new)
     #[tokio::test]
-    async fn test_non_streaming_preserves_failed_raw_responses_from_cached() {
+    async fn test_non_streaming_preserves_failed_raw_response_from_cached() {
         // Create a failed raw response entry (from a provider that failed before the cache hit)
         let failed_raw_response = RawResponseEntry {
             model_inference_id: None, // Failed attempts don't have model_inference_id
@@ -3392,7 +3392,7 @@ mod tests {
             data: r#"{"error": "provider failed"}"#.to_string(),
         };
 
-        // Create a CACHED model inference response with failed_raw_responses
+        // Create a CACHED model inference response with failed_raw_response
         let cached_model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             output: vec![ContentBlockOutput::Text(Text {
@@ -3415,7 +3415,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_usage: None, // Cache hits don't have raw_usage
             relay_raw_response: None,
-            failed_raw_responses: vec![failed_raw_response], // But they DO have failed_raw_responses
+            failed_raw_response: vec![failed_raw_response], // But they DO have failed_raw_response
         };
 
         // Create a ChatInferenceResult with the cached response
@@ -3467,7 +3467,7 @@ mod tests {
 
         assert!(
             found_failed_provider,
-            "failed_raw_responses from cached inference should be preserved (non-streaming path)"
+            "failed_raw_response from cached inference should be preserved (non-streaming path)"
         );
         assert!(
             !found_cached_provider,
@@ -3479,7 +3479,7 @@ mod tests {
     /// This verifies the error handling path in prepare_serialized_events where provider errors
     /// with raw_response data are properly collected and serialized into the SSE event.
     #[tokio::test]
-    async fn test_streaming_error_includes_raw_responses() {
+    async fn test_streaming_error_includes_raw_response() {
         use crate::error::{Error, ErrorDetails};
         use indexmap::IndexMap;
         use reqwest::StatusCode;
@@ -3492,7 +3492,7 @@ mod tests {
             api_type: ApiType::ChatCompletions,
             raw_request: Some(r#"{"prompt":"test"}"#.to_string()),
             raw_response: Some(r#"{"error": "rate_limit"}"#.to_string()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
         });
 
         let error2 = Error::new(ErrorDetails::InferenceClient {
@@ -3502,7 +3502,7 @@ mod tests {
             api_type: ApiType::ChatCompletions,
             raw_request: Some(r#"{"messages":[]}"#.to_string()),
             raw_response: Some(r#"{"type":"error"}"#.to_string()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
         });
 
         // 2. Aggregate into ModelProvidersExhausted
@@ -3511,16 +3511,16 @@ mod tests {
         provider_errors.insert("anthropic".to_string(), error2);
         let exhausted_error = Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors });
 
-        // 3. Verify collect_raw_responses extracts all provider errors
-        let raw_responses = exhausted_error.collect_raw_responses();
+        // 3. Verify collect_raw_response extracts all provider errors
+        let raw_response = exhausted_error.collect_raw_response();
         assert_eq!(
-            raw_responses.len(),
+            raw_response.len(),
             2,
             "Should collect raw_response from both failed providers"
         );
 
         // Verify provider types are correct
-        let provider_types: Vec<&str> = raw_responses
+        let provider_types: Vec<&str> = raw_response
             .iter()
             .map(|r| r.provider_type.as_str())
             .collect();
@@ -3534,7 +3534,7 @@ mod tests {
         );
 
         // Verify raw_response data is preserved
-        for entry in &raw_responses {
+        for entry in &raw_response {
             assert!(
                 entry.model_inference_id.is_none(),
                 "Failed attempts should not have model_inference_id"
@@ -3550,10 +3550,10 @@ mod tests {
         let include_raw_response = true;
         let mut error_json = serde_json::json!({"error": exhausted_error.to_string()});
         if include_raw_response {
-            let collected = exhausted_error.collect_raw_responses();
+            let collected = exhausted_error.collect_raw_response();
             if !collected.is_empty() {
                 error_json["raw_response"] =
-                    serde_json::to_value(&collected).expect("Should serialize raw_responses");
+                    serde_json::to_value(&collected).expect("Should serialize raw_response");
             }
         }
 
@@ -3564,15 +3564,15 @@ mod tests {
             "Should have raw_response field when include_raw_response=true"
         );
 
-        let serialized_raw_responses = error_json["raw_response"].as_array().unwrap();
+        let serialized_raw_response = error_json["raw_response"].as_array().unwrap();
         assert_eq!(
-            serialized_raw_responses.len(),
+            serialized_raw_response.len(),
             2,
             "Should have 2 raw_response entries"
         );
 
         // Verify the entries have the expected fields
-        for entry in serialized_raw_responses {
+        for entry in serialized_raw_response {
             assert!(
                 entry.get("provider_type").is_some(),
                 "Each entry should have provider_type"
@@ -3593,7 +3593,7 @@ mod tests {
         let mut error_json_no_raw = serde_json::json!({"error": exhausted_error.to_string()});
         let include_raw_response_false = false;
         if include_raw_response_false {
-            let collected = exhausted_error.collect_raw_responses();
+            let collected = exhausted_error.collect_raw_response();
             if !collected.is_empty() {
                 error_json_no_raw["raw_response"] =
                     serde_json::to_value(&collected).expect("Should serialize");

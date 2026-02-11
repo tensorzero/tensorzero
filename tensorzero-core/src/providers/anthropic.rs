@@ -721,7 +721,7 @@ impl<'a> AnthropicMessageContent<'a> {
                         api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     })
                 })?;
 
@@ -733,7 +733,7 @@ impl<'a> AnthropicMessageContent<'a> {
                         api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
-                        relay_raw_responses: None,
+                        relay_raw_response: None,
                     }));
                 }
 
@@ -1098,7 +1098,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
             api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
-            relay_raw_responses: None,
+            relay_raw_response: None,
         }))
     }
 }
@@ -1396,7 +1396,7 @@ pub(super) fn handle_anthropic_error(
             api_type: ApiType::ChatCompletions,
             raw_request: Some(raw_request),
             raw_response: Some(raw_response.clone()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
             message: raw_response,
         }
         .into()),
@@ -2430,7 +2430,7 @@ mod tests {
                 api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
-                relay_raw_responses: None,
+                relay_raw_response: None,
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
@@ -2450,7 +2450,7 @@ mod tests {
                 api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
-                relay_raw_responses: None,
+                relay_raw_response: None,
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
@@ -2470,7 +2470,7 @@ mod tests {
                 api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
-                relay_raw_responses: None,
+                relay_raw_response: None,
             }
         );
         let response_code = StatusCode::NOT_FOUND;

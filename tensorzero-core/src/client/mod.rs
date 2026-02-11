@@ -1262,9 +1262,9 @@ pub async fn get_config_no_verify_credentials(
 pub fn err_to_http(e: Error, include_raw_response: bool) -> TensorZeroError {
     let mut body = e.build_response_body(false);
     if include_raw_response {
-        let raw_responses = e.collect_raw_responses();
-        if !raw_responses.is_empty() {
-            body["raw_response"] = serde_json::to_value(&raw_responses)
+        let raw_response = e.collect_raw_response();
+        if !raw_response.is_empty() {
+            body["raw_response"] = serde_json::to_value(&raw_response)
                 .unwrap_or_else(|e| serde_json::json!(e.to_string()));
         }
     }

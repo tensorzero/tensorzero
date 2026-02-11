@@ -744,7 +744,7 @@ impl InferenceProvider for OpenAIProvider {
                     api_type: ApiType::ChatCompletions,
                     raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                     raw_response: None,
-                    relay_raw_responses: None,
+                    relay_raw_response: None,
                 })
             })?;
         let text = res.text().await.map_err(|e| {
@@ -846,7 +846,7 @@ impl InferenceProvider for OpenAIProvider {
                 api_type: ApiType::ChatCompletions,
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
-                relay_raw_responses: None,
+                relay_raw_response: None,
             })
         })?;
         let text = res.text().await.map_err(|e| {
@@ -1301,7 +1301,7 @@ pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
             message,
             raw_request,
             raw_response,
-            relay_raw_responses,
+            relay_raw_response,
             provider_type,
             api_type,
         } => Error::new(ErrorDetails::InferenceClient {
@@ -1309,7 +1309,7 @@ pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
             message: format!("{message} [request_id: {request_id}]"),
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
-            relay_raw_responses: relay_raw_responses.clone(),
+            relay_raw_response: relay_raw_response.clone(),
             provider_type: provider_type.clone(),
             api_type: *api_type,
         }),
@@ -1351,7 +1351,7 @@ pub(super) fn handle_openai_error(
             message,
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
             provider_type: provider_type.to_string(),
             api_type,
         }
@@ -1430,7 +1430,7 @@ where
             api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
-            relay_raw_responses: None,
+            relay_raw_response: None,
         })
     })?;
     let text = res.text().await.map_err(|e| {
@@ -5705,7 +5705,7 @@ mod tests {
             api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
         });
         let error_with_id = with_request_id(error, Some("req_456"));
         if let ErrorDetails::InferenceClient { message, .. } = error_with_id.get_details() {

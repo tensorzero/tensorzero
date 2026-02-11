@@ -161,7 +161,7 @@ impl Variant for MixtureOfNConfig {
         _inference_params: InferenceParams,
     ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
         async move {
-            let (candidate_inference_results, failed_candidate_raw_responses) = self
+            let (candidate_inference_results, failed_candidate_raw_response) = self
                 .infer_candidates(
                     &input,
                     &models,
@@ -178,7 +178,7 @@ impl Variant for MixtureOfNConfig {
                 Arc::clone(&inference_config),
                 clients,
                 candidate_inference_results,
-                failed_candidate_raw_responses,
+                failed_candidate_raw_response,
                 false,
             )
             .await?
@@ -203,7 +203,7 @@ impl Variant for MixtureOfNConfig {
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // We infer the candidates in non-streaming mode, since we need to pass the full candidate results to the fuser
-        let (candidate_inference_results, failed_candidate_raw_responses) = self
+        let (candidate_inference_results, failed_candidate_raw_response) = self
             .infer_candidates(
                 &input,
                 &models,
@@ -221,7 +221,7 @@ impl Variant for MixtureOfNConfig {
                 Arc::clone(&inference_config),
                 clients,
                 candidate_inference_results,
-                failed_candidate_raw_responses,
+                failed_candidate_raw_response,
                 true,
             )
             .await?
@@ -377,7 +377,7 @@ pub fn stream_inference_from_non_stream(
         },
         cached: model_inference_result.cached,
         model_inference_id: model_inference_result.id,
-        failed_raw_responses: model_inference_result.failed_raw_responses.clone(),
+        failed_raw_response: model_inference_result.failed_raw_response.clone(),
         relay_raw_response: model_inference_result.relay_raw_response.clone(),
         raw_usage: raw_usage_entries.clone(),
     };
@@ -481,7 +481,7 @@ impl fmt::Debug for InferenceOrStreamResult {
 }
 impl MixtureOfNConfig {
     /// Infer each candidate variant concurrently and return the results.
-    /// Returns a tuple of (successful_results, failed_candidate_raw_responses).
+    /// Returns a tuple of (successful_results, failed_candidate_raw_response).
     async fn infer_candidates(
         &self,
         input: &LazyResolvedInput,
@@ -556,20 +556,20 @@ impl MixtureOfNConfig {
         )
         .await;
 
-        // Collect the successful results and failed candidate raw_responses
+        // Collect the successful results and failed candidate raw_response
         let mut successful_results = Vec::new();
-        let mut failed_candidate_raw_responses = Vec::new();
+        let mut failed_candidate_raw_response = Vec::new();
         for (_candidate_name, result) in inference_results {
             match result {
                 Ok(res) => successful_results.push(res),
                 Err(e) => {
                     // Extract raw_response from failed candidate
-                    failed_candidate_raw_responses.extend(e.collect_raw_responses());
+                    failed_candidate_raw_response.extend(e.collect_raw_response());
                 }
             }
         }
 
-        Ok((successful_results, failed_candidate_raw_responses))
+        Ok((successful_results, failed_candidate_raw_response))
     }
 
     /// Fuses the candidates using the fuser config.
@@ -584,7 +584,7 @@ impl MixtureOfNConfig {
         inference_config: Arc<InferenceConfig>,
         clients: InferenceClients,
         mut candidates: Vec<InferenceResult>,
-        failed_candidate_raw_responses: Vec<RawResponseEntry>,
+        failed_candidate_raw_response: Vec<RawResponseEntry>,
         stream: bool,
     ) -> Result<InferenceOrStreamResult, Error> {
         if candidates.is_empty() {
@@ -597,13 +597,13 @@ impl MixtureOfNConfig {
             let mut result = candidates.pop().ok_or_else(|| Error::new(ErrorDetails::Inference {
                 message: "Expected one candidate but found none. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             }))?;
-            // Add failed candidate raw_responses even when only 1 candidate succeeds
-            if !failed_candidate_raw_responses.is_empty()
+            // Add failed candidate raw_response even when only 1 candidate succeeds
+            if !failed_candidate_raw_response.is_empty()
                 && let Some(first_result) = result.mut_model_inference_results().first_mut()
             {
                 first_result
-                    .failed_raw_responses
-                    .extend(failed_candidate_raw_responses);
+                    .failed_raw_response
+                    .extend(failed_candidate_raw_response);
             }
             return Ok(InferenceOrStreamResult::NonStream(result));
         }
@@ -660,14 +660,14 @@ impl MixtureOfNConfig {
                         .mut_model_inference_results()
                         .extend(candidate.owned_model_inference_results());
                 }
-                // Add failed candidate raw_responses to the first model inference result
-                if !failed_candidate_raw_responses.is_empty()
+                // Add failed candidate raw_response to the first model inference result
+                if !failed_candidate_raw_response.is_empty()
                     && let Some(first_result) =
                         inference_result.mut_model_inference_results().first_mut()
                 {
                     first_result
-                        .failed_raw_responses
-                        .extend(failed_candidate_raw_responses);
+                        .failed_raw_response
+                        .extend(failed_candidate_raw_response);
                 }
             }
             InferenceOrStreamResult::Stream(_stream, model_used_info) => {
@@ -676,10 +676,10 @@ impl MixtureOfNConfig {
                         .previous_model_inference_results
                         .extend(candidate.owned_model_inference_results());
                 }
-                // Add failed candidate raw_responses to the model_used_info
+                // Add failed candidate raw_response to the model_used_info
                 model_used_info
-                    .failed_raw_responses
-                    .extend(failed_candidate_raw_responses);
+                    .failed_raw_response
+                    .extend(failed_candidate_raw_response);
             }
         }
 
@@ -1219,7 +1219,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1255,7 +1255,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1310,7 +1310,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1349,7 +1349,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1429,7 +1429,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1465,7 +1465,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(

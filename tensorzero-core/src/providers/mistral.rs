@@ -349,7 +349,7 @@ fn handle_mistral_error(
             api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
-            relay_raw_responses: None,
+            relay_raw_response: None,
         }
         .into()),
         _ => Err(ErrorDetails::InferenceServer {

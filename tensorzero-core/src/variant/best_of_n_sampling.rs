@@ -185,7 +185,7 @@ impl Variant for BestOfNSamplingConfig {
         _inference_params: InferenceParams,
     ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
         async move {
-            let (candidate_inference_results, failed_candidate_raw_responses) = self
+            let (candidate_inference_results, failed_candidate_raw_response) = self
                 .infer_candidates(
                     &input,
                     &models,
@@ -200,7 +200,7 @@ impl Variant for BestOfNSamplingConfig {
                 &inference_config,
                 &clients,
                 candidate_inference_results,
-                failed_candidate_raw_responses,
+                failed_candidate_raw_response,
             )
             .await
         }
@@ -215,7 +215,7 @@ impl Variant for BestOfNSamplingConfig {
         clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        let (candidate_inference_results, failed_candidate_raw_responses) = self
+        let (candidate_inference_results, failed_candidate_raw_response) = self
             .infer_candidates(
                 &input,
                 &models,
@@ -231,7 +231,7 @@ impl Variant for BestOfNSamplingConfig {
                 &inference_config,
                 &clients,
                 candidate_inference_results,
-                failed_candidate_raw_responses,
+                failed_candidate_raw_response,
             )
             .await?;
 
@@ -322,7 +322,7 @@ impl Variant for BestOfNSamplingConfig {
 
 impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
-    /// Returns a tuple of (successful_results, failed_candidate_raw_responses).
+    /// Returns a tuple of (successful_results, failed_candidate_raw_response).
     async fn infer_candidates(
         &self,
         input: &LazyResolvedInput,
@@ -397,20 +397,20 @@ impl BestOfNSamplingConfig {
         )
         .await;
 
-        // Collect the successful results and failed candidate raw_responses
+        // Collect the successful results and failed candidate raw_response
         let mut successful_results = Vec::new();
-        let mut failed_candidate_raw_responses = Vec::new();
+        let mut failed_candidate_raw_response = Vec::new();
         for (_candidate_name, result) in inference_results {
             match result {
                 Ok(res) => successful_results.push(res),
                 Err(e) => {
                     // Extract raw_response from failed candidate
-                    failed_candidate_raw_responses.extend(e.collect_raw_responses());
+                    failed_candidate_raw_response.extend(e.collect_raw_response());
                 }
             }
         }
 
-        Ok((successful_results, failed_candidate_raw_responses))
+        Ok((successful_results, failed_candidate_raw_response))
     }
 
     /// Gets the best candidate using the evaluator config.
@@ -423,7 +423,7 @@ impl BestOfNSamplingConfig {
         inference_config: &InferenceConfig,
         clients: &InferenceClients,
         candidates: Vec<InferenceResult>,
-        failed_candidate_raw_responses: Vec<RawResponseEntry>,
+        failed_candidate_raw_response: Vec<RawResponseEntry>,
     ) -> Result<InferenceResult, Error> {
         if candidates.is_empty() {
             return Err(ErrorDetails::Inference {
@@ -438,13 +438,13 @@ impl BestOfNSamplingConfig {
                     message: "Expected one candidate but found none".to_string(),
                 })
             })?;
-            // Add failed candidate raw_responses even when only 1 candidate succeeds
-            if !failed_candidate_raw_responses.is_empty()
+            // Add failed candidate raw_response even when only 1 candidate succeeds
+            if !failed_candidate_raw_response.is_empty()
                 && let Some(first_result) = result.mut_model_inference_results().first_mut()
             {
                 first_result
-                    .failed_raw_responses
-                    .extend(failed_candidate_raw_responses);
+                    .failed_raw_response
+                    .extend(failed_candidate_raw_response);
             }
             return Ok(result);
         }
@@ -496,13 +496,13 @@ impl BestOfNSamplingConfig {
                 .push(inference_result);
         }
 
-        // Add failed candidate raw_responses to the first model inference result
-        if !failed_candidate_raw_responses.is_empty()
+        // Add failed candidate raw_response to the first model inference result
+        if !failed_candidate_raw_response.is_empty()
             && let Some(first_result) = selected_candidate.mut_model_inference_results().first_mut()
         {
             first_result
-                .failed_raw_responses
-                .extend(failed_candidate_raw_responses);
+                .failed_raw_response
+                .extend(failed_candidate_raw_response);
         }
 
         Ok(selected_candidate)
@@ -571,12 +571,12 @@ async fn inner_select_best_candidate<'a>(
         .await;
     let mut model_inference_response = retry_result.result?;
 
-    // Collect raw_responses from failed retry attempts
+    // Collect raw_response from failed retry attempts
     if clients.include_raw_response {
         for error in &retry_result.failed_attempts {
             model_inference_response
-                .failed_raw_responses
-                .extend(error.collect_raw_responses());
+                .failed_raw_response
+                .extend(error.collect_raw_response());
         }
     }
 
@@ -1127,7 +1127,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1166,7 +1166,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1224,7 +1224,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1266,7 +1266,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1340,7 +1340,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1379,7 +1379,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
-            failed_raw_responses: Vec::new(),
+            failed_raw_response: Vec::new(),
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(

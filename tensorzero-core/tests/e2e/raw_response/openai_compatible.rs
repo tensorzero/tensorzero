@@ -340,10 +340,10 @@ async fn test_openai_compatible_raw_response_error_non_streaming() {
 
     let body: Value = response.json().await.unwrap();
 
-    // Should have raw_response in error response
-    let raw_response = body
-        .get("raw_response")
-        .expect("Error should include raw_response when tensorzero::include_raw_response=true");
+    // Should have tensorzero_raw_response in error response
+    let raw_response = body.get("tensorzero_raw_response").expect(
+        "Error should include tensorzero_raw_response when tensorzero::include_raw_response=true",
+    );
     assert!(raw_response.is_array(), "raw_response should be an array");
 
     let entries = raw_response.as_array().unwrap();
@@ -406,10 +406,10 @@ async fn test_openai_compatible_raw_response_error_streaming() {
 
     let body: Value = response.json().await.unwrap();
 
-    // raw_response should be included in the error
+    // tensorzero_raw_response should be included in the error
     let raw_response = body
-        .get("raw_response")
-        .expect("Streaming error should include raw_response");
+        .get("tensorzero_raw_response")
+        .expect("Streaming error should include tensorzero_raw_response");
     assert!(raw_response.is_array(), "raw_response should be an array");
 
     let entries = raw_response.as_array().unwrap();
@@ -437,10 +437,9 @@ async fn test_openai_compatible_raw_response_mid_stream_error() {
 
     // Use fatal_stream_error_with_raw_response model - produces a fatal error mid-stream
     let payload = json!({
-        "model": "tensorzero::function_name::basic_test",
+        "model": "tensorzero::model_name::dummy::fatal_stream_error_with_raw_response",
         "messages": [{"role": "user", "content": "Hello"}],
         "stream": true,
-        "tensorzero::variant_name": "fatal_stream_error_with_raw_response",
         "tensorzero::episode_id": episode_id.to_string(),
         "tensorzero::include_raw_response": true
     });
@@ -475,7 +474,7 @@ async fn test_openai_compatible_raw_response_mid_stream_error() {
             );
 
             // Check for raw_response in the error event
-            if let Some(raw_response) = chunk_json.get("raw_response") {
+            if let Some(raw_response) = chunk_json.get("tensorzero_raw_response") {
                 found_error_with_raw_response = true;
                 assert!(raw_response.is_array(), "raw_response should be an array");
                 let entries = raw_response.as_array().unwrap();

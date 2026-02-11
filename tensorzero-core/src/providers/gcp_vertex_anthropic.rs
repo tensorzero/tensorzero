@@ -635,7 +635,7 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
             api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
-            relay_raw_responses: None,
+            relay_raw_response: None,
         }))
     }
 }

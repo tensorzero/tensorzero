@@ -972,7 +972,7 @@ pub async fn write_completed_batch_inference<'a>(
             finish_reason,
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             relay_raw_response: None, // batch inference does not support include_raw_response (#5710)
-            failed_raw_responses: Vec::new(), // batch inference does not track failed attempts
+            failed_raw_response: Vec::new(), // batch inference does not track failed attempts
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {

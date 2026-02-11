@@ -136,10 +136,10 @@ pub async fn chat_completions_handler(
         Err(e) => {
             // For inference errors, include raw_response if requested
             if include_raw_response {
-                let raw_responses = e.collect_raw_responses();
+                let raw_response = e.collect_raw_response();
                 return Ok(super::OpenAICompatibleErrorWithRawResponse {
                     error: e,
-                    raw_responses,
+                    raw_response,
                 }
                 .into_response());
             }

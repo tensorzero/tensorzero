@@ -664,7 +664,7 @@ pub(super) fn handle_tgi_error(response_code: StatusCode, response_body: &str) -
             api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
-            relay_raw_responses: None,
+            relay_raw_response: None,
         }
         .into(),
         _ => ErrorDetails::InferenceServer {

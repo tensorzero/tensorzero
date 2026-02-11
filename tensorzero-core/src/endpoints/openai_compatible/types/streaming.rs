@@ -331,16 +331,16 @@ pub fn prepare_serialized_openai_compatible_events(
             let chunk = match chunk {
                 Ok(c) => c,
                 Err(e) => {
-                    // Emit error event with raw_response data (mirroring the native endpoint pattern)
+                    // Emit error event with tensorzero_raw_response data (mirroring the native endpoint pattern)
                     let mut error_data = serde_json::json!({
                         "error": {
                             "message": e.to_string(),
                         }
                     });
                     if include_raw_response {
-                        let raw_responses = e.collect_raw_responses();
-                        if !raw_responses.is_empty() {
-                            error_data["raw_response"] = serde_json::to_value(&raw_responses)
+                        let raw_response = e.collect_raw_response();
+                        if !raw_response.is_empty() {
+                            error_data["tensorzero_raw_response"] = serde_json::to_value(&raw_response)
                                 .unwrap_or_else(|err| serde_json::json!(err.to_string()));
                         }
                     }

@@ -45,19 +45,19 @@ impl IntoResponse for OpenAICompatibleError {
 
 /// An OpenAI-compatible error with raw response data.
 ///
-/// This is used to provide `raw_response` in error responses when requested via
+/// This is used to provide `tensorzero_raw_response` in error responses when requested via
 /// the `tensorzero::include_raw_response` parameter. It wraps an error and includes
 /// raw response entries collected from provider errors.
 pub struct OpenAICompatibleErrorWithRawResponse {
     pub error: Error,
-    pub raw_responses: Vec<crate::inference::types::usage::RawResponseEntry>,
+    pub raw_response: Vec<crate::inference::types::usage::RawResponseEntry>,
 }
 
 impl IntoResponse for OpenAICompatibleErrorWithRawResponse {
     fn into_response(self) -> Response {
         let mut body = self.error.build_response_body(true);
-        if !self.raw_responses.is_empty() {
-            body["raw_response"] = serde_json::to_value(&self.raw_responses)
+        if !self.raw_response.is_empty() {
+            body["tensorzero_raw_response"] = serde_json::to_value(&self.raw_response)
                 .unwrap_or_else(|e| serde_json::json!(e.to_string()));
         }
         let status_code = self.error.status_code();

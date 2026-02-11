@@ -178,33 +178,33 @@ impl Error {
     /// `ModelProvidersExhausted`).
     ///
     /// Returns an empty Vec if no raw responses are found (e.g., for non-provider errors).
-    pub fn collect_raw_responses(&self) -> Vec<RawResponseEntry> {
+    pub fn collect_raw_response(&self) -> Vec<RawResponseEntry> {
         let mut entries = Vec::new();
-        self.collect_raw_responses_recursive(&mut entries);
+        self.collect_raw_response_recursive(&mut entries);
         entries
     }
 
-    fn collect_raw_responses_recursive(&self, entries: &mut Vec<RawResponseEntry>) {
+    fn collect_raw_response_recursive(&self, entries: &mut Vec<RawResponseEntry>) {
         match self.get_details() {
             ErrorDetails::AllVariantsFailed { errors } => {
                 for error in errors.values() {
-                    error.collect_raw_responses_recursive(entries);
+                    error.collect_raw_response_recursive(entries);
                 }
             }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 for error in provider_errors.values() {
-                    error.collect_raw_responses_recursive(entries);
+                    error.collect_raw_response_recursive(entries);
                 }
             }
             ErrorDetails::InferenceClient {
                 raw_response,
                 provider_type,
                 api_type,
-                relay_raw_responses,
+                relay_raw_response,
                 ..
             } => {
                 // Include relay passthrough entries first
-                if let Some(relay_entries) = relay_raw_responses {
+                if let Some(relay_entries) = relay_raw_response {
                     entries.extend(relay_entries.iter().cloned());
                 }
                 // Then include the direct raw_response if present
@@ -244,7 +244,7 @@ impl Error {
                 });
             }
             ErrorDetails::Relay {
-                relay_raw_responses: Some(relay_entries),
+                relay_raw_response: Some(relay_entries),
                 ..
             } => {
                 entries.extend(relay_entries.iter().cloned());
@@ -434,7 +434,7 @@ pub enum ErrorDetails {
         raw_response: Option<String>,
         /// Raw response entries from downstream relay errors (for passthrough)
         #[serde(skip)]
-        relay_raw_responses: Option<Vec<RawResponseEntry>>,
+        relay_raw_response: Option<Vec<RawResponseEntry>>,
     },
     InferenceNotFound {
         inference_id: Uuid,
@@ -660,7 +660,7 @@ pub enum ErrorDetails {
         message: String,
         /// Raw response entries from downstream relay errors (for passthrough)
         #[serde(skip)]
-        relay_raw_responses: Option<Vec<RawResponseEntry>>,
+        relay_raw_response: Option<Vec<RawResponseEntry>>,
     },
     RateLimitMissingMaxTokens,
     Serialization {
@@ -1819,15 +1819,15 @@ impl IntoResponse for Error {
 /// entries collected from provider errors.
 pub struct ErrorWithRawResponse {
     pub error: Error,
-    pub raw_responses: Vec<RawResponseEntry>,
+    pub raw_response: Vec<RawResponseEntry>,
 }
 
 impl IntoResponse for ErrorWithRawResponse {
     fn into_response(self) -> Response {
         let mut body = self.error.build_response_body(false);
-        if !self.raw_responses.is_empty() {
+        if !self.raw_response.is_empty() {
             body["raw_response"] =
-                serde_json::to_value(&self.raw_responses).unwrap_or_else(|e| json!(e.to_string()));
+                serde_json::to_value(&self.raw_response).unwrap_or_else(|e| json!(e.to_string()));
         }
         let status_code = self.error.status_code();
         let mut response = (status_code, Json(body)).into_response();
@@ -1954,7 +1954,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_collect_raw_responses_from_inference_errors() {
+    fn test_collect_raw_response_from_inference_errors() {
         // Test that InferenceClient errors collect raw responses with correct api_type
         let error = Error::new(ErrorDetails::InferenceClient {
             message: "test error".to_string(),
@@ -1963,10 +1963,10 @@ mod tests {
             api_type: ApiType::Responses,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
         });
 
-        let entries = error.collect_raw_responses();
+        let entries = error.collect_raw_response();
 
         assert_eq!(entries.len(), 1, "should collect one entry");
         assert_eq!(
@@ -1985,7 +1985,7 @@ mod tests {
             raw_response: Some("response".to_string()),
         });
 
-        let entries = error.collect_raw_responses();
+        let entries = error.collect_raw_response();
 
         assert_eq!(entries.len(), 1, "should collect one entry");
         assert_eq!(

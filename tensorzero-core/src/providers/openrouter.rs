@@ -591,7 +591,7 @@ pub(super) fn handle_openrouter_error(
             message: response_body.to_string(),
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
-            relay_raw_responses: None,
+            relay_raw_response: None,
             provider_type: provider_type.to_string(),
             api_type: ApiType::ChatCompletions,
         }
