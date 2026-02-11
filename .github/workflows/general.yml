@@ -1266,7 +1266,7 @@ jobs:
 
   build-fixtures-container:
     uses: ./.github/workflows/build-fixtures-container.yml
-    if: !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
+    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
     permissions:
       # Permission to checkout the repository
       contents: read
