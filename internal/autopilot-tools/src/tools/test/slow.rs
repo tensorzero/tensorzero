@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::time::Instant;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
 use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,7 @@ pub struct SlowToolOutput {
 pub struct SlowTool;
 
 impl ToolMetadata for SlowTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = SlowToolOutput;
     type LlmParams = SlowToolParams;
 
