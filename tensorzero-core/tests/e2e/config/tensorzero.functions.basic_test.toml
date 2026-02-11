@@ -592,7 +592,7 @@ max_tokens = 100
 
 [functions.basic_test.variants.together-tool]
 type = "chat_completion"
-model = "llama3.1-405b-instruct-turbo-together"
+model = "llama4-maverick-instruct-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -675,7 +675,7 @@ max_tokens = 100
 
 [functions.basic_test.variants.xai-reasoning]
 type = "chat_completion"
-model = "grok-3-mini"
+model = "grok-code-fast-1"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
@@ -868,7 +868,7 @@ max_tokens = 2048
 # Grok 3 Mini with effort-based reasoning
 [functions.basic_test.variants.openrouter-grok-reasoning]
 type = "chat_completion"
-model = "grok-3-mini-openrouter"
+model = "grok-code-fast-1-openrouter"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 reasoning_effort = "low"

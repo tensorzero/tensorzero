@@ -1,22 +1,22 @@
-use crate::{db::EpisodeByIdRow, serde_util::deserialize_u64};
+use async_trait::async_trait;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{
-    db::{SelectQueries, TableBoundsWithCount},
-    error::{Error, ErrorDetails},
-};
+use crate::db::{EpisodeByIdRow, EpisodeQueries, TableBoundsWithCount};
+use crate::error::{Error, ErrorDetails};
+use crate::serde_util::deserialize_u64;
 
 use super::ClickHouseConnectionInfo;
 
-impl SelectQueries for ClickHouseConnectionInfo {
+#[async_trait]
+impl EpisodeQueries for ClickHouseConnectionInfo {
     async fn query_episode_table(
         &self,
         limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
     ) -> Result<Vec<EpisodeByIdRow>, Error> {
-        let (where_clause, params, is_after) = match (before, after) {
+        let (where_clause, params, should_reverse_results) = match (before, after) {
             (Some(_before), Some(_after)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Cannot specify both before and after in query_episode_table"
@@ -44,7 +44,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // Finally, we order by episode_id_uint correctly and limit the result to limit
         let limit_overestimate = 5 * limit;
 
-        let query = if is_after {
+        let query = if should_reverse_results {
             format!(
                 r"WITH potentially_duplicated_episode_ids AS (
                     SELECT episode_id_uint

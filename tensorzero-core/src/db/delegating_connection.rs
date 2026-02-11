@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::config::snapshot::SnapshotHash;
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
@@ -41,7 +41,14 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRow,
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint};
+use crate::db::{
+    ConfigQueries, DeploymentIdQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries,
+    HowdyTokenUsage,
+};
+use crate::db::{
+    EpisodeByIdRow, EpisodeQueries, ModelLatencyDatapoint, ModelUsageTimePoint,
+    TableBoundsWithCount,
+};
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
@@ -75,12 +82,16 @@ pub struct DelegatingDatabaseConnection {
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
 pub trait DelegatingDatabaseQueries:
-    FeedbackQueries
+    ConfigQueries
+    + DeploymentIdQueries
+    + HowdyQueries
+    + FeedbackQueries
     + InferenceQueries
     + DatasetQueries
     + BatchInferenceQueries
     + ModelInferenceQueries
     + WorkflowEvaluationQueries
+    + EpisodeQueries
 {
 }
 impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
@@ -100,6 +111,52 @@ impl DelegatingDatabaseConnection {
         } else {
             &self.clickhouse
         }
+    }
+}
+
+#[async_trait]
+impl ConfigQueries for DelegatingDatabaseConnection {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        self.get_read_database()
+            .get_config_snapshot(snapshot_hash)
+            .await
+    }
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        self.clickhouse.write_config_snapshot(snapshot).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.write_config_snapshot(snapshot).await
+        {
+            tracing::error!("Error writing config snapshot to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl DeploymentIdQueries for DelegatingDatabaseConnection {
+    async fn get_deployment_id(&self) -> Result<String, Error> {
+        self.get_read_database().get_deployment_id().await
+    }
+}
+
+#[async_trait]
+impl HowdyQueries for DelegatingDatabaseConnection {
+    async fn count_inferences_for_howdy(&self) -> Result<HowdyInferenceCounts, Error> {
+        self.get_read_database().count_inferences_for_howdy().await
+    }
+
+    async fn count_feedbacks_for_howdy(&self) -> Result<HowdyFeedbackCounts, Error> {
+        self.get_read_database().count_feedbacks_for_howdy().await
+    }
+
+    async fn get_token_totals_for_howdy(&self) -> Result<HowdyTokenUsage, Error> {
+        self.get_read_database().get_token_totals_for_howdy().await
     }
 }
 
@@ -860,6 +917,24 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl EpisodeQueries for DelegatingDatabaseConnection {
+    async fn query_episode_table(
+        &self,
+        limit: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error> {
+        self.get_read_database()
+            .query_episode_table(limit, before, after)
+            .await
+    }
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
+        self.get_read_database().query_episode_table_bounds().await
     }
 }
 

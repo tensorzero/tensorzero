@@ -109,7 +109,7 @@ async fn get_providers() -> E2ETestProviders {
     let reasoning_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "xai-reasoning".to_string(),
-        model_name: "grok-3-mini".into(),
+        model_name: "grok-code-fast-1".into(),
         model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
@@ -118,7 +118,7 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "xai-reasoning".to_string(),
-            model_name: "grok-3-mini".into(),
+            model_name: "grok-code-fast-1".into(),
             model_provider_name: "xai".into(),
             credentials: HashMap::new(),
         },

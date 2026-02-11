@@ -9,7 +9,6 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, TaskTool};
-use serde::Serialize;
 
 use autopilot_client::AutopilotSideInfo;
 
@@ -25,7 +24,6 @@ use autopilot_client::AutopilotSideInfo;
 /// helpers on `ToolExecutor` instead.
 ///
 /// The bounds on `SideInfo` are required for:
-/// - `TryFrom<AutopilotSideInfo>`: Converting caller params to tool-specific side info
 /// - `Serialize`: Serializing side info into tool call events
 ///
 /// # Implementors
@@ -44,9 +42,7 @@ pub trait ToolVisitor {
     /// For remote execution, this wraps the tool in an adapter.
     async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
     where
-        T: TaskTool,
-        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display;
+        T: TaskTool<SideInfo = AutopilotSideInfo>;
 
     /// Visit a `SimpleTool`.
     ///
@@ -54,9 +50,7 @@ pub trait ToolVisitor {
     /// For remote execution, this wraps the tool in an adapter.
     async fn visit_simple_tool<T>(&self) -> Result<(), Self::Error>
     where
-        T: SimpleTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display;
+        T: SimpleTool<SideInfo = AutopilotSideInfo> + Default;
 }
 
 /// A visitor that collects tool names from `for_each_tool`.
@@ -96,9 +90,7 @@ impl ToolVisitor for ToolNameCollector {
 
     async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
     where
-        T: TaskTool,
-        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+        T: TaskTool<SideInfo = AutopilotSideInfo>,
     {
         let mut names = self
             .names
@@ -110,9 +102,7 @@ impl ToolVisitor for ToolNameCollector {
 
     async fn visit_simple_tool<T>(&self) -> Result<(), Self::Error>
     where
-        T: SimpleTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+        T: SimpleTool<SideInfo = AutopilotSideInfo> + Default,
     {
         let mut names = self
             .names

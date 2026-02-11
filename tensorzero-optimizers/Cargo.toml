@@ -44,6 +44,9 @@ reqwest = { workspace = true }
 object_store = { workspace = true }
 mime = { workspace = true }
 
+# Database
+sqlx = { workspace = true }
+
 # Tracing and logging
 tracing = { workspace = true }
 

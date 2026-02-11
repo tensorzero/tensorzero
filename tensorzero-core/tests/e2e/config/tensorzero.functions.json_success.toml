@@ -463,7 +463,7 @@ max_tokens = 100
 # Grok 3 Mini with `reasoning_effort`-based reasoning
 [functions.json_success.variants.openrouter-grok-reasoning]
 type = "chat_completion"
-model = "grok-3-mini-openrouter"
+model = "grok-code-fast-1-openrouter"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -779,7 +779,7 @@ max_tokens = 100
 
 [functions.json_success.variants.xai-reasoning]
 type = "chat_completion"
-model = "grok-3-mini"
+model = "grok-code-fast-1"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"

@@ -295,7 +295,7 @@ async fn test_gemini_trailing_thought() {
     let error = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
         error
-            .contains("Thought block with signature must be followed by a content block in Gemini"),
+            .contains("Thought block with signature must be followed by a content block in google_ai_studio_gemini"),
         "Unexpected error message: {error}"
     );
 }
@@ -338,7 +338,7 @@ async fn test_gemini_double_thought() {
     let error = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
         error.contains(
-            "Thought block with signature cannot be followed by another thought block in Gemini"
+            "Thought block with signature cannot be followed by another thought block in google_ai_studio_gemini"
         ),
         "Unexpected error message: {error}"
     );
