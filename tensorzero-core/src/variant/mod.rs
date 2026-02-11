@@ -32,7 +32,7 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
-use crate::inference::types::usage::RawResponseEntry;
+use crate::inference::types::usage::{RawResponseEntry, RawUsageEntry};
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -211,6 +211,9 @@ pub struct ModelUsedInfo {
     pub failed_raw_responses: Vec<RawResponseEntry>,
     /// Passed-through raw response entries from downstream (for relay mode).
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw usage entries from the current model inference, used for `api_type` derivation
+    /// in fake-stream `raw_response` entries.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
 
 pub trait Variant {
@@ -870,6 +873,7 @@ async fn infer_model_request_stream<'request>(
         model_inference_id,
         failed_raw_responses,
         relay_raw_response: None,
+        raw_usage: None,
     };
     let config_type = function.config_type();
     let stream =

@@ -562,7 +562,7 @@ async fn create_datapoints_internal(
                     &gateway.handle.app_state.clickhouse_connection_info,
                 )
                 .await
-                .map_err(err_to_http)
+                .map_err(|e| err_to_http(e, false))
             })
             .await?)
         }
@@ -626,7 +626,7 @@ impl ClientExt for Client {
                         ),
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await?)
             }
@@ -672,7 +672,7 @@ impl ClientExt for Client {
                         params,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await?)
             }
@@ -703,7 +703,7 @@ impl ClientExt for Client {
                         params,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await?)
             }
@@ -801,14 +801,17 @@ impl ClientExt for Client {
                         },
                     )
                     .await
-                    .map_err(err_to_http)?;
+                    .map_err(|e| err_to_http(e, false))?;
 
                     if response.datapoints.is_empty() {
                         // We explicitly construct an HTTP error here because python client expects it.
-                        return Err(err_to_http(Error::new(ErrorDetails::DatapointNotFound {
-                            dataset_name,
-                            datapoint_id,
-                        })));
+                        return Err(err_to_http(
+                            Error::new(ErrorDetails::DatapointNotFound {
+                                dataset_name,
+                                datapoint_id,
+                            }),
+                            false,
+                        ));
                     }
                     Ok(response.datapoints.swap_remove(0))
                 })
@@ -833,7 +836,7 @@ impl ClientExt for Client {
                         &dataset_name,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -877,7 +880,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -909,7 +912,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -954,7 +957,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -985,7 +988,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -1017,7 +1020,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -1049,7 +1052,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -1078,7 +1081,7 @@ impl ClientExt for Client {
                         &dataset_name,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -1111,7 +1114,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await?)
             }
@@ -1162,7 +1165,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -1202,7 +1205,7 @@ impl ClientExt for Client {
             .clickhouse_connection_info
             .list_inferences(&gateway.handle.app_state.config, &params)
             .await
-            .map_err(err_to_http)?;
+            .map_err(|e| err_to_http(e, false))?;
 
         // Convert storage types to wire types
         let wire_inferences: Result<Vec<StoredInference>, _> = inferences
@@ -1243,7 +1246,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -1273,7 +1276,7 @@ impl ClientExt for Client {
                         request,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await
             }
@@ -1310,7 +1313,7 @@ impl ClientExt for Client {
             concurrency,
         )
         .await
-        .map_err(err_to_http)
+        .map_err(|e| err_to_http(e, false))
     }
 
     /// Launch an optimization job.
@@ -1328,7 +1331,7 @@ impl ClientExt for Client {
                         gateway.handle.app_state.config.clone(),
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 }))
                 .await?)
             }
@@ -1358,7 +1361,7 @@ impl ClientExt for Client {
                         params,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 }))
                 .await
             }
@@ -1398,7 +1401,7 @@ impl ClientExt for Client {
                         &gateway.handle.app_state.config.provider_types,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await?)
             }
@@ -1467,9 +1470,12 @@ impl ClientExt for Client {
                     use tensorzero_core::db::ConfigQueries;
                     let snapshot_hash = match hash {
                         Some(h) => h.parse().map_err(|_| {
-                            err_to_http(Error::new(ErrorDetails::ConfigSnapshotNotFound {
-                                snapshot_hash: h.to_string(),
-                            }))
+                            err_to_http(
+                                Error::new(ErrorDetails::ConfigSnapshotNotFound {
+                                    snapshot_hash: h.to_string(),
+                                }),
+                                false,
+                            )
                         })?,
                         None => gateway.handle.app_state.config.hash.clone(),
                     };
@@ -1479,13 +1485,16 @@ impl ClientExt for Client {
                         .clickhouse_connection_info
                         .get_config_snapshot(snapshot_hash)
                         .await
-                        .map_err(err_to_http)?;
+                        .map_err(|e| err_to_http(e, false))?;
                     Ok(GetConfigResponse {
                         hash: snapshot.hash.to_string(),
                         config: snapshot.config.try_into().map_err(|e: &'static str| {
-                            err_to_http(Error::new(ErrorDetails::Config {
-                                message: e.to_string(),
-                            }))
+                            err_to_http(
+                                Error::new(ErrorDetails::Config {
+                                    message: e.to_string(),
+                                }),
+                                false,
+                            )
                         })?,
                         extra_templates: snapshot.extra_templates,
                         tags: snapshot.tags,
@@ -1518,7 +1527,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Box::pin(with_embedded_timeout(*timeout, async {
                     let mut snapshot = ConfigSnapshot::new(request.config, request.extra_templates)
-                        .map_err(err_to_http)?;
+                        .map_err(|e| err_to_http(e, false))?;
                     snapshot.tags = request.tags;
 
                     let hash = snapshot.hash.to_string();
@@ -1528,7 +1537,7 @@ impl ClientExt for Client {
                         snapshot,
                     )
                     .await
-                    .map_err(err_to_http)?;
+                    .map_err(|e| err_to_http(e, false))?;
 
                     Ok(WriteConfigResponse { hash })
                 }))
@@ -1569,7 +1578,7 @@ impl ClientExt for Client {
                         },
                     )
                     .await
-                    .map_err(err_to_http)?;
+                    .map_err(|e| err_to_http(e, false))?;
                     Ok(response.probabilities)
                 })
                 .await?)

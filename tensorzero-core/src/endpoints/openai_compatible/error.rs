@@ -55,10 +55,7 @@ pub struct OpenAICompatibleErrorWithRawResponse {
 
 impl IntoResponse for OpenAICompatibleErrorWithRawResponse {
     fn into_response(self) -> Response {
-        let message = self.error.to_string();
-        let mut body = serde_json::json!({
-            "error": {"message": message},
-        });
+        let mut body = self.error.build_response_body(true);
         if !self.raw_responses.is_empty() {
             body["raw_response"] = serde_json::to_value(&self.raw_responses)
                 .unwrap_or_else(|e| serde_json::json!(e.to_string()));

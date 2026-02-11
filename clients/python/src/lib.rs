@@ -247,7 +247,7 @@ impl AsyncStreamWrapper {
             // We need to interact with Python objects here (to build up a Python `InferenceChunk`),
             // so we need the GIL
             Python::attach(|py| {
-                let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e)))?;
+                let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e, false)))?;
                 parse_inference_chunk(py, chunk)
             })
         })
@@ -294,7 +294,7 @@ impl StreamWrapper {
         let Some(chunk) = chunk else {
             return Err(PyStopIteration::new_err(()));
         };
-        let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e)))?;
+        let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e, false)))?;
         parse_inference_chunk(py, chunk)
     }
 }

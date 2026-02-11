@@ -977,7 +977,7 @@ impl Client {
                         None,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await?)
             }
@@ -1141,6 +1141,7 @@ impl Client {
         match &*self.mode {
             ClientMode::HTTPGateway(_) => Ok(self.http_inference(params).await?.response),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
+                let include_raw_response = params.include_raw_response;
                 Ok(with_embedded_timeout(*timeout, async {
                     let res = Box::pin(crate::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
@@ -1149,13 +1150,13 @@ impl Client {
                         gateway.handle.app_state.postgres_connection_info.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
                         gateway.handle.app_state.rate_limiting_manager.clone(),
-                        params.try_into().map_err(err_to_http)?,
+                        params.try_into().map_err(|e| err_to_http(e, false))?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
                         None,
                     ))
                     .await
-                    .map_err(err_to_http)?
+                    .map_err(|e| err_to_http(e, include_raw_response))?
                     .output;
                     match res {
                         InferenceOutput::NonStreaming(response) => {
@@ -1210,7 +1211,7 @@ impl Client {
                         storage_path,
                     )
                     .await
-                    .map_err(err_to_http)
+                    .map_err(|e| err_to_http(e, false))
                 })
                 .await?)
             }
@@ -1258,12 +1259,14 @@ pub async fn get_config_no_verify_credentials(
 // errors for certain embedded gateway errors. For example, a config parsing error
 // should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
 #[doc(hidden)]
-pub fn err_to_http(e: Error) -> TensorZeroError {
-    let raw_responses = e.collect_raw_responses();
-    let mut body = serde_json::json!({"error": e.to_string()});
-    if !raw_responses.is_empty() {
-        body["raw_response"] = serde_json::to_value(&raw_responses)
-            .unwrap_or_else(|e| serde_json::json!(e.to_string()));
+pub fn err_to_http(e: Error, include_raw_response: bool) -> TensorZeroError {
+    let mut body = e.build_response_body(false);
+    if include_raw_response {
+        let raw_responses = e.collect_raw_responses();
+        if !raw_responses.is_empty() {
+            body["raw_response"] = serde_json::to_value(&raw_responses)
+                .unwrap_or_else(|e| serde_json::json!(e.to_string()));
+        }
     }
     TensorZeroError::Http {
         status_code: e.status_code().as_u16(),

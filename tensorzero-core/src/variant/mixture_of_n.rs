@@ -379,6 +379,7 @@ pub fn stream_inference_from_non_stream(
         model_inference_id: model_inference_result.id,
         failed_raw_responses: model_inference_result.failed_raw_responses.clone(),
         relay_raw_response: model_inference_result.relay_raw_response.clone(),
+        raw_usage: raw_usage_entries.clone(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage), raw_usage_entries)?;
     Ok((stream, model_used_info))
