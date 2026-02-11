@@ -2767,6 +2767,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
+        "cache_options": {"enabled": "write_only"},
         "extra_headers": extra_headers.extra_headers,
     });
 

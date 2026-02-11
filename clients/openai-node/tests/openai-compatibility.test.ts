@@ -859,6 +859,10 @@ describe("OpenAI Compatibility", () => {
       messages,
       model: "tensorzero::function_name::basic_test",
       temperature: 0.4,
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::cache_options": {
+        enabled: "write_only",
+      },
     });
 
     expect(result.choices[0].message.content).toBe(
@@ -911,7 +915,8 @@ describe("OpenAI Compatibility", () => {
       { role: "user", content: "Hello" },
     ];
 
-    // First streaming request
+    // First streaming request (write_only to populate cache)
+    // @ts-expect-error - custom TensorZero property
     const stream = await client.chat.completions.create({
       messages,
       model: "tensorzero::function_name::basic_test",
@@ -920,6 +925,9 @@ describe("OpenAI Compatibility", () => {
         include_usage: true,
       },
       seed: 69,
+      "tensorzero::cache_options": {
+        enabled: "write_only",
+      },
     });
 
     const chunks = [];
