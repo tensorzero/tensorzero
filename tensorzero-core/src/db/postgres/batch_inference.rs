@@ -390,6 +390,8 @@ fn build_get_completed_chat_batch_inferences_query(
             // The ARRAY_AGG function here takes all finish_reasons from model inferences, orders them by model inference ID, and
             // returns the first one (Postgres uses 1-based indexing).
             // This returns the most recent finish reason for each inference, which matches ClickHouse's behavior.
+            // TODO(#5691): BIG TODO: remove COALESCE fallback for output and make batch response
+            // output properly optional when IO rows are missing due to shorter IO retention.
             qb.push(
                 r"
                 )
@@ -397,11 +399,12 @@ fn build_get_completed_chat_batch_inferences_query(
                     ci.id as inference_id,
                     ci.episode_id as episode_id,
                     ci.variant_name as variant_name,
-                    ci.output::text as output,
+                    COALESCE(cio.output::text, '[]') as output,
                     SUM(mi.input_tokens)::INTEGER as input_tokens,
                     SUM(mi.output_tokens)::INTEGER as output_tokens,
                     (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
                 FROM tensorzero.chat_inferences ci
+                LEFT JOIN tensorzero.chat_inference_data cio ON cio.id = ci.id AND cio.created_at = ci.created_at
                 LEFT JOIN tensorzero.model_inferences mi ON ci.id = mi.inference_id
                 WHERE ci.id IN (SELECT inference_id FROM batch_inferences)
                 AND ci.function_name = ",
@@ -409,7 +412,9 @@ fn build_get_completed_chat_batch_inferences_query(
             qb.push_bind(function_name.to_string());
             qb.push(" AND ci.variant_name = ");
             qb.push_bind(variant_name.to_string());
-            qb.push(" GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output");
+            qb.push(
+                " GROUP BY ci.id, ci.episode_id, ci.variant_name, COALESCE(cio.output::text, '[]')",
+            );
             qb
         }
         Some(inference_id) => {
@@ -417,17 +422,20 @@ fn build_get_completed_chat_batch_inferences_query(
             // The ARRAY_AGG function here takes all finish_reasons from model inferences, orders them by model inference ID, and
             // returns the first one (Postgres uses 1-based indexing).
             // This returns the most recent finish reason for each inference, which matches ClickHouse's behavior.
+            // TODO(#5691): BIG TODO: remove COALESCE fallback for output and make batch response
+            // output properly optional when IO rows are missing due to shorter IO retention.
             let mut qb = QueryBuilder::new(
                 r"
                 SELECT
                     ci.id as inference_id,
                     ci.episode_id as episode_id,
                     ci.variant_name as variant_name,
-                    ci.output::text as output,
+                    COALESCE(cio.output::text, '[]') as output,
                     SUM(mi.input_tokens)::INTEGER as input_tokens,
                     SUM(mi.output_tokens)::INTEGER as output_tokens,
                     (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
                 FROM tensorzero.chat_inferences ci
+                LEFT JOIN tensorzero.chat_inference_data cio ON cio.id = ci.id AND cio.created_at = ci.created_at
                 LEFT JOIN tensorzero.model_inferences mi ON ci.id = mi.inference_id
                 WHERE ci.id = ",
             );
@@ -436,7 +444,9 @@ fn build_get_completed_chat_batch_inferences_query(
             qb.push_bind(function_name.to_string());
             qb.push(" AND ci.variant_name = ");
             qb.push_bind(variant_name.to_string());
-            qb.push(" GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output");
+            qb.push(
+                " GROUP BY ci.id, ci.episode_id, ci.variant_name, COALESCE(cio.output::text, '[]')",
+            );
             qb
         }
     }
@@ -464,6 +474,8 @@ fn build_get_completed_json_batch_inferences_query(
             // The ARRAY_AGG function here takes all finish_reasons from model inferences, orders them by model inference ID, and
             // returns the first one (Postgres uses 1-based indexing).
             // This returns the most recent finish reason for each inference, which matches ClickHouse's behavior.
+            // TODO(#5691): BIG TODO: remove COALESCE fallback for output and make batch response
+            // output properly optional when IO rows are missing due to shorter IO retention.
             qb.push(
                 r"
                 )
@@ -471,11 +483,12 @@ fn build_get_completed_json_batch_inferences_query(
                     ji.id as inference_id,
                     ji.episode_id as episode_id,
                     ji.variant_name as variant_name,
-                    ji.output::text as output,
+                    COALESCE(jio.output::text, '{}') as output,
                     SUM(mi.input_tokens)::INTEGER as input_tokens,
                     SUM(mi.output_tokens)::INTEGER as output_tokens,
                     (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
                 FROM tensorzero.json_inferences ji
+                LEFT JOIN tensorzero.json_inference_data jio ON jio.id = ji.id AND jio.created_at = ji.created_at
                 LEFT JOIN tensorzero.model_inferences mi ON ji.id = mi.inference_id
                 WHERE ji.id IN (SELECT inference_id FROM batch_inferences)
                 AND ji.function_name = ",
@@ -483,7 +496,9 @@ fn build_get_completed_json_batch_inferences_query(
             qb.push_bind(function_name.to_string());
             qb.push(" AND ji.variant_name = ");
             qb.push_bind(variant_name.to_string());
-            qb.push(" GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output");
+            qb.push(
+                " GROUP BY ji.id, ji.episode_id, ji.variant_name, COALESCE(jio.output::text, '{}')",
+            );
             qb
         }
         Some(inference_id) => {
@@ -491,17 +506,20 @@ fn build_get_completed_json_batch_inferences_query(
             // The ARRAY_AGG function here takes all finish_reasons from model inferences, orders them by model inference ID, and
             // returns the first one (Postgres uses 1-based indexing).
             // This returns the most recent finish reason for each inference, which matches ClickHouse's behavior.
+            // TODO(#5691): BIG TODO: remove COALESCE fallback for output and make batch response
+            // output properly optional when IO rows are missing due to shorter IO retention.
             let mut qb = QueryBuilder::new(
                 r"
                 SELECT
                     ji.id as inference_id,
                     ji.episode_id as episode_id,
                     ji.variant_name as variant_name,
-                    ji.output::text as output,
+                    COALESCE(jio.output::text, '{}') as output,
                     SUM(mi.input_tokens)::INTEGER as input_tokens,
                     SUM(mi.output_tokens)::INTEGER as output_tokens,
                     (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
                 FROM tensorzero.json_inferences ji
+                LEFT JOIN tensorzero.json_inference_data jio ON jio.id = ji.id AND jio.created_at = ji.created_at
                 LEFT JOIN tensorzero.model_inferences mi ON ji.id = mi.inference_id
                 WHERE ji.id = ",
             );
@@ -510,7 +528,9 @@ fn build_get_completed_json_batch_inferences_query(
             qb.push_bind(function_name.to_string());
             qb.push(" AND ji.variant_name = ");
             qb.push_bind(variant_name.to_string());
-            qb.push(" GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output");
+            qb.push(
+                " GROUP BY ji.id, ji.episode_id, ji.variant_name, COALESCE(jio.output::text, '{}')",
+            );
             qb
         }
     }
@@ -718,15 +738,16 @@ mod tests {
                 ci.id as inference_id,
                 ci.episode_id as episode_id,
                 ci.variant_name as variant_name,
-                ci.output::text as output,
+                COALESCE(cio.output::text, '[]') as output,
                 SUM(mi.input_tokens)::INTEGER as input_tokens,
                 SUM(mi.output_tokens)::INTEGER as output_tokens,
                 (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
             FROM tensorzero.chat_inferences ci
+            LEFT JOIN tensorzero.chat_inference_data cio ON cio.id = ci.id AND cio.created_at = ci.created_at
             LEFT JOIN tensorzero.model_inferences mi ON ci.id = mi.inference_id
             WHERE ci.id IN (SELECT inference_id FROM batch_inferences)
             AND ci.function_name = $2 AND ci.variant_name = $3
-            GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output
+            GROUP BY ci.id, ci.episode_id, ci.variant_name, COALESCE(cio.output::text, '[]')
             ",
         );
     }
@@ -751,14 +772,15 @@ mod tests {
                 ci.id as inference_id,
                 ci.episode_id as episode_id,
                 ci.variant_name as variant_name,
-                ci.output::text as output,
+                COALESCE(cio.output::text, '[]') as output,
                 SUM(mi.input_tokens)::INTEGER as input_tokens,
                 SUM(mi.output_tokens)::INTEGER as output_tokens,
                 (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
             FROM tensorzero.chat_inferences ci
+            LEFT JOIN tensorzero.chat_inference_data cio ON cio.id = ci.id AND cio.created_at = ci.created_at
             LEFT JOIN tensorzero.model_inferences mi ON ci.id = mi.inference_id
             WHERE ci.id = $1 AND ci.function_name = $2 AND ci.variant_name = $3
-            GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output
+            GROUP BY ci.id, ci.episode_id, ci.variant_name, COALESCE(cio.output::text, '[]')
             ",
         );
     }
@@ -787,15 +809,16 @@ mod tests {
                 ji.id as inference_id,
                 ji.episode_id as episode_id,
                 ji.variant_name as variant_name,
-                ji.output::text as output,
+                COALESCE(jio.output::text, '{}') as output,
                 SUM(mi.input_tokens)::INTEGER as input_tokens,
                 SUM(mi.output_tokens)::INTEGER as output_tokens,
                 (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
             FROM tensorzero.json_inferences ji
+            LEFT JOIN tensorzero.json_inference_data jio ON jio.id = ji.id AND jio.created_at = ji.created_at
             LEFT JOIN tensorzero.model_inferences mi ON ji.id = mi.inference_id
             WHERE ji.id IN (SELECT inference_id FROM batch_inferences)
             AND ji.function_name = $2 AND ji.variant_name = $3
-            GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output
+            GROUP BY ji.id, ji.episode_id, ji.variant_name, COALESCE(jio.output::text, '{}')
             ",
         );
     }
@@ -820,14 +843,15 @@ mod tests {
                 ji.id as inference_id,
                 ji.episode_id as episode_id,
                 ji.variant_name as variant_name,
-                ji.output::text as output,
+                COALESCE(jio.output::text, '{}') as output,
                 SUM(mi.input_tokens)::INTEGER as input_tokens,
                 SUM(mi.output_tokens)::INTEGER as output_tokens,
                 (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
             FROM tensorzero.json_inferences ji
+            LEFT JOIN tensorzero.json_inference_data jio ON jio.id = ji.id AND jio.created_at = ji.created_at
             LEFT JOIN tensorzero.model_inferences mi ON ji.id = mi.inference_id
             WHERE ji.id = $1 AND ji.function_name = $2 AND ji.variant_name = $3
-            GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output
+            GROUP BY ji.id, ji.episode_id, ji.variant_name, COALESCE(jio.output::text, '{}')
             ",
         );
     }
