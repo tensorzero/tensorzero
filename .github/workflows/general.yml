@@ -1310,6 +1310,7 @@ jobs:
       GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   check-production-deployment-docker-compose:
     needs: [build-gateway-container]
@@ -1384,6 +1385,7 @@ jobs:
       FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
       FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   run-merge-queue-checks:
     needs:

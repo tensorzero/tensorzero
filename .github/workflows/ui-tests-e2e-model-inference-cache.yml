@@ -21,6 +21,8 @@ on:
         required: false
       TOGETHER_API_KEY:
         required: false
+      DOCKERHUB_LIMITED_TOKEN:
+        required: false
     inputs:
       regen_cache:
         required: true
