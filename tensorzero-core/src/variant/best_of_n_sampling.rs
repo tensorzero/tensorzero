@@ -1078,6 +1078,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1116,6 +1117,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1173,6 +1175,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1214,6 +1217,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1287,6 +1291,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1325,6 +1330,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1368,6 +1374,7 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1439,6 +1446,7 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(75),
             output_tokens: Some(126),
+            cost: None,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         assert_eq!(selected.usage_considering_cached(), expected_usage);
@@ -1486,6 +1494,7 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1561,6 +1570,7 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1654,6 +1664,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 )]),
                 timeouts: Default::default(),

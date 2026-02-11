@@ -1652,6 +1652,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             "expected usage to include provider raw_usage entries"
         );

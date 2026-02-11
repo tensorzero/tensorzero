@@ -78,6 +78,12 @@ pub struct ModelInference {
 
     /// Whether the inference was cached.
     pub cached: bool,
+
+    /// Cost of this inference in dollars.
+    /// `None` means cost tracking was not configured for this provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub cost: Option<crate::cost::Cost>,
 }
 
 /// HTTP handler for getting model inferences by inference ID
@@ -147,6 +153,7 @@ async fn get_model_inferences(
                 input_messages: row.input_messages,
                 output: row.output,
                 cached: row.cached,
+                cost: row.cost,
             })
         })
         .collect()

@@ -1175,6 +1175,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1210,6 +1211,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1264,6 +1266,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1302,6 +1305,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1381,6 +1385,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1416,6 +1421,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1459,6 +1465,7 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1532,6 +1539,7 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(35),
             output_tokens: Some(46),
+            cost: None,
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1582,6 +1590,7 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1663,6 +1672,7 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1797,6 +1807,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             None, // raw_usage_entries
         )
@@ -1847,6 +1858,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_response: None,

@@ -37,6 +37,7 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
                 cached,
                 finish_reason,
                 snapshot_hash,
+                cost,
                 formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp
             FROM ModelInference
             WHERE inference_id = {inference_id:UUID}
@@ -296,6 +297,7 @@ mod tests {
                     cached,
                     finish_reason,
                     snapshot_hash,
+                    cost,
                     formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp
                 FROM ModelInference
                 WHERE inference_id = {inference_id:UUID}

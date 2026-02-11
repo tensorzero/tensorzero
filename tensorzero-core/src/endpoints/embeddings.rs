@@ -164,6 +164,7 @@ mod tests {
             provider_name: Arc::from("dummy"),
             extra_body: None,
             extra_headers: None,
+            cost: None,
         };
         let embedding_model = EmbeddingModelConfig {
             routing: vec!["dummy".to_string().into()],

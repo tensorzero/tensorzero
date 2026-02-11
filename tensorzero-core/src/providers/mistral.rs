@@ -646,6 +646,7 @@ impl From<MistralUsage> for Usage {
         Usage {
             input_tokens: Some(usage.prompt_tokens),
             output_tokens: Some(usage.completion_tokens),
+            cost: None,
         }
     }
 }

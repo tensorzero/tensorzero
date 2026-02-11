@@ -133,6 +133,7 @@ git2 = { workspace = true }
 opentelemetry-http = "0.31.0"
 # durable.workspace = true
 regex = { workspace = true }
+rust_decimal = { workspace = true }
 dashmap = "6.1.0"
 redis = { workspace = true }
 

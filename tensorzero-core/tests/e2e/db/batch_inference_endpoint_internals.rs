@@ -489,6 +489,7 @@ async fn test_write_read_completed_batch_inference_chat(clickhouse: ClickHouseCo
         usage: Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cost: None,
         },
         finish_reason: Some(FinishReason::Stop),
     };
@@ -500,6 +501,7 @@ async fn test_write_read_completed_batch_inference_chat(clickhouse: ClickHouseCo
         usage: Usage {
             input_tokens: Some(20),
             output_tokens: Some(30),
+            cost: None,
         },
         finish_reason: Some(FinishReason::ToolCall),
     };
@@ -767,6 +769,7 @@ async fn test_write_read_completed_batch_inference_json(clickhouse: ClickHouseCo
         usage: Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cost: None,
         },
         finish_reason: Some(FinishReason::Stop),
     };
@@ -778,6 +781,7 @@ async fn test_write_read_completed_batch_inference_json(clickhouse: ClickHouseCo
         usage: Usage {
             input_tokens: Some(20),
             output_tokens: Some(30),
+            cost: None,
         },
         finish_reason: Some(FinishReason::ToolCall),
     };
