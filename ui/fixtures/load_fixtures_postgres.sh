@@ -6,6 +6,7 @@ set -euo pipefail
 # Table loading status:
 # - "chat_inference_examples.jsonl" -> chat_inferences + chat_inference_data (Done)
 # - "json_inference_examples.jsonl" -> json_inferences + json_inference_data (Done)
+# - "metadata_only_inference_examples.jsonl" -> chat_inferences + json_inferences (Done, metadata only — no data rows)
 # - "model_inference_examples.jsonl" -> model_inferences + model_inference_data (Done)
 # - "boolean_metric_feedback_examples.jsonl" (Done)
 # - "float_metric_feedback_examples.jsonl" (Done)
@@ -97,7 +98,8 @@ if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixt
    [ ! -f "small-fixtures/chat_inference_datapoint_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_datapoint_examples.jsonl" ] || \
    [ ! -f "small-fixtures/model_inference_examples.jsonl" ] || \
    [ ! -f "small-fixtures/dynamic_evaluation_run_examples.jsonl" ] || \
-   [ ! -f "small-fixtures/dynamic_evaluation_run_episode_examples.jsonl" ]; then
+   [ ! -f "small-fixtures/dynamic_evaluation_run_episode_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/metadata_only_inference_examples.jsonl" ]; then
     echo "Downloading small fixtures..."
     if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
         uv run ./download-small-fixtures-http.py
@@ -192,6 +194,46 @@ SELECT
     COALESCE(NULLIF(j->>'auxiliary_content', '')::jsonb, '{}'),
     tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# Metadata-only chat inferences (simulating data retention expiry — no data table rows)
+load_jsonl "small-fixtures/metadata_only_inference_examples.jsonl" "tensorzero.chat_inferences" "
+INSERT INTO tensorzero.chat_inferences (
+    id, function_name, variant_name, episode_id,
+    processing_time_ms, ttft_ms, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    j->>'function_name',
+    j->>'variant_name',
+    (j->>'episode_id')::uuid,
+    (j->>'processing_time_ms')::integer,
+    (j->>'ttft_ms')::integer,
+    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+WHERE j->>'inference_type' = 'chat'
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# Metadata-only JSON inferences (simulating data retention expiry — no data table rows)
+load_jsonl "small-fixtures/metadata_only_inference_examples.jsonl" "tensorzero.json_inferences" "
+INSERT INTO tensorzero.json_inferences (
+    id, function_name, variant_name, episode_id,
+    processing_time_ms, ttft_ms, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    j->>'function_name',
+    j->>'variant_name',
+    (j->>'episode_id')::uuid,
+    (j->>'processing_time_ms')::integer,
+    (j->>'ttft_ms')::integer,
+    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+WHERE j->>'inference_type' = 'json'
 ON CONFLICT (id, created_at) DO NOTHING;
 "
 

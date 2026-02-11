@@ -10,12 +10,14 @@ use crate::inference::types::FinishReason;
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 
 /// Response row for completed batch inferences (used for both Chat and Json).
+/// The `output` field is optional because inference data tables may have shorter
+/// retention than metadata tables; when IO rows are missing, `output` is `None`.
 #[derive(Debug, serde::Deserialize)]
 pub struct CompletedBatchInferenceRow {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
-    pub output: String,
+    pub output: Option<String>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,

@@ -1177,6 +1177,8 @@ pub async fn get_completed_batch_inference_response(
 }
 
 /// Convert a CompletedBatchInferenceRow to an InferenceResponse based on function type.
+/// When `output` is None (inference data dropped due to retention), defaults to
+/// an empty content list (Chat) or empty JSON object (Json).
 fn convert_row_to_inference_response(
     row: CompletedBatchInferenceRow,
     function: &FunctionConfig,
@@ -1188,12 +1190,14 @@ fn convert_row_to_inference_response(
 
     match function {
         FunctionConfig::Chat(_) => {
-            let output: Vec<ContentBlockChatOutput> =
-                serde_json::from_str(&row.output).map_err(|e| {
+            let output: Vec<ContentBlockChatOutput> = match row.output {
+                Some(ref output_str) => serde_json::from_str(output_str).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: e.to_string(),
                     })
-                })?;
+                })?,
+                None => vec![],
+            };
             Ok(InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: row.inference_id,
                 episode_id: row.episode_id,
@@ -1207,11 +1211,17 @@ fn convert_row_to_inference_response(
             }))
         }
         FunctionConfig::Json(_) => {
-            let output: JsonInferenceOutput = serde_json::from_str(&row.output).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: e.to_string(),
-                })
-            })?;
+            let output: JsonInferenceOutput = match row.output {
+                Some(ref output_str) => serde_json::from_str(output_str).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: e.to_string(),
+                    })
+                })?,
+                None => JsonInferenceOutput {
+                    raw: None,
+                    parsed: None,
+                },
+            };
             Ok(InferenceResponse::Json(JsonInferenceResponse {
                 inference_id: row.inference_id,
                 episode_id: row.episode_id,
