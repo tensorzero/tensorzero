@@ -1,4 +1,7 @@
-use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
+use crate::experimentation::{
+    ExperimentationConfig, ExperimentationConfigWithNamespaces,
+    UninitializedExperimentationConfigWithNamespaces,
+};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 use crate::relay::TensorzeroRelay;
@@ -63,6 +66,7 @@ use std::error::Error as StdError;
 
 pub mod built_in;
 pub mod gateway;
+pub mod namespace;
 pub mod path;
 pub mod provider_types;
 pub mod rate_limiting;
@@ -72,6 +76,8 @@ pub mod stored;
 #[cfg(test)]
 mod tests;
 pub mod unwritten;
+
+pub use namespace::Namespace;
 
 tokio::task_local! {
     /// When set, we skip performing credential validation in model providers
@@ -1784,7 +1790,7 @@ pub struct UninitializedFunctionConfigChat {
     pub parallel_tool_calls: Option<bool>,
     #[serde(default)]
     pub description: Option<String>,
-    pub experimentation: Option<UninitializedExperimentationConfig>,
+    pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1799,7 +1805,7 @@ pub struct UninitializedFunctionConfigJson {
     pub output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
     pub description: Option<String>,
-    pub experimentation: Option<UninitializedExperimentationConfig>,
+    pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -2022,9 +2028,12 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics))
+                    .map(|config| config.load(&variants, metrics, function_name))
                     .transpose()?
-                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
+                    .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
+                        base: ExperimentationConfig::legacy_from_variants_map(&variants),
+                        namespaces: std::collections::HashMap::new(),
+                    });
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     schemas: schema_data,
@@ -2116,9 +2125,12 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics))
+                    .map(|config| config.load(&variants, metrics, function_name))
                     .transpose()?
-                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
+                    .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
+                        base: ExperimentationConfig::legacy_from_variants_map(&variants),
+                        namespaces: std::collections::HashMap::new(),
+                    });
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: schema_data,
