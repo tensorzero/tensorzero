@@ -1,4 +1,5 @@
 import { ActionBar } from "~/components/layout/ActionBar";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { TryWithSelect } from "~/components/inference/TryWithSelect";
 import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
@@ -100,6 +101,9 @@ export function DatapointActions({
               ? "You can't delete a stale datapoint."
               : "Delete"
         }
+      />
+      <AskAutopilotButton
+        message={`Datapoint ID: ${datapoint.id}\nDataset: ${datapoint.dataset_name}\n\n`}
       />
     </ActionBar>
   );

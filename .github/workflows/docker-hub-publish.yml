@@ -164,6 +164,17 @@ jobs:
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}@sha256:%s ' *)
 
-      - name: Inspect image
+      - name: Wait for image to be available on Docker Hub
         run: |
-          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}:${{ steps.meta.outputs.version }}
+          IMAGE="${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}:${{ steps.meta.outputs.version }}"
+          echo "Waiting for ${IMAGE} to be available on Docker Hub..."
+          for i in $(seq 1 30); do
+            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+              echo "Image ${IMAGE} is available on Docker Hub"
+              exit 0
+            fi
+            echo "Attempt ${i}/30: Image not yet available, waiting 10s..."
+            sleep 10
+          done
+          echo "Timed out waiting for ${IMAGE} to appear on Docker Hub"
+          exit 1

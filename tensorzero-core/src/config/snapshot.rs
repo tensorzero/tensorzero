@@ -55,7 +55,7 @@ use super::UninitializedConfig;
 /// let snapshot = ConfigSnapshot::new(sorted_table, extra_templates)?;
 ///
 /// // Later, after database connection is established
-/// write_config_snapshot(&clickhouse, snapshot).await?;
+/// db.write_config_snapshot(&snapshot).await?;
 /// ```
 #[expect(clippy::manual_non_exhaustive)]
 #[derive(Debug)]

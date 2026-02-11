@@ -2,6 +2,7 @@ name: Mocked Batch Tests (for Merge Queue)
 
 # Fake credentials - gateway validates presence but doesn't use them in mock mode
 env:
+  CARGO_INCREMENTAL: 0
   ANTHROPIC_API_KEY: "fake_anthropic_key"
   AWS_ACCESS_KEY_ID: "fake_aws_access_key"
   AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
@@ -98,6 +99,12 @@ jobs:
         run: |
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
+      # This is for postgres migrations to run the correct gateway
+      - name: Set container image tags
+        run: |
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
       - name: Start Docker services (mock-provider-api + dependencies)
         run: |
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-provider-api
@@ -118,6 +125,11 @@ jobs:
       - name: Run mocked batch tests
         run: |
           cargo test-mock-batch --no-fail-fast
+
+      - name: Print docker compose logs
+        if: always()
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print batch logs
         if: always()

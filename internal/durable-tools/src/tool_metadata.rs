@@ -1,9 +1,10 @@
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Serialize, de::DeserializeOwned};
+use serde_json::Value as JsonValue;
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::ToolResult;
+use crate::{NonControlToolError, ToolResult};
 
 /// Common metadata trait for all tools (both `TaskTool` and `SimpleTool`).
 ///
@@ -96,5 +97,21 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// like Anthropic)
     fn strict(&self) -> bool {
         true
+    }
+
+    /// Validates the provided llm params and side_info
+    /// This is called *before* spawning a tool, to catch errors early.
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: Self::LlmParams = serde_json::from_value(llm_params.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("llm_params: {e}"),
+            }
+        })?;
+        let _: Self::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("side_info: {e}"),
+            }
+        })?;
+        Ok(())
     }
 }

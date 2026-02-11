@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use super::ClickHouseConnectionInfo;
+use super::episode_queries::{parse_count, parse_json_rows};
 use super::escape_string_for_clickhouse_literal;
-use super::select_queries::{parse_count, parse_json_rows};
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::db::evaluation_queries::EvaluationResultRow;
 use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;

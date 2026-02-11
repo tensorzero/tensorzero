@@ -2,7 +2,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -35,12 +35,16 @@ use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolC
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::providers::openai::{
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
-    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage,
-    StreamOptions, SystemOrDeveloper, get_chat_url, handle_openai_error,
-    prepare_system_or_developer_message, tensorzero_to_openai_messages,
+    OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
+    SystemOrDeveloper, get_chat_url, handle_openai_error,
+    openai_response_tool_call_to_tensorzero_tool_call, prepare_system_or_developer_message,
+    tensorzero_to_openai_messages,
 };
 use crate::tool::ToolCallChunk;
 use serde_json::Value;
+use tensorzero_types_providers::deepseek::{
+    DeepSeekChatChunk, DeepSeekResponse, DeepSeekResponseChoice, DeepSeekResponseFormat,
+};
 use uuid::Uuid;
 
 lazy_static! {
@@ -331,23 +335,14 @@ impl InferenceProvider for DeepSeekProvider {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum DeepSeekResponseFormat {
-    #[default]
-    Text,
-    JsonObject,
-}
-
-impl DeepSeekResponseFormat {
-    fn new(json_mode: ModelInferenceRequestJsonMode) -> Option<Self> {
-        match json_mode {
-            ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
-            // For now, we never explicitly send `DeepSeekResponseFormat::Text`
-            ModelInferenceRequestJsonMode::Off => None,
-            ModelInferenceRequestJsonMode::Strict => Some(DeepSeekResponseFormat::JsonObject),
-        }
+fn deepseek_response_format(
+    json_mode: ModelInferenceRequestJsonMode,
+) -> Option<DeepSeekResponseFormat> {
+    match json_mode {
+        ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
+        // For now, we never explicitly send `DeepSeekResponseFormat::Text`
+        ModelInferenceRequestJsonMode::Off => None,
+        ModelInferenceRequestJsonMode::Strict => Some(DeepSeekResponseFormat::JsonObject),
     }
 }
 
@@ -439,7 +434,7 @@ impl<'a> DeepSeekRequest<'a> {
             );
         }
 
-        let response_format = DeepSeekResponseFormat::new(request.json_mode);
+        let response_format = deepseek_response_format(request.json_mode);
 
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
@@ -531,49 +526,6 @@ fn stream_deepseek(
     })
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekFunctionCallChunk {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    arguments: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekToolCallChunk {
-    index: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
-    // If we were to do this better, we would need to check the `type` field
-    function: DeepSeekFunctionCallChunk,
-}
-
-// This doesn't include role
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekDelta {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<DeepSeekToolCallChunk>>,
-}
-
-// This doesn't include logprobs, finish_reason, and index
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekChatChunkChoice {
-    delta: DeepSeekDelta,
-    finish_reason: Option<OpenAIFinishReason>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekChatChunk {
-    choices: Vec<DeepSeekChatChunkChoice>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<OpenAIUsage>,
-}
-
 /// Maps a DeepSeek chunk to a TensorZero chunk for streaming inferences
 fn deepseek_to_tensorzero_chunk(
     raw_message: String,
@@ -663,31 +615,6 @@ fn deepseek_to_tensorzero_chunk(
         finish_reason,
         raw_usage,
     ))
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekResponseMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
-}
-
-// Leaving out logprobs and finish_reason for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct DeepSeekResponseChoice {
-    index: u8,
-    message: DeepSeekResponseMessage,
-    finish_reason: Option<OpenAIFinishReason>,
-}
-
-// Leaving out id, created, model, service_tier, system_fingerprint, object for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct DeepSeekResponse {
-    choices: Vec<DeepSeekResponseChoice>,
-    usage: OpenAIUsage,
 }
 
 pub(super) async fn prepare_deepseek_messages<'a>(
@@ -789,7 +716,9 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
         let raw_usage = deepseek_usage_from_raw_response(&raw_response).map(|usage| {
@@ -903,6 +832,7 @@ mod tests {
         OpenAIUsage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use tensorzero_types_providers::deepseek::DeepSeekResponseMessage;
 
     #[tokio::test]
     async fn test_deepseek_request_new() {

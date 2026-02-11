@@ -39,7 +39,7 @@ use uuid::Uuid;
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
     OpenAIUsage, StreamOptions, SystemOrDeveloper, get_chat_url, handle_openai_error,
-    prepare_openai_messages,
+    openai_response_tool_call_to_tensorzero_tool_call, prepare_openai_messages,
 };
 
 const PROVIDER_NAME: &str = "SGLang";
@@ -778,7 +778,9 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
         let raw_usage = sglang_usage_from_raw_response(&raw_response).map(|usage| {

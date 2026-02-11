@@ -1,17 +1,17 @@
 use serde::Serialize;
 use toml_edit::{DocumentMut, Item, Table};
 
-use crate::error::ConfigWriterError;
+use crate::error::ConfigApplierError;
 
 /// Serialize a value to a TOML Item using toml_edit.
-pub fn serialize_to_item<T: Serialize>(value: &T) -> Result<Item, ConfigWriterError> {
+pub fn serialize_to_item<T: Serialize>(value: &T) -> Result<Item, ConfigApplierError> {
     // First serialize to toml string, then parse to toml_edit
-    let toml_string = toml::to_string(value).map_err(|e| ConfigWriterError::TomlSerialize {
+    let toml_string = toml::to_string(value).map_err(|e| ConfigApplierError::TomlSerialize {
         message: e.to_string(),
     })?;
 
     let doc: DocumentMut = toml_string.parse().map_err(|e: toml_edit::TomlError| {
-        ConfigWriterError::TomlSerialize {
+        ConfigApplierError::TomlSerialize {
             message: e.to_string(),
         }
     })?;
@@ -26,7 +26,7 @@ pub fn serialize_to_item<T: Serialize>(value: &T) -> Result<Item, ConfigWriterEr
 pub fn ensure_table<'a>(
     doc: &'a mut DocumentMut,
     path: &[&str],
-) -> Result<&'a mut Table, ConfigWriterError> {
+) -> Result<&'a mut Table, ConfigApplierError> {
     let mut current = doc.as_table_mut();
 
     for &key in path {
@@ -34,7 +34,7 @@ pub fn ensure_table<'a>(
             current.insert(key, Item::Table(Table::new()));
         }
         current = current[key].as_table_mut().ok_or_else(|| {
-            ConfigWriterError::InvalidConfigStructure {
+            ConfigApplierError::InvalidConfigStructure {
                 path: path.join("."),
                 key: key.to_string(),
             }
@@ -50,7 +50,7 @@ pub fn upsert_variant(
     function_name: &str,
     variant_name: &str,
     variant_item: Item,
-) -> Result<(), ConfigWriterError> {
+) -> Result<(), ConfigApplierError> {
     let variants_table = ensure_table(doc, &["functions", function_name, "variants"])?;
     variants_table.insert(variant_name, variant_item);
     Ok(())
@@ -61,7 +61,7 @@ pub fn upsert_experimentation(
     doc: &mut DocumentMut,
     function_name: &str,
     experimentation_item: Item,
-) -> Result<(), ConfigWriterError> {
+) -> Result<(), ConfigApplierError> {
     let function_table = ensure_table(doc, &["functions", function_name])?;
     function_table.insert("experimentation", experimentation_item);
     Ok(())
@@ -72,7 +72,7 @@ pub fn upsert_evaluation(
     doc: &mut DocumentMut,
     evaluation_name: &str,
     evaluation_item: Item,
-) -> Result<(), ConfigWriterError> {
+) -> Result<(), ConfigApplierError> {
     let evaluations_table = ensure_table(doc, &["evaluations"])?;
     evaluations_table.insert(evaluation_name, evaluation_item);
     Ok(())
@@ -84,7 +84,7 @@ pub fn upsert_evaluator(
     evaluation_name: &str,
     evaluator_name: &str,
     evaluator_item: Item,
-) -> Result<(), ConfigWriterError> {
+) -> Result<(), ConfigApplierError> {
     let evaluators_table = ensure_table(doc, &["evaluations", evaluation_name, "evaluators"])?;
     evaluators_table.insert(evaluator_name, evaluator_item);
     Ok(())

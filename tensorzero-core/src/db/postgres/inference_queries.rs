@@ -410,61 +410,12 @@ impl InferenceQueries for PostgresConnectionInfo {
             return Ok(());
         }
 
+        if let Some(batch_sender) = self.batch_sender() {
+            return batch_sender.send_chat_inferences(rows);
+        }
+
         let pool = self.get_pool_result()?;
-
-        // Pre-compute timestamps to propagate errors before entering push_values
-        let timestamps: Vec<DateTime<Utc>> = rows
-            .iter()
-            .map(|row| uuid_to_datetime(row.id))
-            .collect::<Result<_, _>>()?;
-
-        let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
-            r"
-            INSERT INTO tensorzero.chat_inferences (
-                id, function_name, variant_name, episode_id, input, output,
-                inference_params, processing_time_ms, ttft_ms,
-                tags, extra_body, dynamic_tools, dynamic_provider_tools,
-                allowed_tools, tool_choice, parallel_tool_calls, snapshot_hash, created_at
-            ) ",
-        );
-
-        query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
-            let snapshot_hash_bytes: Option<Vec<u8>> =
-                row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
-            // For tool params, use empty defaults when None
-            let tool_params_ref = row.tool_params.as_ref();
-            let empty_tools: Vec<Tool> = vec![];
-            let empty_provider_tools: Vec<ProviderTool> = vec![];
-
-            b.push_bind(row.id)
-                .push_bind(&row.function_name)
-                .push_bind(&row.variant_name)
-                .push_bind(row.episode_id)
-                .push_bind(Json::from(&row.input))
-                .push_bind(Json::from(&row.output))
-                .push_bind(Json::from(&row.inference_params))
-                .push_bind(row.processing_time_ms.map(|v| v as i32))
-                .push_bind(row.ttft_ms.map(|v| v as i32))
-                .push_bind(Json::from(&row.tags))
-                .push_bind(Json::from(&row.extra_body))
-                .push_bind(Json::from(
-                    tool_params_ref
-                        .map(|tp| &tp.dynamic_tools)
-                        .unwrap_or(&empty_tools),
-                ))
-                .push_bind(Json::from(
-                    tool_params_ref
-                        .map(|tp| &tp.dynamic_provider_tools)
-                        .unwrap_or(&empty_provider_tools),
-                ))
-                .push_bind(tool_params_ref.map(|tp| Json::from(&tp.allowed_tools)))
-                .push_bind(tool_params_ref.map(|tp| Json::from(&tp.tool_choice)))
-                .push_bind(tool_params_ref.and_then(|tp| tp.parallel_tool_calls))
-                .push_bind(snapshot_hash_bytes)
-                .push_bind(created_at);
-        });
-
+        let mut query_builder = build_insert_chat_inferences_query(rows)?;
         query_builder.build().execute(pool).await?;
 
         Ok(())
@@ -478,44 +429,12 @@ impl InferenceQueries for PostgresConnectionInfo {
             return Ok(());
         }
 
+        if let Some(batch_sender) = self.batch_sender() {
+            return batch_sender.send_json_inferences(rows);
+        }
+
         let pool = self.get_pool_result()?;
-
-        // Pre-compute timestamps to propagate errors before entering push_values
-        let timestamps: Vec<DateTime<Utc>> = rows
-            .iter()
-            .map(|row| uuid_to_datetime(row.id))
-            .collect::<Result<_, _>>()?;
-
-        let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
-            r"
-            INSERT INTO tensorzero.json_inferences (
-                id, function_name, variant_name, episode_id, input, output,
-                output_schema, inference_params, processing_time_ms, ttft_ms,
-                tags, extra_body, auxiliary_content, snapshot_hash, created_at
-            ) ",
-        );
-
-        query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
-            let snapshot_hash_bytes: Option<Vec<u8>> =
-                row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
-            b.push_bind(row.id)
-                .push_bind(&row.function_name)
-                .push_bind(&row.variant_name)
-                .push_bind(row.episode_id)
-                .push_bind(Json::from(&row.input))
-                .push_bind(Json::from(&row.output))
-                .push_bind(&row.output_schema)
-                .push_bind(Json::from(&row.inference_params))
-                .push_bind(row.processing_time_ms.map(|v| v as i32))
-                .push_bind(row.ttft_ms.map(|v| v as i32))
-                .push_bind(Json::from(&row.tags))
-                .push_bind(Json::from(&row.extra_body))
-                .push_bind(Json::from(&row.auxiliary_content))
-                .push_bind(snapshot_hash_bytes)
-                .push_bind(created_at);
-        });
-
+        let mut query_builder = build_insert_json_inferences_query(rows)?;
         query_builder.build().execute(pool).await?;
 
         Ok(())
@@ -608,6 +527,111 @@ impl InferenceQueries for PostgresConnectionInfo {
 
         Ok(results)
     }
+}
+
+// ===== Query builder functions for insert operations =====
+
+/// Builds a query to insert chat inferences.
+pub(super) fn build_insert_chat_inferences_query(
+    rows: &[ChatInferenceDatabaseInsert],
+) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
+    // Pre-compute timestamps to propagate errors before entering push_values
+    let timestamps: Vec<DateTime<Utc>> = rows
+        .iter()
+        .map(|row| uuid_to_datetime(row.id))
+        .collect::<Result<_, _>>()?;
+
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        r"
+        INSERT INTO tensorzero.chat_inferences (
+            id, function_name, variant_name, episode_id, input, output,
+            inference_params, processing_time_ms, ttft_ms,
+            tags, extra_body, dynamic_tools, dynamic_provider_tools,
+            allowed_tools, tool_choice, parallel_tool_calls, snapshot_hash, created_at
+        ) ",
+    );
+
+    query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
+        let snapshot_hash_bytes: Option<Vec<u8>> =
+            row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
+
+        // For tool params, use empty defaults when None
+        let tool_params_ref = row.tool_params.as_ref();
+        let empty_tools: Vec<Tool> = vec![];
+        let empty_provider_tools: Vec<ProviderTool> = vec![];
+
+        b.push_bind(row.id)
+            .push_bind(&row.function_name)
+            .push_bind(&row.variant_name)
+            .push_bind(row.episode_id)
+            .push_bind(Json::from(&row.input))
+            .push_bind(Json::from(&row.output))
+            .push_bind(Json::from(&row.inference_params))
+            .push_bind(row.processing_time_ms.map(|v| v as i32))
+            .push_bind(row.ttft_ms.map(|v| v as i32))
+            .push_bind(Json::from(&row.tags))
+            .push_bind(Json::from(&row.extra_body))
+            .push_bind(Json::from(
+                tool_params_ref
+                    .map(|tp| &tp.dynamic_tools)
+                    .unwrap_or(&empty_tools),
+            ))
+            .push_bind(Json::from(
+                tool_params_ref
+                    .map(|tp| &tp.dynamic_provider_tools)
+                    .unwrap_or(&empty_provider_tools),
+            ))
+            .push_bind(tool_params_ref.map(|tp| Json::from(&tp.allowed_tools)))
+            .push_bind(tool_params_ref.map(|tp| Json::from(&tp.tool_choice)))
+            .push_bind(tool_params_ref.and_then(|tp| tp.parallel_tool_calls))
+            .push_bind(snapshot_hash_bytes)
+            .push_bind(created_at);
+    });
+
+    Ok(query_builder)
+}
+
+/// Builds a query to insert json inferences.
+pub(super) fn build_insert_json_inferences_query(
+    rows: &[JsonInferenceDatabaseInsert],
+) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
+    // Pre-compute timestamps to propagate errors before entering push_values
+    let timestamps: Vec<DateTime<Utc>> = rows
+        .iter()
+        .map(|row| uuid_to_datetime(row.id))
+        .collect::<Result<_, _>>()?;
+
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        r"
+        INSERT INTO tensorzero.json_inferences (
+            id, function_name, variant_name, episode_id, input, output,
+            output_schema, inference_params, processing_time_ms, ttft_ms,
+            tags, extra_body, auxiliary_content, snapshot_hash, created_at
+        ) ",
+    );
+
+    query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
+        let snapshot_hash_bytes: Option<Vec<u8>> =
+            row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
+
+        b.push_bind(row.id)
+            .push_bind(&row.function_name)
+            .push_bind(&row.variant_name)
+            .push_bind(row.episode_id)
+            .push_bind(Json::from(&row.input))
+            .push_bind(Json::from(&row.output))
+            .push_bind(&row.output_schema)
+            .push_bind(Json::from(&row.inference_params))
+            .push_bind(row.processing_time_ms.map(|v| v as i32))
+            .push_bind(row.ttft_ms.map(|v| v as i32))
+            .push_bind(Json::from(&row.tags))
+            .push_bind(Json::from(&row.extra_body))
+            .push_bind(Json::from(&row.auxiliary_content))
+            .push_bind(snapshot_hash_bytes)
+            .push_bind(created_at);
+    });
+
+    Ok(query_builder)
 }
 
 // ===== Helper types =====

@@ -16,6 +16,7 @@ use crate::db::inferences::{
     ListInferenceMetadataParams, ListInferencesParams, MockInferenceQueries, VariantThroughput,
 };
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
+use crate::db::resolve_uuid::{ResolveUuidQueries, ResolvedObject};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::{
     ConfigQueries, MockConfigQueries, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow,
@@ -230,12 +231,17 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
     }
 }
 
+#[async_trait]
 impl ConfigQueries for MockClickHouseConnectionInfo {
     async fn get_config_snapshot(
         &self,
         snapshot_hash: SnapshotHash,
     ) -> Result<ConfigSnapshot, Error> {
         self.config_queries.get_config_snapshot(snapshot_hash).await
+    }
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        self.config_queries.write_config_snapshot(snapshot).await
     }
 }
 
@@ -284,5 +290,12 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         self.model_inference_queries
             .get_model_latency_quantile_function_inputs()
+    }
+}
+
+#[async_trait]
+impl ResolveUuidQueries for MockClickHouseConnectionInfo {
+    async fn resolve_uuid(&self, _id: &Uuid) -> Result<Vec<ResolvedObject>, Error> {
+        Ok(vec![])
     }
 }

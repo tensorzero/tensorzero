@@ -27,7 +27,9 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::config::snapshot::SnapshotHash;
-use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
+use crate::config::{
+    Config, ErrorContext, Namespace, OtlpConfig, SchemaData, UninitializedVariantInfo,
+};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::InferenceQueries;
@@ -35,7 +37,7 @@ use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails, ErrorWithRawResponse, IMPOSSIBLE_ERROR_MESSAGE};
-use crate::experimentation::ExperimentationConfig;
+use crate::experimentation::ExperimentationConfigWithNamespaces;
 use crate::function::{DEFAULT_FUNCTION_NAME, FunctionConfig, FunctionConfigChat};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
@@ -83,6 +85,11 @@ pub struct Params {
     // the episode ID (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     pub episode_id: Option<Uuid>,
+    // The namespace for experimentation. If provided, namespace-specific experimentation
+    // configs will be used if available. Stored as a `tensorzero::namespace` tag.
+    // Must be a non-empty string.
+    #[serde(default)]
+    pub namespace: Option<Namespace>,
     // the input for the inference
     pub input: Input,
     // default False
@@ -389,6 +396,16 @@ pub async fn inference(
         );
     }
 
+    // Store namespace as a tag (validation happens during deserialization)
+    let namespace = if let Some(ref ns) = params.namespace {
+        params
+            .tags
+            .insert("tensorzero::namespace".to_string(), ns.to_string());
+        Some(ns.as_str())
+    } else {
+        None
+    };
+
     let (function, function_name) = find_function(&params, &config).await?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
@@ -538,8 +555,9 @@ pub async fn inference(
     // Keep sampling variants until one succeeds
     let mut already_sampled = false;
     while !candidate_variants.is_empty() {
+        // Use namespace-specific experimentation config if available
         let result = function
-            .experimentation()
+            .experimentation_for_namespace(namespace)
             .sample(
                 &function_name,
                 episode_id,
@@ -948,7 +966,7 @@ async fn find_function(
                     parallel_tool_calls: None,
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
-                    experimentation: ExperimentationConfig::default(),
+                    experimentation: ExperimentationConfigWithNamespaces::default(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
