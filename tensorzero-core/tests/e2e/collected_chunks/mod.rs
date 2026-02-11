@@ -5,6 +5,7 @@
 
 use futures::StreamExt;
 use reqwest::Client;
+use reqwest::StatusCode;
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -176,5 +177,54 @@ async fn test_collected_chunks_json_streaming() {
         Last few chunks:\n{:#?}",
         all_chunks.len(),
         all_chunks.iter().rev().take(3).collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn test_collected_chunks_rejected_in_non_stream_mode() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "openai",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "TestBot"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Say hello"
+                }
+            ]
+        },
+        "stream": false,
+        "include_collected_chunks": true
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "`include_collected_chunks` with `stream: false` should return 400"
+    );
+    let response_json: Value = response
+        .json()
+        .await
+        .expect("Failed to parse response JSON");
+    assert_eq!(
+        response_json,
+        json!({
+            "error": "`include_collected_chunks` is only supported in streaming mode",
+            "error_json": {
+                "InvalidRequest": {
+                    "message": "`include_collected_chunks` is only supported in streaming mode"
+                }
+            }
+        }),
+        "Error response should indicate that `include_collected_chunks` requires streaming"
     );
 }

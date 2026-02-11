@@ -439,6 +439,13 @@ pub async fn inference(
     // Should we stream the inference?
     let stream = params.stream.unwrap_or(false);
 
+    if params.include_collected_chunks && !stream {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "`include_collected_chunks` is only supported in streaming mode".to_string(),
+        }
+        .into());
+    }
+
     // Keep track of which variants failed
     let mut variant_errors: IndexMap<String, Error> = IndexMap::new();
 
