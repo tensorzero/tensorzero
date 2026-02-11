@@ -265,6 +265,11 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/autopilot/v1/sessions/{session_id}/config-writes",
             get(endpoints::internal::autopilot::list_config_writes_handler),
         )
+        // Resolve UUID endpoint
+        .route(
+            "/internal/resolve_uuid/{id}",
+            get(endpoints::internal::resolve_uuid::resolve_uuid_handler),
+        )
         // Other Autopilot endpoints
         .route(
             "/internal/autopilot/status",

@@ -34,6 +34,7 @@ use crate::db::inferences::{
 };
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::resolve_uuid::{ResolveUuidQueries, ResolvedObject};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::workflow_evaluation_queries::{
     GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationProjectRow,
@@ -88,6 +89,7 @@ pub trait DelegatingDatabaseQueries:
     + BatchInferenceQueries
     + ModelInferenceQueries
     + WorkflowEvaluationQueries
+    + ResolveUuidQueries
     + EpisodeQueries
     + DICLQueries
 {
@@ -915,6 +917,13 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl ResolveUuidQueries for DelegatingDatabaseConnection {
+    async fn resolve_uuid(&self, id: &Uuid) -> Result<Vec<ResolvedObject>, Error> {
+        self.get_read_database().resolve_uuid(id).await
     }
 }
 

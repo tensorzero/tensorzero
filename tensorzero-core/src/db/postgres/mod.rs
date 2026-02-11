@@ -25,6 +25,7 @@ pub mod inference_queries;
 pub mod model_inferences;
 pub mod pgcron;
 pub mod rate_limiting;
+mod resolve_uuid;
 pub mod workflow_evaluation_queries;
 
 mod episode_queries;
