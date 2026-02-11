@@ -5,5 +5,5 @@ import type { MultipleChoiceQuestion } from "./MultipleChoiceQuestion";
  * The format of a user question.
  */
 export type EventPayloadUserQuestionInner =
-  | ({ format: "multiple_choice" } & MultipleChoiceQuestion)
-  | { format: "free_response" };
+  | ({ type: "multiple_choice" } & MultipleChoiceQuestion)
+  | { type: "free_response" };

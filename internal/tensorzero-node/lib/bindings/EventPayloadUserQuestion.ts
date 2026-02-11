@@ -15,6 +15,6 @@ export type EventPayloadUserQuestion = {
    */
   question: string;
 } & (
-  | ({ format: "multiple_choice" } & MultipleChoiceQuestion)
-  | { format: "free_response" }
+  | ({ type: "multiple_choice" } & MultipleChoiceQuestion)
+  | { type: "free_response" }
 );
