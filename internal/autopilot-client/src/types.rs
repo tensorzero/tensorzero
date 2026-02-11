@@ -218,7 +218,7 @@ pub enum EventPayload {
     ToolResult(EventPayloadToolResult),
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
-    UserResponses(EventPayloadUserResponses),
+    UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -233,7 +233,7 @@ impl EventPayload {
                 self,
                 EventPayload::ToolCallAuthorization(_)
                     | EventPayload::ToolResult(_)
-                    | EventPayload::UserResponses(_)
+                    | EventPayload::UserQuestionsAnswers(_)
             )
     }
 }
@@ -257,7 +257,7 @@ pub enum GatewayEventPayload {
     ToolResult(EventPayloadToolResult),
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
-    UserResponses(EventPayloadUserResponses),
+    UserResponses(EventPayloadUserQuestionsAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -278,7 +278,7 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             EventPayload::ToolResult(r) => Ok(GatewayEventPayload::ToolResult(r)),
             EventPayload::Visualization(v) => Ok(GatewayEventPayload::Visualization(v)),
             EventPayload::UserQuestions(q) => Ok(GatewayEventPayload::UserQuestions(q)),
-            EventPayload::UserResponses(r) => Ok(GatewayEventPayload::UserResponses(r)),
+            EventPayload::UserQuestionsAnswers(r) => Ok(GatewayEventPayload::UserResponses(r)),
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
     }
@@ -646,9 +646,9 @@ pub struct MultipleChoiceOption {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EventPayloadUserResponses {
+pub struct EventPayloadUserQuestionsAnswers {
     /// Map from question UUID to response.
-    pub responses: HashMap<Uuid, UserQuestionResponse>,
+    pub responses: HashMap<Uuid, UserQuestionAnswer>,
     pub user_questions_event_id: Uuid,
 }
 
@@ -656,7 +656,7 @@ pub struct EventPayloadUserResponses {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum UserQuestionResponse {
+pub enum UserQuestionAnswer {
     MultipleChoice(MultipleChoiceAnswer),
     FreeResponse(FreeResponseAnswer),
     Skipped,

@@ -253,17 +253,11 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
         description: payload.message,
       };
     case "visualization":
-      // Visualization events render their own content, no text description needed
-      return {};
     case "user_questions":
-      // TODO (#6270): add a real component
-      return {};
     case "user_responses":
-      // TODO (#6270): add a real component
-      return {};
     case "unknown":
-      return {};
-    default:
+      // Visualization events render their own content, no text description needed
+      // TODO (#6270): add a real component for user_questions and user_responses
       return {};
   }
 }
@@ -425,11 +419,7 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     case "user_questions":
-      // TODO (#6270): add a real component
-      return "User Questions";
     case "user_responses":
-      // TODO (#6270): add a real component
-      return "User Responses";
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">

@@ -5,7 +5,7 @@ import type { MultipleChoiceAnswer } from "./MultipleChoiceAnswer";
 /**
  * A user's response to a question.
  */
-export type UserQuestionResponse =
+export type UserQuestionAnswer =
   | ({ type: "multiple_choice" } & MultipleChoiceAnswer)
   | ({ type: "free_response" } & FreeResponseAnswer)
   | { type: "skipped" };

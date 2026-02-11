@@ -5,7 +5,7 @@ import type { EventPayloadStatusUpdate } from "./EventPayloadStatusUpdate";
 import type { EventPayloadToolCall } from "./EventPayloadToolCall";
 import type { EventPayloadToolResult } from "./EventPayloadToolResult";
 import type { EventPayloadUserQuestions } from "./EventPayloadUserQuestions";
-import type { EventPayloadUserResponses } from "./EventPayloadUserResponses";
+import type { EventPayloadUserQuestionsAnswers } from "./EventPayloadUserQuestionsAnswers";
 import type { EventPayloadVisualization } from "./EventPayloadVisualization";
 import type { GatewayEventPayloadToolCallAuthorization } from "./GatewayEventPayloadToolCallAuthorization";
 
@@ -25,5 +25,5 @@ export type GatewayEventPayload =
   | ({ type: "tool_result" } & EventPayloadToolResult)
   | ({ type: "visualization" } & EventPayloadVisualization)
   | ({ type: "user_questions" } & EventPayloadUserQuestions)
-  | ({ type: "user_responses" } & EventPayloadUserResponses)
+  | ({ type: "user_responses" } & EventPayloadUserQuestionsAnswers)
   | { type: "unknown" };
