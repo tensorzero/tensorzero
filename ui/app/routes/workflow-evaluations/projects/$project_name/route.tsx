@@ -6,12 +6,12 @@ import {
 } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
 import { WorkflowEvalRunSelector } from "~/routes/workflow-evaluations/projects/$project_name/WorkflowEvalRunSelector";
-import type { WorkflowEvaluationRunStatistics } from "~/types/tensorzero";
+import type { WorkflowEvaluationRun } from "~/types/tensorzero";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
-import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
-import { useNavigate, type RouteHandle } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
+import { useLocation, type RouteHandle } from "react-router";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { fetchResultsData } from "./route.server";
+import { ResultsSection } from "./ResultsSection";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -28,58 +28,30 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const runIds = searchParams.get("run_ids")?.split(",") || [];
 
-  const runStats: Record<string, WorkflowEvaluationRunStatistics[]> = {};
-
-  const tensorZeroClient = getTensorZeroClient();
   if (runIds.length > 0) {
-    // Create promises for fetching statistics for each runId
-    const statsPromises = runIds.map((runId) =>
-      tensorZeroClient
-        .getWorkflowEvaluationRunStatistics(runId)
-        .then((response) => response.statistics),
-    );
+    // Start results fetch immediately so it runs concurrently with runInfos
+    const resultsData = fetchResultsData(runIds, limit, offset);
 
-    // Create promise for fetching run info
-    const runInfosPromise = tensorZeroClient
+    // Await runInfos synchronously — the run selector needs this data
+    // and must remain outside the Suspense boundary
+    const client = getTensorZeroClient();
+    const runInfos = await client
       .getWorkflowEvaluationRuns(runIds, projectName)
       .then((response) => response.runs);
-
-    const client = getTensorZeroClient();
-    const episodeInfoPromise = client
-      .listWorkflowEvaluationRunEpisodesByTaskName(runIds, limit, offset)
-      .then((response) => response.episodes);
-    const countPromise =
-      client.countWorkflowEvaluationRunEpisodeGroupsByTaskName(runIds);
-    // Run all promises concurrently
-    const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
-      Promise.all(statsPromises),
-      runInfosPromise,
-      episodeInfoPromise,
-      countPromise,
-    ]);
-
-    runIds.forEach((runId, index) => {
-      runStats[runId] = statsResults[index];
-    });
-    // Sort runInfos by the same order as the url params
     runInfos.sort((a, b) => runIds.indexOf(a.id) - runIds.indexOf(b.id));
 
     return {
       projectName,
       runInfos,
-      runStats,
-      episodeInfo,
-      count,
+      resultsData,
       limit,
       offset,
     };
   } else {
     return {
       projectName,
-      runInfos: [],
-      runStats: {},
-      episodeInfo: [],
-      count: 0,
+      runInfos: [] as WorkflowEvaluationRun[],
+      resultsData: null,
       limit,
       offset,
     };
@@ -89,20 +61,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function WorkflowEvaluationProjectPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { projectName, runInfos, runStats, episodeInfo, count, limit, offset } =
-    loaderData;
-  const navigate = useNavigate();
+  const { projectName, runInfos, resultsData, limit, offset } = loaderData;
   const selectedRunIds = runInfos.map((run) => run.id);
-  const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
+  const location = useLocation();
+
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
@@ -125,17 +87,15 @@ export default function WorkflowEvaluationProjectPage({
             projectName={projectName}
             selectedRunInfos={runInfos}
           />
-          <WorkflowEvaluationProjectResultsTable
-            selected_run_infos={runInfos}
-            evaluation_results={episodeInfo}
-            evaluation_statistics={runStats}
-          />
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={offset <= 0}
-            disableNext={offset + limit >= count}
-          />
+          {resultsData ? (
+            <ResultsSection
+              resultsData={resultsData}
+              runInfos={runInfos}
+              limit={limit}
+              offset={offset}
+              locationKey={location.key}
+            />
+          ) : null}
         </SectionLayout>
       </PageLayout>
     </ColorAssignerProvider>

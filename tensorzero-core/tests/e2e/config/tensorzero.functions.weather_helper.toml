@@ -249,7 +249,7 @@ max_tokens = 100
 
 [functions.weather_helper.variants.xai-reasoning]
 type = "chat_completion"
-model = "grok-3-mini"
+model = "grok-code-fast-1"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 800
 
@@ -258,7 +258,7 @@ max_tokens = 800
 # Grok 3 Mini with `reasoning_effort`-based reasoning
 [functions.weather_helper.variants.openrouter-grok-reasoning]
 type = "chat_completion"
-model = "grok-3-mini-openrouter"
+model = "grok-code-fast-1-openrouter"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 2048
 reasoning_effort = "low"

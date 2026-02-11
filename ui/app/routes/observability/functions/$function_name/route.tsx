@@ -8,6 +8,8 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
+import { useAutopilotAvailable } from "~/context/autopilot-available";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
@@ -56,6 +58,8 @@ function FunctionDetailPageHeader({
   functionName: string;
   functionConfig: FunctionConfig | null;
 }) {
+  const autopilotAvailable = useAutopilotAvailable();
+
   return (
     <PageHeader
       eyebrow={
@@ -71,6 +75,9 @@ function FunctionDetailPageHeader({
       }
     >
       {functionConfig && <BasicInfo functionConfig={functionConfig} />}
+      {autopilotAvailable && (
+        <AskAutopilotButton message={`Function: ${functionName}\n\n`} />
+      )}
     </PageHeader>
   );
 }
@@ -200,10 +207,11 @@ async function fetchFunctionDetailData(params: FetchParams) {
   // For now, we only fetch this for track_and_stop experimentation
   // but the underlying query is general and could be used for other experimentation types
   const feedbackParams =
-    function_config.experimentation.type === "track_and_stop"
+    function_config.experimentation.base.type === "track_and_stop"
       ? {
-          metric_name: function_config.experimentation.metric,
-          variant_names: function_config.experimentation.candidate_variants,
+          metric_name: function_config.experimentation.base.metric,
+          variant_names:
+            function_config.experimentation.base.candidate_variants,
         }
       : null;
   const feedbackTimeseriesPromise = feedbackParams

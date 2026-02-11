@@ -482,7 +482,7 @@ async fn process_embeddings_with_batching(
 
 /// Inserts DICL examples into the database via the DICLQueries trait.
 pub async fn insert_dicl_examples_with_batching(
-    db: &(impl DICLQueries + Sync),
+    db: &impl DICLQueries,
     examples: Vec<(RenderedSample, Vec<f64>)>,
     function_name: &str,
     variant_name: &str,
@@ -558,7 +558,7 @@ mod tests {
             EmbeddingProviderInfo,
         },
         endpoints::inference::InferenceCredentials,
-        experimentation::ExperimentationConfig,
+        experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
@@ -990,7 +990,7 @@ mod tests {
             description: None,
 
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })
     }
 
@@ -1003,7 +1003,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })
     }
 
@@ -1026,7 +1026,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })
     }
 
@@ -1050,7 +1050,7 @@ mod tests {
             json_mode_tool_call_config: invalid_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })
     }
 
