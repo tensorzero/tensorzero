@@ -257,7 +257,7 @@ pub enum GatewayEventPayload {
     ToolResult(EventPayloadToolResult),
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
-    UserResponses(EventPayloadUserQuestionsAnswers),
+    UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -278,7 +278,9 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             EventPayload::ToolResult(r) => Ok(GatewayEventPayload::ToolResult(r)),
             EventPayload::Visualization(v) => Ok(GatewayEventPayload::Visualization(v)),
             EventPayload::UserQuestions(q) => Ok(GatewayEventPayload::UserQuestions(q)),
-            EventPayload::UserQuestionsAnswers(r) => Ok(GatewayEventPayload::UserResponses(r)),
+            EventPayload::UserQuestionsAnswers(r) => {
+                Ok(GatewayEventPayload::UserQuestionsAnswers(r))
+            }
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
     }

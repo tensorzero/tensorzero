@@ -25,5 +25,5 @@ export type GatewayEventPayload =
   | ({ type: "tool_result" } & EventPayloadToolResult)
   | ({ type: "visualization" } & EventPayloadVisualization)
   | ({ type: "user_questions" } & EventPayloadUserQuestions)
-  | ({ type: "user_responses" } & EventPayloadUserQuestionsAnswers)
+  | ({ type: "user_questions_answers" } & EventPayloadUserQuestionsAnswers)
   | { type: "unknown" };

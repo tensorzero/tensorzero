@@ -254,7 +254,7 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       };
     case "visualization":
     case "user_questions":
-    case "user_responses":
+    case "user_questions_answers":
     case "unknown":
       // Visualization events render their own content, no text description needed
       // TODO (#6270): add a real component for user_questions and user_responses
@@ -419,7 +419,7 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     case "user_questions":
-    case "user_responses":
+    case "user_questions_answers":
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
