@@ -16,13 +16,16 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::UnwrittenConfig};
+use crate::config::{
+    BatchWritesConfig, Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::UnwrittenConfig,
+};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::postgres::batching::PostgresBatchSender;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
 use crate::endpoints::openai_compatible::RouterExt;
@@ -97,6 +100,21 @@ impl Drop for GatewayHandle {
                     }
                 });
                 tracing::info!("ClickHouse batch writer finished");
+            }
+            // Drain the Postgres batch writer (same pattern as ClickHouse above)
+            let pg_handle = self
+                .app_state
+                .postgres_connection_info
+                .batcher_join_handle();
+            self.app_state.postgres_connection_info = PostgresConnectionInfo::new_disabled();
+            if let Some(pg_handle) = pg_handle {
+                tracing::info!("Waiting for Postgres batch writer to finish");
+                tokio::task::block_in_place(|| {
+                    if let Err(e) = Handle::current().block_on(pg_handle) {
+                        tracing::error!("Error in Postgres batch writer: {e}");
+                    }
+                });
+                tracing::info!("Postgres batch writer finished");
             }
             // Return unused rate limit tokens to the database
             if !self.app_state.rate_limiting_manager.is_empty() {
@@ -481,6 +499,7 @@ pub async fn setup_clickhouse(
 async fn create_postgres_connection(
     postgres_url: &str,
     connection_pool_size: u32,
+    batch_writes: &BatchWritesConfig,
 ) -> Result<PostgresConnectionInfo, Error> {
     let pool = PgPoolOptions::new()
         .max_connections(connection_pool_size)
@@ -492,7 +511,15 @@ async fn create_postgres_connection(
             })
         })?;
 
-    let connection_info = PostgresConnectionInfo::new_with_pool(pool);
+    let connection_info = if batch_writes.enabled {
+        let batch_sender = Arc::new(PostgresBatchSender::new(
+            pool.clone(),
+            batch_writes.clone(),
+        )?);
+        PostgresConnectionInfo::new_with_pool_and_batcher(pool, batch_sender)
+    } else {
+        PostgresConnectionInfo::new_with_pool(pool)
+    };
     connection_info.check_migrations().await?;
     Ok(connection_info)
 }
@@ -518,7 +545,12 @@ pub async fn setup_postgres(
         }
         // Postgres enabled and URL provided
         (Some(true), Some(postgres_url)) => {
-            create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
+            create_postgres_connection(
+                postgres_url,
+                config.postgres.connection_pool_size,
+                &config.gateway.observability.batch_writes,
+            )
+            .await?
         }
         // Postgres default and no URL
         (None, None) => {
@@ -529,7 +561,12 @@ pub async fn setup_postgres(
         }
         // Postgres default and URL provided
         (None, Some(postgres_url)) => {
-            create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
+            create_postgres_connection(
+                postgres_url,
+                config.postgres.connection_pool_size,
+                &config.gateway.observability.batch_writes,
+            )
+            .await?
         }
     };
 
@@ -979,8 +1016,7 @@ mod tests {
         let config = Box::leak(Box::new(Config {
             postgres: PostgresConfig {
                 enabled: Some(false),
-                connection_pool_size: 20,
-                inference_retention_days: None,
+                ..Default::default()
             },
             ..Default::default()
         }));
@@ -998,8 +1034,7 @@ mod tests {
         let config = Box::leak(Box::new(Config {
             postgres: PostgresConfig {
                 enabled: Some(false),
-                connection_pool_size: 20,
-                inference_retention_days: None,
+                ..Default::default()
             },
             ..Default::default()
         }));
@@ -1022,8 +1057,7 @@ mod tests {
         let config = Box::leak(Box::new(Config {
             postgres: PostgresConfig {
                 enabled: None,
-                connection_pool_size: 20,
-                inference_retention_days: None,
+                ..Default::default()
             },
             ..Default::default()
         }));
@@ -1041,8 +1075,7 @@ mod tests {
         let config = Box::leak(Box::new(Config {
             postgres: PostgresConfig {
                 enabled: Some(true),
-                connection_pool_size: 20,
-                inference_retention_days: None,
+                ..Default::default()
             },
             ..Default::default()
         }));
@@ -1060,8 +1093,7 @@ mod tests {
         let config = Box::leak(Box::new(Config {
             postgres: PostgresConfig {
                 enabled: Some(true),
-                connection_pool_size: 20,
-                inference_retention_days: None,
+                ..Default::default()
             },
             ..Default::default()
         }));
@@ -1077,8 +1109,7 @@ mod tests {
         let config_no_rules = Arc::new(Config {
             postgres: PostgresConfig {
                 enabled: Some(false),
-                connection_pool_size: 20,
-                inference_retention_days: None,
+                ..Default::default()
             },
             rate_limiting: Default::default(),
             ..Default::default()

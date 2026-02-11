@@ -1,15 +1,19 @@
+use std::sync::Arc;
+use std::{collections::HashSet, time::Duration};
+
 use async_trait::async_trait;
 use durable;
 use futures::TryStreamExt;
 use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
-use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
 use crate::error::{Error, ErrorDetails};
 
+use self::batching::{PostgresBatchSender, PostgresBatchWriterHandle};
 use super::HealthCheckable;
 
 pub mod batch_inference;
+pub mod batching;
 pub mod config_queries;
 pub mod dataset_queries;
 pub mod deployment_queries;
@@ -35,6 +39,7 @@ const RUN_MIGRATIONS_COMMAND: &str = "You likely need to apply migrations to you
 pub enum PostgresConnectionInfo {
     Enabled {
         pool: PgPool,
+        batch_sender: Option<Arc<PostgresBatchSender>>,
     },
     #[cfg(test)]
     Mock {
@@ -45,7 +50,17 @@ pub enum PostgresConnectionInfo {
 
 impl PostgresConnectionInfo {
     pub fn new_with_pool(pool: PgPool) -> Self {
-        Self::Enabled { pool }
+        Self::Enabled {
+            pool,
+            batch_sender: None,
+        }
+    }
+
+    pub fn new_with_pool_and_batcher(pool: PgPool, batch_sender: Arc<PostgresBatchSender>) -> Self {
+        Self::Enabled {
+            pool,
+            batch_sender: Some(batch_sender),
+        }
     }
 
     #[cfg(test)]
@@ -59,7 +74,7 @@ impl PostgresConnectionInfo {
 
     pub fn get_pool(&self) -> Option<&PgPool> {
         match self {
-            Self::Enabled { pool } => Some(pool),
+            Self::Enabled { pool, .. } => Some(pool),
             #[cfg(test)]
             Self::Mock { .. } => None,
             Self::Disabled => None,
@@ -68,7 +83,7 @@ impl PostgresConnectionInfo {
 
     pub fn get_pool_result(&self) -> Result<&PgPool, Error> {
         match self {
-            Self::Enabled { pool } => Ok(pool),
+            Self::Enabled { pool, .. } => Ok(pool),
             #[cfg(test)]
             Self::Mock { .. } => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: "Mock database is not supported".to_string(),
@@ -76,6 +91,26 @@ impl PostgresConnectionInfo {
             Self::Disabled => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: "Database is disabled".to_string(),
             })),
+        }
+    }
+
+    pub fn batch_sender(&self) -> Option<&Arc<PostgresBatchSender>> {
+        match self {
+            Self::Enabled { batch_sender, .. } => batch_sender.as_ref(),
+            #[cfg(test)]
+            Self::Mock { .. } => None,
+            Self::Disabled => None,
+        }
+    }
+
+    pub fn batcher_join_handle(&self) -> Option<PostgresBatchWriterHandle> {
+        match self {
+            Self::Enabled { batch_sender, .. } => {
+                batch_sender.as_ref().map(|s| s.writer_handle.clone())
+            }
+            #[cfg(test)]
+            Self::Mock { .. } => None,
+            Self::Disabled => None,
         }
     }
 
@@ -215,7 +250,7 @@ impl HealthCheckable for PostgresConnectionInfo {
                     }))
                 }
             }
-            Self::Enabled { pool } => {
+            Self::Enabled { pool, .. } => {
                 let check = async {
                     let _result = sqlx::query("SELECT 1").fetch_one(pool).await.map_err(|e| {
                         Error::new(ErrorDetails::PostgresConnection {
