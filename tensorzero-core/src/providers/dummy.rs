@@ -24,6 +24,7 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::usage::{ApiType, RawUsageEntry};
 use crate::inference::types::{ContentBlock, FinishReason, Role};
 use crate::inference::types::{
@@ -890,6 +891,7 @@ impl EmbeddingProvider for DummyProvider {
         _http_client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         _model_provider_data: &EmbeddingProviderRequestInfo,
+        _extra_headers: &FullExtraHeadersConfig,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {

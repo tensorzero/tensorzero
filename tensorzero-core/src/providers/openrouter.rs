@@ -70,6 +70,7 @@ use super::openai::{
 
 use crate::inference::TensorZeroEventError;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::providers::openai::OpenAIEmbeddingUsage;
 
 lazy_static! {
@@ -369,6 +370,7 @@ impl EmbeddingProvider for OpenRouterProvider {
         client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
+        extra_headers: &FullExtraHeadersConfig,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self
             .credentials
@@ -401,7 +403,7 @@ impl EmbeddingProvider for OpenRouterProvider {
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             &FullExtraBodyConfig::default(), // No overrides supported
-            &Default::default(),             // No extra headers for embeddings yet
+            extra_headers,
             model_provider_data,
             &self.model_name,
             request_body_value,

@@ -107,20 +107,18 @@ impl Optimizer for DiclOptimizationConfig {
         let input_texts: Vec<String> = train_examples
             .iter()
             .map(|sample| {
-                serde_json::to_string(&sample.stored_input)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Error in serializing stored_input in DICL optimization: {e}"
-                            ),
-                        })
+                serde_json::to_string(&sample.stored_input).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error in serializing stored_input in DICL optimization: {e}"
+                        ),
                     })
-                    .unwrap_or_else(|_| format!("{:?}", sample.stored_input))
+                })
             })
-            .collect();
+            .collect::<Result<Vec<String>, _>>()?;
 
         // Process embeddings with batching and concurrency control
-        let all_embeddings = process_embeddings_with_batching(
+        let all_embeddings = process_embeddings_with_batching( 
             &config,
             &self.embedding_model,
             client,
@@ -374,7 +372,7 @@ async fn process_embedding_batch(
     };
 
     let response = embedding_model_config
-        .embed(&embedding_request, model_name, &clients)
+        .embed(&embedding_request, model_name, &clients, Default::default())
         .await?;
 
     // We're running an optimization, so we don't really have a gateway to shutdown

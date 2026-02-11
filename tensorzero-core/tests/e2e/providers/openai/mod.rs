@@ -1300,7 +1300,7 @@ async fn test_embedding_request() {
         include_raw_response: false,
     };
     let response = model_config
-        .embed(&request, &model_name, &clients)
+        .embed(&request, &model_name, &clients, Default::default())
         .await
         .unwrap();
     assert!(
@@ -1368,7 +1368,7 @@ async fn test_embedding_request() {
     // Wait for ClickHouse write
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     let cached_response = model_config
-        .embed(&request, &model_name, &clients)
+        .embed(&request, &model_name, &clients, Default::default())
         .await
         .unwrap();
     assert!(cached_response.cached);
@@ -1452,10 +1452,26 @@ async fn test_embedding_sanity_check() {
     };
 
     // Compute all 3 embeddings concurrently
+    let extra_headers = Default::default();
     let (response_a, response_b, response_c) = tokio::join!(
-        provider_config.embed(&embedding_request_a, &clients, &request_info),
-        provider_config.embed(&embedding_request_b, &clients, &request_info),
-        provider_config.embed(&embedding_request_c, &clients, &request_info)
+        provider_config.embed(
+            &embedding_request_a,
+            &clients,
+            &request_info,
+            &extra_headers
+        ),
+        provider_config.embed(
+            &embedding_request_b,
+            &clients,
+            &request_info,
+            &extra_headers
+        ),
+        provider_config.embed(
+            &embedding_request_c,
+            &clients,
+            &request_info,
+            &extra_headers
+        )
     );
 
     // Unwrap the results

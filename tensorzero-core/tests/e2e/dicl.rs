@@ -373,7 +373,12 @@ async fn embed_insert_example(
     };
 
     let response = provider_config
-        .embed(&request, &clients, &(&provider_config).into())
+        .embed(
+            &request,
+            &clients,
+            &(&provider_config).into(),
+            &Default::default(),
+        )
         .await
         .unwrap();
     let id = Uuid::now_v7();
