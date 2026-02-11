@@ -176,6 +176,7 @@ impl InferenceProvider for VLLMProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 
@@ -276,6 +277,7 @@ impl InferenceProvider for VLLMProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let stream = stream_openai(

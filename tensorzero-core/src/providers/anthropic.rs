@@ -307,6 +307,7 @@ impl InferenceProvider for AnthropicProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let latency = Latency::NonStreaming {
@@ -409,6 +410,7 @@ impl InferenceProvider for AnthropicProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let mut stream = stream_anthropic(

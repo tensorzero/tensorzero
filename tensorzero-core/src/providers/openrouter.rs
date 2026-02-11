@@ -218,6 +218,7 @@ impl InferenceProvider for OpenRouterProvider {
             request.model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 
@@ -326,6 +327,7 @@ impl InferenceProvider for OpenRouterProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 
@@ -409,6 +411,7 @@ impl EmbeddingProvider for OpenRouterProvider {
             &self.model_name,
             request_body_value,
             request_builder,
+            ApiType::Embeddings,
         )
         .await?;
         if res.status().is_success() {

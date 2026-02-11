@@ -2964,7 +2964,7 @@ mod tests {
                         provider_type: "dummy".to_string(),
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
-                        raw_response: None,
+                        raw_response: Some("error raw response".to_string()),
                         relay_raw_responses: None,
                     }
                     .into()
@@ -3352,7 +3352,7 @@ mod tests {
                         provider_type: "dummy".to_string(),
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
-                        raw_response: None,
+                        raw_response: Some("error raw response".to_string()),
                         relay_raw_responses: None,
                     }
                     .into()

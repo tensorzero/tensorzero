@@ -417,7 +417,7 @@ reasoning_effort = "minimal"
             .expect("raw_usage entry should have provider_type");
         assert_eq!(
             provider_type, "openai",
-            "All raw_usage entries should have provider_type 'openai' from downstream, not 'relay'"
+            "All raw_usage entries should have provider_type `openai` from downstream, not `relay`"
         );
 
         // Verify each entry has required fields
@@ -529,7 +529,7 @@ reasoning_effort = "minimal"
             .expect("raw_usage entry should have provider_type");
         assert_eq!(
             provider_type, "openai",
-            "All streaming raw_usage entries should have provider_type 'openai' from downstream, not 'relay'"
+            "All streaming raw_usage entries should have provider_type `openai` from downstream, not `relay`"
         );
 
         // Verify each entry has required fields

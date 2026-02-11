@@ -178,6 +178,7 @@ impl InferenceProvider for HyperbolicProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 
@@ -284,6 +285,7 @@ impl InferenceProvider for HyperbolicProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 

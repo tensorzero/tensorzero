@@ -424,7 +424,7 @@ impl InferenceProvider for DummyProvider {
                     self.model_name
                 ),
                 raw_request: Some("raw request".to_string()),
-                raw_response: None,
+                raw_response: Some("error raw response".to_string()),
                 relay_raw_responses: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -876,7 +876,7 @@ impl InferenceProvider for DummyProvider {
                     self.model_name
                 ),
                 raw_request: Some("raw request".to_string()),
-                raw_response: None,
+                raw_response: Some("error raw response".to_string()),
                 relay_raw_responses: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),

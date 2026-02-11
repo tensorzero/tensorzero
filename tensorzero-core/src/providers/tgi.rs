@@ -253,6 +253,7 @@ impl InferenceProvider for TGIProvider {
             model_provider_request.model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 
@@ -349,6 +350,7 @@ impl InferenceProvider for TGIProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 

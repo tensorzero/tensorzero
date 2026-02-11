@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use indexmap::IndexMap;
 use itertools::izip;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
@@ -786,7 +787,22 @@ async fn infer_model_request(
         })
         .await;
 
-    let mut model_inference_response = retry_result.result?;
+    let mut model_inference_response = match retry_result.result {
+        Ok(response) => response,
+        Err(e) => {
+            if clients.include_raw_response && !retry_result.failed_attempts.is_empty() {
+                let mut provider_errors = IndexMap::new();
+                for (i, failed_error) in retry_result.failed_attempts.into_iter().enumerate() {
+                    provider_errors.insert(format!("retry_attempt_{i}"), failed_error);
+                }
+                provider_errors.insert("final".to_string(), e);
+                return Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+                    provider_errors,
+                }));
+            }
+            return Err(e);
+        }
+    };
 
     // Collect raw_responses from failed retry attempts
     if clients.include_raw_response {
@@ -849,7 +865,22 @@ async fn infer_model_request_stream<'request>(
                 mut failed_raw_responses,
             },
         messages: input_messages,
-    } = retry_result.result?;
+    } = match retry_result.result {
+        Ok(response) => response,
+        Err(e) => {
+            if clients.include_raw_response && !retry_result.failed_attempts.is_empty() {
+                let mut provider_errors = IndexMap::new();
+                for (i, failed_error) in retry_result.failed_attempts.into_iter().enumerate() {
+                    provider_errors.insert(format!("retry_attempt_{i}"), failed_error);
+                }
+                provider_errors.insert("final".to_string(), e);
+                return Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+                    provider_errors,
+                }));
+            }
+            return Err(e);
+        }
+    };
 
     // Collect raw_responses from failed retry attempts
     if clients.include_raw_response {
@@ -2040,5 +2071,146 @@ mod tests {
         assert!(logs_contain(
             r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
+    }
+
+    #[tokio::test]
+    async fn test_infer_model_request_errors_include_raw_response() {
+        // Setup: only error providers, retries enabled, include_raw_response = true
+        let api_keys = InferenceCredentials::default();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let clients = InferenceClients {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+            include_raw_response: true,
+        };
+        let templates = Arc::new(get_test_template_config().await);
+        let inference_params = InferenceParams::default();
+        let inference_config = InferenceConfig {
+            templates,
+            tool_config: None,
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
+            dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
+            fetch_and_encode_input_files_before_inference: false,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            extra_cache_key: None,
+        };
+
+        let error_model_name = "error";
+        let function_config_chat = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            description: None,
+            all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
+        });
+
+        let request_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, how are you?".to_string().into()],
+        }];
+
+        let model_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: request_messages.clone(),
+            system: None,
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            output_schema: None,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            ..Default::default()
+        };
+
+        // Only error provider — no fallback
+        let error_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: error_model_name.to_string(),
+            ..Default::default()
+        });
+
+        let model_config = ModelConfig {
+            routing: vec![error_model_name.into()],
+            providers: HashMap::from([(
+                error_model_name.into(),
+                ModelProvider {
+                    name: error_model_name.into(),
+                    config: error_provider_config,
+                    extra_body: Default::default(),
+                    extra_headers: Default::default(),
+                    timeouts: Default::default(),
+                    discard_unknown_chunks: false,
+                },
+            )]),
+            timeouts: Default::default(),
+            skip_relay: false,
+        };
+
+        // 1 retry means 2 total attempts (initial + 1 retry)
+        let retry_config = Box::leak(Box::new(RetryConfig {
+            num_retries: 1,
+            max_delay_s: 0.0,
+        }));
+
+        let args = InferModelRequestArgs {
+            request: model_request.clone(),
+            model_name: error_model_name.into(),
+            model_config: &model_config,
+            function: &function_config_chat,
+            inference_config: Arc::new(inference_config.clone()),
+            clients: clients.clone(),
+            inference_params: inference_params.clone(),
+            retry_config,
+        };
+
+        let result = infer_model_request(args).await;
+        let err = result.expect_err("Should fail since only error providers are configured");
+
+        // With include_raw_response=true and failed attempts, the error should be
+        // ModelProvidersExhausted wrapping both the retry attempt and the final attempt
+        let raw_responses = err.collect_raw_responses();
+        assert!(
+            raw_responses.len() >= 2,
+            "Expected at least 2 raw response entries (retry attempt + final), got {}",
+            raw_responses.len()
+        );
+        for entry in &raw_responses {
+            assert_eq!(
+                entry.data, "error raw response",
+                "Each failed attempt should include its raw response"
+            );
+        }
     }
 }

@@ -204,6 +204,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
 /// Injects extra headers/body fields into a request builder, and sends the request.
 /// This is used when implementing non-streaming inference for a model provider,
 /// and is responsible for actually submitting the HTTP request.
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send(
     provider_type: &str,
     config: &FullExtraBodyConfig,
@@ -212,6 +213,7 @@ pub async fn inject_extra_request_data_and_send(
     model_name: &str,
     body: serde_json::Value,
     builder: TensorzeroRequestBuilder<'_>,
+    api_type: ApiType,
 ) -> Result<(TensorzeroResponseWrapper, String), Error> {
     let InjectedResponse {
         response,
@@ -225,6 +227,7 @@ pub async fn inject_extra_request_data_and_send(
         model_name,
         body,
         builder,
+        api_type,
     )
     .await
     .map_err(|(e, _headers)| e)?;
@@ -233,6 +236,7 @@ pub async fn inject_extra_request_data_and_send(
 
 /// Like `inject_extra_request_data_and_send`, but for streaming requests
 /// Produces an `EventSource` instead of a `Response`.
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_eventsource(
     provider_type: &str,
     config: &FullExtraBodyConfig,
@@ -241,6 +245,7 @@ pub async fn inject_extra_request_data_and_send_eventsource(
     model_name: &str,
     body: serde_json::Value,
     builder: TensorzeroRequestBuilder<'_>,
+    api_type: ApiType,
 ) -> Result<(TensorZeroEventSource, String), Error> {
     let InjectedResponse {
         response,
@@ -254,6 +259,7 @@ pub async fn inject_extra_request_data_and_send_eventsource(
         model_name,
         body,
         builder,
+        api_type,
     )
     .await
     .map_err(|(e, _headers)| e)?;
@@ -266,6 +272,7 @@ pub struct InjectedResponse<T> {
     pub headers: http::HeaderMap,
 }
 
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_with_headers(
     provider_type: &str,
     config: &FullExtraBodyConfig,
@@ -274,6 +281,7 @@ pub async fn inject_extra_request_data_and_send_with_headers(
     model_name: &str,
     mut body: serde_json::Value,
     builder: TensorzeroRequestBuilder<'_>,
+    api_type: ApiType,
 ) -> Result<InjectedResponse<TensorzeroResponseWrapper>, (Error, Option<http::HeaderMap>)> {
     let headers = inject_extra_request_data(
         config,
@@ -308,7 +316,7 @@ pub async fn inject_extra_request_data_and_send_with_headers(
                     status_code,
                     message,
                     provider_type: provider_type.to_string(),
-                    api_type: ApiType::ChatCompletions,
+                    api_type,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     relay_raw_responses: None,
@@ -324,6 +332,7 @@ pub async fn inject_extra_request_data_and_send_with_headers(
     })
 }
 
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
     provider_type: &str,
     config: &FullExtraBodyConfig,
@@ -332,6 +341,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
     model_name: &str,
     mut body: serde_json::Value,
     builder: TensorzeroRequestBuilder<'_>,
+    api_type: ApiType,
 ) -> Result<InjectedResponse<TensorZeroEventSource>, (Error, Option<http::HeaderMap>)> {
     let headers = inject_extra_request_data(
         config,
@@ -402,7 +412,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
             let error = Error::new(ErrorDetails::FatalStreamError {
                 message,
                 provider_type: provider_type.to_string(),
-                api_type: ApiType::ChatCompletions,
+                api_type,
                 raw_request: Some(raw_request),
                 raw_response,
             });

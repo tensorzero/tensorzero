@@ -189,6 +189,7 @@ impl InferenceProvider for GroqProvider {
             request.model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 
@@ -291,6 +292,7 @@ impl InferenceProvider for GroqProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 

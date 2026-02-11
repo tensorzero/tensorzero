@@ -397,7 +397,7 @@ reasoning_effort = "minimal"
             .expect("raw_response entry should have provider_type");
         assert_eq!(
             provider_type, "openai",
-            "All raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+            "All raw_response entries should have provider_type `openai` from downstream, not `relay`"
         );
     }
 }
@@ -507,7 +507,7 @@ reasoning_effort = "minimal"
             .expect("raw_response entry should have provider_type");
         assert_eq!(
             provider_type, "openai",
-            "All streaming raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+            "All streaming raw_response entries should have provider_type `openai` from downstream, not `relay`"
         );
     }
 
@@ -1050,7 +1050,7 @@ reasoning_effort = "minimal"
             .expect("raw_response entry should have provider_type");
         assert_eq!(
             provider_type, "openai",
-            "All raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+            "All raw_response entries should have provider_type `openai` from downstream, not `relay`"
         );
     }
 }
@@ -1161,7 +1161,7 @@ reasoning_effort = "minimal"
             .expect("raw_response entry should have provider_type");
         assert_eq!(
             provider_type, "openai",
-            "All streaming raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+            "All streaming raw_response entries should have provider_type `openai` from downstream, not `relay`"
         );
     }
 
@@ -1257,7 +1257,7 @@ reasoning_effort = "minimal"
             .expect("raw_response entry should have provider_type");
         assert_eq!(
             provider_type, "openai",
-            "All raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+            "All raw_response entries should have provider_type `openai` from downstream, not `relay`"
         );
 
         let api_type = entry
@@ -1375,7 +1375,7 @@ reasoning_effort = "minimal"
             .expect("raw_response entry should have provider_type");
         assert_eq!(
             provider_type, "openai",
-            "All streaming raw_response entries should have provider_type 'openai' from downstream, not 'relay'"
+            "All streaming raw_response entries should have provider_type `openai` from downstream, not `relay`"
         );
 
         let api_type = entry

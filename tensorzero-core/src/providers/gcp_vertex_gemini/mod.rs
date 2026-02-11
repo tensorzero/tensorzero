@@ -1119,6 +1119,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             provider_request.model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let latency = Latency::NonStreaming {
@@ -1232,6 +1233,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let stream = stream_gcp_vertex_gemini(

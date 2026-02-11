@@ -208,6 +208,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let latency = Latency::NonStreaming {
@@ -308,6 +309,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let stream = stream_google_ai_studio_gemini(

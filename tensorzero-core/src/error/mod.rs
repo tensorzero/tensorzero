@@ -1824,17 +1824,10 @@ pub struct ErrorWithRawResponse {
 
 impl IntoResponse for ErrorWithRawResponse {
     fn into_response(self) -> Response {
-        let message = self.error.to_string();
-        let mut body = json!({
-            "error": message,
-        });
+        let mut body = self.error.build_response_body(false);
         if !self.raw_responses.is_empty() {
             body["raw_response"] =
                 serde_json::to_value(&self.raw_responses).unwrap_or_else(|e| json!(e.to_string()));
-        }
-        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
-            body["error_json"] = serde_json::to_value(self.error.get_details())
-                .unwrap_or_else(|e| json!(e.to_string()));
         }
         let status_code = self.error.status_code();
         let mut response = (status_code, Json(body)).into_response();

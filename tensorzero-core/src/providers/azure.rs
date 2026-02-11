@@ -243,6 +243,7 @@ impl InferenceProvider for AzureProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         if res.status().is_success() {
@@ -347,6 +348,7 @@ impl InferenceProvider for AzureProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let stream = stream_openai(
@@ -424,6 +426,7 @@ impl EmbeddingProvider for AzureProvider {
             &self.deployment_id,
             request_body_value,
             request_builder,
+            ApiType::Embeddings,
         )
         .await?;
         if response.status().is_success() {

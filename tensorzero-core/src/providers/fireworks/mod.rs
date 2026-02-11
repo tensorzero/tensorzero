@@ -214,6 +214,7 @@ impl InferenceProvider for FireworksProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         let latency = Latency::NonStreaming {
@@ -314,6 +315,7 @@ impl InferenceProvider for FireworksProvider {
             model_name,
             request_body,
             builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         // Use our own stream implementation to handle thinking blocks

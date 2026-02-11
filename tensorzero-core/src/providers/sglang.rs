@@ -180,6 +180,7 @@ impl InferenceProvider for SGLangProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
         if res.status().is_success() {
@@ -287,6 +288,7 @@ impl InferenceProvider for SGLangProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 

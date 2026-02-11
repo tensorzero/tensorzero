@@ -430,6 +430,7 @@ impl InferenceProvider for OpenAIProvider {
             request.model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await
         .map_err(|(e, headers)| {
@@ -604,6 +605,7 @@ impl InferenceProvider for OpenAIProvider {
                     model_name,
                     request_body,
                     request_builder,
+                    ApiType::ChatCompletions,
                 )
                 .await
                 .map_err(|(e, headers)| {
@@ -659,6 +661,7 @@ impl InferenceProvider for OpenAIProvider {
                     model_name,
                     request_body,
                     request_builder,
+                    ApiType::ChatCompletions,
                 )
                 .await
                 .map_err(|(e, headers)| {
@@ -980,6 +983,7 @@ impl EmbeddingProvider for OpenAIProvider {
             &self.model_name,
             request_body_value,
             request_builder,
+            ApiType::Embeddings,
         )
         .await?;
         if res.status().is_success() {

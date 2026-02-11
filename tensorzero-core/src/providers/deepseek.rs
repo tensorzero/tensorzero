@@ -192,6 +192,7 @@ impl InferenceProvider for DeepSeekProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 
@@ -302,6 +303,7 @@ impl InferenceProvider for DeepSeekProvider {
             model_name,
             request_body,
             request_builder,
+            ApiType::ChatCompletions,
         )
         .await?;
 
