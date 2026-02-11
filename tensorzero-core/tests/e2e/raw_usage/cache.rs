@@ -17,6 +17,7 @@ use tensorzero::{
     InputMessageContent,
 };
 use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::inference::types::usage::RawUsageEntry;
 use tensorzero_core::inference::types::{Arguments, Role, System, Text};
 use uuid::Uuid;
@@ -130,50 +131,47 @@ async fn test_raw_usage_cache_behavior_non_streaming() {
     );
     assert_raw_usage_entry(&first_raw_usage[0]);
 
-    // Wait for cache write to complete
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // Poll until cache write completes and second request is a cache hit
+    poll_result_until_some(async || {
+        let second_response = client
+            .inference(ClientInferenceParams {
+                function_name: Some("weather_helper".to_string()),
+                variant_name: Some("openai".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: Input {
+                    system: Some(System::Template(Arguments({
+                        let mut args = Map::new();
+                        args.insert("assistant_name".to_string(), json!("TestBot"));
+                        args
+                    }))),
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: input.to_string(),
+                        })],
+                    }],
+                },
+                stream: Some(false),
+                include_raw_usage: true,
+                cache_options: CacheParamsOptions {
+                    enabled: CacheEnabledMode::On,
+                    max_age_s: Some(60),
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
 
-    // Second request with same input: should be a cache hit
-    let second_response = client
-        .inference(ClientInferenceParams {
-            function_name: Some("weather_helper".to_string()),
-            variant_name: Some("openai".to_string()),
-            episode_id: Some(Uuid::now_v7()),
-            input: Input {
-                system: Some(System::Template(Arguments({
-                    let mut args = Map::new();
-                    args.insert("assistant_name".to_string(), json!("TestBot"));
-                    args
-                }))),
-                messages: vec![InputMessage {
-                    role: Role::User,
-                    content: vec![InputMessageContent::Text(Text {
-                        text: input.to_string(),
-                    })],
-                }],
-            },
-            stream: Some(false),
-            include_raw_usage: true,
-            cache_options: CacheParamsOptions {
-                enabled: CacheEnabledMode::On,
-                max_age_s: Some(60),
-            },
-            ..Default::default()
-        })
-        .await
-        .unwrap();
+        let InferenceOutput::NonStreaming(second_response) = second_response else {
+            panic!("Expected non-streaming response");
+        };
 
-    let InferenceOutput::NonStreaming(second_response) = second_response else {
-        panic!("Expected non-streaming response");
-    };
-
-    let second_raw_usage = second_response
-        .raw_usage()
-        .expect("raw_usage should be present when include_raw_usage is true");
-    assert!(
-        second_raw_usage.is_empty(),
-        "Second request (cache hit) should have empty raw_usage array, got {second_raw_usage:?}"
-    );
+        let second_raw_usage = second_response
+            .raw_usage()
+            .expect("raw_usage should be present when include_raw_usage is true");
+        second_raw_usage.is_empty().then_some(())
+    })
+    .await;
 }
 
 /// Tests streaming cache behavior with embedded gateway (unique database for test isolation)
@@ -245,15 +243,12 @@ async fn test_raw_usage_cache_behavior_streaming() {
     );
     assert_raw_usage_entry(&first_raw_usage[0]);
 
-    // Wait for cache write
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Second request: should be a cache hit
-    let second_raw_usage = make_streaming_request(&client, input).await;
-    assert!(
-        second_raw_usage.is_empty(),
-        "Second streaming request (cache hit) should have empty raw_usage array, got {second_raw_usage:?}"
-    );
+    // Poll until cache write completes and second request is a cache hit
+    poll_result_until_some(async || {
+        let second_raw_usage = make_streaming_request(&client, input).await;
+        second_raw_usage.is_empty().then_some(())
+    })
+    .await;
 }
 
 /// Tests raw_usage with cache disabled using embedded gateway
@@ -482,17 +477,12 @@ async fn test_raw_usage_cache_openai_compatible_non_streaming() {
     );
     assert_openai_chat_usage_details(&first_raw_usage[0]);
 
-    // Wait for cache write
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Second request: should be a cache hit
-    // tensorzero_raw_usage should still be present but empty (field present as [])
-    let second_raw_usage = make_openai_request_to_gateway(&base_url, input, false).await;
-
-    assert!(
-        second_raw_usage.is_empty(),
-        "Second request (cache hit) should have empty tensorzero_raw_usage array, got {second_raw_usage:?}"
-    );
+    // Poll until cache write completes and second request is a cache hit
+    poll_result_until_some(async || {
+        let second_raw_usage = make_openai_request_to_gateway(&base_url, input, false).await;
+        second_raw_usage.is_empty().then_some(())
+    })
+    .await;
 }
 
 /// Tests OpenAI-compatible streaming cache behavior with HTTP gateway (unique database for test isolation)
@@ -513,15 +503,10 @@ async fn test_raw_usage_cache_openai_compatible_streaming() {
     );
     assert_openai_chat_usage_details(&first_raw_usage[0]);
 
-    // Wait for cache write
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Second request: should be a cache hit
-    // tensorzero_raw_usage should still be present but empty (field present as [])
-    let second_raw_usage = make_openai_request_to_gateway(&base_url, input, true).await;
-
-    assert!(
-        second_raw_usage.is_empty(),
-        "Second streaming request (cache hit) should have empty tensorzero_raw_usage array, got {second_raw_usage:?}"
-    );
+    // Poll until cache write completes and second request is a cache hit
+    poll_result_until_some(async || {
+        let second_raw_usage = make_openai_request_to_gateway(&base_url, input, true).await;
+        second_raw_usage.is_empty().then_some(())
+    })
+    .await;
 }

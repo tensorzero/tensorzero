@@ -19,6 +19,7 @@ use uuid::Uuid;
 use tensorzero_core::cache::ModelProviderRequest;
 use tensorzero_core::cache::cache_lookup;
 use tensorzero_core::cache::start_cache_write;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::inference::types::Latency;
 use tensorzero_core::inference::types::RequestMessage;
 use tensorzero_core::inference::types::Role;
@@ -94,14 +95,15 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
         CacheValidationInfo { tool_config: None },
     )
     .unwrap();
-    tokio::time::sleep(Duration::from_secs(1)).await;
 
-    // Read (should be Some)
-    let result = cache_lookup(&conn, model_provider_request, Some(max_age_s))
-        .await
-        .unwrap();
-    assert!(result.is_some());
-    let result = result.unwrap();
+    // Read (should be Some) - poll until cache write is visible
+    let result = poll_result_until_some(async || {
+        cache_lookup(&conn, model_provider_request, Some(max_age_s))
+            .await
+            .ok()
+            .and_then(|r| r)
+    })
+    .await;
     assert_eq!(
         result.output,
         [ContentBlockOutput::Text(Text {
@@ -241,14 +243,15 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
         None,
     )
     .unwrap();
-    tokio::time::sleep(Duration::from_secs(1)).await;
 
-    // Read (should be Some)
-    let result = cache_lookup_streaming(&conn, model_provider_request, Some(max_age_s))
-        .await
-        .unwrap();
-    assert!(result.is_some());
-    let result = result.unwrap();
+    // Read (should be Some) - poll until cache write is visible
+    let result = poll_result_until_some(async || {
+        cache_lookup_streaming(&conn, model_provider_request, Some(max_age_s))
+            .await
+            .ok()
+            .and_then(|r| r)
+    })
+    .await;
     let chunks = result.stream.map(|c| c.unwrap()).collect::<Vec<_>>().await;
     assert_eq!(chunks.len(), 2);
     for (i, chunk) in chunks.into_iter().enumerate() {

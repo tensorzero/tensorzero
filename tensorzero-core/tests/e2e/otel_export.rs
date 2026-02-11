@@ -195,11 +195,11 @@ pub async fn get_tempo_spans(
     start_time: DateTime<Utc>,
     tempo_semaphore: &Semaphore,
 ) -> TempoSpans {
-    // It takes some time for the span to show up in Tempo
-    tokio::time::sleep(std::time::Duration::from_secs(25)).await;
-
-    let start_time = start_time.timestamp();
-    let now = Utc::now().timestamp();
+    let start_ts = start_time.timestamp();
+    let timeout = std::time::Duration::from_secs(30);
+    let poll_start = std::time::Instant::now();
+    let mut delay = std::time::Duration::from_millis(500);
+    let max_delay = std::time::Duration::from_secs(2);
 
     let client = reqwest::Client::builder()
         .retry(
@@ -217,26 +217,34 @@ pub async fn get_tempo_spans(
     let tempo_base_url = std::env::var("TENSORZERO_TEMPO_URL")
         .unwrap_or_else(|_| "http://localhost:3200".to_string());
 
-    let get_url = Url::parse(&format!(
-        "{tempo_base_url}/api/search?tags={tag_key}={tag_value}&start={start_time}&end={now}"
-    ))
-    .unwrap();
-    println!("Requesting URL: {get_url}");
-
     let permit = tempo_semaphore.acquire().await.unwrap();
 
-    let jaeger_result = client.get(get_url).send().await.unwrap();
-    let res = jaeger_result.text().await.unwrap();
-    println!("Tempo result: {res}");
-    let tempo_traces = serde_json::from_str::<Value>(&res).unwrap();
+    let res = loop {
+        let now = Utc::now().timestamp();
+        let get_url = Url::parse(&format!(
+            "{tempo_base_url}/api/search?tags={tag_key}={tag_value}&start={start_ts}&end={now}"
+        ))
+        .unwrap();
+        println!("Requesting URL: {get_url}");
+        let jaeger_result = client.get(get_url).send().await.unwrap();
+        let res = jaeger_result.text().await.unwrap();
+        println!("Tempo result: {res}");
+        let tempo_traces = serde_json::from_str::<Value>(&res).unwrap();
+        if !tempo_traces["traces"].as_array().unwrap().is_empty() {
+            break res;
+        }
+        if poll_start.elapsed() > timeout {
+            return TempoSpans {
+                target_span: None,
+                span_by_id: HashMap::new(),
+                resources: Vec::new(),
+            };
+        }
+        tokio::time::sleep(delay).await;
+        delay = std::cmp::min(delay * 2, max_delay);
+    };
 
-    if tempo_traces["traces"].as_array().unwrap().is_empty() {
-        return TempoSpans {
-            target_span: None,
-            span_by_id: HashMap::new(),
-            resources: Vec::new(),
-        };
-    }
+    let tempo_traces = serde_json::from_str::<Value>(&res).unwrap();
     let trace_id = tempo_traces["traces"][0]["traceID"].as_str().unwrap();
 
     let trace_res = client

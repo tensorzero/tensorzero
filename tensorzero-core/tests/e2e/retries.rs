@@ -2,6 +2,7 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::{
     inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text},
     providers::dummy::{
@@ -65,14 +66,12 @@ async fn test_inference_flaky() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     assert_eq!(output_tokens, 1);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -110,9 +109,10 @@ async fn test_inference_flaky() {
     assert_eq!(variant_name, "flaky");
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let _ = Uuid::parse_str(id).unwrap();
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
@@ -239,14 +239,12 @@ async fn test_streaming_flaky() {
         }
     }
     let inference_id = inference_id.unwrap();
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -308,9 +306,10 @@ async fn test_streaming_flaky() {
     assert_eq!(seed, 420);
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
@@ -402,14 +401,12 @@ async fn test_best_of_n_dummy_candidates_flaky_judge() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 10, "Unexpected input tokens: {input_tokens}");
     assert_eq!(output_tokens, 3, "Unexpected output tokens");
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -447,9 +444,10 @@ async fn test_best_of_n_dummy_candidates_flaky_judge() {
     assert_eq!(variant_name, "flaky_best_of_n_variant");
 
     // Check the ModelInference Table
-    let results = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let results = poll_result_until_some(async || {
+        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     assert_eq!(results.len(), 3);
 
     // Collect model names

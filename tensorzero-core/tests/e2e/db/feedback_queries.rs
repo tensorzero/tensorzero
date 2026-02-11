@@ -168,21 +168,34 @@ async fn test_count_feedback_by_target_id(conn: impl FeedbackQueries) {
     // Use a known inference ID
     let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
 
-    let count = conn.count_feedback_by_target_id(target_id).await.unwrap();
+    // Retry in a loop because other concurrent tests may insert feedback for this target_id
+    // between the count and query calls, causing a transient mismatch.
+    let mut attempts = 0;
+    loop {
+        let count = conn.count_feedback_by_target_id(target_id).await.unwrap();
+        let feedback = conn
+            .query_feedback_by_target_id(target_id, None, None, Some(1000))
+            .await
+            .unwrap();
 
-    println!("Total feedback count: {count}");
+        println!(
+            "Total feedback count: {count}, query len: {}",
+            feedback.len()
+        );
 
-    // Get actual feedback to verify count
-    let feedback = conn
-        .query_feedback_by_target_id(target_id, None, None, Some(1000))
-        .await
-        .unwrap();
+        if count as usize == feedback.len() {
+            assert!(count > 0, "Should have at least one feedback item");
+            break;
+        }
 
-    assert_eq!(
-        count as usize,
-        feedback.len(),
-        "Count should match actual feedback items"
-    );
+        attempts += 1;
+        assert!(
+            attempts < 5,
+            "Count ({count}) never matched query len ({}) after 5 attempts",
+            feedback.len()
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 }
 make_db_test!(test_count_feedback_by_target_id);
 
@@ -966,7 +979,7 @@ async fn test_insert_boolean_feedback(conn: impl FeedbackQueries + TestDatabaseH
         .await
         .expect("Boolean feedback insert should succeed");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the feedback
     let feedback = conn
@@ -1003,7 +1016,7 @@ async fn test_insert_float_feedback(conn: impl FeedbackQueries + TestDatabaseHel
         .await
         .expect("Float feedback insert should succeed");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the feedback
     let feedback = conn
@@ -1042,7 +1055,7 @@ async fn test_insert_comment_feedback_inference_level(
         .await
         .expect("Comment feedback insert should succeed");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the feedback
     let feedback = conn
@@ -1085,7 +1098,7 @@ async fn test_insert_comment_feedback_episode_level(
         .await
         .expect("Comment feedback insert should succeed");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the feedback
     let feedback = conn
@@ -1121,7 +1134,7 @@ async fn test_insert_demonstration_feedback(conn: impl FeedbackQueries + TestDat
         .await
         .expect("Demonstration feedback insert should succeed");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the feedback using demonstration-specific query
     let feedback = conn
@@ -1160,7 +1173,7 @@ async fn test_insert_static_eval_feedback(
         .await
         .expect("Static eval feedback insert should succeed");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the feedback using evaluation queries
     let feedback = conn
@@ -1208,7 +1221,7 @@ async fn test_insert_static_eval_feedback_without_evaluator_inference_id(
         .await
         .expect("Static eval feedback insert without evaluator_inference_id should succeed");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the feedback using evaluation queries
     let feedback = conn
@@ -1281,7 +1294,7 @@ async fn test_get_variant_performances_distinct_on_semantics(
         .expect("Second feedback insert should succeed");
 
     // Wait for database to process (especially for ClickHouse)
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Query variant performances
     let metric_config = MetricConfig {
@@ -1353,7 +1366,7 @@ async fn test_insert_feedback_with_multiple_tags(conn: impl FeedbackQueries + Te
         .await
         .expect("Feedback insert with multiple tags should succeed");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the feedback
     let feedback = conn

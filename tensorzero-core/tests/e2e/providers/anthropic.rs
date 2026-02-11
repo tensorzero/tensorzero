@@ -22,6 +22,7 @@ use tensorzero_core::{
         get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
     },
     inference::types::{ContentBlockChatOutput, Text},
+    poll_clickhouse_for_result,
 };
 
 use super::common::ModelTestProvider;
@@ -772,14 +773,11 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
         Uuid::parse_str(&inference_id).unwrap()
     };
 
-    // Wait one second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result_json = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result_json = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id).await
+    );
     println!("Result: {result_json}");
 
     // Check that the result is valid JSON
@@ -874,14 +872,11 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
         Uuid::parse_str(&inference_id).unwrap()
     };
 
-    // Wait one second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result_json = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result_json = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id).await
+    );
     println!("Result: {result_json}");
 
     // Check that the result is valid JSON

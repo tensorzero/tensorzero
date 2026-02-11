@@ -8,6 +8,7 @@ use tensorzero_core::{
         select_model_inferences_clickhouse,
     },
     inference::types::{Arguments, ContentBlockChatOutput, System, Text},
+    poll_clickhouse_for_result,
 };
 use uuid::Uuid;
 
@@ -99,11 +100,9 @@ async fn test_template_no_schema() {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     let clickhouse = get_clickhouse().await;
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     println!("Input: {input}");
@@ -277,13 +276,10 @@ async fn test_best_of_n_template_no_schema() {
     });
     assert_eq!(echoed_content, expected_content);
 
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     let clickhouse = get_clickhouse().await;
-    let results: Vec<Value> = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let results: Vec<Value> = poll_clickhouse_for_result!(
+        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+    );
     assert_eq!(results.len(), 3);
     assert!(
         results
@@ -655,12 +651,10 @@ async fn test_named_system_template_with_schema() {
     ]);
 
     let inference_id = res.inference_id;
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(

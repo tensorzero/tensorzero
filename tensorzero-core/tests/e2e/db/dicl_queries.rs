@@ -63,7 +63,7 @@ async fn test_insert_and_has_dicl_examples(conn: impl DICLQueries + TestDatabase
     );
 
     conn.insert_dicl_example(&example).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let exists = conn
         .has_dicl_examples(&function_name, variant_name)
@@ -98,7 +98,7 @@ async fn test_insert_dicl_examples_batch(conn: impl DICLQueries + TestDatabaseHe
     let rows = conn.insert_dicl_examples(&examples).await.unwrap();
     assert_eq!(rows, 5, "Should report 5 rows inserted");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let exists = conn
         .has_dicl_examples(&function_name, variant_name)
@@ -131,7 +131,7 @@ async fn test_insert_dicl_examples_special_characters(
     );
 
     conn.insert_dicl_example(&example).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let results = conn
         .get_similar_dicl_examples(&function_name, variant_name, &[1.0, 0.0, 0.0], 1)
@@ -185,7 +185,7 @@ async fn test_has_dicl_examples_isolates_by_function_and_variant(
         ),
     ];
     conn.insert_dicl_examples(&examples).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Same function + variant should return true
     let exists = conn
@@ -257,7 +257,7 @@ async fn test_get_similar_dicl_examples_returns_sorted_by_distance(
     ];
 
     conn.insert_dicl_examples(&examples).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let results = conn
         .get_similar_dicl_examples(&function_name, variant_name, &[1.0, 0.0, 0.0], 3)
@@ -304,7 +304,7 @@ async fn test_get_similar_dicl_examples_respects_limit(
         .collect();
 
     conn.insert_dicl_examples(&examples).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let results = conn
         .get_similar_dicl_examples(&function_name, variant_name, &[1.0, 0.0, 0.0], 2)
@@ -344,7 +344,7 @@ async fn test_get_similar_dicl_examples_filters_by_function_and_variant(
     );
     conn.insert_dicl_example(&other_example).await.unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let results = conn
         .get_similar_dicl_examples(&function_name, variant_name, &[1.0, 0.0, 0.0], 10)
@@ -395,7 +395,7 @@ async fn test_delete_dicl_examples_all_for_variant(conn: impl DICLQueries + Test
         .collect();
 
     conn.insert_dicl_examples(&examples).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Delete all examples for this function/variant (no namespace filter)
     let deleted = conn
@@ -404,7 +404,7 @@ async fn test_delete_dicl_examples_all_for_variant(conn: impl DICLQueries + Test
         .unwrap();
     assert_eq!(deleted, 3, "Should report deleting all 3 examples");
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let exists = conn
         .has_dicl_examples(&function_name, variant_name)
@@ -440,7 +440,7 @@ async fn test_delete_dicl_examples_by_namespace(conn: impl DICLQueries + TestDat
     );
 
     conn.insert_dicl_examples(&[ns_a, ns_b]).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Delete only namespace_a
     let deleted = conn
@@ -452,7 +452,7 @@ async fn test_delete_dicl_examples_by_namespace(conn: impl DICLQueries + TestDat
         "Should report deleting 1 example from namespace_a"
     );
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // namespace_b examples should still exist
     let exists = conn

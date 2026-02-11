@@ -10,7 +10,6 @@
 use durable_tools::CacheEnabledMode;
 use durable_tools::action::{ActionInput, ActionInputInfo, ActionResponse, RunEvaluationParams};
 use std::collections::HashMap;
-use std::time::Duration;
 use tensorzero::{
     Client, ClientInferenceParams, Input, InputMessage, InputMessageContent, Role, TensorZeroError,
 };
@@ -19,6 +18,7 @@ use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
+use tensorzero_core::db::test_helpers::{TestDatabaseHelpers, poll_result_until_some};
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
@@ -102,7 +102,15 @@ Do a historical inference successfully!
     let snapshot_hash = snapshot.hash.clone();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Poll until config snapshot is visible in ClickHouse
+    poll_result_until_some(async || {
+        database
+            .get_config_snapshot(snapshot_hash.clone())
+            .await
+            .ok()
+    })
+    .await;
 
     // Create the action request
     let params = ActionInputInfo {
@@ -226,7 +234,15 @@ model = "action_test_model_{id}"
     let snapshot_hash = snapshot.hash.clone();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Poll until config snapshot is visible in ClickHouse
+    poll_result_until_some(async || {
+        database
+            .get_config_snapshot(snapshot_hash.clone())
+            .await
+            .ok()
+    })
+    .await;
 
     let params = ActionInputInfo {
         snapshot_hash,
@@ -298,7 +314,15 @@ model = "eval_test_model_{id}"
     let snapshot_hash = snapshot.hash.clone();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Poll until config snapshot is visible in ClickHouse
+    poll_result_until_some(async || {
+        database
+            .get_config_snapshot(snapshot_hash.clone())
+            .await
+            .ok()
+    })
+    .await;
 
     let params = ActionInputInfo {
         snapshot_hash,
@@ -383,7 +407,15 @@ json_mode = "on"
     let snapshot_hash = snapshot.hash.clone();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Poll until config snapshot is visible in ClickHouse
+    poll_result_until_some(async || {
+        database
+            .get_config_snapshot(snapshot_hash.clone())
+            .await
+            .ok()
+    })
+    .await;
 
     // Neither dataset_name nor datapoint_ids provided
     let params = ActionInputInfo {
@@ -468,7 +500,15 @@ json_mode = "on"
     let snapshot_hash = snapshot.hash.clone();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Poll until config snapshot is visible in ClickHouse
+    poll_result_until_some(async || {
+        database
+            .get_config_snapshot(snapshot_hash.clone())
+            .await
+            .ok()
+    })
+    .await;
 
     // Both dataset_name AND datapoint_ids provided - should fail validation
     let params = ActionInputInfo {
@@ -621,7 +661,16 @@ json_mode = "on"
     ];
 
     database.insert_datapoints(&datapoints).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Poll until config snapshot and datapoints are visible in ClickHouse
+    poll_result_until_some(async || {
+        database.flush_pending_writes().await;
+        database
+            .get_config_snapshot(snapshot_hash.clone())
+            .await
+            .ok()
+    })
+    .await;
 
     // Call the action endpoint with RunEvaluation using datapoint_ids
     let params = ActionInputInfo {

@@ -964,13 +964,5 @@ mod test_helpers_impl {
                 self.clickhouse.flush_pending_writes().await;
             }
         }
-
-        async fn sleep_for_writes_to_be_visible(&self) {
-            if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
-                self.postgres.sleep_for_writes_to_be_visible().await;
-            } else {
-                self.clickhouse.sleep_for_writes_to_be_visible().await;
-            }
-        }
     }
 }
