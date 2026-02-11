@@ -67,55 +67,56 @@ function InlineMarkdown({ text }: { text: string }) {
 }
 
 /**
- * PROTOTYPE: Types for the AskUserQuestion event payload.
- * Replace these with Rust bindings once the backend defines the `ask_user_question`
- * event schema. The type structure (discriminated union on `type` field) is intentional
- * and should be preserved in the Rust types.
+ * Types matching the backend wire format from EventPayloadUserQuestions.
+ * These mirror the Rust-generated ts-rs bindings (PR #6272). Once that PR lands
+ * and bindings are rebuilt, replace these with imports from
+ * `~/types/tensorzero` (e.g. EventPayloadUserQuestions, UserQuestionResponse).
+ *
+ * Anticipates Gabriel's review: uses `type` discriminant instead of `format`.
  */
-export type QuestionOption = {
+export type MultipleChoiceOption = {
+  id: string;
   label: string;
   description: string;
 };
 
 export type MultipleChoiceQuestion = {
   type: "multiple_choice";
-  question: string;
+  id: string;
   header: string;
-  options: QuestionOption[];
-  multiSelect: boolean;
+  question: string;
+  options: MultipleChoiceOption[];
+  multi_select: boolean;
 };
 
 export type FreeResponseQuestion = {
   type: "free_response";
-  question: string;
+  id: string;
   header: string;
-  placeholder?: string;
-};
-
-export type RatingQuestion = {
-  type: "rating";
   question: string;
-  header: string;
-  min: number;
-  max: number;
-  minLabel?: string;
-  maxLabel?: string;
 };
 
-export type AskUserQuestionItem =
-  | MultipleChoiceQuestion
-  | FreeResponseQuestion
-  | RatingQuestion;
+export type UserQuestion = MultipleChoiceQuestion | FreeResponseQuestion;
 
-export type AskUserQuestionPayload = {
-  questions: AskUserQuestionItem[];
+export type UserQuestionsPayload = {
+  questions: UserQuestion[];
 };
+
+// Response types — sent back to the backend when submitting answers.
+// Keyed by question UUID in a Record<string, UserQuestionResponse>.
+export type UserQuestionResponse =
+  | { type: "multiple_choice"; selected: string[] }
+  | { type: "free_response"; text: string }
+  | { type: "skipped" };
 
 type PendingQuestionCardProps = {
   eventId: string;
-  payload: AskUserQuestionPayload;
+  payload: UserQuestionsPayload;
   isLoading: boolean;
-  onSubmit: (eventId: string, answers: Record<string, string>) => void;
+  onSubmit: (
+    eventId: string,
+    responses: Record<string, UserQuestionResponse>,
+  ) => void;
   onSkip?: () => void;
   className?: string;
   /** Tab layout: "vertical" (left sidebar, default) or "horizontal" (top row) */
@@ -147,12 +148,12 @@ function MultipleChoiceStep({
 
       <div className="flex flex-col gap-2">
         {question.options.map((option) => {
-          const isSelected = selectedValues.has(option.label);
+          const isSelected = selectedValues.has(option.id);
           return (
             <button
-              key={option.label}
+              key={option.id}
               type="button"
-              onClick={() => onToggle(option.label)}
+              onClick={() => onToggle(option.id)}
               className={cn(
                 "group relative flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-all",
                 isSelected
@@ -249,62 +250,11 @@ function FreeResponseStep({
       <Textarea
         value={text}
         onChange={(e) => onTextChange(e.target.value)}
-        placeholder={question.placeholder ?? "Type your response..."}
+        placeholder="Type your response..."
         className="bg-bg-secondary min-h-[80px] resize-none text-sm"
         rows={3}
         autoFocus
       />
-    </div>
-  );
-}
-
-function RatingStep({
-  question,
-  value,
-  onValueChange,
-}: {
-  question: RatingQuestion;
-  value: number | null;
-  onValueChange: (value: number) => void;
-}) {
-  const numbers = Array.from(
-    { length: question.max - question.min + 1 },
-    (_, i) => question.min + i,
-  );
-
-  return (
-    <div className="flex flex-col gap-3">
-      <span className="text-fg-primary text-sm font-medium">
-        <InlineMarkdown text={question.question} />
-      </span>
-      <div className="flex flex-col gap-1.5">
-        <div className="flex gap-1.5">
-          {numbers.map((n) => {
-            const isSelected = value === n;
-            return (
-              <button
-                key={n}
-                type="button"
-                onClick={() => onValueChange(n)}
-                className={cn(
-                  "flex h-9 min-w-0 flex-1 items-center justify-center rounded-lg border text-sm font-medium transition-all",
-                  isSelected
-                    ? "border-purple-500 bg-purple-50 text-purple-700 ring-1 ring-purple-500 dark:border-purple-400 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-400"
-                    : "border-border bg-bg-secondary text-fg-primary hover:border-purple-300 hover:bg-purple-50/50 dark:hover:border-purple-600 dark:hover:bg-purple-950/20",
-                )}
-              >
-                {n}
-              </button>
-            );
-          })}
-        </div>
-        {(question.minLabel || question.maxLabel) && (
-          <div className="text-fg-muted flex justify-between px-1 text-xs">
-            <span>{question.minLabel ?? ""}</span>
-            <span>{question.maxLabel ?? ""}</span>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -434,10 +384,6 @@ export function PendingQuestionCard({
   const [freeTexts, setFreeTexts] = useState<Map<number, string>>(
     () => new Map(),
   );
-  const [ratingValues, setRatingValues] = useState<Map<number, number>>(
-    () => new Map(),
-  );
-
   // Animate content area height on step change.
   // To measure the *natural* height of the new content, temporarily set
   // height to auto (scrollHeight = max(content, cssHeight), so it can't
@@ -479,7 +425,7 @@ export function PendingQuestionCard({
       if (question.type !== "multiple_choice") return prev;
       const current = next.get(questionIndex) ?? new Set<string>();
 
-      if (question.multiSelect) {
+      if (question.multi_select) {
         const updated = new Set(current);
         if (updated.has(value)) {
           updated.delete(value);
@@ -510,14 +456,6 @@ export function PendingQuestionCard({
     });
   };
 
-  const handleRatingChange = (questionIndex: number, value: number) => {
-    setRatingValues((prev) => {
-      const next = new Map(prev);
-      next.set(questionIndex, value);
-      return next;
-    });
-  };
-
   const isStepValid = (idx: number): boolean => {
     const question = payload.questions[idx];
     switch (question.type) {
@@ -531,36 +469,41 @@ export function PendingQuestionCard({
       }
       case "free_response":
         return (freeTexts.get(idx) ?? "").trim().length > 0;
-      case "rating":
-        return ratingValues.has(idx);
     }
   };
 
   const allStepsValid = payload.questions.every((_, idx) => isStepValid(idx));
 
   const handleSubmit = () => {
-    const answers: Record<string, string> = {};
+    const responses: Record<string, UserQuestionResponse> = {};
     payload.questions.forEach((question, idx) => {
       switch (question.type) {
         case "multiple_choice": {
           const selected = selections.get(idx);
           if (!selected || selected.size === 0) return;
           if (selected.has("__other__")) {
-            answers[question.header] = otherTexts.get(idx) ?? "";
+            // "Other" maps to a free_response answer for this question
+            responses[question.id] = {
+              type: "free_response",
+              text: otherTexts.get(idx) ?? "",
+            };
           } else {
-            answers[question.header] = Array.from(selected).join(", ");
+            responses[question.id] = {
+              type: "multiple_choice",
+              selected: Array.from(selected),
+            };
           }
           break;
         }
         case "free_response":
-          answers[question.header] = freeTexts.get(idx) ?? "";
-          break;
-        case "rating":
-          answers[question.header] = String(ratingValues.get(idx) ?? "");
+          responses[question.id] = {
+            type: "free_response",
+            text: freeTexts.get(idx) ?? "",
+          };
           break;
       }
     });
-    onSubmit(eventId, answers);
+    onSubmit(eventId, responses);
   };
 
   const getAnswerText = (idx: number): string => {
@@ -570,16 +513,20 @@ export function PendingQuestionCard({
         const selected = selections.get(idx);
         if (!selected || selected.size === 0) return "";
         if (selected.has("__other__")) return otherTexts.get(idx) ?? "";
-        return Array.from(selected).join(", ");
+        // Map option IDs back to labels for display
+        return Array.from(selected)
+          .map(
+            (optId) =>
+              question.options.find((o) => o.id === optId)?.label ?? optId,
+          )
+          .join(", ");
       }
       case "free_response":
         return freeTexts.get(idx) ?? "";
-      case "rating":
-        return ratingValues.has(idx) ? String(ratingValues.get(idx)) : "";
     }
   };
 
-  const renderStep = (question: AskUserQuestionItem, idx: number) => {
+  const renderStep = (question: UserQuestion, idx: number) => {
     switch (question.type) {
       case "multiple_choice":
         return (
@@ -597,14 +544,6 @@ export function PendingQuestionCard({
             question={question}
             text={freeTexts.get(idx) ?? ""}
             onTextChange={(text) => handleFreeTextChange(idx, text)}
-          />
-        );
-      case "rating":
-        return (
-          <RatingStep
-            question={question}
-            value={ratingValues.get(idx) ?? null}
-            onValueChange={(value) => handleRatingChange(idx, value)}
           />
         );
     }
@@ -626,7 +565,7 @@ export function PendingQuestionCard({
           <button
             type="button"
             onClick={onSkip}
-            className="text-purple-400 hover:text-purple-600 dark:text-purple-500 dark:hover:text-purple-300 -mr-1 cursor-pointer rounded-sm p-0.5 transition-colors"
+            className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 dark:text-purple-500 dark:hover:text-purple-300"
             aria-label="Dismiss questions"
           >
             <X className="h-4 w-4" />
@@ -717,36 +656,33 @@ export function PendingQuestionCard({
             className="overflow-hidden transition-[height] duration-300 ease-in-out"
             style={{ height: contentHeight }}
           >
-            <div
-              key={activeStep}
-              className="animate-in fade-in duration-300"
-            >
-            {isReviewStep ? (
-              <div className="flex flex-col gap-3">
-                <span className="text-fg-primary text-sm font-medium">
-                  Review your answers
-                </span>
-                <div className="flex flex-col gap-2">
-                  {payload.questions.map((q, idx) => (
-                    <button
-                      key={q.header}
-                      type="button"
-                      onClick={() => setActiveStep(idx)}
-                      className="border-border bg-bg-secondary flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-all hover:border-purple-300 dark:hover:border-purple-600"
-                    >
-                      <span className="text-fg-muted text-xs font-medium">
-                        {q.header}
-                      </span>
-                      <span className="text-fg-primary text-sm">
-                        {getAnswerText(idx) || "—"}
-                      </span>
-                    </button>
-                  ))}
+            <div key={activeStep} className="animate-in fade-in duration-300">
+              {isReviewStep ? (
+                <div className="flex flex-col gap-3">
+                  <span className="text-fg-primary text-sm font-medium">
+                    Review your answers
+                  </span>
+                  <div className="flex flex-col gap-2">
+                    {payload.questions.map((q, idx) => (
+                      <button
+                        key={q.id}
+                        type="button"
+                        onClick={() => setActiveStep(idx)}
+                        className="border-border bg-bg-secondary flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-all hover:border-purple-300 dark:hover:border-purple-600"
+                      >
+                        <span className="text-fg-muted text-xs font-medium">
+                          {q.header}
+                        </span>
+                        <span className="text-fg-primary text-sm">
+                          {getAnswerText(idx) || "—"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              renderStep(payload.questions[activeStep], activeStep)
-            )}
+              ) : (
+                renderStep(payload.questions[activeStep], activeStep)
+              )}
             </div>
           </div>
 
@@ -799,15 +735,36 @@ export function PendingQuestionCard({
  * Collapsed card shown in the event stream after a question has been answered.
  * Expandable to review the Q&A.
  */
+/** Format a UserQuestionResponse for display. */
+function formatResponse(
+  response: UserQuestionResponse | undefined,
+  question: UserQuestion,
+): string {
+  if (!response) return "—";
+  switch (response.type) {
+    case "multiple_choice":
+      return response.selected
+        .map((optId) => {
+          if (question.type !== "multiple_choice") return optId;
+          return question.options.find((o) => o.id === optId)?.label ?? optId;
+        })
+        .join(", ");
+    case "free_response":
+      return response.text || "—";
+    case "skipped":
+      return "Skipped";
+  }
+}
+
 export function AnsweredQuestionCard({
   payload,
-  answers,
+  responses,
   eventId,
   timestamp,
   className,
 }: {
-  payload: AskUserQuestionPayload;
-  answers: Record<string, string>;
+  payload: UserQuestionsPayload;
+  responses: Record<string, UserQuestionResponse>;
   eventId: string;
   timestamp: string;
   className?: string;
@@ -851,12 +808,12 @@ export function AnsweredQuestionCard({
       {isExpanded && (
         <div className="flex flex-col gap-3 px-4 pb-3">
           {payload.questions.map((q) => (
-            <div key={q.header} className="flex flex-col gap-0.5">
+            <div key={q.id} className="flex flex-col gap-0.5">
               <span className="text-fg-muted text-xs font-medium">
                 {q.header}
               </span>
               <span className="text-fg-primary text-sm">
-                {answers[q.header] ?? "—"}
+                {formatResponse(responses[q.id], q)}
               </span>
             </div>
           ))}
@@ -876,7 +833,7 @@ export function SkippedQuestionCard({
   timestamp,
   className,
 }: {
-  payload: AskUserQuestionPayload;
+  payload: UserQuestionsPayload;
   eventId: string;
   timestamp: string;
   className?: string;
@@ -920,7 +877,7 @@ export function SkippedQuestionCard({
       {isExpanded && (
         <div className="flex flex-col gap-3 px-4 pb-3">
           {payload.questions.map((q) => (
-            <div key={q.header} className="flex flex-col gap-0.5">
+            <div key={q.id} className="flex flex-col gap-0.5">
               <span className="text-fg-muted text-xs font-medium">
                 {q.header}
               </span>
