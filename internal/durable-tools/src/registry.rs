@@ -163,8 +163,10 @@ impl<T: SimpleTool> ErasedSimpleTool for T {
         let typed_llm_params: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params)?;
         let typed_side_info: T::SideInfo = serde_json::from_value(side_info)?;
 
-        // Execute (static method)
-        let result = T::execute(typed_llm_params, typed_side_info, ctx, idempotency_key).await?;
+        // Execute
+        let result = self
+            .execute(typed_llm_params, typed_side_info, ctx, idempotency_key)
+            .await?;
 
         // Serialize output
         Ok(serde_json::to_value(&result)?)

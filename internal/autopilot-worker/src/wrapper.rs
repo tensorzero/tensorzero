@@ -219,7 +219,9 @@ struct SimpleToolStepParams<L, S> {
 }
 
 #[async_trait]
-impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolWrapper<T> {
+impl<T: SimpleTool<SideInfo = AutopilotSideInfo> + Default> TaskTool
+    for ClientSimpleToolWrapper<T>
+{
     async fn execute(
         &self,
         llm_params: Self::LlmParams,
@@ -278,7 +280,7 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
 /// success or failure. This ensures tool errors are checkpointed rather than
 /// causing step retries. The error is converted to structured JSON for
 /// programmatic parsing by the autopilot API.
-async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
+async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo> + Default>(
     params: SimpleToolStepParams<T::LlmParams, AutopilotSideInfo>,
     state: ToolAppState,
 ) -> anyhow::Result<Result<T::Output, serde_json::Value>> {
@@ -288,16 +290,19 @@ async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
         params.tool_name, params.tool_call_event_id
     );
 
+    let tool = T::default();
+
     // Wrap the result in Ok so tool errors are checkpointed, not retried.
     // Convert ToolError to structured JSON for programmatic error handling.
-    Ok(T::execute(
-        params.llm_params,
-        params.side_info,
-        simple_ctx,
-        &idempotency_key,
-    )
-    .await
-    .map_err(tool_error_to_json))
+    Ok(tool
+        .execute(
+            params.llm_params,
+            params.side_info,
+            simple_ctx,
+            &idempotency_key,
+        )
+        .await
+        .map_err(tool_error_to_json))
 }
 
 /// Convert a `ToolError` to structured JSON for the autopilot API.
@@ -595,6 +600,7 @@ mod tests {
     #[async_trait]
     impl SimpleTool for TestSimpleTool {
         async fn execute(
+            &self,
             llm_params: Self::LlmParams,
             _side_info: Self::SideInfo,
             _ctx: SimpleToolContext<'_>,

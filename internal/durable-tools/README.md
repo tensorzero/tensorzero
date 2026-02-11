@@ -175,6 +175,7 @@ impl ToolMetadata for SearchTool {
 #[async_trait]
 impl SimpleTool for SearchTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: <Self as ToolMetadata>::SideInfo,
         _ctx: SimpleToolContext<'_>,

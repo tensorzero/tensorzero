@@ -116,6 +116,7 @@ impl ToolMetadata for EchoSimpleTool {
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
@@ -217,6 +218,7 @@ impl ToolMetadata for InferenceSimpleTool {
 #[async_trait]
 impl SimpleTool for InferenceSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         ctx: SimpleToolContext<'_>,
@@ -503,6 +505,7 @@ impl ToolMetadata for KeyCapturingSimpleTool {
 #[async_trait]
 impl SimpleTool for KeyCapturingSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,

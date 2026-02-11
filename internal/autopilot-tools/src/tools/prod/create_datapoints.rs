@@ -142,6 +142,7 @@ fn add_tags_to_datapoint(
 #[async_trait]
 impl SimpleTool for CreateDatapointsTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,

@@ -47,6 +47,7 @@ impl ToolMetadata for GoodSimpleTool {
 #[async_trait]
 impl SimpleTool for GoodSimpleTool {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,

@@ -66,6 +66,7 @@ use crate::tool_metadata::ToolMetadata;
 /// #[async_trait]
 /// impl SimpleTool for SearchTool {
 ///     async fn execute(
+///         &self,
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         _side_info: <Self as ToolMetadata>::SideInfo,
 ///         ctx: SimpleToolContext<'_>,
@@ -88,6 +89,7 @@ pub trait SimpleTool: ToolMetadata {
     /// * `ctx` - The simple tool context (provides database access)
     /// * `idempotency_key` - A unique key for this execution (use for external API calls)
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: Self::SideInfo,
         ctx: SimpleToolContext<'_>,

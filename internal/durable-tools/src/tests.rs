@@ -58,6 +58,7 @@ impl ToolMetadata for EchoSimpleTool {
 #[async_trait]
 impl SimpleTool for EchoSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
@@ -160,6 +161,7 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
 #[async_trait]
 impl SimpleTool for DefaultTimeoutSimpleTool {
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: SimpleToolContext<'_>,
@@ -415,6 +417,7 @@ mod registry_tests {
         #[async_trait::async_trait]
         impl SimpleTool for ConflictingSimpleTool {
             async fn execute(
+                &self,
                 llm_params: <Self as ToolMetadata>::LlmParams,
                 _side_info: Self::SideInfo,
                 _ctx: SimpleToolContext<'_>,
