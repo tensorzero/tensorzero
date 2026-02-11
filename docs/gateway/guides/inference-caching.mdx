@@ -10,10 +10,10 @@ When caching is enabled, identical requests will be served from the cache instea
 
 The TensorZero Gateway supports the following cache modes:
 
-- `write_only` (default): Only write to cache but don't serve cached responses
-- `read_only`: Only read from cache but don't write new entries
+- `off` (default): Disable caching completely
 - `on`: Both read from and write to cache
-- `off`: Disable caching completely
+- `write_only`: Only write to cache but don't serve cached responses
+- `read_only`: Only read from cache but don't write new entries
 
 You can also optionally specify a maximum age for cache entries in seconds for inference reads.
 This parameter is ignored for inference writes.
