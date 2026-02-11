@@ -17,12 +17,12 @@ use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{Arguments, System, Template, Text};
 use tensorzero_core::utils::gateway::GatewayHandle;
-use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_deployment_id() {
@@ -71,10 +71,12 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
 async fn test_get_howdy_report() {
     let (clickhouse, _guard) = get_clean_clickhouse(true).await;
     let client = get_embedded_client(clickhouse.clone()).await;
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    let deployment_id = get_deployment_id(&clickhouse, &PostgresConnectionInfo::Disabled)
-        .await
-        .unwrap();
+    let deployment_id = poll_result_until_some(async || {
+        get_deployment_id(&clickhouse, &PostgresConnectionInfo::Disabled)
+            .await
+            .ok()
+    })
+    .await;
     let howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
     assert_eq!(howdy_report.inference_count, "0");
     assert_eq!(howdy_report.feedback_count, "0");
@@ -156,11 +158,17 @@ async fn test_get_howdy_report() {
         ..Default::default()
     };
     client.feedback(params).await.unwrap();
-    // Sleep for 1 second to ensure the feedback is processed
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Get the howdy report again
-    let new_howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
+    // Get the howdy report again (poll until ClickHouse has processed the writes)
+    let new_howdy_report = poll_result_until_some(async || {
+        let report = get_howdy_report(&clickhouse, &deployment_id).await.ok()?;
+        // Wait until all inferences and feedback are visible
+        if report.inference_count == "2" && report.feedback_count == "2" {
+            Some(report)
+        } else {
+            None
+        }
+    })
+    .await;
     assert!(!new_howdy_report.inference_count.is_empty());
     assert!(!new_howdy_report.feedback_count.is_empty());
     // Since we're in an e2e test, this should be true

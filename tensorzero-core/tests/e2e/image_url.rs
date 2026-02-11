@@ -7,7 +7,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
-use std::time::Duration;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent, Role,
@@ -16,6 +15,7 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse,
 };
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::{Base64File, File, UrlFile};
@@ -207,13 +207,12 @@ async fn test_image_url_with_fetch_true() {
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     // Verify ClickHouse data
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
+    let _result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("✓ Test passed: Image URL with fetch_and_encode_input_files_before_inference = true");
 }
@@ -343,13 +342,12 @@ async fn test_base64_image_with_fetch_true() {
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     // Verify ClickHouse data
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
+    let _result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!(
         "✓ Test passed: Base64 image with fetch_and_encode_input_files_before_inference = true"
@@ -423,13 +421,12 @@ async fn test_base64_image_with_fetch_false() {
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     // Verify ClickHouse data
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
+    let _result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!(
         "✓ Test passed: Base64 image with fetch_and_encode_input_files_before_inference = false"
@@ -502,13 +499,12 @@ async fn test_wikipedia_image_url_with_fetch_true() {
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     // Verify ClickHouse data
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
+    let _result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!(
         "✓ Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = true"
@@ -581,13 +577,12 @@ async fn test_wikipedia_image_url_with_fetch_false() {
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     // Verify ClickHouse data
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
+    let _result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!(
         "✓ Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = false"

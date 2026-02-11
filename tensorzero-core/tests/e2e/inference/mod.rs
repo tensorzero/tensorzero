@@ -23,8 +23,10 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::inference::types::{Arguments, StoredInput, System, Template};
 use tensorzero_core::observability::enter_fake_http_request_otel;
+use tensorzero_core::poll_clickhouse_for_result;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
     db::clickhouse::test_helpers::{
@@ -44,7 +46,6 @@ use tensorzero_core::{
     tool::{ToolCall, ToolCallWrapper},
 };
 use tokio::task::JoinSet;
-use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 mod extra_body;
@@ -142,14 +143,12 @@ async fn test_inference_chat_strip_unknown_block_non_stream() {
     let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id = Uuid::parse_str(episode_id).unwrap();
 
-    // Sleep for 200ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -355,14 +354,12 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
     let episode_id =
         Uuid::parse_str(chunk_json.get("episode_id").unwrap().as_str().unwrap()).unwrap();
 
-    // Sleep for 200ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -504,14 +501,12 @@ async fn test_inference_model_fallback() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     assert_eq!(output_tokens, 1);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -661,14 +656,12 @@ async fn test_tool_call() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     assert_eq!(output_tokens, 1);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -859,14 +852,12 @@ async fn test_tool_call_malformed() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     assert_eq!(output_tokens, 1);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -1040,14 +1031,12 @@ async fn test_inference_json_fail() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     assert_eq!(output_tokens, 1);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -1175,14 +1164,12 @@ async fn test_inference_json_success() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     assert_eq!(output_tokens, 1);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -1338,14 +1325,12 @@ async fn test_variant_failover() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     assert_eq!(output_tokens, 1);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -1613,14 +1598,12 @@ async fn test_streaming() {
         }
     }
     let inference_id = inference_id.unwrap();
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -2320,14 +2303,12 @@ async fn test_tool_call_streaming() {
         }
     }
     let inference_id = inference_id.unwrap();
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -2539,14 +2520,12 @@ async fn test_tool_call_streaming_split_tool_name() {
     }
     let inference_id = inference_id.unwrap();
     assert_eq!(accumulated_tool_name, "get_temperature");
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -2730,14 +2709,12 @@ pub async fn test_raw_text(client: tensorzero::Client) {
         })
     );
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -2866,14 +2843,12 @@ pub async fn test_dynamic_api_key() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -3027,14 +3002,12 @@ async fn test_dummy_only_embedded_gateway_no_config() {
         panic!("Expected non-streaming response");
     };
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, response.inference_id()).await
+    })
+    .await;
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -3068,14 +3041,12 @@ async fn test_dummy_only_replicated_clickhouse() {
         panic!("Expected non-streaming response");
     };
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, response.inference_id()).await
+    })
+    .await;
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -3408,14 +3379,12 @@ async fn test_inference_zero_tokens_helper(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, expected_input_tokens.unwrap_or(0));
     assert_eq!(output_tokens, expected_output_tokens.unwrap_or(0));
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -3644,14 +3613,12 @@ async fn test_multiple_text_blocks_in_message() {
     let response = response.json::<Value>().await.unwrap();
     let inference_id = response.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     // Get the ClickHouse inference
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     // Check that the inference has multiple content blocks
     let input = result.get("input").unwrap().as_str().unwrap();
@@ -3776,16 +3743,14 @@ async fn test_clickhouse_bulk_insert() {
     // and allow the batch writer to shut down.
     drop(client);
     eprintln!("Dropped client");
-    // Wait for ClickHouse to finish processing batch writes.
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     let clickhouse_client = get_clickhouse().await;
-    let inferences = select_chat_inferences_clickhouse(&clickhouse_client, episode_id)
-        .await
-        .unwrap();
+    let inferences: Vec<Value> = poll_clickhouse_for_result!(
+        select_chat_inferences_clickhouse(&clickhouse_client, episode_id).await
+    );
     let actual_inference_ids = inferences
         .iter()
-        .map(|i| {
+        .map(|i: &Value| {
             i.get("id")
                 .unwrap()
                 .as_str()
@@ -3849,21 +3814,20 @@ async fn test_internal_tag_auto_injection() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse to verify both tags are present
     let clickhouse = get_clickhouse().await;
 
     // Verify custom tag is present
-    let result = select_inference_tags_clickhouse(
-        &clickhouse,
-        "basic_test",
-        "custom_tag",
-        "custom_value",
-        inference_id,
-    )
-    .await
-    .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_inference_tags_clickhouse(
+            &clickhouse,
+            "basic_test",
+            "custom_tag",
+            "custom_value",
+            inference_id,
+        )
+        .await
+    );
     assert_eq!(
         result.get("inference_id").unwrap().as_str().unwrap(),
         inference_id.to_string()

@@ -11,7 +11,7 @@ use tensorzero_core::endpoints::internal::inference_count::{
     InferenceCountResponse, InferenceWithFeedbackCountResponse,
     ListFunctionsWithInferenceCountResponse,
 };
-use tokio::time::{Duration, sleep};
+use tensorzero_core::poll_clickhouse_for_result;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -129,12 +129,15 @@ async fn test_get_inference_count_chat_function() {
     // Create a new inference
     let (_inference_id, _episode_id) = create_inference(&client, "basic_test").await;
 
-    // Wait for ClickHouse to process
-    sleep(Duration::from_millis(1000)).await;
-
     // Verify the count increased
-    let resp = client.get(url).send().await.unwrap();
-    let response: InferenceCountResponse = resp.json().await.unwrap();
+    let response: InferenceCountResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = client.get(url.clone()).send().await.ok()?;
+            let r: InferenceCountResponse = resp.json().await.ok()?;
+            (r.inference_count > initial_count).then_some(r)
+        }
+        .await
+    );
     assert!(
         response.inference_count > initial_count,
         "Expected inference_count to increase from {} after creating inference, got {}",
@@ -179,12 +182,15 @@ async fn test_get_inference_count_json_function() {
         .unwrap();
     assert!(response.status().is_success());
 
-    // Wait for ClickHouse to process
-    sleep(Duration::from_millis(1000)).await;
-
     // Verify the count increased
-    let resp = client.get(url).send().await.unwrap();
-    let response: InferenceCountResponse = resp.json().await.unwrap();
+    let response: InferenceCountResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = client.get(url.clone()).send().await.ok()?;
+            let r: InferenceCountResponse = resp.json().await.ok()?;
+            (r.inference_count > initial_count).then_some(r)
+        }
+        .await
+    );
     assert!(
         response.inference_count > initial_count,
         "Expected inference_count to increase from {} after creating inference, got {}",
@@ -282,12 +288,15 @@ async fn test_get_feedback_stats_float_metric() {
     let _feedback_id =
         submit_inference_feedback(&client, inference_id, "brevity_score", json!(0.85)).await;
 
-    // Wait for ClickHouse to process
-    sleep(Duration::from_millis(1000)).await;
-
     // Verify feedback count increased
-    let resp = client.get(url).send().await.unwrap();
-    let response: InferenceWithFeedbackCountResponse = resp.json().await.unwrap();
+    let response: InferenceWithFeedbackCountResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = client.get(url.clone()).send().await.ok()?;
+            let r: InferenceWithFeedbackCountResponse = resp.json().await.ok()?;
+            (r.feedback_count > initial_feedback_count).then_some(r)
+        }
+        .await
+    );
     assert!(
         response.feedback_count > initial_feedback_count,
         "Expected feedback_count to increase from {} after submitting feedback, got {}",
@@ -319,12 +328,15 @@ async fn test_get_feedback_stats_boolean_metric() {
     let _feedback_id =
         submit_inference_feedback(&client, inference_id, "task_success", json!(true)).await;
 
-    // Wait for ClickHouse to process
-    sleep(Duration::from_millis(1000)).await;
-
     // Verify feedback count increased
-    let resp = client.get(url).send().await.unwrap();
-    let response: InferenceWithFeedbackCountResponse = resp.json().await.unwrap();
+    let response: InferenceWithFeedbackCountResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = client.get(url.clone()).send().await.ok()?;
+            let r: InferenceWithFeedbackCountResponse = resp.json().await.ok()?;
+            (r.feedback_count > initial_feedback_count).then_some(r)
+        }
+        .await
+    );
     assert!(
         response.feedback_count > initial_feedback_count,
         "Expected feedback_count to increase from {} after submitting feedback, got {}",
@@ -342,10 +354,7 @@ async fn test_get_feedback_stats_with_threshold() {
     let _feedback_id =
         submit_inference_feedback(&client, inference_id, "brevity_score", json!(0.75)).await;
 
-    // Wait for ClickHouse to process
-    sleep(Duration::from_millis(1000)).await;
-
-    // Get stats without threshold
+    // Get stats without threshold (poll until feedback is visible)
     let url_total =
         get_gateway_endpoint("/internal/functions/basic_test/inference_count/brevity_score");
     let resp_total = client.get(url_total).send().await.unwrap();
@@ -475,12 +484,15 @@ async fn test_get_feedback_stats_episode_level_boolean_metric() {
     let _feedback_id =
         submit_episode_feedback(&client, episode_id, "goal_achieved", json!(true)).await;
 
-    // Wait for ClickHouse to process
-    sleep(Duration::from_millis(1000)).await;
-
     // Verify feedback count increased
-    let resp = client.get(url).send().await.unwrap();
-    let response: InferenceWithFeedbackCountResponse = resp.json().await.unwrap();
+    let response: InferenceWithFeedbackCountResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = client.get(url.clone()).send().await.ok()?;
+            let r: InferenceWithFeedbackCountResponse = resp.json().await.ok()?;
+            (r.feedback_count > initial_feedback_count).then_some(r)
+        }
+        .await
+    );
     assert!(
         response.feedback_count > initial_feedback_count,
         "Expected feedback_count to increase from {} after submitting episode feedback, got {}",
@@ -513,12 +525,15 @@ async fn test_get_feedback_stats_episode_level_float_metric() {
     let _feedback_id =
         submit_episode_feedback(&client, episode_id, "user_rating", json!(4.5)).await;
 
-    // Wait for ClickHouse to process
-    sleep(Duration::from_millis(1000)).await;
-
     // Verify feedback count increased
-    let resp = client.get(url).send().await.unwrap();
-    let response: InferenceWithFeedbackCountResponse = resp.json().await.unwrap();
+    let response: InferenceWithFeedbackCountResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = client.get(url.clone()).send().await.ok()?;
+            let r: InferenceWithFeedbackCountResponse = resp.json().await.ok()?;
+            (r.feedback_count > initial_feedback_count).then_some(r)
+        }
+        .await
+    );
     assert!(
         response.feedback_count > initial_feedback_count,
         "Expected feedback_count to increase from {} after submitting episode feedback, got {}",

@@ -110,7 +110,7 @@ async fn test_count_datapoints_for_dataset_chat(conn: impl DatasetQueries + Test
             .unwrap();
     }
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let new_count = conn
         .count_datapoints_for_dataset(&dataset_name, Some(function_name))
@@ -170,7 +170,7 @@ async fn test_count_datapoints_for_dataset_json(conn: impl DatasetQueries + Test
             .unwrap();
     }
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let new_count = conn
         .count_datapoints_for_dataset(&dataset_name, Some(function_name))
@@ -216,7 +216,7 @@ async fn test_insert_datapoint_chat(conn: impl DatasetQueries + TestDatabaseHelp
     // Insert the datapoint
     conn.insert_datapoints(&[datapoint_insert]).await.unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Verify it was inserted by selecting
     let inserted_datapoint = conn
@@ -268,7 +268,7 @@ async fn test_insert_datapoint_json(conn: impl DatasetQueries + TestDatabaseHelp
     // Insert the datapoint
     conn.insert_datapoints(&[datapoint_insert]).await.unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Verify it was inserted by selecting
     let inserted_datapoint = conn
@@ -525,7 +525,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete(
     // Flush async insert to ensure datapoint is visible before deletion
     conn.flush_pending_writes().await;
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Test retrieval
     let retrieved_datapoint = conn
@@ -555,7 +555,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete(
     // Flush async insert to ensure datapoint is deleted
     conn.flush_pending_writes().await;
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Try to get the datapoint (should return error since it's staled)
     let staled_result = conn
@@ -628,7 +628,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete(
     // Test insertion
     conn.insert_datapoints(&[json_datapoint]).await.unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Test retrieval
     let retrieved_datapoint = conn
@@ -655,7 +655,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Try to get the datapoint (should return error since it's staled)
     let staled_result = conn
@@ -922,7 +922,7 @@ async fn test_get_datapoints_with_single_chat_datapoint(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Retrieve using get_datapoints
     let result = conn
@@ -988,7 +988,7 @@ async fn test_get_datapoints_with_single_json_datapoint(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Retrieve using get_datapoints
     let result = conn
@@ -1116,7 +1116,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Retrieve all three datapoints
     let result = conn
@@ -1196,7 +1196,7 @@ async fn test_get_datapoints_with_non_existent_ids(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Query with both existing and non-existent IDs
     let non_existent_id = Uuid::now_v7();
@@ -1321,7 +1321,7 @@ async fn test_get_datapoints_with_search_query(conn: impl DatasetQueries + TestD
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Retrieve all three datapoints
     let result = conn
@@ -1388,7 +1388,7 @@ async fn test_get_datapoints_with_search_query_with_json_encoded_term(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Retrieve all three datapoints
     let result = conn
@@ -1453,7 +1453,7 @@ async fn test_get_datapoints_respects_allow_stale_false(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Verify we can retrieve it before staling
     let result = conn
@@ -1477,7 +1477,7 @@ async fn test_get_datapoints_respects_allow_stale_false(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Try to retrieve with allow_stale=false
     let result = conn
@@ -1538,14 +1538,14 @@ async fn test_get_datapoints_respects_allow_stale_true(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Stale the datapoint
     conn.delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Try to retrieve with allow_stale=true
     let result = conn
@@ -1615,7 +1615,7 @@ async fn test_get_datapoints_with_wrong_dataset_name(
         .await
         .unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Try to retrieve with different dataset name
     let wrong_dataset = format!("wrong_{dataset_name}");
@@ -1692,7 +1692,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip(
     // Insert the datapoint
     conn.insert_datapoints(&[chat_datapoint]).await.unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Retrieve the datapoint
     let retrieved_datapoint = conn
@@ -1778,7 +1778,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip(
     // Insert the datapoint
     conn.insert_datapoints(&[json_datapoint]).await.unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Retrieve the datapoint
     let retrieved_datapoint = conn
@@ -1883,7 +1883,7 @@ async fn test_datapoint_with_mixed_file_types(conn: impl DatasetQueries + TestDa
     // Insert the datapoint
     conn.insert_datapoints(&[chat_datapoint]).await.unwrap();
 
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Retrieve the datapoint
     let retrieved_datapoint = conn
@@ -1993,7 +1993,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        conn.sleep_for_writes_to_be_visible().await;
+        conn.flush_pending_writes().await;
 
         // Verify by retrieving the datapoint
         let retrieved_datapoint = conn
@@ -2094,7 +2094,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        conn.sleep_for_writes_to_be_visible().await;
+        conn.flush_pending_writes().await;
 
         let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
@@ -2185,7 +2185,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        conn.sleep_for_writes_to_be_visible().await;
+        conn.flush_pending_writes().await;
 
         let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
@@ -2275,7 +2275,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        conn.sleep_for_writes_to_be_visible().await;
+        conn.flush_pending_writes().await;
 
         let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
@@ -2354,7 +2354,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        conn.sleep_for_writes_to_be_visible().await;
+        conn.flush_pending_writes().await;
 
         let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
@@ -2426,7 +2426,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        conn.sleep_for_writes_to_be_visible().await;
+        conn.flush_pending_writes().await;
 
         let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
@@ -2504,7 +2504,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        conn.sleep_for_writes_to_be_visible().await;
+        conn.flush_pending_writes().await;
 
         let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {
@@ -2592,7 +2592,7 @@ mod tool_call_storage_tests {
             .await
             .unwrap();
 
-        conn.sleep_for_writes_to_be_visible().await;
+        conn.flush_pending_writes().await;
 
         let retrieved_datapoint = conn
             .get_datapoint(&GetDatapointParams {

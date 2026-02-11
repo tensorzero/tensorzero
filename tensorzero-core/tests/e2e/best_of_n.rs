@@ -2,6 +2,7 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::{
     inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text, Unknown},
     providers::dummy::DUMMY_INFER_RESPONSE_CONTENT,
@@ -91,14 +92,12 @@ async fn test_best_of_n_dummy_candidates_dummy_judge_inner(
         Uuid::parse_str(inference_id).unwrap()
     };
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -122,9 +121,10 @@ async fn test_best_of_n_dummy_candidates_dummy_judge_inner(
     assert_eq!(input, correct_input);
 
     // Check the ModelInference Table
-    let results: Vec<Value> = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let results: Vec<Value> = poll_result_until_some(async || {
+        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     assert_eq!(results.len(), 4);
 
     // Collect model names
@@ -241,14 +241,12 @@ async fn test_best_of_n_dummy_candidates_real_judge() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 100);
     assert!(output_tokens > 20);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -553,14 +551,12 @@ async fn test_best_of_n_json_real_judge() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 100);
     assert!(output_tokens > 20);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -595,9 +591,10 @@ async fn test_best_of_n_json_real_judge() {
     assert_eq!(variant_name, "best_of_n_variant");
 
     // Check the ModelInference Table
-    let results = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let results = poll_result_until_some(async || {
+        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     assert_eq!(results.len(), 4);
 
     // Collect model names
@@ -827,14 +824,12 @@ async fn test_best_of_n_json_real_judge_implicit_tool() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 100);
     assert!(output_tokens > 20);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -869,9 +864,10 @@ async fn test_best_of_n_json_real_judge_implicit_tool() {
     assert_eq!(variant_name, "best_of_n_variant_implicit_tool");
 
     // Check the ModelInference Table
-    let results = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let results = poll_result_until_some(async || {
+        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     assert_eq!(results.len(), 4);
 
     // Collect model names
@@ -1108,14 +1104,12 @@ async fn test_best_of_n_judge_extra_body() {
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 100);
     assert!(output_tokens > 20);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     let clickhouse = get_clickhouse().await;
     // Check the ModelInference Table
-    let results = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let results = poll_result_until_some(async || {
+        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     assert_eq!(results.len(), 3);
 
     // Collect model names

@@ -2,7 +2,7 @@
 
 use reqwest::Client;
 use serde_json::{Map, Value};
-use tokio::time::{Duration, sleep};
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -123,10 +123,12 @@ async fn test_get_datapoint_count_counts_new_datapoints() {
         "Expected to insert exactly 1 datapoint"
     );
 
-    // Wait for ClickHouse to process the insertion
-    sleep(Duration::from_millis(1000)).await;
-
-    let updated_stats = fetch_datapoint_count(&client, &dataset_name, None).await;
+    // Poll until ClickHouse reflects the new datapoint
+    let updated_stats = poll_result_until_some(async || {
+        let stats = fetch_datapoint_count(&client, &dataset_name, None).await;
+        (stats.datapoint_count == initial_stats.datapoint_count + 1).then_some(stats)
+    })
+    .await;
 
     assert_eq!(
         updated_stats.datapoint_count,
@@ -164,10 +166,12 @@ async fn test_get_datapoint_count_filters_by_function_name() {
         "Expected to insert exactly 2 datapoints"
     );
 
-    // Wait for ClickHouse to process the insertions
-    sleep(Duration::from_millis(1000)).await;
-
-    let total_stats = fetch_datapoint_count(&client, &dataset_name, None).await;
+    // Poll until ClickHouse reflects both new datapoints
+    let total_stats = poll_result_until_some(async || {
+        let stats = fetch_datapoint_count(&client, &dataset_name, None).await;
+        (stats.datapoint_count == 2).then_some(stats)
+    })
+    .await;
     assert_eq!(
         total_stats.datapoint_count, 2,
         "Expected exactly 2 datapoints for dataset {dataset_name}"

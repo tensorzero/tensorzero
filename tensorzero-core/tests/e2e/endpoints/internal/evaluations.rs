@@ -1,18 +1,16 @@
 //! E2E tests for the evaluation endpoints.
 
-use std::time::Duration;
-
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStatisticsResponse;
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
 };
-use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -755,8 +753,19 @@ async fn test_run_evaluation_streaming_success() {
     create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
     create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
 
-    // Wait for data to be available in ClickHouse
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Poll until datapoints are available in ClickHouse
+    poll_result_until_some(async || {
+        let resp = http_client
+            .get(get_gateway_endpoint(&format!(
+                "/internal/datasets/{dataset_name}/datapoints/count"
+            )))
+            .send()
+            .await
+            .ok()?;
+        let body: Value = resp.json().await.ok()?;
+        (body["datapoint_count"].as_u64()? >= 2).then_some(())
+    })
+    .await;
 
     // Build the evaluation request payload
     let payload = json!({
@@ -990,8 +999,19 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
     create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
     create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id3).await;
 
-    // Wait for data to be available
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Poll until datapoints are available in ClickHouse
+    poll_result_until_some(async || {
+        let resp = http_client
+            .get(get_gateway_endpoint(&format!(
+                "/internal/datasets/{dataset_name}/datapoints/count"
+            )))
+            .send()
+            .await
+            .ok()?;
+        let body: Value = resp.json().await.ok()?;
+        (body["datapoint_count"].as_u64()? >= 3).then_some(())
+    })
+    .await;
 
     // Only evaluate specific datapoint IDs (2 out of 3)
     let payload = json!({
@@ -1213,33 +1233,27 @@ async fn test_get_human_feedback_returns_feedback_when_exists() {
         response.status()
     );
 
-    // Wait for ClickHouse to process the data
-    sleep(Duration::from_secs(1)).await;
-
-    // Now call the get_human_feedback endpoint
-    let resp = http_client
-        .post(get_gateway_endpoint(&format!(
-            "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
-        )))
-        .json(&json!({
-            "metric_name": "brevity_score",
-            "output": serialized_inference_output
-        }))
-        .send()
-        .await
-        .unwrap();
-    assert!(
-        resp.status().is_success(),
-        "get_human_feedback request failed: status={:?}",
-        resp.status()
-    );
-
-    let response: serde_json::Value = resp.json().await.unwrap();
-
-    assert!(
-        response.get("feedback").is_some(),
-        "Expected feedback to be present"
-    );
+    // Poll until feedback is available in ClickHouse
+    let response: Value = poll_result_until_some(async || {
+        let resp = http_client
+            .post(get_gateway_endpoint(&format!(
+                "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+            )))
+            .json(&json!({
+                "metric_name": "brevity_score",
+                "output": serialized_inference_output
+            }))
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let body: Value = resp.json().await.ok()?;
+        body.get("feedback").filter(|f| !f.is_null())?;
+        Some(body)
+    })
+    .await;
 
     let feedback = response.get("feedback").unwrap();
     assert_eq!(feedback.get("value").unwrap(), &json!(0.85));
@@ -1343,26 +1357,27 @@ async fn test_get_human_feedback_with_boolean_value() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    // Wait for ClickHouse to process the data
-    sleep(Duration::from_secs(1)).await;
-
-    // Now call the get_human_feedback endpoint
-    let resp = http_client
-        .post(get_gateway_endpoint(&format!(
-            "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
-        )))
-        .json(&json!({
-            "metric_name": "task_success",
-            "output": serialized_inference_output
-        }))
-        .send()
-        .await
-        .unwrap();
-    assert!(resp.status().is_success());
-
-    let response: serde_json::Value = resp.json().await.unwrap();
-
-    assert!(response.get("feedback").is_some());
+    // Poll until feedback is available in ClickHouse
+    let response: Value = poll_result_until_some(async || {
+        let resp = http_client
+            .post(get_gateway_endpoint(&format!(
+                "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
+            )))
+            .json(&json!({
+                "metric_name": "task_success",
+                "output": serialized_inference_output
+            }))
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let body: Value = resp.json().await.ok()?;
+        body.get("feedback").filter(|f| !f.is_null())?;
+        Some(body)
+    })
+    .await;
 
     let feedback = response.get("feedback").unwrap();
     assert_eq!(feedback.get("value").unwrap(), &json!(true));
@@ -1432,24 +1447,29 @@ async fn test_get_human_feedback_output_mismatch() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    // Wait for ClickHouse to process the data
-    sleep(Duration::from_secs(1)).await;
-
-    // Query with correct output - should find feedback
+    // Poll until feedback is available in ClickHouse
     let url = get_gateway_endpoint(&format!(
         "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback"
     ));
 
-    let resp = http_client
-        .post(url.clone())
-        .json(&json!({
-            "metric_name": "brevity_score",
-            "output": serialized_inference_output
-        }))
-        .send()
-        .await
-        .unwrap();
-    let response: serde_json::Value = resp.json().await.unwrap();
+    let response: serde_json::Value = poll_result_until_some(async || {
+        let resp = http_client
+            .post(url.clone())
+            .json(&json!({
+                "metric_name": "brevity_score",
+                "output": serialized_inference_output
+            }))
+            .send()
+            .await
+            .ok()?;
+        let body: serde_json::Value = resp.json().await.ok()?;
+        if body.get("feedback").is_some() && !body.get("feedback").unwrap().is_null() {
+            Some(body)
+        } else {
+            None
+        }
+    })
+    .await;
     assert!(
         response.get("feedback").is_some() && !response.get("feedback").unwrap().is_null(),
         "Should find feedback with matching output"

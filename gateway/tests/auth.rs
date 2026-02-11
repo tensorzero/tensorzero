@@ -10,6 +10,7 @@ use tensorzero_core::{
         get_clickhouse, select_chat_inference_clickhouse, select_feedback_clickhouse,
     },
     endpoints::status::{StatusResponse, TENSORZERO_VERSION},
+    poll_clickhouse_for_result,
 };
 use tokio::process::Command;
 use uuid::Uuid;
@@ -79,14 +80,11 @@ async fn test_tensorzero_auth_enabled() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for one second to allow time for the inference to be inserted into ClickHouse
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
     // Check that we applied the API key as a tag
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     let tags = result.get("tags").unwrap();
     assert_eq!(
@@ -125,14 +123,11 @@ async fn test_tensorzero_auth_enabled() {
         .unwrap();
     let feedback_id = Uuid::parse_str(feedback_id).unwrap();
 
-    // Sleep for one second to allow time for the feedback to be inserted into ClickHouse
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
     // Get the feedback from the database
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id).await
+    );
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);

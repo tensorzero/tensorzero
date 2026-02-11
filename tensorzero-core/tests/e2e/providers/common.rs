@@ -61,6 +61,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 use tensorzero_core::model::CredentialLocation;
+use tensorzero_core::poll_clickhouse_for_result;
 
 use super::helpers::{get_modal_extra_headers, get_test_model_extra_headers};
 
@@ -2042,17 +2043,13 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
         Uuid::parse_str(inference_id).unwrap()
     };
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
 
     // Check the ModelInference Table. We don't check the ChatInference table, since we only care about the contents
     // of the raw request sent to the model provider.
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ModelInference: {result:#?}");
 
@@ -2252,14 +2249,10 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         Uuid::parse_str(inference_id).unwrap()
     };
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let chat_result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let chat_result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {chat_result:#?}");
 
@@ -2276,9 +2269,9 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
 
     // Check the ModelInference Table. We don't check the ChatInference table, since we only care about the contents
     // of the raw request sent to the model provider.
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ModelInference: {result:#?}");
 
@@ -2635,11 +2628,20 @@ pub async fn test_warn_ignored_thought_block_with_provider(
             "Should not have warned about dropping thought blocks"
         );
     } else {
+        // Poll briefly for the log message — in multi_thread tokio the warning may be
+        // flushed to the buffer slightly after the inference response is returned.
+        let mut found = false;
+        for _ in 0..20 {
+            if logs_contain("TensorZero doesn't support input thought blocks for the") {
+                found = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
         assert!(
-            logs_contain("TensorZero doesn't support input thought blocks for the"),
+            found,
             "Missing expected warning for model_provider {} variant {}",
-            provider.model_provider_name,
-            provider.variant_name
+            provider.model_provider_name, provider.variant_name
         );
     }
 }
@@ -2882,14 +2884,10 @@ pub async fn check_base64_pdf_response(
         assert!(output_tokens.unwrap() > 0);
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -3035,14 +3033,10 @@ pub async fn check_base64_image_response(
         assert!(output_tokens.unwrap() > 0);
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -3189,14 +3183,10 @@ pub async fn check_url_image_response(
         assert!(output_tokens.unwrap() > 0);
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -3354,14 +3344,10 @@ pub async fn check_simple_inference_response(
         assert!(finish_reason == "stop" || finish_reason == "length");
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -3557,14 +3543,10 @@ pub async fn check_simple_image_inference_response(
     // Some providers return "stop" and others return "length"
     assert!(finish_reason == "stop" || finish_reason == "length");
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -3977,14 +3959,10 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         );
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -4243,14 +4221,10 @@ pub async fn check_inference_params_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -4523,14 +4497,10 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -4879,14 +4849,10 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -5210,14 +5176,10 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let tool_id = tool_id.unwrap();
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -5498,14 +5460,10 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -5795,14 +5753,10 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 
     assert!(full_text.to_lowercase().contains("mehta"));
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -6108,14 +6062,10 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -6427,14 +6377,10 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let tool_id = tool_id.unwrap();
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -6733,14 +6679,10 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -7011,14 +6953,10 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 
     let inference_id = inference_id.unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -7325,14 +7263,10 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -7705,14 +7639,10 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "Arguments: {arguments}"
     );
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -8058,14 +7988,10 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -8388,14 +8314,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let tool_id = tool_id.unwrap();
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -8702,14 +8624,10 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -9018,14 +8936,10 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -9268,24 +9182,18 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 panic!("Expected a chat response");
             };
 
-            // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-            // Check ClickHouse - ChatInference Table
             let clickhouse = get_clickhouse().await;
 
             println!("Response: {response:#?}");
 
-            let model_inference =
-                select_model_inference_clickhouse(&clickhouse, response.inference_id)
-                    .await
-                    .unwrap();
+            let model_inference = poll_clickhouse_for_result!(
+                select_model_inference_clickhouse(&clickhouse, response.inference_id).await
+            );
             println!("Model inference: {model_inference:#?}");
 
-            let chat_inference =
-                select_chat_inference_clickhouse(&clickhouse, response.inference_id)
-                    .await
-                    .unwrap();
+            let chat_inference = poll_clickhouse_for_result!(
+                select_chat_inference_clickhouse(&clickhouse, response.inference_id).await
+            );
             println!("Chat inference: {chat_inference:#?}");
 
             // Just check 'stop_sequences', as we check ModelInference and ChatInference in lots of other tests
@@ -9501,14 +9409,10 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -9826,14 +9730,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     println!("Collected arguments: {arguments}");
     serde_json::from_str::<Value>(&arguments).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -10166,14 +10066,10 @@ pub async fn check_parallel_tool_use_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -10552,14 +10448,10 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(serde_json::from_str::<Value>(&get_temperature_arguments).is_ok());
     assert!(serde_json::from_str::<Value>(&get_humidity_arguments).is_ok());
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - Inference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -10901,14 +10793,10 @@ pub async fn check_json_mode_inference_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - JsonInference: {result:#?}");
 
@@ -11174,14 +11062,10 @@ pub async fn check_dynamic_json_mode_inference_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - JsonInference: {result:#?}");
 
@@ -11441,14 +11325,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_json_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - JsonInference: {result:#?}");
 
@@ -11728,14 +11608,10 @@ async fn check_short_inference_response(
         .unwrap();
     assert_eq!(finish_reason, "length");
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -12041,14 +11917,10 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
     assert!(content_text.to_lowercase().contains("70"));
     assert!(content_text.to_lowercase().contains("30"));
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -12379,14 +12251,10 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     // Check inference_id
     let inference_id = inference_id.unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - Inference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     println!("ClickHouse - ChatInference: {result:#?}");
 
@@ -12572,10 +12440,6 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check ClickHouse
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
@@ -12981,14 +12845,10 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
     }
     let inference_id = inference_id.unwrap().parse::<Uuid>().unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check ClickHouse for the collected chunks from the first request
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
     let id = result.get("id").unwrap().as_str().unwrap();
     let _id_uuid = Uuid::parse_str(id).unwrap();
 
@@ -13092,13 +12952,9 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
         }
         let current_inference_id = current_inference_id.unwrap().parse::<Uuid>().unwrap();
 
-        // Sleep for 1 second to allow time for data to be inserted into ClickHouse
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-        // Check ClickHouse for the collected chunks
-        let result = select_chat_inference_clickhouse(&clickhouse, current_inference_id)
-            .await
-            .unwrap();
+        let result = poll_clickhouse_for_result!(
+            select_chat_inference_clickhouse(&clickhouse, current_inference_id).await
+        );
         let content_blocks_str = result.get("output").unwrap().as_str().unwrap();
         let content_blocks: Vec<Value> = serde_json::from_str(content_blocks_str).unwrap();
 

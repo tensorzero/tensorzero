@@ -4,8 +4,8 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::time::Duration;
 use tensorzero::{FunctionTool, GetDatapointParams};
+use tensorzero_core::poll_clickhouse_for_result;
 use uuid::Uuid;
 
 use tensorzero_core::db::datasets::DatasetQueries;
@@ -80,29 +80,27 @@ async fn test_update_chat_datapoint_output() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Now update the datapoint with new output and tags
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "output": [{"type": "text", "text": "Updated output"}],
-                "tags": {"version": "2"}
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "chat",
+                        "id": datapoint_id.to_string(),
+                        "output": [{"type": "text", "text": "Updated output"}],
+                        "tags": {"version": "2"}
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(
-        resp.status().is_success(),
-        "Update request failed: {:?}",
-        resp.status()
     );
     let resp_json: Value = resp.json().await.unwrap();
     let new_ids = resp_json["ids"].as_array().unwrap();
@@ -113,17 +111,18 @@ async fn test_update_chat_datapoint_output() {
     // Wait for async inserts and give ClickHouse time to merge the staled version
 
     database.flush_pending_writes().await;
-    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the old datapoint is staled
-    let old_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            allow_stale: Some(true),
-        })
-        .await
-        .unwrap();
+    let old_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: Some(true),
+            })
+            .await
+            .ok()
+    );
     let StoredDatapoint::Chat(chat_datapoint) = old_datapoint else {
         panic!("Expected chat datapoint");
     };
@@ -218,47 +217,47 @@ async fn test_update_json_datapoint_output() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update the datapoint with new output
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "json",
-                "id": datapoint_id.to_string(),
-                "output": {
-                    "raw": "{\"answer\": \"updated\"}",
-                },
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "json",
+                        "id": datapoint_id.to_string(),
+                        "output": {
+                            "raw": "{\"answer\": \"updated\"}",
+                        },
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let error_text = resp.text().await.unwrap();
-        panic!("Update request failed with status {status}: {error_text}");
-    }
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_ids = resp_json["ids"].as_array().unwrap();
     assert_eq!(new_ids.len(), 1);
     let new_id: Uuid = new_ids[0].as_str().unwrap().parse().unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    database.flush_pending_writes().await;
 
     // Verify the new datapoint has updated output
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
     let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
     };
@@ -358,50 +357,51 @@ async fn test_update_multiple_datapoints() {
         "Should insert 2 datapoints in preparation for batch update"
     );
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update both datapoints in one request
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [
-                {
-                    "type": "chat",
-                    "id": datapoint_id1.to_string(),
-                    "output": [{"type": "text", "text": "Updated output 1"}],
-                },
-                {
-                    "type": "chat",
-                    "id": datapoint_id2.to_string(),
-                    "output": [{"type": "text", "text": "Updated output 2"}],
-                }
-            ]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [
+                        {
+                            "type": "chat",
+                            "id": datapoint_id1.to_string(),
+                            "output": [{"type": "text", "text": "Updated output 1"}],
+                        },
+                        {
+                            "type": "chat",
+                            "id": datapoint_id2.to_string(),
+                            "output": [{"type": "text", "text": "Updated output 2"}],
+                        }
+                    ]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_ids = resp_json["ids"].as_array().unwrap();
     assert_eq!(new_ids.len(), 2);
 
-    // Wait for async inserts and give ClickHouse time to merge the staled versions
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    // Wait for async inserts and verify both old datapoints are staled
     database.flush_pending_writes().await;
-    tokio::time::sleep(Duration::from_millis(1000)).await;
 
-    // Verify both old datapoints are staled
-    let old_dp1 = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: datapoint_id1,
-            allow_stale: Some(true),
-        })
-        .await
-        .unwrap();
+    let old_dp1 = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: datapoint_id1,
+                allow_stale: Some(true),
+            })
+            .await
+            .ok()
+    );
     let StoredDatapoint::Chat(chat_datapoint) = old_dp1 else {
         panic!("Expected chat datapoint");
     };
@@ -495,24 +495,28 @@ async fn test_update_datapoint_type_mismatch() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Try to update it as a JSON datapoint
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "json",
-                "id": datapoint_id.to_string(),
-                "output": {"answer": "test"},
-                "output_schema": {"type": "object"}
-            }]
-        }))
-        .send()
+    // Try to update it as a JSON datapoint (retry on NOT_FOUND while data propagates)
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "json",
+                        "id": datapoint_id.to_string(),
+                        "output": {"answer": "test"},
+                        "output_schema": {"type": "object"}
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            (resp.status() != StatusCode::NOT_FOUND).then_some(resp)
+        }
         .await
-        .unwrap();
+    );
 
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
@@ -567,38 +571,42 @@ async fn test_update_datapoint_with_metadata() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update with new name metadata
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "name": "Test Datapoint Name"
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "chat",
+                        "id": datapoint_id.to_string(),
+                        "name": "Test Datapoint Name"
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    database.flush_pending_writes().await;
 
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: None,
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: None,
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
@@ -706,39 +714,43 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update to set output to empty
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "output": [],
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "chat",
+                        "id": datapoint_id.to_string(),
+                        "output": [],
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    database.flush_pending_writes().await;
 
     // Verify the new datapoint has output set to None
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
@@ -814,41 +826,45 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update to set tool_params fields to null
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "allowed_tools": null,
-                "additional_tools": [],
-                "provider_tools": [],
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "chat",
+                        "id": datapoint_id.to_string(),
+                        "allowed_tools": null,
+                        "additional_tools": [],
+                        "provider_tools": [],
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    database.flush_pending_writes().await;
 
     // Verify the new datapoint has tool_params fields cleared appropriately
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
@@ -913,39 +929,43 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update to set tags to empty
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "tags": {},
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "chat",
+                        "id": datapoint_id.to_string(),
+                        "tags": {},
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    database.flush_pending_writes().await;
 
     // Verify the new datapoint has tags set to None
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
@@ -1004,39 +1024,43 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update to set name to null
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "name": null
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "chat",
+                        "id": datapoint_id.to_string(),
+                        "name": null
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    database.flush_pending_writes().await;
 
     // Verify the new datapoint has name set to None
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
@@ -1102,39 +1126,43 @@ async fn test_update_json_datapoint_set_output_to_null() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update to set output to null
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "json",
-                "id": datapoint_id.to_string(),
-                "output": null,
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "json",
+                        "id": datapoint_id.to_string(),
+                        "output": null,
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    database.flush_pending_writes().await;
 
     // Verify the new datapoint has output set to None
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
@@ -1204,39 +1232,43 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update to set tags to null
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "json",
-                "id": datapoint_id.to_string(),
-                "tags": {},
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "type": "json",
+                        "id": datapoint_id.to_string(),
+                        "tags": {},
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    database.flush_pending_writes().await;
 
     // Verify the new datapoint has tags set to None
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
@@ -1291,27 +1323,25 @@ async fn test_update_metadata_chat_datapoint() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update metadata
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints/metadata",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "id": datapoint_id.to_string(),
-                "name": "updated_name"
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints/metadata",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "id": datapoint_id.to_string(),
+                        "name": "updated_name"
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(
-        resp.status().is_success(),
-        "Update metadata request failed: {:?}",
-        resp.status()
     );
     let resp_json: Value = resp.json().await.unwrap();
     let returned_ids = resp_json["ids"].as_array().unwrap();
@@ -1323,19 +1353,19 @@ async fn test_update_metadata_chat_datapoint() {
     );
 
     // Wait for async inserts
-    tokio::time::sleep(Duration::from_millis(1000)).await;
     database.flush_pending_writes().await;
-    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the datapoint has updated name
-    let updated_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let updated_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = updated_datapoint else {
         panic!("Expected chat datapoint");
@@ -1396,24 +1426,26 @@ async fn test_update_metadata_json_datapoint() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update metadata
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints/metadata",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "id": datapoint_id.to_string(),
-                "name": "updated_json_name"
-            }]
-        }))
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints/metadata",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "id": datapoint_id.to_string(),
+                        "name": "updated_json_name"
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let returned_ids = resp_json["ids"].as_array().unwrap();
     assert_eq!(returned_ids.len(), 1);
@@ -1421,19 +1453,19 @@ async fn test_update_metadata_json_datapoint() {
     assert_eq!(returned_id, datapoint_id);
 
     // Wait for async inserts
-    tokio::time::sleep(Duration::from_millis(1000)).await;
     database.flush_pending_writes().await;
-    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the datapoint has updated name
-    let updated_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let updated_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Json(json_datapoint) = updated_datapoint else {
         panic!("Expected json datapoint");
@@ -1484,38 +1516,41 @@ async fn test_update_metadata_set_name_to_null() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Set name to null
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints/metadata",
-        )))
-        .json(&json!({
-            "datapoints": [{
-                "id": datapoint_id.to_string(),
-                "name": null,
-            }]
-        }))
-        .send()
+    let _resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints/metadata",
+                )))
+                .json(&json!({
+                    "datapoints": [{
+                        "id": datapoint_id.to_string(),
+                        "name": null,
+                    }]
+                }))
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
 
     // Wait for async inserts
     database.flush_pending_writes().await;
-    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify name is now null
-    let updated_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let updated_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = updated_datapoint else {
         panic!("Expected chat datapoint");
@@ -1596,8 +1631,6 @@ async fn test_update_metadata_multiple_datapoints() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Update both datapoints' metadata
     let update_request = UpdateDatapointsMetadataRequest {
         datapoints: vec![
@@ -1615,33 +1648,38 @@ async fn test_update_metadata_multiple_datapoints() {
             },
         ],
     };
-    let resp = http_client
-        .patch(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints/metadata",
-        )))
-        .json(&update_request)
-        .send()
+    let resp = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .patch(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints/metadata",
+                )))
+                .json(&update_request)
+                .send()
+                .await
+                .ok()?;
+            resp.status().is_success().then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(resp.status().is_success());
+    );
     let resp_json: Value = resp.json().await.unwrap();
     let returned_ids = resp_json["ids"].as_array().unwrap();
     assert_eq!(returned_ids.len(), 2);
 
     // Wait for async inserts
     database.flush_pending_writes().await;
-    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify both datapoints have updated names
-    let datapoint1 = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: datapoint_id1,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let datapoint1 = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: datapoint_id1,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = datapoint1 else {
         panic!("Expected chat datapoint");
@@ -1768,29 +1806,27 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Get the datapoint via HTTP API
-    let get_resp = http_client
-        .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
-        .send()
+    let get_datapoints_response: Value = poll_clickhouse_for_result!(
+        async {
+            let get_resp = http_client
+                .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+                .json(&json!({
+                    "ids": [datapoint_id.to_string()]
+                }))
+                .send()
+                .await
+                .ok()?;
+            if !get_resp.status().is_success() {
+                return None;
+            }
+            let resp: Value = get_resp.json().await.ok()?;
+            (resp["datapoints"].as_array()?.len() == 1).then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(get_resp.status().is_success());
-    let get_datapoints_response: Value = get_resp.json().await.unwrap();
+    );
 
     // Modify the output field in the JSON
-    assert!(
-        get_datapoints_response["datapoints"]
-            .as_array()
-            .unwrap()
-            .len()
-            == 1
-    );
     let mut first_datapoint = get_datapoints_response["datapoints"][0].clone();
     first_datapoint["output"][0]["text"] = json!("Modified output");
 
@@ -1817,17 +1853,18 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
 
     // Wait for async inserts
     database.flush_pending_writes().await;
-    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the new datapoint has the modified output
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
@@ -1920,29 +1957,27 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Get the datapoint via HTTP API
-    let get_resp = http_client
-        .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
-        .send()
+    let get_datapoints_response: Value = poll_clickhouse_for_result!(
+        async {
+            let get_resp = http_client
+                .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+                .json(&json!({
+                    "ids": [datapoint_id.to_string()]
+                }))
+                .send()
+                .await
+                .ok()?;
+            if !get_resp.status().is_success() {
+                return None;
+            }
+            let resp: Value = get_resp.json().await.ok()?;
+            (resp["datapoints"].as_array()?.len() == 1).then_some(resp)
+        }
         .await
-        .unwrap();
-
-    assert!(get_resp.status().is_success());
-    let get_datapoints_response: Value = get_resp.json().await.unwrap();
+    );
 
     // Modify the output field in the JSON
-    assert!(
-        get_datapoints_response["datapoints"]
-            .as_array()
-            .unwrap()
-            .len()
-            == 1
-    );
     let mut first_datapoint = get_datapoints_response["datapoints"][0].clone();
     first_datapoint["output"] = json!({
         "raw": r#"{"answer":"5"}"#
@@ -1972,17 +2007,18 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
 
     // Wait for async inserts
     database.flush_pending_writes().await;
-    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the new datapoint has the modified output and name
-    let new_datapoint = database
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: new_id,
-            allow_stale: Some(false),
-        })
-        .await
-        .unwrap();
+    let new_datapoint = poll_clickhouse_for_result!(
+        database
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id: new_id,
+                allow_stale: Some(false),
+            })
+            .await
+            .ok()
+    );
 
     let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");

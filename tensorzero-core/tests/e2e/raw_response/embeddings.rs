@@ -5,6 +5,7 @@
 
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 
 use crate::common::get_gateway_endpoint;
 
@@ -277,38 +278,36 @@ async fn test_embeddings_raw_response_with_cache() {
         "First request should have non-zero prompt_tokens"
     );
 
-    // Wait for cache write to complete
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    // Poll until cache write completes and second request is a cache hit
+    poll_result_until_some(async || {
+        let response_cached = Client::new()
+            .post(get_gateway_endpoint("/openai/v1/embeddings"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
 
-    // Second request: should hit cache
-    let response_cached = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+        assert_eq!(response_cached.status(), StatusCode::OK);
+        let response_cached_json: Value = response_cached.json().await.unwrap();
 
-    assert_eq!(response_cached.status(), StatusCode::OK);
-    let response_cached_json: Value = response_cached.json().await.unwrap();
+        let raw_response_cached = response_cached_json
+            .get("tensorzero::raw_response")
+            .expect("Cached request should still have tensorzero::raw_response when requested");
+        let raw_response_cached_array = raw_response_cached.as_array().unwrap();
+        if !raw_response_cached_array.is_empty() {
+            return None;
+        }
 
-    // Cached response should have tensorzero::raw_response but with empty array
-    let raw_response_cached = response_cached_json
-        .get("tensorzero::raw_response")
-        .expect("Cached request should still have tensorzero::raw_response when requested");
-    let raw_response_cached_array = raw_response_cached.as_array().unwrap();
-    assert!(
-        raw_response_cached_array.is_empty(),
-        "Cached response should have empty tensorzero::raw_response array"
-    );
-
-    // Usage should be zero for cached request
-    assert_eq!(
-        response_cached_json["usage"]["prompt_tokens"]
-            .as_u64()
-            .unwrap(),
-        0,
-        "Cached request should have zero prompt_tokens"
-    );
+        assert_eq!(
+            response_cached_json["usage"]["prompt_tokens"]
+                .as_u64()
+                .unwrap(),
+            0,
+            "Cached request should have zero prompt_tokens"
+        );
+        Some(())
+    })
+    .await;
 }
 
 // =============================================================================

@@ -3,9 +3,9 @@
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::time::Duration;
 use tensorzero::{Client as TensorZeroClient, ClientExt, WriteConfigRequest};
 use tensorzero_core::config::UninitializedConfig;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -146,18 +146,14 @@ optimize = "max"
     let write_response = response.unwrap();
     assert!(!write_response.hash.is_empty(), "Hash should not be empty");
 
-    // Wait for ClickHouse to commit
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Verify we can retrieve the config by hash
-    let get_response = client.get_config_snapshot(Some(&write_response.hash)).await;
-    assert!(
-        get_response.is_ok(),
-        "get_config_snapshot should succeed: {:?}",
-        get_response.err()
-    );
-
-    let config_snapshot = get_response.unwrap();
+    // Poll until config snapshot is visible in ClickHouse
+    let config_snapshot = poll_result_until_some(async || {
+        client
+            .get_config_snapshot(Some(&write_response.hash))
+            .await
+            .ok()
+    })
+    .await;
     assert_eq!(config_snapshot.hash, write_response.hash);
     assert_eq!(
         config_snapshot.extra_templates.get("test_template"),
@@ -203,8 +199,8 @@ optimize = "max"
     let response1 = client.write_config(request1).await.unwrap();
     let hash = response1.hash.clone();
 
-    // Wait for ClickHouse to commit
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Poll until first write is visible in ClickHouse
+    poll_result_until_some(async || client.get_config_snapshot(Some(&hash)).await.ok()).await;
 
     // Second write with different tags (should merge)
     let mut tags2 = HashMap::new();
@@ -220,11 +216,14 @@ optimize = "max"
     let response2 = client.write_config(request2).await.unwrap();
     assert_eq!(response2.hash, hash, "Same config should produce same hash");
 
-    // Wait for ClickHouse to commit
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Verify tags were merged
-    let config_snapshot = client.get_config_snapshot(Some(&hash)).await.unwrap();
+    // Poll until second write's tags are merged and visible in ClickHouse
+    let config_snapshot = poll_result_until_some(async || {
+        let snapshot = client.get_config_snapshot(Some(&hash)).await.ok()?;
+        // Wait until the second write's tags are visible
+        snapshot.tags.get("key3")?;
+        Some(snapshot)
+    })
+    .await;
 
     assert_eq!(
         config_snapshot.tags.get("key1"),

@@ -8,6 +8,7 @@ use tensorzero::{
     ClientExt, ClientInferenceParams, FeedbackParams, InferenceOutput, Input, InputMessage,
     InputMessageContent, Role, WorkflowEvaluationRunParams,
 };
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse,
@@ -34,12 +35,11 @@ async fn test_workflow_evaluation() {
     };
     let workflow_evaluation_info = client.workflow_evaluation_run(params).await.unwrap();
     let run_id = workflow_evaluation_info.run_id;
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let run_row = select_workflow_evaluation_run_clickhouse(&clickhouse, run_id)
-        .await
-        .unwrap();
+    let run_row = poll_result_until_some(async || {
+        select_workflow_evaluation_run_clickhouse(&clickhouse, run_id).await
+    })
+    .await;
     assert_eq!(run_row.project_name, Some("test_project".to_string()));
     assert_eq!(
         run_row.run_display_name,
@@ -119,13 +119,13 @@ async fn test_workflow_evaluation() {
         } else {
             panic!("Expected a non-streaming response");
         };
-        tokio::time::sleep(Duration::from_millis(500)).await;
         // We won't test the output here but will grab from ClickHouse so we can check the variant name
         // and tags
         let clickhouse = get_clickhouse().await;
-        let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
-            .await
-            .unwrap();
+        let result = poll_result_until_some(async || {
+            select_chat_inference_clickhouse(&clickhouse, response.inference_id()).await
+        })
+        .await;
 
         println!("ClickHouse - ChatInference: {result:#?}");
         let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
@@ -288,12 +288,11 @@ async fn test_workflow_evaluation_other_function() {
     };
     let result = client.workflow_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let run_row = select_workflow_evaluation_run_clickhouse(&clickhouse, run_id)
-        .await
-        .unwrap();
+    let run_row = poll_result_until_some(async || {
+        select_workflow_evaluation_run_clickhouse(&clickhouse, run_id).await
+    })
+    .await;
     assert_eq!(run_row.project_name, None);
     assert_eq!(run_row.run_display_name, None);
     let episode_id = client
@@ -334,11 +333,11 @@ async fn test_workflow_evaluation_other_function() {
     };
     // We won't test the output here but will grab from ClickHouse so we can check the variant name
     // and tags
-    tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, response.inference_id()).await
+    })
+    .await;
 
     println!("ClickHouse - ChatInference: {result:#?}");
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
@@ -361,12 +360,11 @@ async fn test_workflow_evaluation_variant_error() {
     };
     let result = client.workflow_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let run_row = select_workflow_evaluation_run_clickhouse(&clickhouse, run_id)
-        .await
-        .unwrap();
+    let run_row = poll_result_until_some(async || {
+        select_workflow_evaluation_run_clickhouse(&clickhouse, run_id).await
+    })
+    .await;
     assert_eq!(run_row.project_name, None);
     assert_eq!(run_row.run_display_name, None);
     let episode_id = client
@@ -417,12 +415,11 @@ async fn test_workflow_evaluation_override_variant_tags() {
     };
     let result = client.workflow_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let run_row = select_workflow_evaluation_run_clickhouse(&clickhouse, run_id)
-        .await
-        .unwrap();
+    let run_row = poll_result_until_some(async || {
+        select_workflow_evaluation_run_clickhouse(&clickhouse, run_id).await
+    })
+    .await;
     assert_eq!(run_row.project_name, None);
     assert_eq!(run_row.run_display_name, None);
     let episode_id = client
@@ -462,14 +459,13 @@ async fn test_workflow_evaluation_override_variant_tags() {
     } else {
         panic!("Expected a non-streaming response");
     };
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(Duration::from_millis(200)).await;
     // We won't test the output here but will grab from ClickHouse so we can check the variant name
     // and tags
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_chat_inference_clickhouse(&clickhouse, response.inference_id()).await
+    })
+    .await;
 
     println!("ClickHouse - ChatInference: {result:#?}");
     // Test that inference time settings override the dynamic evaluation run settings

@@ -1,7 +1,7 @@
 /// Tests for the GET /internal/datasets endpoint (list_datasets).
 use reqwest::{Client, StatusCode};
-use std::time::Duration;
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::poll_clickhouse_for_result;
 use uuid::Uuid;
 
 use tensorzero_core::db::datasets::DatasetQueries;
@@ -59,29 +59,24 @@ async fn test_list_datasets_no_params() {
         .await
         .unwrap();
 
-    // Wait for data to be available and retry multiple times if needed
-    let mut found = false;
-    for _ in 0..10 {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        let resp = http_client
-            .get(get_gateway_endpoint("/internal/datasets"))
-            .send()
-            .await
-            .unwrap();
-
-        if resp.status() == StatusCode::OK {
-            let body: ListDatasetsResponse = resp.json().await.unwrap();
-            if body.datasets.iter().any(|d| d.dataset_name == dataset_name) {
-                found = true;
-                break;
+    // Wait for data to be available
+    poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .get(get_gateway_endpoint("/internal/datasets"))
+                .send()
+                .await
+                .ok()?;
+            if resp.status() != StatusCode::OK {
+                return None;
             }
+            let body: ListDatasetsResponse = resp.json().await.ok()?;
+            body.datasets
+                .iter()
+                .any(|d| d.dataset_name == dataset_name)
+                .then_some(())
         }
-    }
-
-    assert!(
-        found,
-        "Dataset '{dataset_name}' should appear in list_datasets after insertion",
+        .await
     );
 
     // Verify the dataset details
@@ -174,35 +169,26 @@ async fn test_list_datasets_with_function_filter() {
         .await
         .unwrap();
 
-    // Wait for data and retry until dataset_1 appears with function filter
-    let mut found = false;
-    for _ in 0..10 {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        let resp = http_client
-            .get(get_gateway_endpoint(&format!(
-                "/internal/datasets?function_name={function_name_1}",
-            )))
-            .send()
-            .await
-            .unwrap();
-
-        if resp.status() == StatusCode::OK {
-            let body: ListDatasetsResponse = resp.json().await.unwrap();
-            if body
-                .datasets
+    // Wait for data until dataset_1 appears with function filter
+    poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .get(get_gateway_endpoint(&format!(
+                    "/internal/datasets?function_name={function_name_1}",
+                )))
+                .send()
+                .await
+                .ok()?;
+            if resp.status() != StatusCode::OK {
+                return None;
+            }
+            let body: ListDatasetsResponse = resp.json().await.ok()?;
+            body.datasets
                 .iter()
                 .any(|d| d.dataset_name == dataset_name_1)
-            {
-                found = true;
-                break;
-            }
+                .then_some(())
         }
-    }
-
-    assert!(
-        found,
-        "Dataset '{dataset_name_1}' with function '{function_name_1}' should appear in filtered results",
+        .await
     );
 
     // Verify filtering works correctly
@@ -282,34 +268,24 @@ async fn test_list_datasets_with_pagination() {
     database.insert_datapoints(&datapoints).await.unwrap();
 
     // Wait for all datasets to be visible
-    let mut all_found = false;
-    for _ in 0..10 {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        let resp = http_client
-            .get(get_gateway_endpoint("/internal/datasets"))
-            .send()
-            .await
-            .unwrap();
-
-        if resp.status() == StatusCode::OK {
-            let body: ListDatasetsResponse = resp.json().await.unwrap();
+    poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .get(get_gateway_endpoint("/internal/datasets"))
+                .send()
+                .await
+                .ok()?;
+            if resp.status() != StatusCode::OK {
+                return None;
+            }
+            let body: ListDatasetsResponse = resp.json().await.ok()?;
             let found_count = dataset_names
                 .iter()
                 .filter(|name| body.datasets.iter().any(|d| &d.dataset_name == *name))
                 .count();
-
-            if found_count == dataset_names.len() {
-                all_found = true;
-                break;
-            }
+            (found_count == dataset_names.len()).then_some(())
         }
-    }
-
-    let num_datasets = dataset_names.len();
-    assert!(
-        all_found,
-        "All {num_datasets} test datasets should appear in list",
+        .await
     );
 
     // Test limit

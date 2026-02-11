@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashSet;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 use tensorzero_core::tool::Tool;
 use tensorzero_core::{
@@ -23,7 +24,6 @@ use tensorzero_core::{
     },
     tool::{ToolCall, ToolResult},
 };
-use tokio::time::{Duration, sleep};
 use url::Url;
 use uuid::Uuid;
 
@@ -704,14 +704,12 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -926,7 +924,10 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_simple_image_batch_inference_request_with_provider_and_ids(provider, ids)
         .await;
 }
@@ -1064,14 +1065,12 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -1279,7 +1278,10 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_inference_params_batch_inference_request_with_provider_and_ids(
         provider, ids,
     )
@@ -1470,9 +1472,6 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
     {
         assert_eq!(episode_id_response, expected_episode_id);
     }
-
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
@@ -1718,9 +1717,10 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
     ];
 
     for inference_id in inference_ids {
-        let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let result = poll_result_until_some(async || {
+            select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+        })
+        .await;
         let id_str = result.get("inference_id").unwrap().as_str().unwrap();
         let id = Uuid::parse_str(id_str).unwrap();
         let i = inference_id_to_index.remove(&id).unwrap();
@@ -2005,7 +2005,10 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_tool_use_batch_inference_request_with_provider_and_ids(provider, ids).await;
 }
 
@@ -2166,14 +2169,12 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -2398,7 +2399,10 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_allowed_tools_batch_inference_request_with_provider_and_ids(provider, ids)
         .await;
 }
@@ -2566,14 +2570,12 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -2812,14 +2814,12 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -3122,7 +3122,10 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider_and_ids(
         provider, ids,
     )
@@ -3226,7 +3229,10 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_multi_turn_batch_inference_request_with_provider_and_ids(provider, ids)
         .await;
 }
@@ -3368,14 +3374,12 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -3594,7 +3598,10 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider_and_ids(
         provider, ids,
     )
@@ -3716,14 +3723,12 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -3969,7 +3974,10 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_parallel_tool_use_batch_inference_request_with_provider_and_ids(
         provider, ids,
     )
@@ -4106,14 +4114,12 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -4322,7 +4328,10 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_json_mode_batch_inference_request_with_provider_and_ids(provider, ids)
         .await;
 }
@@ -4455,14 +4464,12 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
     // Check if ClickHouse is ok - BatchModelInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_batch_model_inference_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
@@ -4685,7 +4692,10 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
         None => return, // No completed batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
     };
-    sleep(Duration::from_millis(200)).await;
+    poll_result_until_some(async || {
+        select_latest_batch_request_clickhouse(&clickhouse, ids.batch_id).await
+    })
+    .await;
     test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider_and_ids(
         provider, ids,
     )
