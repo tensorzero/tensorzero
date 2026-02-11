@@ -19,7 +19,7 @@ use crate::db::datasets::{
     DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT, DatasetMetadata, DatasetQueries, GetDatapointParams,
     GetDatapointsParams, GetDatasetMetadataParams,
 };
-use crate::db::query_helpers::{json_double_escape_string_without_quotes, uuid_to_datetime};
+use crate::db::query_helpers::uuid_to_datetime;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -373,8 +373,28 @@ fn build_count_datapoints_query(
 fn build_datapoints_union_query(
     params: &GetDatapointsParams,
 ) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
-    // Build ORDER BY clause string for reuse in inner and outer queries
-    let order_by_clause = build_order_by_clause_string(params.order_by.as_ref());
+    let search_query = params.search_query_experimental.as_deref();
+
+    // Validate SearchRelevance ordering: requires search_query_experimental
+    let search_query_for_rank: Option<&str> = if let Some(obs) = params.order_by.as_ref() {
+        if obs
+            .iter()
+            .any(|o| matches!(o.term, DatapointOrderByTerm::SearchRelevance))
+        {
+            let sq = search_query.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message:
+                            "ORDER BY search_relevance requires search_query_experimental to be provided"
+                                .to_string(),
+                    })
+                })?;
+            Some(sq)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     // Inner limit is (limit + offset) to ensure we fetch enough rows before applying outer offset
     let inner_limit = (params.limit + params.offset) as i64;
@@ -388,7 +408,15 @@ fn build_datapoints_union_query(
                 id, dataset_name, function_name, episode_id, input, output,
                 dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice, parallel_tool_calls,
                 NULL::jsonb as output_schema,
-                tags, is_custom, source_inference_id, name, snapshot_hash, staled_at, updated_at
+                tags, is_custom, source_inference_id, name, snapshot_hash, staled_at, updated_at",
+    );
+
+    if let Some(sq) = search_query_for_rank {
+        push_search_rank_select(&mut qb, sq);
+    }
+
+    qb.push(
+        r"
             FROM tensorzero.chat_datapoints
             WHERE TRUE
         ",
@@ -401,12 +429,12 @@ fn build_datapoints_union_query(
         params.ids.as_deref(),
         params.allow_stale,
         params.filter.as_ref(),
-        params.search_query_experimental.as_deref(),
+        search_query,
         "input",
         "output",
     )?;
 
-    qb.push(&order_by_clause);
+    push_order_by_clause(&mut qb, params.order_by.as_ref());
     qb.push(" LIMIT ");
     qb.push_bind(inner_limit);
 
@@ -420,7 +448,15 @@ fn build_datapoints_union_query(
                 NULL::jsonb as dynamic_tools, NULL::jsonb as dynamic_provider_tools,
                 NULL::jsonb as allowed_tools, NULL::jsonb as tool_choice, NULL::boolean as parallel_tool_calls,
                 output_schema,
-                tags, is_custom, source_inference_id, name, snapshot_hash, staled_at, updated_at
+                tags, is_custom, source_inference_id, name, snapshot_hash, staled_at, updated_at",
+    );
+
+    if let Some(sq) = search_query_for_rank {
+        push_search_rank_select(&mut qb, sq);
+    }
+
+    qb.push(
+        r"
             FROM tensorzero.json_datapoints
             WHERE TRUE
         ",
@@ -433,12 +469,12 @@ fn build_datapoints_union_query(
         params.ids.as_deref(),
         params.allow_stale,
         params.filter.as_ref(),
-        params.search_query_experimental.as_deref(),
+        search_query,
         "input",
         "output",
     )?;
 
-    qb.push(&order_by_clause);
+    push_order_by_clause(&mut qb, params.order_by.as_ref());
     qb.push(" LIMIT ");
     qb.push_bind(inner_limit);
 
@@ -448,7 +484,7 @@ fn build_datapoints_union_query(
         ) AS combined
         ",
     );
-    qb.push(&order_by_clause);
+    push_order_by_clause(&mut qb, params.order_by.as_ref());
     qb.push(" LIMIT ");
     qb.push_bind(params.limit as i64);
     qb.push(" OFFSET ");
@@ -457,35 +493,44 @@ fn build_datapoints_union_query(
     Ok(qb)
 }
 
-/// Build ORDER BY clause as a string for use in UNION ALL queries.
-fn build_order_by_clause_string(order_by: Option<&Vec<DatapointOrderBy>>) -> String {
+/// Pushes the ORDER BY clause onto the query builder.
+/// When SearchRelevance is used, references the precomputed `search_rank` alias
+/// (which must be included in the SELECT via `push_search_rank_select`).
+fn push_order_by_clause(
+    qb: &mut QueryBuilder<sqlx::Postgres>,
+    order_by: Option<&Vec<DatapointOrderBy>>,
+) {
     let Some(order_by_vec) = order_by else {
-        return " ORDER BY updated_at DESC, id DESC".to_string();
+        qb.push(" ORDER BY updated_at DESC, id DESC");
+        return;
     };
 
     if order_by_vec.is_empty() {
-        return " ORDER BY updated_at DESC, id DESC".to_string();
+        qb.push(" ORDER BY updated_at DESC, id DESC");
+        return;
     }
 
-    let mut clauses = Vec::new();
-    for order_spec in order_by_vec {
+    qb.push(" ORDER BY ");
+    for (i, order_spec) in order_by_vec.iter().enumerate() {
+        if i > 0 {
+            qb.push(", ");
+        }
+        let direction = order_spec.direction.to_sql_direction();
         let column = match order_spec.term {
             DatapointOrderByTerm::Timestamp => "updated_at",
-            DatapointOrderByTerm::SearchRelevance => {
-                // For Postgres, we don't have the same term frequency calculation as ClickHouse.
-                // Fall back to updated_at for now.
-                // TODO(#5691): Implement proper text search ranking in Postgres
-                "updated_at"
-            }
+            DatapointOrderByTerm::SearchRelevance => "search_rank",
         };
-        let direction = order_spec.direction.to_sql_direction();
-        clauses.push(format!("{column} {direction}"));
+        qb.push(format!("{column} {direction}"));
     }
+    qb.push(", id DESC");
+}
 
-    // Always add id as tie-breaker for deterministic ordering
-    clauses.push("id DESC".to_string());
-
-    format!(" ORDER BY {}", clauses.join(", "))
+/// Pushes a computed `search_rank` column onto the SELECT list.
+/// Must be called after the other SELECT columns but before FROM.
+fn push_search_rank_select(qb: &mut QueryBuilder<sqlx::Postgres>, search_query: &str) {
+    qb.push(", ts_rank(COALESCE(input_tsvector, ''::tsvector) || COALESCE(output_tsvector, ''::tsvector), websearch_to_tsquery('simple',");
+    qb.push_bind(search_query.to_string());
+    qb.push(")) AS search_rank");
 }
 
 /// Builds a query to delete (soft) chat datapoints.
@@ -928,18 +973,17 @@ fn add_common_where_clauses(
     }
 
     if let Some(query) = search_query {
-        // Case-insensitive substring search on input and output
-        let json_escaped_query = json_double_escape_string_without_quotes(query)?;
-        let search_pattern = format!("%{json_escaped_query}%");
-        qb.push(" AND (");
-        qb.push(input_column);
-        qb.push("::TEXT ILIKE ");
-        qb.push_bind(search_pattern.clone());
-        qb.push(" OR ");
-        qb.push(output_column);
-        qb.push("::TEXT ILIKE ");
-        qb.push_bind(search_pattern);
-        qb.push(")");
+        // Full-text search using generated tsvector columns.
+        // Must use 'simple' config to match the tsvector config used in the generated columns.
+        qb.push(format!(
+            " AND ({input_column}_tsvector @@ websearch_to_tsquery('simple',"
+        ));
+        qb.push_bind(query.to_string());
+        qb.push(format!(
+            ") OR {output_column}_tsvector @@ websearch_to_tsquery('simple',"
+        ));
+        qb.push_bind(query.to_string());
+        qb.push("))");
     }
 
     Ok(())
@@ -1476,7 +1520,7 @@ mod tests {
                 FROM tensorzero.chat_datapoints
                 WHERE TRUE
                 AND dataset_name = $1 AND function_name = $2 AND id = ANY($3)
-                AND (input::TEXT ILIKE $4 OR output::TEXT ILIKE $5)
+                AND (input_tsvector @@ websearch_to_tsquery('simple',$4) OR output_tsvector @@ websearch_to_tsquery('simple',$5))
                 ORDER BY updated_at ASC, id DESC LIMIT $6)
                 UNION ALL
                 (SELECT
@@ -1489,7 +1533,7 @@ mod tests {
                 FROM tensorzero.json_datapoints
                 WHERE TRUE
                 AND dataset_name = $7 AND function_name = $8 AND id = ANY($9)
-                AND (input::TEXT ILIKE $10 OR output::TEXT ILIKE $11)
+                AND (input_tsvector @@ websearch_to_tsquery('simple',$10) OR output_tsvector @@ websearch_to_tsquery('simple',$11))
                 ORDER BY updated_at ASC, id DESC LIMIT $12)
             ) AS combined
             ORDER BY updated_at ASC, id DESC LIMIT $13 OFFSET $14

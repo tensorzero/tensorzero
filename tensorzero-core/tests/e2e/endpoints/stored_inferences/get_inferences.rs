@@ -882,9 +882,8 @@ async fn test_search_query_with_other_filters() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_order_by_search_relevance() {
-    // TODO(#5691): Support search relevance ordering in Postgres
-    skip_for_postgres!();
-    // Test ordering by term frequency in descending order
+    // ClickHouse uses term frequency and Postgres uses pg_trgm similarity() for ranking,
+    // so ordering may differ between backends. We only check that results are returned.
     let request = json!({
         "function_name": "answer_question",
         "output_source": "inference",
@@ -902,25 +901,21 @@ async fn test_search_query_order_by_search_relevance() {
 
     assert!(!res.is_empty(), "Expected results for 'canister' query");
 
-    // Verify that results are ordered by search relevance (currently term frequency) in descending order
-    let mut prev_relevance = None;
     for inference in &res {
-        assert_eq!(inference["function_name"], "answer_question");
+        assert_eq!(
+            inference["function_name"], "answer_question",
+            "All results should belong to the requested function"
+        );
         let input_string = serde_json::to_string(&inference["input"])
             .unwrap()
             .to_lowercase();
         let output_string = serde_json::to_string(&inference["output"])
             .unwrap()
             .to_lowercase();
-        let relevance =
-            input_string.matches("canister").count() + output_string.matches("canister").count();
-        if let Some(prev) = &prev_relevance {
-            assert!(
-                relevance <= *prev,
-                "Search relevance should be in descending order. Got: {relevance} > {prev}"
-            );
-            prev_relevance = Some(relevance);
-        }
+        assert!(
+            input_string.contains("canister") || output_string.contains("canister"),
+            "Each result should contain the search term in input or output"
+        );
     }
 }
 
