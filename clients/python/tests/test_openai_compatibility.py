@@ -124,6 +124,9 @@ async def test_async_inference_cache(async_openai_client):
     ]
 
     result = await async_openai_client.chat.completions.create(
+        extra_body={
+            "tensorzero::cache_options": {"enabled": "write_only"},
+        },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         temperature=0.4,
@@ -175,9 +178,12 @@ async def test_async_inference_streaming_with_cache(async_openai_client):
         {"role": "user", "content": "Hello"},
     ]
 
-    # First request without cache to populate the cache
+    # First request with write_only cache to populate the cache
     stream = await async_openai_client.chat.completions.create(
-        extra_body={"tensorzero::episode_id": str(uuid7())},
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::cache_options": {"enabled": "write_only"},
+        },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         stream=True,

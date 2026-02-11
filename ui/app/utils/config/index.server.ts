@@ -120,7 +120,7 @@ const defaultFunctionConfig: FunctionConfig = {
   parallel_tool_calls: null,
   description:
     "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
-  experimentation: { type: "uniform" },
+  experimentation: { base: { type: "uniform" }, namespaces: {} },
 };
 
 /**

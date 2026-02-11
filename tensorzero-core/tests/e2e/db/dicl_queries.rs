@@ -1,7 +1,4 @@
-//! E2E tests for DICLQueries implementations (ClickHouse only).
-//!
-//! Tests verify read and write operations for DICL examples work correctly.
-//! Since only ClickHouse implements DICLQueries, these use `make_clickhouse_only_test!`.
+//! E2E tests for DICLQueries implementations.
 
 use chrono::Utc;
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
@@ -47,7 +44,7 @@ async fn test_has_dicl_examples_returns_false_for_empty(
         "Should return false when no examples exist for the function/variant"
     );
 }
-make_clickhouse_only_test!(test_has_dicl_examples_returns_false_for_empty);
+make_db_test!(test_has_dicl_examples_returns_false_for_empty);
 
 async fn test_insert_and_has_dicl_examples(conn: impl DICLQueries + TestDatabaseHelpers) {
     let function_name = format!("test_fn_{}", Uuid::now_v7());
@@ -74,7 +71,7 @@ async fn test_insert_and_has_dicl_examples(conn: impl DICLQueries + TestDatabase
         "Should return true after inserting an example for the function/variant"
     );
 }
-make_clickhouse_only_test!(test_insert_and_has_dicl_examples);
+make_db_test!(test_insert_and_has_dicl_examples);
 
 // ===== INSERT_DICL_EXAMPLES (BATCH) =====
 
@@ -106,13 +103,13 @@ async fn test_insert_dicl_examples_batch(conn: impl DICLQueries + TestDatabaseHe
         .unwrap();
     assert!(exists, "Should have examples after batch insert");
 }
-make_clickhouse_only_test!(test_insert_dicl_examples_batch);
+make_db_test!(test_insert_dicl_examples_batch);
 
 async fn test_insert_dicl_examples_empty(conn: impl DICLQueries + TestDatabaseHelpers) {
     let rows = conn.insert_dicl_examples(&[]).await.unwrap();
     assert_eq!(rows, 0, "Should return 0 for empty batch insert");
 }
-make_clickhouse_only_test!(test_insert_dicl_examples_empty);
+make_db_test!(test_insert_dicl_examples_empty);
 
 async fn test_insert_dicl_examples_special_characters(
     conn: impl DICLQueries + TestDatabaseHelpers,
@@ -155,7 +152,7 @@ async fn test_insert_dicl_examples_special_characters(
         results[0].output
     );
 }
-make_clickhouse_only_test!(test_insert_dicl_examples_special_characters);
+make_db_test!(test_insert_dicl_examples_special_characters);
 
 async fn test_has_dicl_examples_isolates_by_function_and_variant(
     conn: impl DICLQueries + TestDatabaseHelpers,
@@ -217,7 +214,7 @@ async fn test_has_dicl_examples_isolates_by_function_and_variant(
         "Should return false for a different function name"
     );
 }
-make_clickhouse_only_test!(test_has_dicl_examples_isolates_by_function_and_variant);
+make_db_test!(test_has_dicl_examples_isolates_by_function_and_variant);
 
 // ===== GET_SIMILAR_DICL_EXAMPLES TESTS =====
 
@@ -282,7 +279,7 @@ async fn test_get_similar_dicl_examples_returns_sorted_by_distance(
         );
     }
 }
-make_clickhouse_only_test!(test_get_similar_dicl_examples_returns_sorted_by_distance);
+make_db_test!(test_get_similar_dicl_examples_returns_sorted_by_distance);
 
 async fn test_get_similar_dicl_examples_respects_limit(
     conn: impl DICLQueries + TestDatabaseHelpers,
@@ -313,7 +310,7 @@ async fn test_get_similar_dicl_examples_respects_limit(
 
     assert_eq!(results.len(), 2, "Should respect the limit of 2");
 }
-make_clickhouse_only_test!(test_get_similar_dicl_examples_respects_limit);
+make_db_test!(test_get_similar_dicl_examples_respects_limit);
 
 async fn test_get_similar_dicl_examples_filters_by_function_and_variant(
     conn: impl DICLQueries + TestDatabaseHelpers,
@@ -358,7 +355,7 @@ async fn test_get_similar_dicl_examples_filters_by_function_and_variant(
     );
     assert_eq!(results[0].output, "our_output");
 }
-make_clickhouse_only_test!(test_get_similar_dicl_examples_filters_by_function_and_variant);
+make_db_test!(test_get_similar_dicl_examples_filters_by_function_and_variant);
 
 async fn test_get_similar_dicl_examples_empty_result(conn: impl DICLQueries + TestDatabaseHelpers) {
     let function_name = format!("test_fn_{}", Uuid::now_v7());
@@ -373,7 +370,7 @@ async fn test_get_similar_dicl_examples_empty_result(conn: impl DICLQueries + Te
         "Should return empty vec when no examples match"
     );
 }
-make_clickhouse_only_test!(test_get_similar_dicl_examples_empty_result);
+make_db_test!(test_get_similar_dicl_examples_empty_result);
 
 // ===== DELETE_DICL_EXAMPLES TESTS =====
 
@@ -415,7 +412,7 @@ async fn test_delete_dicl_examples_all_for_variant(conn: impl DICLQueries + Test
         "Should have no examples after deleting all for the variant"
     );
 }
-make_clickhouse_only_test!(test_delete_dicl_examples_all_for_variant);
+make_db_test!(test_delete_dicl_examples_all_for_variant);
 
 async fn test_delete_dicl_examples_by_namespace(conn: impl DICLQueries + TestDatabaseHelpers) {
     let function_name = format!("test_fn_{}", Uuid::now_v7());
@@ -476,7 +473,7 @@ async fn test_delete_dicl_examples_by_namespace(conn: impl DICLQueries + TestDat
     );
     assert_eq!(results[0].output, "output_b");
 }
-make_clickhouse_only_test!(test_delete_dicl_examples_by_namespace);
+make_db_test!(test_delete_dicl_examples_by_namespace);
 
 async fn test_delete_dicl_examples_returns_zero_when_none_exist(
     conn: impl DICLQueries + TestDatabaseHelpers,
@@ -489,4 +486,4 @@ async fn test_delete_dicl_examples_returns_zero_when_none_exist(
         .unwrap();
     assert_eq!(deleted, 0, "Should return 0 when no examples match");
 }
-make_clickhouse_only_test!(test_delete_dicl_examples_returns_zero_when_none_exist);
+make_db_test!(test_delete_dicl_examples_returns_zero_when_none_exist);

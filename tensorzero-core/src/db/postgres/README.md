@@ -15,10 +15,10 @@ export TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ=1
 
 ### Rebuilding SQLx Cache
 
-When you edit SQL queries, rebuild the sqlx cache:
+When you edit SQL queries, rebuild the sqlx cache from repository root:
 
 ```bash
-DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres_migration_dev" cargo sqlx prepare
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres_migration_dev" cargo sqlx prepare --workspace -- --all-features --all-targets
 ```
 
 We build sqlx cache within each crate (see https://github.com/tensorzero/tensorzero/pull/5622).
