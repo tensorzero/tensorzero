@@ -2566,6 +2566,7 @@ impl From<OpenAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            cost: None,
         }
     }
 }
@@ -2589,6 +2590,7 @@ impl From<OpenAIEmbeddingUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: Some(0), // this is always zero for embeddings
+            cost: None,
         }
     }
 }
@@ -4300,6 +4302,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             "expected usage to include provider raw_usage entries"
         );

@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+
+use crate::cost::Cost;
 use uuid::Uuid;
 
 /// The type of API used for a model inference.
@@ -58,6 +60,12 @@ pub struct RawResponseEntry {
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+    /// Cost of this inference in dollars, computed from the provider response
+    /// using the user-configured cost pointer mappings on the model provider.
+    /// `None` means cost tracking is not configured for this provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional, type = "number"))]
+    pub cost: Option<Cost>,
 }
 
 impl Usage {
@@ -65,6 +73,7 @@ impl Usage {
         Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            cost: Some(Cost::ZERO),
         }
     }
 
@@ -103,6 +112,7 @@ where
             let Usage {
                 input_tokens: chunk_input_tokens,
                 output_tokens: chunk_output_tokens,
+                cost: chunk_cost,
             } = chunk_usage;
 
             acc.input_tokens = match (acc.input_tokens, chunk_input_tokens) {
@@ -143,6 +153,19 @@ where
                 }
             };
 
+            // Aggregate cost using max (same strategy as tokens)
+            acc.cost = match (acc.cost, chunk_cost) {
+                (_, None) => acc.cost,
+                (None, chunk_value) => chunk_value,
+                (Some(current_value), Some(chunk_value)) => {
+                    if current_value < chunk_value {
+                        Some(chunk_value)
+                    } else {
+                        Some(current_value)
+                    }
+                }
+            };
+
             acc
         })
 }
@@ -163,6 +186,7 @@ where
         let Usage {
             input_tokens: mi_input_tokens,
             output_tokens: mi_output_tokens,
+            cost: mi_cost,
         } = mi_usage;
 
         Usage {
@@ -171,6 +195,10 @@ where
                 _ => None,
             },
             output_tokens: match (acc.output_tokens, mi_output_tokens) {
+                (Some(a), Some(b)) => Some(a + b),
+                _ => None,
+            },
+            cost: match (acc.cost, mi_cost) {
                 (Some(a), Some(b)) => Some(a + b),
                 _ => None,
             },
@@ -250,6 +278,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
+            cost: None,
         };
         let result = aggregate_usage_from_single_streaming_model_inference(vec![usage]);
         assert_eq!(
@@ -271,14 +300,17 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(10),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(25),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -301,14 +333,17 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
+                cost: None,
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -330,10 +365,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -353,10 +390,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: Some(50),
+                cost: None,
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -381,10 +420,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(80),  // Smaller than previous (unexpected)
                 output_tokens: Some(30), // Smaller than previous (unexpected)
+                cost: None,
             },
         ];
         // This will panic due to debug_assert! when non-cumulative values are detected
@@ -413,6 +454,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
+            cost: None,
         };
         let result = aggregate_usage_across_model_inferences(vec![usage]);
         assert_eq!(
@@ -433,10 +475,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
+                cost: None,
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -458,10 +502,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             Usage {
                 input_tokens: None, // This should propagate None for input_tokens
                 output_tokens: Some(100),
+                cost: None,
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -482,10 +528,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: Some(50),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: None,
+                cost: None,
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -505,10 +553,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -529,11 +579,13 @@ mod tests {
             Usage {
                 input_tokens: Some(69),
                 output_tokens: Some(1),
+                cost: None,
             },
             // message_delta chunk: only output_tokens, no input_tokens
             Usage {
                 input_tokens: None,
                 output_tokens: Some(100),
+                cost: None,
             },
         ];
 

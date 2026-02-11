@@ -879,6 +879,7 @@ fn convert_converse_response(
     let usage = Usage {
         input_tokens: Some(total_input_tokens),
         output_tokens: Some(response.usage.output_tokens as u32),
+        cost: None,
     };
 
     // Extract raw usage from response
@@ -1243,6 +1244,7 @@ fn process_stream_event(
             let usage = Some(Usage {
                 input_tokens: Some(total_input_tokens),
                 output_tokens: Some(event.usage.output_tokens as u32),
+                cost: None,
             });
 
             Ok(Some(ProviderInferenceResponseChunk::new_with_raw_usage(

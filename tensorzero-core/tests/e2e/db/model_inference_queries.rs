@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use rust_decimal::Decimal;
 use tensorzero_core::{
     config::{Config, ConfigFileGlob},
     db::{
@@ -230,6 +231,7 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
         cached: false,
         finish_reason: Some(FinishReason::Stop),
         snapshot_hash: None,
+        cost: None,
         timestamp: None, // Computed from UUID on insert
     };
 
@@ -274,6 +276,55 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
 }
 make_db_test!(test_insert_and_read_model_inference);
 
+/// Validates that the cost column (from migration) round-trips correctly for both Postgres and ClickHouse.
+async fn test_insert_and_read_model_inference_with_cost(conn: impl ModelInferenceQueries) {
+    let inference_id = Uuid::now_v7();
+    let model_inference_id = Uuid::now_v7();
+
+    // Cost: $0.003 (e.g. 1000 input * 1.50/1M + 500 output * 3.00/1M)
+    let cost = Decimal::new(3000, 6);
+
+    let model_inference = StoredModelInference {
+        id: model_inference_id,
+        inference_id,
+        raw_request: r#"{"model": "test-model", "messages": []}"#.to_string(),
+        raw_response: r#"{"choices": [{"message": {"content": "test"}}], "usage": {"input_tokens": 1000, "output_tokens": 500}}"#.to_string(),
+        system: None,
+        input_messages: vec![],
+        output: vec![],
+        input_tokens: Some(1000),
+        output_tokens: Some(500),
+        response_time_ms: Some(100),
+        model_name: "cost-test-model".to_string(),
+        model_provider_name: "cost-test-provider".to_string(),
+        ttft_ms: None,
+        cached: false,
+        finish_reason: Some(FinishReason::Stop),
+        snapshot_hash: None,
+        cost: Some(cost),
+        timestamp: None,
+    };
+
+    conn.insert_model_inferences(std::slice::from_ref(&model_inference))
+        .await
+        .unwrap();
+
+    let read_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        read_inferences.len(),
+        1,
+        "Should have exactly one model inference"
+    );
+
+    let read = &read_inferences[0];
+    assert_eq!(read.cost, Some(cost), "Cost should round-trip correctly");
+}
+make_db_test!(test_insert_and_read_model_inference_with_cost);
+
 async fn test_insert_multiple_model_inferences_for_same_inference(
     conn: impl ModelInferenceQueries,
 ) {
@@ -298,6 +349,7 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
             cached: false,
             finish_reason: None, // Failed, no finish reason
             snapshot_hash: None,
+            cost: None,
             timestamp: None,
         },
         StoredModelInference {
@@ -317,6 +369,7 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
             cached: false,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            cost: None,
             timestamp: None,
         },
     ];
@@ -380,6 +433,7 @@ async fn test_insert_model_inference_with_all_finish_reasons(conn: impl ModelInf
             cached: false,
             finish_reason: Some(finish_reason),
             snapshot_hash: None,
+            cost: None,
             timestamp: None,
         };
 
@@ -421,6 +475,7 @@ async fn test_insert_model_inference_with_null_finish_reason(conn: impl ModelInf
         cached: false,
         finish_reason: None,
         snapshot_hash: None,
+        cost: None,
         timestamp: None,
     };
 
@@ -461,6 +516,7 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
         cached: true,
         finish_reason: None,
         snapshot_hash: None,
+        cost: None,
         timestamp: None,
     };
 
@@ -495,6 +551,7 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
         cached: false,
         finish_reason: None,
         snapshot_hash: None,
+        cost: None,
         timestamp: None,
     };
 

@@ -1162,6 +1162,7 @@ fn convert_row_to_inference_response(
     let usage = Usage {
         input_tokens: row.input_tokens,
         output_tokens: row.output_tokens,
+        cost: None,
     };
 
     match function {

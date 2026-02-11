@@ -5,6 +5,10 @@ routing = ["openai"]
 [models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 0.15, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 0.60, required = true },
+]
 
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]

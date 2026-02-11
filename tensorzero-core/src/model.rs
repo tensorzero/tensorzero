@@ -145,6 +145,7 @@ impl UninitializedModelConfig {
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
+                        cost: provider.cost,
                     },
                 ))
             }
@@ -426,6 +427,7 @@ impl ModelConfig {
             clients,
             stream,
             write_to_cache,
+            provider.cost.clone(),
         )?
         .instrument(span);
         // Get a single chunk from the stream and make sure it is OK then send to client.
@@ -725,6 +727,7 @@ fn wrap_provider_stream(
     clients: &InferenceClients,
     stream: Instrumented<PeekableProviderInferenceResponseStream>,
     write_to_cache: bool,
+    cost_config: Option<crate::cost::CostConfig>,
 ) -> Result<PeekableProviderInferenceResponseStream, Error> {
     // Detach the span from the stream, and re-attach it to the 'async_stream::stream!' wrapper
     // This ensures that the span duration include the entire provider-specific processing time
@@ -750,8 +753,16 @@ fn wrap_provider_stream(
 
         // IMPORTANT: We should NOT modify chunks here, as they'll be re-processed downstream (e.g. `create_stream`).
         while let Some(chunk) = stream.next().await {
-            if let Ok(chunk) = chunk.as_ref() && let Some(chunk_usage) = chunk.usage.as_ref() {
-                usages.push(*chunk_usage);
+            if let Ok(chunk) = chunk.as_ref() && let Some(mut chunk_usage) = chunk.usage {
+                // Compute cost from this chunk's raw response if cost config is provided
+                if let Some(cost_config) = &cost_config {
+                    chunk_usage.cost = crate::cost::compute_cost_from_response(
+                        &chunk.raw_response,
+                        cost_config,
+                        true, // streaming
+                    );
+                }
+                usages.push(chunk_usage);
             }
 
             // We can skip cloning the chunk if we know we're not going to write to the cache
@@ -851,6 +862,12 @@ pub struct UninitializedModelProvider {
     /// know how to correctly merge them.
     #[serde(default)]
     pub discard_unknown_chunks: bool,
+    /// Cost configuration: maps fields in the raw provider response to cost rates.
+    /// When configured, cost is computed from the raw response and included in the
+    /// API response and stored in the database.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<crate::cost::CostConfig>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -866,11 +883,17 @@ pub struct ModelProvider {
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
     pub discard_unknown_chunks: bool,
+    /// Cost configuration for computing inference cost from raw provider responses.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<crate::cost::CostConfig>,
 }
 
 impl ModelProvider {
     fn validate(&self, global_outbound_http_timeout: &chrono::Duration) -> Result<(), Error> {
         self.timeouts.validate(global_outbound_http_timeout)?;
+        if let Some(cost_config) = &self.cost {
+            crate::cost::validate_cost_config(cost_config)?;
+        }
         Ok(())
     }
     fn non_streaming_total_timeout(&self) -> Option<Duration> {
@@ -1895,7 +1918,15 @@ impl ModelProvider {
             }
         };
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
-        let provider_inference_response = res?;
+        let mut provider_inference_response = res?;
+        // Compute cost from the raw response if cost config is provided
+        if let Some(cost_config) = &self.cost {
+            provider_inference_response.usage.cost = crate::cost::compute_cost_from_response(
+                &provider_inference_response.raw_response,
+                cost_config,
+                false, // non-streaming
+            );
+        }
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
@@ -2696,6 +2727,7 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2809,6 +2841,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2877,6 +2910,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -2893,6 +2927,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2934,6 +2969,7 @@ mod tests {
             extra_headers: Default::default(),
             timeouts: Default::default(),
             discard_unknown_chunks: false,
+            cost: None,
         };
 
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
@@ -3103,6 +3139,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
                 (
@@ -3114,6 +3151,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
             ]),
@@ -3143,6 +3181,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -3190,6 +3229,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3274,6 +3314,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3353,6 +3394,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
                 (
@@ -3364,6 +3406,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
             ]),
@@ -3457,6 +3500,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3588,6 +3632,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3741,6 +3786,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),

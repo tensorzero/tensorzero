@@ -1375,6 +1375,7 @@ impl ModelInferenceResponseWithMetadata {
             Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
+                cost: Some(rust_decimal::Decimal::ZERO),
             }
         } else {
             self.usage
@@ -1576,6 +1577,10 @@ pub struct StoredModelInference {
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
     pub snapshot_hash: Option<SnapshotHash>,
+    /// Cost of this inference in dollars.
+    /// `None` means cost tracking was not configured for this provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<crate::cost::Cost>,
     /// Materialized column in ClickHouse - only present when reading from the database.
     /// Ignored during insert (computed from `UUIDv7ToDateTime(id)`).
     #[serde(default, skip_serializing)]
@@ -1659,6 +1664,7 @@ impl ModelInferenceResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+                cost: None,
             },
             provider_latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -1762,6 +1768,7 @@ impl StoredModelInference {
             finish_reason: result.finish_reason,
             input_messages: stored_input_messages,
             snapshot_hash: Some(snapshot_hash),
+            cost: result.usage.cost,
             // timestamp is a materialized column, not set during insert
             timestamp: None,
         })
@@ -2308,6 +2315,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cost: None,
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
@@ -3123,6 +3131,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3130,6 +3139,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3155,6 +3165,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3162,6 +3173,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3187,6 +3199,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3194,6 +3207,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3219,6 +3233,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3226,6 +3241,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3252,6 +3268,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 true,
             ), // This will be treated as 0/0 due to cached=true
@@ -3259,6 +3276,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3333,6 +3351,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cost: None,
         };
 
         // Create responses with different finish reasons and IDs

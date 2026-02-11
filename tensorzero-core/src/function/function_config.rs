@@ -1898,6 +1898,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1966,6 +1967,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2020,6 +2022,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2077,6 +2080,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2131,6 +2135,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2185,6 +2190,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(0),
+            cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2257,6 +2263,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2305,6 +2312,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2361,6 +2369,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2414,6 +2423,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2473,6 +2483,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cost: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
