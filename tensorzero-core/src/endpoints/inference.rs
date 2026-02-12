@@ -215,6 +215,7 @@ pub async fn inference_handler(
             .extra_overhead_labels
             .push(Label::new("function_name", "tensorzero::default"));
     }
+    let include_raw_response = params.include_raw_response;
     let inference_output = Box::pin(inference(
         config,
         &http_client,
@@ -244,10 +245,42 @@ pub async fn inference_handler(
                 }
             }
         }
-        Err(e) => e.into_response(),
+        Err(e) => InferenceErrorResponse::new(e, include_raw_response).into_response(),
     };
     response.extensions_mut().insert(metric_data);
     response
+}
+
+/// Wrapper for inference errors that optionally includes raw response entries
+/// from failed providers in the error HTTP response body.
+struct InferenceErrorResponse {
+    error: Error,
+    raw_response_entries: Option<Vec<RawResponseEntry>>,
+}
+
+impl InferenceErrorResponse {
+    fn new(error: Error, include_raw_response: bool) -> Self {
+        let raw_response_entries = if include_raw_response {
+            error.extract_raw_response_entries()
+        } else {
+            None
+        };
+        Self {
+            error,
+            raw_response_entries,
+        }
+    }
+}
+
+impl IntoResponse for InferenceErrorResponse {
+    fn into_response(self) -> Response {
+        let body = self
+            .error
+            .build_response_body(false, self.raw_response_entries);
+        let mut response = (self.error.status_code(), Json(body)).into_response();
+        response.extensions_mut().insert(self.error);
+        response
+    }
 }
 
 pub type InferenceStream =
@@ -999,7 +1032,7 @@ fn create_previous_raw_response_chunk(
                     .map(|entry| entry.api_type)
                     .unwrap_or(ApiType::ChatCompletions);
                 vec![RawResponseEntry {
-                    model_inference_id: r.id,
+                    model_inference_id: Some(r.id),
                     provider_type: r.model_provider_name.to_string(),
                     api_type,
                     data: r.raw_response.clone(),
@@ -1535,7 +1568,7 @@ impl InferenceResponse {
                             .map(|entry| entry.api_type)
                             .unwrap_or(ApiType::ChatCompletions);
                         vec![RawResponseEntry {
-                            model_inference_id: r.id,
+                            model_inference_id: Some(r.id),
                             provider_type: r.model_provider_name.to_string(),
                             api_type,
                             data: r.raw_response.clone(),

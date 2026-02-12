@@ -57,9 +57,10 @@ pub fn raw_usage_entries_from_value(
 /// This preserves the original provider-specific response string that TensorZero normalizes.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct RawResponseEntry {
-    pub model_inference_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_inference_id: Option<Uuid>,
     pub provider_type: String,
     pub api_type: ApiType,
     pub data: String,
