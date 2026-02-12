@@ -500,7 +500,6 @@ class EventErrorBoundary extends Component<
   }
 }
 
-/** Stable references to avoid re-creating on each render. */
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
@@ -575,7 +574,7 @@ function EventItem({
           event.payload.role === "assistant" ? (
             <Markdown
               remarkPlugins={uuidRemarkPlugins}
-              extraComponents={uuidComponents}
+              components={uuidComponents}
             >
               {summary.description}
             </Markdown>

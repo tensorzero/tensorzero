@@ -1,9 +1,8 @@
 import { splitTextOnUuids } from "~/utils/uuid";
 
-/** Custom element name bridging remark AST to React via `data.hName`. */
 export const UUID_LINK_ELEMENT = "uuid-link";
 
-/** Minimal MDAST types to avoid a `@types/mdast` dependency. */
+/** Minimal MDAST types — avoids a `@types/mdast` dependency. */
 interface MdastText {
   type: "text";
   value: string;
@@ -30,11 +29,8 @@ function uuidLinkNode(uuid: string): MdastNode {
   } as MdastNode;
 }
 
-/** Remark plugin that transforms UUID patterns into custom `uuidLink` nodes. */
 export function remarkUuidLinks() {
-  return (tree: MdastParent) => {
-    visitParent(tree);
-  };
+  return visitParent;
 }
 
 const SKIP_TYPES = new Set(["code", "link"]);

@@ -19,7 +19,6 @@ function getUrlForResolvedObject(
     case "float_feedback":
     case "comment_feedback":
     case "demonstration_feedback":
-      // No dedicated feedback detail pages
       return null;
     default:
       return null;
