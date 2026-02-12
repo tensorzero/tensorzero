@@ -76,7 +76,7 @@ impl ToolMetadata for ListEpisodesTool {
                     "description": "Return episodes after this episode_id (for pagination)."
                 }
             },
-            "required": ["limit"],
+            "required": ["limit", "before", "after"],
             "additionalProperties": false
         });
 
