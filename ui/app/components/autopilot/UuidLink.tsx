@@ -31,6 +31,14 @@ function getUrlForResolvedObject(
   }
 }
 
+function UuidCode({ children }: { children: string }) {
+  return (
+    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
+      {children}
+    </code>
+  );
+}
+
 /**
  * Renders a UUID as an orange link if it resolves to exactly one known entity,
  * otherwise renders it as plain monospace text.
@@ -40,20 +48,12 @@ export function UuidLink({ uuid }: { uuid: string }) {
 
   // Not yet resolved, multiple types, or no types → plain text
   if (!data || data.object_types.length !== 1) {
-    return (
-      <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
-        {uuid}
-      </code>
-    );
+    return <UuidCode>{uuid}</UuidCode>;
   }
 
   const url = getUrlForResolvedObject(uuid, data.object_types[0]);
   if (!url) {
-    return (
-      <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
-        {uuid}
-      </code>
-    );
+    return <UuidCode>{uuid}</UuidCode>;
   }
 
   return (
