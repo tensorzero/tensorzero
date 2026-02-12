@@ -115,7 +115,7 @@ function MarkdownCodeBlock({ children }: { children?: React.ReactNode }) {
   );
 }
 
-const components: Components = {
+const defaultComponents: Components = {
   // Headings
   h1: ({ children }) => (
     <h1 className="mt-6 mb-4 text-2xl font-semibold first:mt-0">{children}</h1>
@@ -211,21 +211,21 @@ interface MarkdownProps {
   children: string;
   className?: string;
   remarkPlugins?: React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"];
-  extraComponents?: Components & Record<string, React.ComponentType<never>>;
+  components?: Components & Record<string, React.ComponentType<never>>;
 }
 
 export function Markdown({
   children,
   className,
-  remarkPlugins: extraRemarkPlugins,
-  extraComponents,
+  remarkPlugins,
+  components,
 }: MarkdownProps) {
-  const mergedPlugins = extraRemarkPlugins
-    ? [remarkGfm, ...extraRemarkPlugins]
+  const mergedPlugins = remarkPlugins
+    ? [remarkGfm, ...remarkPlugins]
     : [remarkGfm];
-  const mergedComponents = extraComponents
-    ? { ...components, ...extraComponents }
-    : components;
+  const mergedComponents = components
+    ? { ...defaultComponents, ...components }
+    : defaultComponents;
   return (
     <div className={cn("text-fg-secondary text-sm", className)}>
       <ReactMarkdown
