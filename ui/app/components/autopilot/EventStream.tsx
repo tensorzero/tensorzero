@@ -608,8 +608,9 @@ function EventItem({
           ) : event.payload.type === "tool_call" ? (
             <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (
-            <EventStreamMarkdown
+            <p
               className={cn(
+                "text-fg-secondary text-sm whitespace-pre-wrap",
                 (event.payload.type === "tool_result" ||
                   event.payload.type === "error") &&
                   "overflow-y-auto font-mono",
@@ -622,7 +623,7 @@ function EventItem({
               }
             >
               {summary.description}
-            </EventStreamMarkdown>
+            </p>
           )}
         </>
       )}
@@ -675,7 +676,9 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
-      <EventStreamMarkdown>{message.text}</EventStreamMarkdown>
+      <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+        {message.text}
+      </p>
     </div>
   );
 }
