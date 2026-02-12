@@ -86,6 +86,7 @@ use uuid::Uuid;
 use crate::cache::{CacheData, NonStreamingCacheData};
 use crate::config::ObjectStoreInfo;
 use crate::config::snapshot::SnapshotHash;
+use crate::cost::Cost;
 use crate::endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceParams};
 use crate::endpoints::object_storage::get_object;
 use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens};
@@ -1580,7 +1581,7 @@ pub struct StoredModelInference {
     /// Cost of this inference in dollars.
     /// `None` means cost tracking was not configured for this provider.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cost: Option<crate::cost::Cost>,
+    pub cost: Option<Cost>,
     /// Materialized column in ClickHouse - only present when reading from the database.
     /// Ignored during insert (computed from `UUIDv7ToDateTime(id)`).
     #[serde(default, skip_serializing)]

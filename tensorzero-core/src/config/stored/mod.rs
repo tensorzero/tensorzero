@@ -18,6 +18,7 @@ use crate::config::{
     MetricConfig, PostgresConfig, TimeoutsConfig, UninitializedConfig, UninitializedFunctionConfig,
     UninitializedToolConfig,
 };
+use crate::cost::UninitializedCostConfig;
 use crate::embeddings::{UninitializedEmbeddingModelConfig, UninitializedEmbeddingProviderConfig};
 use crate::evaluations::UninitializedEvaluationConfig;
 use crate::inference::types::extra_body::ExtraBodyConfig;
@@ -88,7 +89,7 @@ pub struct StoredEmbeddingProviderConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
     /// Cost configuration for computing embedding cost from raw provider responses.
     #[serde(default)]
-    pub cost: Option<crate::cost::UninitializedCostConfig>,
+    pub cost: Option<UninitializedCostConfig>,
 }
 
 impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfig {

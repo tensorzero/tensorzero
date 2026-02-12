@@ -10,7 +10,9 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write,
 };
 use crate::config::provider_types::ProviderTypesConfig;
-use crate::cost::compute_cost_from_response;
+use crate::cost::{
+    CostConfig, UninitializedCostConfig, compute_cost_from_response, load_cost_config,
+};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
@@ -574,7 +576,7 @@ pub struct EmbeddingProviderInfo {
     /// Rates are always stored as cost-per-unit after normalization at config load time.
     #[serde(skip)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
-    pub cost: Option<crate::cost::CostConfig>,
+    pub cost: Option<CostConfig>,
 }
 
 #[derive(Clone, Debug)]
@@ -635,14 +637,11 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
-        // Compute cost from the raw response if cost config is provided
-        if let Some(cost_config) = &self.cost {
-            response.usage.cost = compute_cost_from_response(
-                &response.raw_response,
-                cost_config,
-                false, // embeddings are never streaming
-            );
-        }
+        // Compute cost from the raw response immediately after receiving it
+        response.usage.cost = self
+            .cost
+            .as_ref()
+            .and_then(|cfg| compute_cost_from_response(&response.raw_response, cfg, false));
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
@@ -672,7 +671,7 @@ pub struct UninitializedEmbeddingProviderConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
     /// Cost configuration for computing embedding cost from raw provider responses.
     #[serde(default)]
-    pub cost: Option<crate::cost::UninitializedCostConfig>,
+    pub cost: Option<UninitializedCostConfig>,
 }
 
 impl UninitializedEmbeddingProviderConfig {
@@ -692,7 +691,7 @@ impl UninitializedEmbeddingProviderConfig {
 
         let extra_body = self.extra_body;
         let extra_headers = self.extra_headers;
-        let cost = self.cost.map(crate::cost::load_cost_config).transpose()?;
+        let cost = self.cost.map(load_cost_config).transpose()?;
 
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {

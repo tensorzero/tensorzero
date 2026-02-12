@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::cost::Cost;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockOutput, StoredRequestMessage};
@@ -83,7 +84,7 @@ pub struct ModelInference {
     /// `None` means cost tracking was not configured for this provider.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub cost: Option<crate::cost::Cost>,
+    pub cost: Option<Cost>,
 }
 
 /// HTTP handler for getting model inferences by inference ID

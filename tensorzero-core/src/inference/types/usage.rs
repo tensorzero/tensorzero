@@ -161,6 +161,17 @@ where
         })
 }
 
+/// Sum two optional values with poison semantics: if either is `None`, the result is `None`.
+///
+/// This is used for cross-inference aggregation (summing usage from multiple model calls).
+/// Compare with [`streaming_max`], which uses keep-`Some` semantics for streaming chunks.
+fn sum_or_poison<T: std::ops::Add<Output = T>>(a: Option<T>, b: Option<T>) -> Option<T> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a + b),
+        _ => None,
+    }
+}
+
 /// Aggregate `Usage` from multiple model inferences.
 ///
 /// Used to combine usage from advanced variant types that invoke multiple models
@@ -173,33 +184,19 @@ pub fn aggregate_usage_across_model_inferences<I>(usages: I) -> Usage
 where
     I: IntoIterator<Item = Usage>,
 {
-    usages.into_iter().fold(Usage::zero(), |acc, mi_usage| {
-        let Usage {
-            input_tokens: mi_input_tokens,
-            output_tokens: mi_output_tokens,
-            cost: mi_cost,
-        } = mi_usage;
-
-        Usage {
-            input_tokens: match (acc.input_tokens, mi_input_tokens) {
-                (Some(a), Some(b)) => Some(a + b),
-                _ => None,
-            },
-            output_tokens: match (acc.output_tokens, mi_output_tokens) {
-                (Some(a), Some(b)) => Some(a + b),
-                _ => None,
-            },
-            cost: match (acc.cost, mi_cost) {
-                (Some(a), Some(b)) => Some(a + b),
-                _ => None,
-            },
-        }
-    })
+    usages
+        .into_iter()
+        .fold(Usage::zero(), |acc, mi_usage| Usage {
+            input_tokens: sum_or_poison(acc.input_tokens, mi_usage.input_tokens),
+            output_tokens: sum_or_poison(acc.output_tokens, mi_usage.output_tokens),
+            cost: sum_or_poison(acc.cost, mi_usage.cost),
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_decimal::Decimal;
 
     #[test]
     fn test_api_type_serialization() {
@@ -555,6 +552,159 @@ mod tests {
         let result = aggregate_usage_across_model_inferences(usages);
         assert_eq!(result.input_tokens, None, "all None should result in None");
         assert_eq!(result.output_tokens, None, "all None should result in None");
+    }
+
+    // ── Cost aggregation tests for aggregate_usage_across_model_inferences ──
+
+    #[test]
+    fn test_aggregate_cost_both_present() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(3, 3)), // 0.003
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: Some(Decimal::new(5, 3)), // 0.005
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::new(8, 3)), // 0.008
+            "cost should be summed when both inferences have cost"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_cost_one_missing_poisons_total() {
+        // Simulates DICL scenario: model inference has cost, embedding doesn't.
+        // The combined cost should be None (poison semantics).
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(3, 3)), // 0.003
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: None, // e.g. embedding provider without cost config
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost, None,
+            "cost should be None when any inference has missing cost (poison semantics)"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_cost_missing_first_poisons_total() {
+        // Same as above but the missing cost comes first in the iterator
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: None, // e.g. embedding without cost
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: Some(Decimal::new(5, 3)), // 0.005
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost, None,
+            "cost should be None when first inference has missing cost"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_cost_all_none() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: None,
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: None,
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost, None,
+            "cost should be None when no inferences have cost"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_cost_zero_is_present() {
+        // cost=Some(0) means cost was tracked but was zero (e.g. cached response)
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::ZERO),
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: Some(Decimal::new(5, 3)), // 0.005
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::new(5, 3)),
+            "cost=0 is present, not missing — should sum normally"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_cost_empty_returns_zero() {
+        let result = aggregate_usage_across_model_inferences(vec![]);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::ZERO),
+            "empty iterator should return Some(0) from Usage::zero()"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_cost_three_way_mix_poisons() {
+        // Mixture-of-N scenario: multiple candidates, one without cost
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(3, 3)), // candidate 1: has cost
+            },
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: None, // candidate 2: no cost config
+            },
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(5, 3)), // fuser: has cost
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost, None,
+            "any missing cost in a multi-model variant should poison the total"
+        );
+        // tokens should still sum correctly despite cost being poisoned
+        assert_eq!(result.input_tokens, Some(300));
+        assert_eq!(result.output_tokens, Some(150));
     }
 
     #[test]

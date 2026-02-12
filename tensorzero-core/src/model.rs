@@ -26,7 +26,9 @@ use crate::config::with_skip_credential_validation;
 use crate::config::{
     OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
-use crate::cost::compute_cost_from_response;
+use crate::cost::{
+    CostConfig, UninitializedCostConfig, compute_cost_from_response, load_cost_config,
+};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
@@ -135,7 +137,7 @@ impl UninitializedModelConfig {
                 };
                 let cost = provider
                     .cost
-                    .map(crate::cost::load_cost_config)
+                    .map(load_cost_config)
                     .transpose()
                     .map_err(|e| {
                         Error::new(ErrorDetails::Config {
@@ -737,7 +739,7 @@ fn wrap_provider_stream(
     clients: &InferenceClients,
     stream: Instrumented<PeekableProviderInferenceResponseStream>,
     write_to_cache: bool,
-    cost_config: Option<crate::cost::CostConfig>,
+    cost_config: Option<CostConfig>,
 ) -> Result<PeekableProviderInferenceResponseStream, Error> {
     // Detach the span from the stream, and re-attach it to the 'async_stream::stream!' wrapper
     // This ensures that the span duration include the entire provider-specific processing time
@@ -765,14 +767,10 @@ fn wrap_provider_stream(
         // Note: `Usage` derives `Copy`, so `chunk.usage` is copied (not moved) into `chunk_usage`.
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref() && let Some(mut chunk_usage) = chunk.usage {
-                // Compute cost from this chunk's raw response if cost config is provided
-                if let Some(cost_config) = &cost_config {
-                    chunk_usage.cost = compute_cost_from_response(
-                        &chunk.raw_response,
-                        cost_config,
-                        true, // streaming
-                    );
-                }
+                // Compute cost from this chunk's raw response immediately
+                chunk_usage.cost = cost_config
+                    .as_ref()
+                    .and_then(|cfg| compute_cost_from_response(&chunk.raw_response, cfg, true));
                 usages.push(chunk_usage);
             }
 
@@ -883,7 +881,7 @@ pub struct UninitializedModelProvider {
     /// API response and stored in the database.
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
-    pub cost: Option<crate::cost::UninitializedCostConfig>,
+    pub cost: Option<UninitializedCostConfig>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -902,7 +900,7 @@ pub struct ModelProvider {
     /// Normalized cost configuration for computing inference cost from raw provider responses.
     /// Rates are always stored as cost-per-unit after normalization at config load time.
     #[serde(skip)]
-    pub cost: Option<crate::cost::CostConfig>,
+    pub cost: Option<CostConfig>,
 }
 
 impl ModelProvider {
@@ -1934,14 +1932,10 @@ impl ModelProvider {
         };
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let mut provider_inference_response = res?;
-        // Compute cost from the raw response if cost config is provided
-        if let Some(cost_config) = &self.cost {
-            provider_inference_response.usage.cost = compute_cost_from_response(
-                &provider_inference_response.raw_response,
-                cost_config,
-                false, // non-streaming
-            );
-        }
+        // Compute cost from the raw response immediately after receiving it
+        provider_inference_response.usage.cost = self.cost.as_ref().and_then(|cfg| {
+            compute_cost_from_response(&provider_inference_response.raw_response, cfg, false)
+        });
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(

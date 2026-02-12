@@ -31,18 +31,16 @@
 //! }
 //! ```
 //!
-//! ## Decimal Precision Note
+//! ## Decimal Precision
 //!
-//! Cost rates are deserialized from TOML as `rust_decimal::Decimal` using the
-//! crate-wide `serde-float` feature. This means TOML float values pass through
-//! `f64` before becoming `Decimal`, which can introduce tiny precision errors
-//! for values not exactly representable in binary (e.g., `0.1`, `0.2`).
-//! Values like `0.25`, `0.50`, `1.50`, `3.00` are exact.
+//! Cost rates are deserialized from TOML using a custom serde visitor
+//! (`decimal_from_value`) that formats `f64` values to their shortest decimal
+//! string (via Ryu) before parsing into `Decimal`. This avoids the binary
+//! floating-point noise that `Decimal::try_from(f64)` would introduce.
 //!
-//! In practice, the error is on the order of 1e-17 per unit — far below any
-//! meaningful cost threshold. If exact decimal precision is ever required,
-//! consider switching to `rust_decimal`'s `serde-with-arbitrary-precision`
-//! feature or accepting string-quoted values in config.
+//! For example, `cost_per_million = 0.1` in TOML produces exactly `Decimal(0.1)`,
+//! not `Decimal(0.1000000000000000055...)`. String values are also accepted
+//! for users who prefer quoting (`cost_per_million = "0.1"`).
 
 use std::fmt;
 use std::str::FromStr;
@@ -61,6 +59,67 @@ use crate::error::{Error, ErrorDetails};
 /// 18 total digits with 9 fractional digits gives us up to 999,999,999 dollars
 /// with sub-nanocent precision — more than enough for inference cost tracking.
 pub type Cost = Decimal;
+
+// ─── Decimal serde helpers ───────────────────────────────────────────────────
+
+/// Serde helper for `Decimal` fields that avoids f64 precision loss.
+///
+/// When deserializing from TOML (or JSON), numeric values are first formatted
+/// to their shortest decimal string (via the `Display` impl for `f64`), then
+/// parsed into `Decimal`. This gives exact results for "normal" config values
+/// like `1.50`, `0.25`, `3.00` — whereas `Decimal::try_from(f64)` would pick
+/// up binary floating-point noise.
+///
+/// Also accepts string values (`"1.50"`) for users who prefer quoting.
+mod decimal_from_value {
+    use rust_decimal::Decimal;
+    use serde::{self, Deserializer, Serializer};
+
+    pub fn serialize<S>(value: &Decimal, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Delegate to the crate-wide serde impl (serde-float)
+        serde::Serialize::serialize(value, serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Decimal, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de;
+
+        struct DecimalVisitor;
+
+        impl<'de> de::Visitor<'de> for DecimalVisitor {
+            type Value = Decimal;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a decimal number or numeric string")
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(Decimal::from(v))
+            }
+
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(Decimal::from(v))
+            }
+
+            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                // Format to shortest decimal string, then parse to Decimal.
+                // This avoids binary float noise (e.g. 0.1 → 0.1, not 0.1000000000000000055...).
+                v.to_string().parse::<Decimal>().map_err(E::custom)
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                v.parse::<Decimal>().map_err(E::custom)
+            }
+        }
+
+        deserializer.deserialize_any(DecimalVisitor)
+    }
+}
 
 // ─── Validated JSON Pointer ──────────────────────────────────────────────────
 
@@ -168,11 +227,13 @@ pub enum UninitializedCostRate {
     /// Cost per million units (e.g., cost per million tokens).
     PerMillion {
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+        #[serde(with = "decimal_from_value")]
         cost_per_million: Decimal,
     },
     /// Cost per single unit (e.g., cost per web search).
     PerUnit {
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+        #[serde(with = "decimal_from_value")]
         cost_per_unit: Decimal,
     },
 }
@@ -395,15 +456,11 @@ pub fn compute_cost_from_json(
 fn json_value_to_decimal(value: &serde_json::Value) -> Option<Decimal> {
     match value {
         serde_json::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Some(Decimal::from(i))
-            } else if let Some(u) = n.as_u64() {
-                Some(Decimal::from(u))
-            } else if let Some(f) = n.as_f64() {
-                Decimal::try_from(f).ok()
-            } else {
-                None
-            }
+            // Parse through the string representation to avoid f64 precision loss.
+            // serde_json formats f64 with the shortest exact decimal (Ryu algorithm),
+            // so `Decimal::from_str("0.0035")` gives exactly 0.0035 whereas
+            // `Decimal::try_from(0.0035_f64)` picks up binary noise.
+            n.to_string().parse::<Decimal>().ok()
         }
         serde_json::Value::String(s) => s.parse::<Decimal>().ok(),
         _ => None,
@@ -851,11 +908,11 @@ mod tests {
             "should handle float values from provider responses"
         );
         let cost = cost.unwrap();
-        // Float precision: 0.0035 should be close to Decimal(35, 4)
-        let expected = Decimal::new(35, 4);
-        assert!(
-            (cost - expected).abs() < Decimal::new(1, 10),
-            "float cost should be approximately 0.0035, got {cost}"
+        // json_value_to_decimal parses through string, so this should be exact
+        assert_eq!(
+            cost,
+            Decimal::new(35, 4),
+            "float cost should be exactly 0.0035 (parsed via string, not f64)"
         );
     }
 
@@ -996,6 +1053,149 @@ required = true
         );
     }
 
+    #[test]
+    fn test_deserialization_exact_decimal_precision_from_toml() {
+        // Values like 0.1 and 0.3 are not exactly representable in f64.
+        // Our custom deserializer formats f64 → string → Decimal, giving exact results.
+        let toml_str = r#"
+pointer = "/usage/input_tokens"
+cost_per_million = 0.1
+"#;
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("should deserialize from TOML");
+        match &entry.rate {
+            UninitializedCostRate::PerMillion { cost_per_million } => {
+                assert_eq!(
+                    *cost_per_million,
+                    Decimal::new(1, 1), // exactly 0.1
+                    "0.1 should deserialize to exact Decimal, not 0.1000000000000000055..."
+                );
+            }
+            _ => panic!("expected PerMillion"),
+        }
+
+        let toml_str = r#"
+pointer = "/usage/output_tokens"
+cost_per_million = 0.3
+"#;
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("should deserialize from TOML");
+        match &entry.rate {
+            UninitializedCostRate::PerMillion { cost_per_million } => {
+                assert_eq!(
+                    *cost_per_million,
+                    Decimal::new(3, 1), // exactly 0.3
+                    "0.3 should deserialize to exact Decimal, not 0.29999999999999998..."
+                );
+            }
+            _ => panic!("expected PerMillion"),
+        }
+    }
+
+    #[test]
+    fn test_deserialization_string_quoted_decimal_from_toml() {
+        // Users can also quote the number for explicit string → Decimal parsing
+        let toml_str = r#"
+pointer = "/usage/input_tokens"
+cost_per_million = "0.1"
+"#;
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("should deserialize string-quoted decimal from TOML");
+        match &entry.rate {
+            UninitializedCostRate::PerMillion { cost_per_million } => {
+                assert_eq!(
+                    *cost_per_million,
+                    Decimal::new(1, 1),
+                    "string-quoted 0.1 should deserialize to exact Decimal"
+                );
+            }
+            _ => panic!("expected PerMillion"),
+        }
+    }
+
+    // ── Config parse error tests (bad strings / missing fields) ───────────
+
+    #[test]
+    fn test_deserialization_missing_pointer_from_toml() {
+        let toml_str = r#"
+cost_per_million = 1.50
+required = true
+"#;
+        let result: Result<UninitializedCostConfigEntry, _> = toml::from_str(toml_str);
+        assert!(
+            result.is_err(),
+            "should reject config entry with no pointer specified"
+        );
+    }
+
+    #[test]
+    fn test_deserialization_invalid_cost_value_from_toml() {
+        let toml_str = r#"
+pointer = "/usage/input_tokens"
+cost_per_million = "not_a_number"
+"#;
+        let result: Result<UninitializedCostConfigEntry, _> = toml::from_str(toml_str);
+        assert!(
+            result.is_err(),
+            "should reject non-numeric string for cost_per_million"
+        );
+    }
+
+    #[test]
+    fn test_deserialization_negative_cost_from_toml() {
+        // Negative costs are valid (e.g. caching discounts)
+        let toml_str = r#"
+pointer = "/usage/cached_tokens"
+cost_per_million = -0.50
+"#;
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("negative costs should be allowed");
+        match &entry.rate {
+            UninitializedCostRate::PerMillion { cost_per_million } => {
+                assert_eq!(
+                    *cost_per_million,
+                    Decimal::new(-5, 1),
+                    "negative cost_per_million should parse correctly"
+                );
+            }
+            _ => panic!("expected PerMillion"),
+        }
+    }
+
+    #[test]
+    fn test_deserialization_both_rates_from_toml() {
+        // Specifying both cost_per_million and cost_per_unit should pick one (untagged enum)
+        let toml_str = r#"
+pointer = "/usage/tokens"
+cost_per_million = 1.50
+cost_per_unit = 0.25
+"#;
+        // With untagged enum, the first matching variant wins (PerMillion)
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("should parse when both rates are present");
+        assert!(
+            matches!(entry.rate, UninitializedCostRate::PerMillion { .. }),
+            "should pick PerMillion when both rates are present (first matching variant)"
+        );
+    }
+
+    #[test]
+    fn test_deserialization_empty_pointer_string_from_toml() {
+        // Empty pointer is valid (points to the root of the JSON response)
+        let toml_str = r#"
+pointer = ""
+cost_per_unit = 1.0
+"#;
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("empty pointer should be valid (root pointer)");
+        match &entry.pointer {
+            CostPointerConfig::Unified { pointer } => {
+                assert_eq!(pointer.as_str(), "", "empty pointer should be preserved");
+            }
+            _ => panic!("expected Unified pointer"),
+        }
+    }
+
     // ── UninitializedCostConfigEntry -> CostConfigEntry conversion ───────
 
     #[test]
@@ -1107,6 +1307,251 @@ required = true
         assert!(
             JsonPointer::new("usage/tokens").is_err(),
             "should reject pointer without leading slash"
+        );
+    }
+
+    // ── Full pipeline tests: TOML config → normalize → provider response → cost ─
+
+    /// Parse a TOML config with `[[entry]]` sections into a normalized `CostConfig`,
+    /// then compute cost from a raw provider JSON response.
+    fn pipeline_cost(config_toml: &str, raw_response: &str) -> Option<Cost> {
+        let entries: Vec<UninitializedCostConfigEntry> = {
+            let wrapper: toml::Value = toml::from_str(config_toml).unwrap();
+            wrapper
+                .get("entry")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|e| e.clone().try_into().unwrap())
+                .collect()
+        };
+        let config = load_cost_config(entries).unwrap();
+        compute_cost_from_response(raw_response, &config, false)
+    }
+
+    #[test]
+    fn test_full_pipeline_openai_style_response() {
+        // OpenAI: $0.15/M input, $0.60/M output; 1000 input, 500 output
+        let cost = pipeline_cost(
+            r#"
+[[entry]]
+pointer = "/usage/prompt_tokens"
+cost_per_million = 0.15
+required = true
+
+[[entry]]
+pointer = "/usage/completion_tokens"
+cost_per_million = 0.60
+required = true
+"#,
+            r#"{"id":"chatcmpl-123","choices":[{"message":{"content":"Hello!"}}],"usage":{"prompt_tokens":1000,"completion_tokens":500}}"#,
+        );
+        // 1000 * 0.15/1M + 500 * 0.60/1M = 0.00015 + 0.0003 = 0.00045
+        assert_eq!(
+            cost,
+            Some(Decimal::new(45, 5)),
+            "OpenAI-style cost should be exactly $0.00045"
+        );
+    }
+
+    #[test]
+    fn test_full_pipeline_anthropic_style_with_cache() {
+        // Anthropic: $3/M input, $15/M output, $0.30/M cache_read (optional)
+        let config = r#"
+[[entry]]
+pointer = "/usage/input_tokens"
+cost_per_million = 3.00
+required = true
+
+[[entry]]
+pointer = "/usage/output_tokens"
+cost_per_million = 15.00
+required = true
+
+[[entry]]
+pointer = "/usage/cache_read_input_tokens"
+cost_per_million = 0.30
+"#;
+        // 500 input, 200 output, 100 cached
+        let cost = pipeline_cost(
+            config,
+            r#"{"content":[{"text":"Hi"}],"usage":{"input_tokens":500,"output_tokens":200,"cache_read_input_tokens":100}}"#,
+        );
+        // 500*3/1M + 200*15/1M + 100*0.30/1M = 0.0015 + 0.003 + 0.00003 = 0.00453
+        assert_eq!(
+            cost,
+            Some(Decimal::new(453, 5)),
+            "Anthropic-style cost with cache should be exactly $0.00453"
+        );
+
+        // Same config, but response without cache field (optional → treated as 0)
+        let cost_no_cache = pipeline_cost(
+            config,
+            r#"{"content":[{"text":"Hi"}],"usage":{"input_tokens":500,"output_tokens":200}}"#,
+        );
+        // 500*3/1M + 200*15/1M = 0.0015 + 0.003 = 0.0045
+        assert_eq!(
+            cost_no_cache,
+            Some(Decimal::new(45, 4)),
+            "missing optional cache field should not affect cost"
+        );
+    }
+
+    #[test]
+    fn test_full_pipeline_required_field_missing_returns_none() {
+        let cost = pipeline_cost(
+            r#"
+[[entry]]
+pointer = "/usage/prompt_tokens"
+cost_per_million = 0.15
+required = true
+
+[[entry]]
+pointer = "/usage/completion_tokens"
+cost_per_million = 0.60
+required = true
+"#,
+            r#"{"usage":{"prompt_tokens":1000}}"#, // missing completion_tokens
+        );
+        assert_eq!(
+            cost, None,
+            "missing required field should produce None cost"
+        );
+    }
+
+    #[test]
+    fn test_full_pipeline_per_unit_web_search() {
+        // Mix of per-million tokens and per-unit web searches
+        let cost = pipeline_cost(
+            r#"
+[[entry]]
+pointer = "/usage/input_tokens"
+cost_per_million = 0.15
+required = true
+
+[[entry]]
+pointer = "/usage/completion_tokens"
+cost_per_million = 0.60
+required = true
+
+[[entry]]
+pointer = "/usage/web_searches"
+cost_per_unit = 0.03
+"#,
+            r#"{"usage":{"input_tokens":100,"completion_tokens":50,"web_searches":2}}"#,
+        );
+        // 100*0.15/1M + 50*0.60/1M + 2*0.03 = 0.000015 + 0.00003 + 0.06 = 0.060045
+        assert_eq!(
+            cost,
+            Some(Decimal::new(60045, 6)),
+            "per-unit web search cost should be added to token cost"
+        );
+    }
+
+    #[test]
+    fn test_full_pipeline_invalid_json_response() {
+        let cost = pipeline_cost(
+            r#"
+[[entry]]
+pointer = "/usage/prompt_tokens"
+cost_per_million = 0.15
+required = true
+"#,
+            "not valid json",
+        );
+        assert_eq!(cost, None, "invalid JSON response should produce None cost");
+    }
+
+    #[test]
+    fn test_full_pipeline_zero_tokens() {
+        let cost = pipeline_cost(
+            r#"
+[[entry]]
+pointer = "/usage/prompt_tokens"
+cost_per_million = 0.15
+required = true
+
+[[entry]]
+pointer = "/usage/completion_tokens"
+cost_per_million = 0.60
+required = true
+"#,
+            r#"{"usage":{"prompt_tokens":0,"completion_tokens":0}}"#,
+        );
+        assert_eq!(
+            cost,
+            Some(Decimal::ZERO),
+            "zero tokens should produce zero cost, not None"
+        );
+    }
+
+    #[test]
+    fn test_full_pipeline_large_token_counts() {
+        // GPT-4 style: $30/M input, $60/M output; large context
+        let cost = pipeline_cost(
+            r#"
+[[entry]]
+pointer = "/usage/prompt_tokens"
+cost_per_million = 30.00
+required = true
+
+[[entry]]
+pointer = "/usage/completion_tokens"
+cost_per_million = 60.00
+required = true
+"#,
+            r#"{"usage":{"prompt_tokens":100000,"completion_tokens":4000}}"#,
+        );
+        // 100000*30/1M + 4000*60/1M = 3.0 + 0.24 = 3.24
+        assert_eq!(
+            cost,
+            Some(Decimal::new(324, 2)),
+            "large context GPT-4 style cost should be exactly $3.24"
+        );
+    }
+
+    #[test]
+    fn test_full_pipeline_gemini_style_nested_usage() {
+        // Gemini uses different field names
+        let cost = pipeline_cost(
+            r#"
+[[entry]]
+pointer = "/usageMetadata/promptTokenCount"
+cost_per_million = 0.075
+required = true
+
+[[entry]]
+pointer = "/usageMetadata/candidatesTokenCount"
+cost_per_million = 0.30
+required = true
+"#,
+            r#"{"candidates":[{"content":{"parts":[{"text":"Hi"}]}}],"usageMetadata":{"promptTokenCount":200,"candidatesTokenCount":100}}"#,
+        );
+        // 200*0.075/1M + 100*0.30/1M = 0.000015 + 0.00003 = 0.000045
+        assert_eq!(
+            cost,
+            Some(Decimal::new(45, 6)),
+            "Gemini-style nested usage should be exactly $0.000045"
+        );
+    }
+
+    #[test]
+    fn test_full_pipeline_direct_cost_passthrough() {
+        // Some providers return cost directly (not per-token)
+        let cost = pipeline_cost(
+            r#"
+[[entry]]
+pointer = "/cost"
+cost_per_unit = 1.0
+required = true
+"#,
+            r#"{"cost":0.0042,"output":"Hello"}"#,
+        );
+        assert_eq!(
+            cost,
+            Some(Decimal::new(42, 4)),
+            "direct cost passthrough should be exactly $0.0042"
         );
     }
 }
