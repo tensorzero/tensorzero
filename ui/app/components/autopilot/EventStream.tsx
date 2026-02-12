@@ -12,7 +12,7 @@ import {
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
-import { renderRichText } from "~/components/autopilot/RichText";
+import { renderTextWithUuidLinks } from "~/components/autopilot/UuidLink";
 import { remarkUuidLinks } from "~/components/autopilot/remarkUuidLinks";
 import { UuidLink } from "~/components/autopilot/UuidLink";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -607,7 +607,7 @@ function EventItem({
                   "font-mono",
               )}
             >
-              {renderRichText(summary.description)}
+              {renderTextWithUuidLinks(summary.description)}
             </p>
           )}
         </>
@@ -662,7 +662,7 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <Skeleton className="h-4 w-32" />
       </div>
       <p className="text-fg-secondary text-sm whitespace-pre-wrap">
-        {renderRichText(message.text)}
+        {renderTextWithUuidLinks(message.text)}
       </p>
     </div>
   );

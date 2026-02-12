@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { useResolveUuid } from "~/hooks/useResolveUuid";
 import type { ResolvedObject } from "~/types/tensorzero";
 import { toDatapointUrl, toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
+import { splitTextOnUuids } from "~/utils/uuid";
 
 /**
  * Given a resolved object, return the URL to navigate to.
@@ -43,6 +44,28 @@ function UuidCode({ children }: { children: string }) {
  * Renders a UUID as an orange link if it resolves to exactly one known entity,
  * otherwise renders it as plain monospace text.
  */
+/**
+ * Scans plain text for UUIDs and renders each as a `UuidLink`.
+ * This is the plain-text counterpart to `remarkUuidLinks` (which handles markdown).
+ */
+export function renderTextWithUuidLinks(text: string): React.ReactNode {
+  const segments = splitTextOnUuids(text);
+  if (!segments.some((s) => s.isUuid)) {
+    return text;
+  }
+  return (
+    <>
+      {segments.map((segment, i) =>
+        segment.isUuid ? (
+          <UuidLink key={i} uuid={segment.text} />
+        ) : (
+          segment.text
+        ),
+      )}
+    </>
+  );
+}
+
 export function UuidLink({ uuid }: { uuid: string }) {
   const { data } = useResolveUuid(uuid);
 
