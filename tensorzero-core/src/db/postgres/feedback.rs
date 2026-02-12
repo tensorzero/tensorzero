@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use sqlx::types::Json;
 use sqlx::{PgPool, QueryBuilder, Row};
 use uuid::Uuid;
 
@@ -716,25 +717,25 @@ impl FeedbackQueries for PostgresConnectionInfo {
                 message: format!("Failed to serialize tags: {e}"),
             })
         })?;
-        sqlx::query!(
-            r#"
-            INSERT INTO tensorzero.boolean_metric_feedback (id, target_id, metric_name, value, tags, snapshot_hash)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            "#,
-            row.id,
-            row.target_id,
-            row.metric_name,
-            row.value,
-            tags_json,
-            row.snapshot_hash.as_bytes(),
-        )
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresConnection {
-                message: format!("Failed to insert boolean feedback: {e}"),
-            })
-        })?;
+        let mut qb = QueryBuilder::new(
+            "INSERT INTO tensorzero.boolean_metric_feedback (id, target_id, metric_name, value, tags, snapshot_hash) ",
+        );
+        qb.push_values(std::iter::once((row, tags_json)), |mut b, (row, tags_json)| {
+            b.push_bind(row.id)
+                .push_bind(row.target_id)
+                .push_bind(&row.metric_name)
+                .push_bind(row.value)
+                .push_bind(Json(tags_json))
+                .push_bind(row.snapshot_hash.as_bytes());
+        });
+        qb.build()
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::PostgresConnection {
+                    message: format!("Failed to insert boolean feedback: {e}"),
+                })
+            })?;
 
         Ok(())
     }
@@ -746,25 +747,25 @@ impl FeedbackQueries for PostgresConnectionInfo {
                 message: format!("Failed to serialize tags: {e}"),
             })
         })?;
-        sqlx::query!(
-            r#"
-            INSERT INTO tensorzero.float_metric_feedback (id, target_id, metric_name, value, tags, snapshot_hash)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            "#,
-            row.id,
-            row.target_id,
-            row.metric_name,
-            row.value,
-            tags_json,
-            row.snapshot_hash.as_bytes(),
-        )
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresConnection {
-                message: format!("Failed to insert float feedback: {e}"),
-            })
-        })?;
+        let mut qb = QueryBuilder::new(
+            "INSERT INTO tensorzero.float_metric_feedback (id, target_id, metric_name, value, tags, snapshot_hash) ",
+        );
+        qb.push_values(std::iter::once((row, tags_json)), |mut b, (row, tags_json)| {
+            b.push_bind(row.id)
+                .push_bind(row.target_id)
+                .push_bind(&row.metric_name)
+                .push_bind(row.value)
+                .push_bind(Json(tags_json))
+                .push_bind(row.snapshot_hash.as_bytes());
+        });
+        qb.build()
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::PostgresConnection {
+                    message: format!("Failed to insert float feedback: {e}"),
+                })
+            })?;
 
         Ok(())
     }
@@ -781,25 +782,28 @@ impl FeedbackQueries for PostgresConnectionInfo {
             CommentTargetType::Episode => "episode",
         };
 
-        sqlx::query!(
-            r#"
-            INSERT INTO tensorzero.comment_feedback (id, target_id, target_type, value, tags, snapshot_hash)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            "#,
-            row.id,
-            row.target_id,
-            target_type_str,
-            row.value,
-            tags_json,
-            row.snapshot_hash.as_bytes(),
-        )
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresConnection {
-                message: format!("Failed to insert comment feedback: {e}"),
-            })
-        })?;
+        let mut qb = QueryBuilder::new(
+            "INSERT INTO tensorzero.comment_feedback (id, target_id, target_type, value, tags, snapshot_hash) ",
+        );
+        qb.push_values(
+            std::iter::once((row, tags_json, target_type_str)),
+            |mut b, (row, tags_json, target_type_str)| {
+                b.push_bind(row.id)
+                    .push_bind(row.target_id)
+                    .push_bind(target_type_str)
+                    .push_bind(&row.value)
+                    .push_bind(Json(tags_json))
+                    .push_bind(row.snapshot_hash.as_bytes());
+            },
+        );
+        qb.build()
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::PostgresConnection {
+                    message: format!("Failed to insert comment feedback: {e}"),
+                })
+            })?;
 
         Ok(())
     }
@@ -820,24 +824,27 @@ impl FeedbackQueries for PostgresConnectionInfo {
                 message: format!("Failed to parse demonstration value as JSON: {e}"),
             })
         })?;
-        sqlx::query!(
-            r#"
-            INSERT INTO tensorzero.demonstration_feedback (id, inference_id, value, tags, snapshot_hash)
-            VALUES ($1, $2, $3, $4, $5)
-            "#,
-            row.id,
-            row.inference_id,
-            value_json,
-            tags_json,
-            row.snapshot_hash.as_bytes(),
-        )
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresConnection {
-                message: format!("Failed to insert demonstration feedback: {e}"),
-            })
-        })?;
+        let mut qb = QueryBuilder::new(
+            "INSERT INTO tensorzero.demonstration_feedback (id, inference_id, value, tags, snapshot_hash) ",
+        );
+        qb.push_values(
+            std::iter::once((row, value_json, tags_json)),
+            |mut b, (row, value_json, tags_json)| {
+                b.push_bind(row.id)
+                    .push_bind(row.inference_id)
+                    .push_bind(Json(value_json))
+                    .push_bind(Json(tags_json))
+                    .push_bind(row.snapshot_hash.as_bytes());
+            },
+        );
+        qb.build()
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::PostgresConnection {
+                    message: format!("Failed to insert demonstration feedback: {e}"),
+                })
+            })?;
 
         Ok(())
     }
@@ -847,26 +854,25 @@ impl FeedbackQueries for PostgresConnectionInfo {
         row: &StaticEvaluationHumanFeedbackInsert,
     ) -> Result<(), Error> {
         let pool = self.get_pool_result()?;
-        sqlx::query!(
-            r#"
-            INSERT INTO tensorzero.inference_evaluation_human_feedback
-                (feedback_id, metric_name, datapoint_id, output, value, evaluator_inference_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            "#,
-            row.feedback_id,
-            row.metric_name,
-            row.datapoint_id,
-            row.output,
-            row.value,
-            row.evaluator_inference_id,
-        )
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresConnection {
-                message: format!("Failed to insert static evaluation human feedback: {e}"),
-            })
-        })?;
+        let mut qb = QueryBuilder::new(
+            "INSERT INTO tensorzero.inference_evaluation_human_feedback (feedback_id, metric_name, datapoint_id, output, value, evaluator_inference_id) ",
+        );
+        qb.push_values(std::iter::once(row), |mut b, row| {
+            b.push_bind(row.feedback_id)
+                .push_bind(&row.metric_name)
+                .push_bind(row.datapoint_id)
+                .push_bind(Json(&row.output))
+                .push_bind(row.value)
+                .push_bind(row.evaluator_inference_id);
+        });
+        qb.build()
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::PostgresConnection {
+                    message: format!("Failed to insert static evaluation human feedback: {e}"),
+                })
+            })?;
 
         Ok(())
     }

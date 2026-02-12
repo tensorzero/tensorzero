@@ -187,11 +187,11 @@ pub(super) fn build_insert_model_inferences_query(
 // =====================================================================
 
 async fn count_distinct_models_used_impl(pool: &PgPool) -> Result<u32, Error> {
-    let row: (i64,) = sqlx::query_as(
-        r"
-        SELECT COUNT(DISTINCT model_name)
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(DISTINCT model_name)::BIGINT as "count!"
         FROM tensorzero.model_provider_statistics
-        ",
+        "#,
     )
     .fetch_one(pool)
     .await
@@ -201,7 +201,7 @@ async fn count_distinct_models_used_impl(pool: &PgPool) -> Result<u32, Error> {
         })
     })?;
 
-    Ok(row.0 as u32)
+    Ok(count as u32)
 }
 
 async fn get_model_usage_timeseries_impl(
