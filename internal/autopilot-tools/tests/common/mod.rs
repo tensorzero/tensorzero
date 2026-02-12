@@ -13,11 +13,12 @@ use tensorzero::{
     CreateDatapointsResponse, DatasetMetadata, DeleteDatapointsResponse, FeedbackParams,
     FeedbackResponse, GetConfigResponse, GetDatapointsResponse, GetInferencesRequest,
     GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
-    ListDatasetsResponse, ListInferencesRequest, Role, StoredChatInference, StoredInference,
-    UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
-    WriteConfigResponse,
+    ListDatasetsResponse, ListEpisodesParams, ListEpisodesResponse, ListInferencesRequest, Role,
+    StoredChatInference, StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::EpisodeByIdRow;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
@@ -136,6 +137,11 @@ mock! {
             &self,
             request: GetInferencesRequest,
         ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+        async fn list_episodes(
+            &self,
+            params: ListEpisodesParams,
+        ) -> Result<ListEpisodesResponse, TensorZeroClientError>;
 
         async fn launch_optimization_workflow(
             &self,
@@ -327,4 +333,9 @@ pub fn create_mock_dataset_metadata(
         datapoint_count,
         last_updated: last_updated.to_string(),
     }
+}
+
+/// Create a mock ListEpisodesResponse with the given episodes.
+pub fn create_mock_list_episodes_response(episodes: Vec<EpisodeByIdRow>) -> ListEpisodesResponse {
+    ListEpisodesResponse { episodes }
 }

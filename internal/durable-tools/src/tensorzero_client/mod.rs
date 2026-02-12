@@ -19,7 +19,10 @@ pub use tensorzero::{
     ListDatasetsResponse, PostgresConfig, TensorZeroError, UpdateDatapointRequest,
     UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
-use tensorzero::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
+use tensorzero::{
+    GetInferencesRequest, GetInferencesResponse, ListEpisodesParams, ListEpisodesResponse,
+    ListInferencesRequest,
+};
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -251,6 +254,14 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         request: GetInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+    // ========== Episode Operations ==========
+
+    /// List episodes with pagination.
+    async fn list_episodes(
+        &self,
+        params: ListEpisodesParams,
+    ) -> Result<ListEpisodesResponse, TensorZeroClientError>;
 
     // ========== Optimization Operations ==========
 

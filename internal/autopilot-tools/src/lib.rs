@@ -195,6 +195,11 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
     // Dataset upload tool
     visitor.visit_task_tool(tools::UploadDatasetTool).await?;
 
+    // Episode query tools
+    visitor
+        .visit_simple_tool::<tools::ListEpisodesTool>()
+        .await?;
+
     // Test tools (e2e_tests feature)
     // ------------------------------
     #[cfg(feature = "e2e_tests")]
