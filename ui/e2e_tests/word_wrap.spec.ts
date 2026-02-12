@@ -11,15 +11,15 @@ test("ensure word wrap persists between pages", async ({ page }) => {
   // Reload the page to avoid any quirks
   await page.reload();
 
-  await expect(page.getByText("Input")).toBeVisible();
-
   const getWordWrapToggle = () => page.getByTitle("Toggle word wrap").first();
   const getWordWrap = async () =>
     await page.evaluate(() => localStorage.getItem("word-wrap"));
+  await expect(getWordWrapToggle()).toBeVisible();
 
   // expect default value for word wrap to be true
   {
     const button = getWordWrapToggle();
+    await expect(button).toBeVisible();
     expect(await button.getAttribute("aria-pressed")).toBe("true");
 
     // Wait for localStorage to be set by useEffect
@@ -41,11 +41,11 @@ test("ensure word wrap persists between pages", async ({ page }) => {
   // ensure that it is still set to false on page reload...
   {
     await page.reload();
-    // Sleep to try to fix flakiness. TODO - figure out what event we should wait for.
-    await page.waitForTimeout(1000);
-
     const button = getWordWrapToggle();
-    expect(await button.getAttribute("aria-pressed")).toBe("false");
-    expect(await getWordWrap()).toEqual("false");
+    await expect(button).toBeVisible();
+    await expect
+      .poll(async () => await button.getAttribute("aria-pressed"))
+      .toBe("false");
+    await expect.poll(getWordWrap).toBe("false");
   }
 });
