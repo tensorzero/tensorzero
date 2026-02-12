@@ -60,6 +60,10 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
             return Ok(());
         }
 
+        if let Some(batch_sender) = self.batch_sender() {
+            return batch_sender.send_model_inferences(rows);
+        }
+
         let pool = self.get_pool_result()?;
         let mut qb = build_insert_model_inferences_query(rows)?;
         qb.build().execute(pool).await?;
@@ -133,7 +137,7 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
 }
 
 /// Builds a query to insert model inferences.
-fn build_insert_model_inferences_query(
+pub(super) fn build_insert_model_inferences_query(
     rows: &[StoredModelInference],
 ) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
     // Pre-compute timestamps from UUIDs to propagate errors before entering push_values

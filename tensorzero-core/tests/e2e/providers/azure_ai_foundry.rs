@@ -53,7 +53,7 @@ async fn get_providers() -> E2ETestProviders {
             credentials: HashMap::new(),
         },
         // NB: As of 2025-09-04, Azure AI Foundry doesn't support tool calling for Llama models.
-        // TODO: Use `grok-3-mini` model instead for this test case (supports tool calling)
+        // TODO: Use another model instead for this test case (supports tool calling)
         // E2ETestProvider {
         //     supports_batch_inference: false,
         //     variant_name: "azure-ai-foundry-implicit".to_string(),
@@ -79,7 +79,7 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    // TODO: Use `grok-3-mini` to run the tool use tests.
+    // TODO: Use another to run the tool use tests.
 
     // azure requires deployment_id and endpoint parameters, so it can't be tested with just default credentials
     let provider_type_default_credentials_providers = vec![];

@@ -91,6 +91,7 @@ import type {
   VariantPerformancesResponse,
   ClientInferenceParams,
   InferenceResponse,
+  ResolveUuidResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -1862,6 +1863,22 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as OptimizationJobInfo;
+  }
+
+  /**
+   * Resolves a UUID to determine what type(s) of object it represents.
+   * @param id - The UUID to resolve
+   * @returns A promise that resolves with the resolved object types
+   * @throws Error if the request fails
+   */
+  async resolveUuid(id: string): Promise<ResolveUuidResponse> {
+    const endpoint = `/internal/resolve_uuid/${encodeURIComponent(id)}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ResolveUuidResponse;
   }
 }
 

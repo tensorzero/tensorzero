@@ -1122,8 +1122,11 @@ jobs:
       contents: read
       # Permission for rust-cache
       actions: read
+      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      id-token: write
+    needs: [build-gateway-container]
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
     env:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
@@ -1173,9 +1176,21 @@ jobs:
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+
+      - name: Login to Namespace registry
+        run: nsc docker login
+
+      - name: Download container images
+        run: |
+          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Make sure dependency services are up
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
@@ -1266,6 +1281,7 @@ jobs:
 
   build-fixtures-container:
     uses: ./.github/workflows/build-fixtures-container.yml
+    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1296,6 +1312,7 @@ jobs:
     needs:
       [
         build-gateway-container,
+        build-gateway-e2e-container,
         build-ui-container,
         build-mock-provider-api-container,
       ]
