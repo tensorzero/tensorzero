@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -130,14 +132,17 @@ pub struct ModelLatencyDatapoint {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
 pub struct EpisodeByIdRow {
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_u64")]
     #[sqlx(try_from = "i64")]
     pub count: u64,
+    #[schemars(with = "String")]
     pub start_time: DateTime<Utc>,
+    #[schemars(with = "String")]
     pub end_time: DateTime<Utc>,
     pub last_inference_id: Uuid,
 }

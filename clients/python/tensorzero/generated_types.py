@@ -127,6 +127,15 @@ Detail = Literal["low", "high", "auto"]
 
 
 @dataclass(kw_only=True)
+class EpisodeByIdRow:
+    count: int
+    end_time: str
+    episode_id: str
+    last_inference_id: str
+    start_time: str
+
+
+@dataclass(kw_only=True)
 class ProviderExtraBody:
     """
     DEPRECATED: Use `ModelProvider` instead.
@@ -638,6 +647,11 @@ class ListDatasetsResponse:
     """
     List of dataset metadata.
     """
+
+
+@dataclass(kw_only=True)
+class ListEpisodesResponse:
+    episodes: list[EpisodeByIdRow]
 
 
 @dataclass(kw_only=True)
@@ -2140,46 +2154,6 @@ class GetInferencesResponse:
     inferences: list[StoredInference]
     """
     The retrieved inferences.
-    """
-
-
-@dataclass(kw_only=True)
-class EpisodeByIdRow:
-    """
-    A row representing an episode with aggregated inference data.
-    """
-
-    episode_id: str
-    """
-    The unique identifier of the episode (UUID).
-    """
-    count: int
-    """
-    The number of inferences in this episode.
-    """
-    start_time: str
-    """
-    The start time of the episode (ISO 8601 / RFC 3339).
-    """
-    end_time: str
-    """
-    The end time of the episode (ISO 8601 / RFC 3339).
-    """
-    last_inference_id: str
-    """
-    The ID of the last inference in the episode (UUID).
-    """
-
-
-@dataclass(kw_only=True)
-class ListEpisodesResponse:
-    """
-    Response containing the requested episodes.
-    """
-
-    episodes: list[EpisodeByIdRow]
-    """
-    The retrieved episodes.
     """
 
 

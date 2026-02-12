@@ -52,8 +52,9 @@ pub struct ListEpisodesRequest {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
 pub struct ListEpisodesResponse {
     pub episodes: Vec<EpisodeByIdRow>,
 }
