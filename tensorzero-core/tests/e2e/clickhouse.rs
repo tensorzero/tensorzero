@@ -102,6 +102,7 @@ pub async fn get_clean_clickhouse(
             __force_allow_embedded_batch_writes: false,
             flush_interval_ms: 1000,
             max_rows: 100,
+            max_rows_postgres: None,
         },
     )
     .await

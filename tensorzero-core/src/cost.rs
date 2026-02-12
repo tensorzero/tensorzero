@@ -106,23 +106,18 @@ impl<'de> Deserialize<'de> for JsonPointer {
 
 #[cfg(feature = "ts-bindings")]
 impl ts_rs::TS for JsonPointer {
-    const EXPORT_TO: Option<&'static str> = None;
-    fn name() -> String {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+
+    fn name(_cfg: &ts_rs::Config) -> String {
         "string".to_string()
     }
-    fn name_with_type_args(_args: Vec<String>) -> String {
+
+    fn inline(_cfg: &ts_rs::Config) -> String {
         "string".to_string()
     }
-    fn inline() -> String {
-        "string".to_string()
-    }
-    fn decl() -> String {
-        String::new()
-    }
-    fn decl_concrete() -> String {
-        String::new()
-    }
-    fn output_path() -> Option<&'static std::path::Path> {
+
+    fn output_path() -> Option<std::path::PathBuf> {
         None
     }
 }

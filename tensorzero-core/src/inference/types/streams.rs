@@ -846,7 +846,7 @@ mod tests {
     use super::*;
     use crate::{
         config::SchemaData,
-        experimentation::ExperimentationConfig,
+        experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
             ContentBlockChatOutput, ContentBlockOutputType, InferenceResult, Text, Thought,
@@ -1123,7 +1123,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),
@@ -1467,7 +1467,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),
@@ -1596,7 +1596,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),

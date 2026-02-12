@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use autopilot_client::OptimizationWorkflowSideInfo;
+use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use autopilot_tools::tools::{
     LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolParams,
 };
@@ -56,10 +56,15 @@ fn create_test_params() -> LaunchOptimizationWorkflowToolParams {
     }
 }
 
-fn create_test_side_info() -> OptimizationWorkflowSideInfo {
-    OptimizationWorkflowSideInfo {
-        poll_interval_secs: 1, // Short for tests
-        max_wait_secs: 30,     // Reasonable timeout for tests
+fn create_test_side_info() -> AutopilotSideInfo {
+    AutopilotSideInfo {
+        optimization: OptimizationWorkflowSideInfo {
+            poll_interval_secs: 1, // Short for tests
+            max_wait_secs: 30,     // Reasonable timeout for tests
+        },
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test-config-hash".to_string(),
     }
 }
 

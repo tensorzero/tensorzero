@@ -1483,7 +1483,7 @@ pub enum TaggedInferenceDatabaseInsert {
     Json(JsonInferenceDatabaseInsert),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
@@ -1507,7 +1507,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub snapshot_hash: Option<SnapshotHash>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct JsonInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,

@@ -1,4 +1,7 @@
-use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
+use crate::experimentation::{
+    ExperimentationConfig, ExperimentationConfigWithNamespaces,
+    UninitializedExperimentationConfigWithNamespaces,
+};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 use crate::relay::TensorzeroRelay;
@@ -63,6 +66,7 @@ use std::error::Error as StdError;
 
 pub mod built_in;
 pub mod gateway;
+pub mod namespace;
 pub mod path;
 pub mod provider_types;
 pub mod rate_limiting;
@@ -72,6 +76,8 @@ pub mod stored;
 #[cfg(test)]
 mod tests;
 pub mod unwritten;
+
+pub use namespace::Namespace;
 
 tokio::task_local! {
     /// When set, we skip performing credential validation in model providers
@@ -383,6 +389,10 @@ pub struct BatchWritesConfig {
     pub flush_interval_ms: u64,
     #[serde(default = "default_max_rows")]
     pub max_rows: usize,
+    /// Optional override for Postgres batch size. Defaults to `max_rows` when unset.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_rows_postgres: Option<usize>,
 }
 
 impl Default for BatchWritesConfig {
@@ -392,6 +402,7 @@ impl Default for BatchWritesConfig {
             __force_allow_embedded_batch_writes: false,
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
+            max_rows_postgres: None,
         }
     }
 }
@@ -1387,6 +1398,14 @@ impl Config {
             }
             .into());
         }
+        if let Some(max_rows_postgres) = self.gateway.observability.batch_writes.max_rows_postgres
+            && max_rows_postgres == 0
+        {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes Postgres max rows must be greater than 0".to_string(),
+            }
+            .into());
+        }
         // Validate each function
         // Note: We don't check for tensorzero:: prefix here because:
         // 1. Built-in functions are allowed to have this prefix
@@ -1784,7 +1803,7 @@ pub struct UninitializedFunctionConfigChat {
     pub parallel_tool_calls: Option<bool>,
     #[serde(default)]
     pub description: Option<String>,
-    pub experimentation: Option<UninitializedExperimentationConfig>,
+    pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1799,7 +1818,7 @@ pub struct UninitializedFunctionConfigJson {
     pub output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
     pub description: Option<String>,
-    pub experimentation: Option<UninitializedExperimentationConfig>,
+    pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -2022,9 +2041,12 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics))
+                    .map(|config| config.load(&variants, metrics, function_name))
                     .transpose()?
-                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
+                    .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
+                        base: ExperimentationConfig::legacy_from_variants_map(&variants),
+                        namespaces: std::collections::HashMap::new(),
+                    });
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     schemas: schema_data,
@@ -2116,9 +2138,12 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics))
+                    .map(|config| config.load(&variants, metrics, function_name))
                     .transpose()?
-                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
+                    .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
+                        base: ExperimentationConfig::legacy_from_variants_map(&variants),
+                        namespaces: std::collections::HashMap::new(),
+                    });
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: schema_data,

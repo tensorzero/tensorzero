@@ -785,16 +785,21 @@ fn wrap_provider_stream(
                     Err(e) => {
                         tracing::warn!("Skipping cache write for stream response due to error in stream: {e}");
                         errored = true;
-                        // If we see a `FatalStreamError`, then yield it and stop processing the stream,
-                        // to avoid holding open a stream that might never produce more chunks.
-                        // We'll still compute rate-limiting usage using all of the chunks that we've seen so far.
-                        if let ErrorDetails::FatalStreamError { .. } = e.get_details() {
-                            yield chunk;
-                            break;
-                        }
                     }
                 }
             }
+
+            // If we see a `FatalStreamError`, yield it and stop processing the stream,
+            // to avoid holding open a stream that might never produce more chunks.
+            // We'll still compute rate-limiting usage using all of the chunks that we've seen so far.
+            if let Err(e) = chunk.as_ref()
+                && let ErrorDetails::FatalStreamError { .. } = e.get_details()
+            {
+                errored = true;
+                yield chunk;
+                break;
+            }
+
             yield chunk;
         }
 

@@ -120,7 +120,7 @@ mod tests {
         CreateChatDatapointRequest, CreateDatapointRequest, CreateJsonDatapointRequest,
         JsonDatapointOutputUpdate,
     };
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::{
@@ -148,7 +148,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: Some(true),
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: HashSet::new(),
             })),
         );
@@ -168,7 +168,7 @@ mod tests {
                 .unwrap(),
                 json_mode_tool_call_config: crate::tool::ToolCallConfig::default(),
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_template_names: HashSet::new(),
             })),
         );

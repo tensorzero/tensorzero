@@ -802,7 +802,7 @@ mod tests {
     use crate::config::{Config, SchemaData};
     use crate::db::stored_datapoint::StoredDatapoint;
     use crate::endpoints::inference::InferenceParams;
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::System;
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
@@ -824,7 +824,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: Default::default(),
             })),
         );
@@ -838,7 +838,7 @@ mod tests {
                 output_schema: JSONSchema::default(),
                 json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_template_names: Default::default(),
             })),
         );

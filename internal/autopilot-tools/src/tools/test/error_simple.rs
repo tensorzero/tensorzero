@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
@@ -23,7 +24,7 @@ pub struct ErrorSimpleParams {
 pub struct ErrorSimpleTool;
 
 impl ToolMetadata for ErrorSimpleTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = ();
     type LlmParams = ErrorSimpleParams;
 

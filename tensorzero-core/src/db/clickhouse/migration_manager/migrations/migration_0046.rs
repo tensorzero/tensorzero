@@ -1,46 +1,80 @@
-use super::check_column_exists;
-use crate::db::clickhouse::ClickHouseConnectionInfo;
-use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::Error;
 use async_trait::async_trait;
 
-const MIGRATION_ID: &str = "0046";
+use super::check_index_exists;
+use super::check_table_exists;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::migration_manager::migration_trait::Migration;
+use crate::error::{Error, ErrorDetails};
 
-/// This migration adds a `cost` column to the `ModelInference` table.
-/// Cost is stored as `Nullable(Decimal(18, 9))` — 18 total digits, 9 fractional —
-/// matching the Postgres `NUMERIC(18, 9)` column.
+/// This migration adds bloom filter indices on `id` columns to the feedback tables:
+/// `BooleanMetricFeedback`, `FloatMetricFeedback`, `CommentFeedback`, and `DemonstrationFeedback`.
+/// This allows efficient lookup of feedback rows by their primary ID (used by the resolve_uuid endpoint).
 pub struct Migration0046<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
+const TABLES: [&str; 4] = [
+    "BooleanMetricFeedback",
+    "FloatMetricFeedback",
+    "CommentFeedback",
+    "DemonstrationFeedback",
+];
+
 #[async_trait]
 impl Migration for Migration0046<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
+        for table in &TABLES {
+            if !check_table_exists(self.clickhouse, table, "0046").await? {
+                return Err(ErrorDetails::ClickHouseMigration {
+                    id: "0046".to_string(),
+                    message: format!("{table} table does not exist"),
+                }
+                .into());
+            }
+        }
         Ok(())
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        Ok(!check_column_exists(self.clickhouse, "ModelInference", "cost", MIGRATION_ID).await?)
+        for table in &TABLES {
+            if !check_index_exists(self.clickhouse, table, "id_index").await? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        for table in &TABLES {
+            let create_index_query = format!(
+                "ALTER TABLE {table} ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;"
+            );
+            let _ = self
+                .clickhouse
+                .run_query_synchronous_no_params(create_index_query)
+                .await?;
 
-        self.clickhouse
-            .run_query_synchronous_no_params(format!(
-                "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS cost Nullable(Decimal(18, 9))"
-            ))
-            .await?;
+            let materialize_index_query =
+                format!("ALTER TABLE {table} MATERIALIZE INDEX id_index;");
+            let _ = self
+                .clickhouse
+                .run_query_synchronous_no_params(materialize_index_query)
+                .await?;
+        }
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        format!("ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN cost;")
+        TABLES
+            .iter()
+            .map(|table| format!("ALTER TABLE {table} DROP INDEX IF EXISTS id_index;"))
+            .collect::<Vec<_>>()
+            .join("\n        ")
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
-        Ok(check_column_exists(self.clickhouse, "ModelInference", "cost", MIGRATION_ID).await?)
+        let should_apply = self.should_apply().await?;
+        Ok(!should_apply)
     }
 }

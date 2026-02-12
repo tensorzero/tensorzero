@@ -424,11 +424,7 @@ struct GeminiTool<'a> {
 
 impl<'a> GeminiFunctionDeclaration<'a> {
     fn from_tool_config(tool: &'a FunctionToolConfig) -> Self {
-        let mut parameters = tool.parameters().clone();
-        if let Some(obj) = parameters.as_object_mut() {
-            obj.remove("additionalProperties");
-            obj.remove("$schema");
-        }
+        let parameters = process_jsonschema_for_gcp_vertex_gemini(tool.parameters());
 
         GeminiFunctionDeclaration {
             name: tool.name(),
