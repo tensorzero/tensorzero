@@ -7,6 +7,7 @@ use tensorzero_core::{
         CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
         select_model_inferences_clickhouse,
     },
+    db::test_helpers::poll_result_until_some,
     inference::types::{Arguments, ContentBlockChatOutput, System, Text},
     poll_clickhouse_for_result,
 };
@@ -277,10 +278,12 @@ async fn test_best_of_n_template_no_schema() {
     assert_eq!(echoed_content, expected_content);
 
     let clickhouse = get_clickhouse().await;
-    let results: Vec<Value> = poll_clickhouse_for_result!(
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
-    );
-    assert_eq!(results.len(), 3);
+    // Poll until full fan-out (3 rows)
+    let results: Vec<Value> = poll_result_until_some(async || {
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 3).then_some(rows)
+    })
+    .await;
     assert!(
         results
             .iter()

@@ -233,13 +233,13 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
     );
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-    // Check the ModelInference Table
+    // Check the ModelInference Table - poll until full fan-out (2 rows)
     let result = poll_result_until_some(async || {
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 2).then_some(rows)
     })
     .await;
     println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2);
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         match model_name {
@@ -615,13 +615,13 @@ pub async fn test_dicl_inference_request_simple() {
     );
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-    // Check the ModelInference Table
+    // Check the ModelInference Table - poll until full fan-out (2 rows)
     let result = poll_result_until_some(async || {
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 2).then_some(rows)
     })
     .await;
     println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2);
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         let input_messages = model_inference
@@ -836,13 +836,13 @@ pub async fn test_dicl_inference_request_simple() {
     );
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-    // Check the ModelInference Table
+    // Check the ModelInference Table - poll until full fan-out (2 rows)
     let result = poll_result_until_some(async || {
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 2).then_some(rows)
     })
     .await;
     println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2);
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         let input_messages = model_inference
@@ -1155,13 +1155,13 @@ async fn test_dicl_json_request() {
     );
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-    // Check the ModelInference Table
+    // Check the ModelInference Table - poll until full fan-out (2 rows)
     let result = poll_result_until_some(async || {
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 2).then_some(rows)
     })
     .await;
     println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2);
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         let input_messages = model_inference
@@ -1365,14 +1365,14 @@ max_tokens = 100
     };
     println!("API response: {response:#?}");
     let inference_id = response.inference_id;
-    // Check the ModelInference Table
+    // Check the ModelInference Table - poll until full fan-out (2 rows: embedding + chat completion)
     let clickhouse = get_clickhouse().await;
     let result = poll_result_until_some(async || {
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 2).then_some(rows)
     })
     .await;
     println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2); // embedding + chat completion
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         let input_messages = model_inference
@@ -1517,14 +1517,14 @@ max_tokens = 100
     };
     println!("API response: {response:#?}");
     let inference_id = response.inference_id;
-    // Check the ModelInference Table
+    // Check the ModelInference Table - poll until full fan-out (2 rows: embedding + chat completion)
     let clickhouse = get_clickhouse().await;
     let result = poll_result_until_some(async || {
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 2).then_some(rows)
     })
     .await;
     println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2); // embedding + chat completion
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         let input_messages = model_inference

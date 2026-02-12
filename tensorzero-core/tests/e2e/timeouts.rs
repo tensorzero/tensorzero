@@ -207,12 +207,14 @@ async fn test_inference_ttft_ms(payload: Value, json: bool) {
         "Unexpected ttft_ms: {inference:?}"
     );
 
-    let model_inferences = poll_clickhouse_for_result!(
-        select_model_inferences_clickhouse(&clickhouse, inference_id.unwrap()).await
-    );
+    let model_inferences = poll_result_until_some(async || {
+        let rows =
+            select_model_inferences_clickhouse(&clickhouse, inference_id.unwrap()).await?;
+        (rows.len() == 1).then_some(rows)
+    })
+    .await;
 
     // The first provider will time out, so we should only have one inference
-    assert_eq!(model_inferences.len(), 1);
     println!("model_inferences: {model_inferences:?}");
     assert_eq!(model_inferences[0]["model_name"], "first_provider_timeout");
     assert_eq!(model_inferences[0]["model_provider_name"], "second_good");
@@ -410,12 +412,14 @@ async fn best_of_n_other_candidate(payload: Value) {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     let clickhouse = get_clickhouse().await;
-    let model_inferences = poll_clickhouse_for_result!(
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
-    );
+    // Poll until full fan-out (3 rows: 2 candidates + judge)
+    let model_inferences = poll_result_until_some(async || {
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 3).then_some(rows)
+    })
+    .await;
 
     // One of the candidates timed out, leaving us with 2 candidates and the judge
-    assert_eq!(model_inferences.len(), 3);
     assert_eq!(
         model_inferences[0]
             .get("inference_id")
@@ -477,13 +481,15 @@ async fn best_of_n_judge_timeout(payload: Value) {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     let clickhouse = get_clickhouse().await;
-    let model_inferences = poll_clickhouse_for_result!(
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
-    );
+    // Poll until full fan-out (2 rows: both candidates, judge timed out)
+    let model_inferences = poll_result_until_some(async || {
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 2).then_some(rows)
+    })
+    .await;
 
     // Both of the candidates should succeed, but the judge should time out,
     // leaving us with 2 successful inferences
-    assert_eq!(model_inferences.len(), 2);
     assert_eq!(
         model_inferences[0]
             .get("inference_id")

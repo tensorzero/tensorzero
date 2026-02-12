@@ -443,12 +443,12 @@ async fn test_best_of_n_dummy_candidates_flaky_judge() {
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "flaky_best_of_n_variant");
 
-    // Check the ModelInference Table
+    // Check the ModelInference Table - poll until full fan-out (3 rows)
     let results = poll_result_until_some(async || {
-        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 3).then_some(rows)
     })
     .await;
-    assert_eq!(results.len(), 3);
 
     // Collect model names
     let mut model_names = std::collections::HashSet::new();
