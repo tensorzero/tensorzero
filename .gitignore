@@ -59,3 +59,15 @@ clients/rust/bindings/
 internal/tensorzero-node/bindings/
 *.junit.xml
 tensorzero-core/schemas
+
+# OpenAPI spec is generated at runtime by the gateway (GET /openapi.json). Local copy for SDK generation only.
+openapi.json
+
+# Remote deploy script state
+.active_workspace
+
+# Remote deploy script state (which workspace was last used for e2e)
+.active_workspace
+
+# Remote deploy script state
+.active_workspace
