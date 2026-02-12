@@ -37,6 +37,21 @@ fn test_good_deserialize() {
 }
 
 #[test]
+fn test_unit_variant_deserialize() {
+    let val = serde_json::json!(
+        {
+            "mytag": "third",
+        }
+    );
+    let res: MyTaggedEnum = serde_json::from_value(val).unwrap();
+    assert_eq!(
+        res,
+        MyTaggedEnum::Third,
+        "Unit variant should deserialize correctly"
+    );
+}
+
+#[test]
 fn test_bad_deserialize() {
     let val = serde_json::json!(
         {

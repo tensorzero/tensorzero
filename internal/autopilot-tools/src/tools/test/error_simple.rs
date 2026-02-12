@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 /// Parameters for the error simple tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct ErrorSimpleParams {
     /// The error message to return.
     pub error_message: String,
@@ -22,7 +24,7 @@ pub struct ErrorSimpleParams {
 pub struct ErrorSimpleTool;
 
 impl ToolMetadata for ErrorSimpleTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = ();
     type LlmParams = ErrorSimpleParams;
 

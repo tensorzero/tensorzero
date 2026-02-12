@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
@@ -33,8 +34,19 @@ use crate::db::inferences::{
 };
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::resolve_uuid::{ResolveUuidQueries, ResolvedObject};
 use crate::db::stored_datapoint::StoredDatapoint;
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint};
+use crate::db::workflow_evaluation_queries::{
+    GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationProjectRow,
+    WorkflowEvaluationQueries, WorkflowEvaluationRunEpisodeWithFeedbackRow,
+    WorkflowEvaluationRunInfo, WorkflowEvaluationRunRow, WorkflowEvaluationRunStatisticsRow,
+    WorkflowEvaluationRunWithEpisodeCountRow,
+};
+use crate::db::{
+    ConfigQueries, DICLExampleWithDistance, DICLQueries, DeploymentIdQueries, EpisodeByIdRow,
+    EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
+    ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
+};
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
@@ -68,7 +80,18 @@ pub struct DelegatingDatabaseConnection {
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
 pub trait DelegatingDatabaseQueries:
-    FeedbackQueries + InferenceQueries + DatasetQueries + BatchInferenceQueries + ModelInferenceQueries
+    ConfigQueries
+    + DeploymentIdQueries
+    + HowdyQueries
+    + FeedbackQueries
+    + InferenceQueries
+    + DatasetQueries
+    + BatchInferenceQueries
+    + ModelInferenceQueries
+    + WorkflowEvaluationQueries
+    + ResolveUuidQueries
+    + EpisodeQueries
+    + DICLQueries
 {
 }
 impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
@@ -88,6 +111,52 @@ impl DelegatingDatabaseConnection {
         } else {
             &self.clickhouse
         }
+    }
+}
+
+#[async_trait]
+impl ConfigQueries for DelegatingDatabaseConnection {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        self.get_read_database()
+            .get_config_snapshot(snapshot_hash)
+            .await
+    }
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        self.clickhouse.write_config_snapshot(snapshot).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.write_config_snapshot(snapshot).await
+        {
+            tracing::error!("Error writing config snapshot to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl DeploymentIdQueries for DelegatingDatabaseConnection {
+    async fn get_deployment_id(&self) -> Result<String, Error> {
+        self.get_read_database().get_deployment_id().await
+    }
+}
+
+#[async_trait]
+impl HowdyQueries for DelegatingDatabaseConnection {
+    async fn count_inferences_for_howdy(&self) -> Result<HowdyInferenceCounts, Error> {
+        self.get_read_database().count_inferences_for_howdy().await
+    }
+
+    async fn count_feedbacks_for_howdy(&self) -> Result<HowdyFeedbackCounts, Error> {
+        self.get_read_database().count_feedbacks_for_howdy().await
+    }
+
+    async fn get_token_totals_for_howdy(&self) -> Result<HowdyTokenUsage, Error> {
+        self.get_read_database().get_token_totals_for_howdy().await
     }
 }
 
@@ -655,6 +724,296 @@ impl ModelInferenceQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+#[async_trait]
+impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
+    // ===== Read methods: delegate based on ENABLE_POSTGRES_READ =====
+
+    async fn list_workflow_evaluation_projects(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<WorkflowEvaluationProjectRow>, Error> {
+        self.get_read_database()
+            .list_workflow_evaluation_projects(limit, offset)
+            .await
+    }
+
+    async fn count_workflow_evaluation_projects(&self) -> Result<u32, Error> {
+        self.get_read_database()
+            .count_workflow_evaluation_projects()
+            .await
+    }
+
+    async fn search_workflow_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+        project_name: Option<&str>,
+        search_query: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunRow>, Error> {
+        self.get_read_database()
+            .search_workflow_evaluation_runs(limit, offset, project_name, search_query)
+            .await
+    }
+
+    async fn list_workflow_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+        run_id: Option<Uuid>,
+        project_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunWithEpisodeCountRow>, Error> {
+        self.get_read_database()
+            .list_workflow_evaluation_runs(limit, offset, run_id, project_name)
+            .await
+    }
+
+    async fn count_workflow_evaluation_runs(&self) -> Result<u32, Error> {
+        self.get_read_database()
+            .count_workflow_evaluation_runs()
+            .await
+    }
+
+    async fn get_workflow_evaluation_runs(
+        &self,
+        run_ids: &[Uuid],
+        project_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunRow>, Error> {
+        self.get_read_database()
+            .get_workflow_evaluation_runs(run_ids, project_name)
+            .await
+    }
+
+    async fn get_workflow_evaluation_run_statistics(
+        &self,
+        run_id: Uuid,
+        metric_name: Option<&str>,
+    ) -> Result<Vec<WorkflowEvaluationRunStatisticsRow>, Error> {
+        self.get_read_database()
+            .get_workflow_evaluation_run_statistics(run_id, metric_name)
+            .await
+    }
+
+    async fn list_workflow_evaluation_run_episodes_by_task_name(
+        &self,
+        run_ids: &[Uuid],
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow>, Error> {
+        self.get_read_database()
+            .list_workflow_evaluation_run_episodes_by_task_name(run_ids, limit, offset)
+            .await
+    }
+
+    async fn count_workflow_evaluation_run_episodes_by_task_name(
+        &self,
+        run_ids: &[Uuid],
+    ) -> Result<u32, Error> {
+        self.get_read_database()
+            .count_workflow_evaluation_run_episodes_by_task_name(run_ids)
+            .await
+    }
+
+    async fn get_workflow_evaluation_run_episodes_with_feedback(
+        &self,
+        run_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<WorkflowEvaluationRunEpisodeWithFeedbackRow>, Error> {
+        self.get_read_database()
+            .get_workflow_evaluation_run_episodes_with_feedback(run_id, limit, offset)
+            .await
+    }
+
+    async fn count_workflow_evaluation_run_episodes(&self, run_id: Uuid) -> Result<u32, Error> {
+        self.get_read_database()
+            .count_workflow_evaluation_run_episodes(run_id)
+            .await
+    }
+
+    async fn get_workflow_evaluation_run_by_episode_id(
+        &self,
+        episode_id: Uuid,
+    ) -> Result<Option<WorkflowEvaluationRunInfo>, Error> {
+        self.get_read_database()
+            .get_workflow_evaluation_run_by_episode_id(episode_id)
+            .await
+    }
+
+    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+
+    async fn insert_workflow_evaluation_run(
+        &self,
+        run_id: Uuid,
+        variant_pins: &HashMap<String, String>,
+        tags: &HashMap<String, String>,
+        project_name: Option<&str>,
+        run_display_name: Option<&str>,
+        snapshot_hash: &SnapshotHash,
+    ) -> Result<(), Error> {
+        self.clickhouse
+            .insert_workflow_evaluation_run(
+                run_id,
+                variant_pins,
+                tags,
+                project_name,
+                run_display_name,
+                snapshot_hash,
+            )
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .insert_workflow_evaluation_run(
+                    run_id,
+                    variant_pins,
+                    tags,
+                    project_name,
+                    run_display_name,
+                    snapshot_hash,
+                )
+                .await
+        {
+            tracing::error!("Error writing workflow evaluation run to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    async fn insert_workflow_evaluation_run_episode(
+        &self,
+        run_id: Uuid,
+        episode_id: Uuid,
+        task_name: Option<&str>,
+        tags: &HashMap<String, String>,
+        snapshot_hash: &SnapshotHash,
+    ) -> Result<(), Error> {
+        self.clickhouse
+            .insert_workflow_evaluation_run_episode(
+                run_id,
+                episode_id,
+                task_name,
+                tags,
+                snapshot_hash,
+            )
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .insert_workflow_evaluation_run_episode(
+                    run_id,
+                    episode_id,
+                    task_name,
+                    tags,
+                    snapshot_hash,
+                )
+                .await
+        {
+            tracing::error!("Error writing workflow evaluation run episode to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ResolveUuidQueries for DelegatingDatabaseConnection {
+    async fn resolve_uuid(&self, id: &Uuid) -> Result<Vec<ResolvedObject>, Error> {
+        self.get_read_database().resolve_uuid(id).await
+    }
+}
+
+#[async_trait]
+impl EpisodeQueries for DelegatingDatabaseConnection {
+    async fn query_episode_table(
+        &self,
+        limit: u32,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error> {
+        self.get_read_database()
+            .query_episode_table(limit, before, after)
+            .await
+    }
+
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
+        self.get_read_database().query_episode_table_bounds().await
+    }
+}
+
+#[async_trait]
+impl DICLQueries for DelegatingDatabaseConnection {
+    async fn insert_dicl_example(&self, example: &StoredDICLExample) -> Result<(), Error> {
+        self.clickhouse.insert_dicl_example(example).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_dicl_example(example).await
+        {
+            tracing::error!("Error writing DICL example to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    async fn insert_dicl_examples(&self, examples: &[StoredDICLExample]) -> Result<u64, Error> {
+        let count = self.clickhouse.insert_dicl_examples(examples).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_dicl_examples(examples).await
+        {
+            tracing::error!("Error writing DICL examples to Postgres: {e}");
+        }
+
+        Ok(count)
+    }
+
+    async fn get_similar_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        embedding: &[f32],
+        limit: u32,
+    ) -> Result<Vec<DICLExampleWithDistance>, Error> {
+        self.get_read_database()
+            .get_similar_dicl_examples(function_name, variant_name, embedding, limit)
+            .await
+    }
+
+    async fn has_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+    ) -> Result<bool, Error> {
+        self.get_read_database()
+            .has_dicl_examples(function_name, variant_name)
+            .await
+    }
+
+    async fn delete_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        namespace: Option<&str>,
+    ) -> Result<u64, Error> {
+        let count = self
+            .clickhouse
+            .delete_dicl_examples(function_name, variant_name, namespace)
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .delete_dicl_examples(function_name, variant_name, namespace)
+                .await
+        {
+            tracing::error!("Error deleting DICL examples from Postgres: {e}");
+        }
+
+        Ok(count)
     }
 }
 

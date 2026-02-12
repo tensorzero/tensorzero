@@ -22,7 +22,6 @@ import {
 import {
   ChartContainer,
   ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "~/components/ui/chart";
@@ -165,90 +164,92 @@ export function ModelUsage({
               );
 
               return (
-                <ChartContainer config={chartConfig} className="h-80 w-full">
-                  <BarChart accessibilityLayer data={data}>
-                    <CartesianGrid vertical={false} />
-                    {timeGranularity !== "cumulative" && (
-                      <XAxis
-                        dataKey="date"
+                <>
+                  <ChartContainer config={chartConfig}>
+                    <BarChart accessibilityLayer data={data}>
+                      <CartesianGrid vertical={false} />
+                      {timeGranularity !== "cumulative" && (
+                        <XAxis
+                          dataKey="date"
+                          tickLine={false}
+                          tickMargin={10}
+                          axisLine={true}
+                          tickFormatter={(value) =>
+                            formatXAxisTimestamp(
+                              new Date(value),
+                              timeGranularity,
+                            )
+                          }
+                        />
+                      )}
+                      <YAxis
                         tickLine={false}
                         tickMargin={10}
                         axisLine={true}
-                        tickFormatter={(value) =>
-                          formatXAxisTimestamp(new Date(value), timeGranularity)
+                        tickFormatter={formatChartNumber}
+                      />
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent
+                            labelFormatter={(label) =>
+                              timeGranularity === "cumulative"
+                                ? "Total"
+                                : formatTooltipTimestamp(
+                                    new Date(label),
+                                    timeGranularity,
+                                  )
+                            }
+                            formatter={(value, name, entry) => {
+                              const count = entry.payload[`${name}_count`];
+                              const inputTokens =
+                                entry.payload[`${name}_input_tokens`];
+                              const outputTokens =
+                                entry.payload[`${name}_output_tokens`];
+                              const totalTokens = inputTokens + outputTokens;
+
+                              return (
+                                <div className="flex flex-1 items-center justify-between leading-none">
+                                  <span className="text-muted-foreground mr-2 font-mono text-xs">
+                                    {name}
+                                  </span>
+                                  <div className="grid text-right">
+                                    <span className="text-foreground font-mono font-medium tabular-nums">
+                                      {METRIC_TYPE_CONFIG[
+                                        selectedMetric
+                                      ].formatter(value as number)}
+                                    </span>
+                                    {selectedMetric === "inferences" && (
+                                      <span className="text-muted-foreground text-[10px]">
+                                        {formatDetailedNumber(totalTokens)}{" "}
+                                        tokens
+                                      </span>
+                                    )}
+                                    {selectedMetric !== "inferences" && (
+                                      <span className="text-muted-foreground text-[10px]">
+                                        {formatDetailedNumber(count)} requests
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }}
+                          />
                         }
                       />
-                    )}
-                    <YAxis
-                      tickLine={false}
-                      tickMargin={10}
-                      axisLine={true}
-                      tickFormatter={formatChartNumber}
-                    />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          labelFormatter={(label) =>
-                            timeGranularity === "cumulative"
-                              ? "Total"
-                              : formatTooltipTimestamp(
-                                  new Date(label),
-                                  timeGranularity,
-                                )
-                          }
-                          formatter={(value, name, entry) => {
-                            const count = entry.payload[`${name}_count`];
-                            const inputTokens =
-                              entry.payload[`${name}_input_tokens`];
-                            const outputTokens =
-                              entry.payload[`${name}_output_tokens`];
-                            const totalTokens = inputTokens + outputTokens;
-
-                            return (
-                              <div className="flex flex-1 items-center justify-between leading-none">
-                                <span className="text-muted-foreground mr-2 font-mono text-xs">
-                                  {name}
-                                </span>
-                                <div className="grid text-right">
-                                  <span className="text-foreground font-mono font-medium tabular-nums">
-                                    {METRIC_TYPE_CONFIG[
-                                      selectedMetric
-                                    ].formatter(value as number)}
-                                  </span>
-                                  {selectedMetric === "inferences" && (
-                                    <span className="text-muted-foreground text-[10px]">
-                                      {formatDetailedNumber(totalTokens)} tokens
-                                    </span>
-                                  )}
-                                  {selectedMetric !== "inferences" && (
-                                    <span className="text-muted-foreground text-[10px]">
-                                      {formatDetailedNumber(count)} requests
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          }}
+                      {modelNames.map((modelName, index) => (
+                        <Bar
+                          key={modelName}
+                          dataKey={modelName}
+                          name={modelName}
+                          fill={CHART_COLORS[index % CHART_COLORS.length]}
+                          radius={4}
+                          maxBarSize={100}
                         />
-                      }
-                    />
-                    <ChartLegend
-                      content={
-                        <ChartLegendContent className="font-mono text-xs" />
-                      }
-                    />
-                    {modelNames.map((modelName, index) => (
-                      <Bar
-                        key={modelName}
-                        dataKey={modelName}
-                        name={modelName}
-                        fill={CHART_COLORS[index % CHART_COLORS.length]}
-                        radius={4}
-                        maxBarSize={100}
-                      />
-                    ))}
-                  </BarChart>
-                </ChartContainer>
+                      ))}
+                    </BarChart>
+                  </ChartContainer>
+                  <ChartLegend items={modelNames} colors={CHART_COLORS} />
+                </>
               );
             }}
           </Await>

@@ -4,7 +4,7 @@
  * Includes links to external job details and raw data visualization.
  */
 
-import { ExternalLink } from "lucide-react";
+import { AlertTriangle, ExternalLink } from "lucide-react";
 import { Calendar, Function } from "~/components/icons/Icons";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { RawDataAccordion } from "./RawDataAccordion";
@@ -28,6 +28,28 @@ import type {
   OptimizationJobInfo,
 } from "~/types/tensorzero";
 import { toFunctionUrl } from "~/utils/urls";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+
+/**
+ * Safely extracts error description from a failed job status.
+ * Handles string errors, object errors (with safe stringify), and fallback messages.
+ */
+function getErrorDescription(
+  status: Extract<OptimizationJobInfo, { status: "failed" }>,
+): string {
+  if (status.error) {
+    if (typeof status.error === "string") {
+      return status.error;
+    }
+    // Safely stringify non-string errors, catching bigint/circular reference issues
+    try {
+      return JSON.stringify(status.error, null, 2);
+    } catch {
+      return "Error details could not be displayed";
+    }
+  }
+  return status.message ?? "An unknown error occurred";
+}
 
 export default function LLMFineTuningStatus({
   status,
@@ -90,6 +112,17 @@ export default function LLMFineTuningStatus({
           </BasicInfoItem>
         </BasicInfoLayout>
       </SectionLayout>
+
+      {status.status === "failed" && (
+        <SectionLayout>
+          <SectionHeader heading="Error" />
+          <SectionErrorNotice
+            icon={AlertTriangle}
+            title="Fine-tuning job failed"
+            description={getErrorDescription(status)}
+          />
+        </SectionLayout>
+      )}
 
       {/* hide if not available from provider, eg fireworks */}
       {status.status === "pending" && status.estimated_finish && (

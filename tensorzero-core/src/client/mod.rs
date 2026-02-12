@@ -391,7 +391,7 @@ pub enum ClientBuilderError {
     NotHTTPGateway,
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
-    #[error("Failed to configure PostgreSQL: {0}")]
+    #[error("Failed to configure Postgres: {0}")]
     Postgres(TensorZeroError),
     #[error("Authentication is not supported in embedded gateway mode: {0}")]
     AuthNotSupportedInEmbeddedMode(TensorZeroError),

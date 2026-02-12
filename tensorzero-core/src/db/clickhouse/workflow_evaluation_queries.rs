@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use super::select_queries::{parse_count, parse_json_rows};
+use super::episode_queries::{parse_count, parse_json_rows};
 use super::{ClickHouseConnectionInfo, escape_string_for_clickhouse_literal};
 use crate::config::snapshot::SnapshotHash;
 use crate::db::workflow_evaluation_queries::{
@@ -311,7 +311,7 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
                   metric_name,
                   toUInt32(count()) as count,
                   avg(value) as avg_metric,
-                  stddevSamp(value) as stdev,
+                  stddevSampStable(value) as stdev,
                   false as is_boolean
                 FROM FloatMetricFeedbackByTargetId
                 WHERE target_id IN (
@@ -325,7 +325,7 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
                   metric_name,
                   toUInt32(count()) as count,
                   avg(value) as avg_metric,
-                  stddevSamp(value) as stdev,
+                  stddevSampStable(value) as stdev,
                   true as is_boolean
                 FROM BooleanMetricFeedbackByTargetId
                 WHERE target_id IN (

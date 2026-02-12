@@ -29,6 +29,7 @@ pub mod gepa;
 pub mod openai;
 pub mod openai_rft;
 pub mod openai_sft;
+pub mod postgres;
 pub mod together_sft;
 
 // Re-export core types for convenience

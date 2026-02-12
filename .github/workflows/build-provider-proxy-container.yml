@@ -59,3 +59,18 @@ jobs:
 
       - name: Push `provider-proxy` container to DockerHub
         run: docker push tensorzero/provider-proxy:sha-${{ github.sha }}
+
+      - name: Wait for image to be available on Docker Hub
+        run: |
+          IMAGE="tensorzero/provider-proxy:sha-${{ github.sha }}"
+          echo "Waiting for ${IMAGE} to be available on Docker Hub..."
+          for i in $(seq 1 30); do
+            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+              echo "Image ${IMAGE} is available on Docker Hub"
+              exit 0
+            fi
+            echo "Attempt ${i}/30: Image not yet available, waiting 10s..."
+            sleep 10
+          done
+          echo "Timed out waiting for ${IMAGE} to appear on Docker Hub"
+          exit 1

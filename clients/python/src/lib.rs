@@ -31,7 +31,7 @@ use python_helpers::{
 
 use crate::gil_helpers::in_tokio_runtime_no_gil;
 use tensorzero_core::{
-    config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
+    config::{ConfigPyClass, FunctionsConfigPyClass, Namespace, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
@@ -309,7 +309,7 @@ const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -317,6 +317,7 @@ impl BaseTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -347,6 +348,7 @@ impl BaseTensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,
@@ -424,6 +426,7 @@ impl BaseTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -450,6 +453,13 @@ impl BaseTensorZeroGateway {
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
             .map(|id| python_uuid_to_uuid("episode_id", id))
+            .transpose()?;
+
+        let namespace = namespace
+            .map(|ns| {
+                Namespace::new(ns)
+                    .map_err(|e| PyValueError::new_err(format!("Invalid namespace: {e}")))
+            })
             .transpose()?;
 
         let params: Option<InferenceParams> = if let Some(params) = params {
@@ -535,6 +545,7 @@ impl BaseTensorZeroGateway {
             model_name,
             stream,
             episode_id,
+            namespace,
             variant_name,
             dryrun,
             tags: tags.unwrap_or_default(),
@@ -667,7 +678,7 @@ impl TensorZeroGateway {
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
-    /// :param postgres_url: The URL of the PostgreSQL instance to use for rate limiting.
+    /// :param postgres_url: The URL of the Postgres instance to use for rate limiting.
     /// :param valkey_url: The URL of the Valkey instance to use for rate limiting.
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
@@ -759,7 +770,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -811,6 +822,7 @@ impl TensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -842,6 +854,7 @@ impl TensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,
@@ -1879,7 +1892,7 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
-    /// :param postgres_url: The URL of the PostgreSQL instance to use for rate limiting.
+    /// :param postgres_url: The URL of the Postgres instance to use for rate limiting.
     /// :param valkey_url: The URL of the Valkey instance to use for rate limiting.
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :param async_setup: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
@@ -1942,7 +1955,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1988,6 +2001,7 @@ impl AsyncTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -2018,6 +2032,7 @@ impl AsyncTensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,

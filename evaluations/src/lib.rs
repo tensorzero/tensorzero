@@ -150,9 +150,9 @@ pub async fn run_evaluation(
     debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
     if let Some(postgres_url) = postgres_url.as_ref() {
-        debug!(postgres_url = %postgres_url, "PostgreSQL URL resolved");
+        debug!(postgres_url = %postgres_url, "Postgres URL resolved");
     } else {
-        debug!("PostgreSQL URL not provided");
+        debug!("Postgres URL not provided");
     }
     let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
     if let Some(valkey_url) = valkey_url.as_ref() {
@@ -776,6 +776,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         cache_options: get_cache_options(inference_cache),
         dryrun: Some(dryrun),
         episode_id: None,
+        namespace: None,
         model_name: None,
         stream: Some(false),
         params: InferenceParams::default(),
