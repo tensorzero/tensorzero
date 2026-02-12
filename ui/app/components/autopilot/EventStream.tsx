@@ -501,13 +501,31 @@ class EventErrorBoundary extends Component<
 }
 
 /**
- * Remark plugins and component overrides for rendering UUID-aware markdown.
- * Defined at module level so references are stable across renders.
+ * Markdown renderer for EventStream content.
+ * Includes plugins for interactive elements (e.g. UUID resolution).
  */
-const uuidRemarkPlugins = [remarkUuidLinks];
-const uuidLinkComponents = {
+const eventStreamRemarkPlugins = [remarkUuidLinks];
+const eventStreamComponents = {
   [UUID_LINK_ELEMENT]: ({ uuid }: { uuid: string }) => <UuidLink uuid={uuid} />,
 };
+
+function EventStreamMarkdown({
+  children,
+  className,
+}: {
+  children: string;
+  className?: string;
+}) {
+  return (
+    <Markdown
+      remarkPlugins={eventStreamRemarkPlugins}
+      extraComponents={eventStreamComponents}
+      className={className}
+    >
+      {children}
+    </Markdown>
+  );
+}
 
 function EventItem({
   event,
@@ -578,18 +596,11 @@ function EventItem({
         <>
           {event.payload.type === "message" &&
           event.payload.role === "assistant" ? (
-            <Markdown
-              remarkPlugins={uuidRemarkPlugins}
-              extraComponents={uuidLinkComponents}
-            >
-              {summary.description}
-            </Markdown>
+            <EventStreamMarkdown>{summary.description}</EventStreamMarkdown>
           ) : event.payload.type === "tool_call" ? (
             <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (
-            <Markdown
-              remarkPlugins={uuidRemarkPlugins}
-              extraComponents={uuidLinkComponents}
+            <EventStreamMarkdown
               className={cn(
                 (event.payload.type === "tool_result" ||
                   event.payload.type === "error") &&
@@ -597,7 +608,7 @@ function EventItem({
               )}
             >
               {summary.description}
-            </Markdown>
+            </EventStreamMarkdown>
           )}
         </>
       )}
@@ -650,12 +661,7 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
-      <Markdown
-        remarkPlugins={uuidRemarkPlugins}
-        extraComponents={uuidLinkComponents}
-      >
-        {message.text}
-      </Markdown>
+      <EventStreamMarkdown>{message.text}</EventStreamMarkdown>
     </div>
   );
 }
