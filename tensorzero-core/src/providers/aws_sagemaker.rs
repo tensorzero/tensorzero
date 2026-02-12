@@ -21,7 +21,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
-    Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ApiType, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError, WrappedProvider};
@@ -113,12 +113,16 @@ impl AWSSagemakerProvider {
     }
 
     /// Get the base URL for AWS SageMaker requests.
-    fn get_base_url(&self, dynamic_api_keys: &InferenceCredentials) -> Result<String, Error> {
+    fn get_base_url(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        api_type: ApiType,
+    ) -> Result<String, Error> {
         if let Some(endpoint_url) = &self.endpoint_url {
             let url = endpoint_url.resolve(dynamic_api_keys)?;
             Ok(url.to_string().trim_end_matches('/').to_string())
         } else {
-            let region = self.get_region(dynamic_api_keys)?;
+            let region = self.get_region(dynamic_api_keys, api_type)?;
             Ok(format!(
                 "https://runtime.sagemaker.{}.amazonaws.com",
                 region.as_ref()
@@ -127,9 +131,17 @@ impl AWSSagemakerProvider {
     }
 
     /// Get the region for this request.
-    fn get_region(&self, dynamic_api_keys: &InferenceCredentials) -> Result<Region, Error> {
-        self.region
-            .resolve_with_sdk_config(dynamic_api_keys, Some(&self.sdk_config), PROVIDER_TYPE)
+    fn get_region(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        api_type: ApiType,
+    ) -> Result<Region, Error> {
+        self.region.resolve_with_sdk_config(
+            dynamic_api_keys,
+            Some(&self.sdk_config),
+            PROVIDER_TYPE,
+            api_type,
+        )
     }
 }
 
@@ -200,7 +212,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         } = prepare_sagemaker_request(request, model_provider, &*self.hosted_provider).await?;
 
         // Build URL
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url = self.get_base_url(dynamic_api_keys, ApiType::ChatCompletions)?;
         let url = format!(
             "{}/endpoints/{}/invocations",
             base_url,
@@ -213,9 +225,10 @@ impl InferenceProvider for AWSSagemakerProvider {
             &self.sdk_config,
             dynamic_api_keys,
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         )
         .await?;
-        let region = self.get_region(dynamic_api_keys)?;
+        let region = self.get_region(dynamic_api_keys, ApiType::ChatCompletions)?;
 
         // Send signed request
         let aws_response = send_aws_request(
@@ -228,6 +241,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             "sagemaker",
             PROVIDER_TYPE,
             &raw_request,
+            ApiType::ChatCompletions,
         )
         .await?;
 
@@ -266,7 +280,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         } = prepare_sagemaker_request(request, model_provider, &*self.hosted_provider).await?;
 
         // Build URL for streaming endpoint
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url = self.get_base_url(dynamic_api_keys, ApiType::ChatCompletions)?;
         let url = format!(
             "{}/endpoints/{}/invocations-response-stream",
             base_url,
@@ -279,9 +293,10 @@ impl InferenceProvider for AWSSagemakerProvider {
             &self.sdk_config,
             dynamic_api_keys,
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         )
         .await?;
-        let region = self.get_region(dynamic_api_keys)?;
+        let region = self.get_region(dynamic_api_keys, ApiType::ChatCompletions)?;
 
         // Build headers
         let mut headers = http_extra_headers;
@@ -300,6 +315,7 @@ impl InferenceProvider for AWSSagemakerProvider {
             region.as_ref(),
             "sagemaker",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         )?;
 
         // Send request
@@ -316,6 +332,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -327,6 +344,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                 raw_request: Some(raw_request),
                 raw_response: Some(raw_response),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }));
         }
 
@@ -350,6 +368,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }
                         )));
                         return;
@@ -369,6 +388,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                                                 raw_request: Some(raw_request.clone()),
                                                 raw_response: Some(error_message),
                                                 provider_type: PROVIDER_TYPE.to_string(),
+                                                api_type: ApiType::ChatCompletions,
                                             }
                                         )));
                                         return;
@@ -399,6 +419,7 @@ impl InferenceProvider for AWSSagemakerProvider {
                                             raw_request: Some(raw_request.clone()),
                                             raw_response: None,
                                             provider_type: PROVIDER_TYPE.to_string(),
+                                            api_type: ApiType::ChatCompletions,
                                         }
                                     )));
                                     return;

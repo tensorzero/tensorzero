@@ -17,6 +17,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
+    inference::types::ApiType,
     model::{CredentialLocation, CredentialLocationOrHardcoded},
 };
 
@@ -289,6 +290,7 @@ impl AWSRegion {
         credentials: &InferenceCredentials,
         sdk_config: Option<&SdkConfig>,
         provider_type: &str,
+        api_type: ApiType,
     ) -> Result<Region, Error> {
         match self {
             AWSRegion::Static(region) => Ok(region.clone()),
@@ -309,6 +311,7 @@ impl AWSRegion {
                         status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                         message: "No region configured".to_string(),
                         provider_type: provider_type.to_string(),
+                        api_type,
                     })
                 }),
         }
@@ -747,6 +750,7 @@ pub async fn config_with_region(
                 status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                 message: "Failed to determine AWS region.".to_string(),
                 provider_type: provider_type.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -773,6 +777,7 @@ pub async fn resolve_request_credentials(
     sdk_config: &SdkConfig,
     dynamic_api_keys: &InferenceCredentials,
     provider_type: &str,
+    api_type: ApiType,
 ) -> Result<Credentials, Error> {
     match credentials {
         AWSIAMCredentials::Static {
@@ -833,7 +838,7 @@ pub async fn resolve_request_credentials(
                 "tensorzero",
             ))
         }
-        AWSIAMCredentials::Sdk => get_credentials(sdk_config, provider_type).await,
+        AWSIAMCredentials::Sdk => get_credentials(sdk_config, provider_type, api_type).await,
     }
 }
 
@@ -842,6 +847,7 @@ pub async fn resolve_request_credentials(
 pub async fn get_credentials(
     config: &SdkConfig,
     provider_type: &str,
+    api_type: ApiType,
 ) -> Result<Credentials, Error> {
     let provider = config.credentials_provider().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceClient {
@@ -850,6 +856,7 @@ pub async fn get_credentials(
             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
             message: "No credentials provider configured".to_string(),
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })?;
 
@@ -860,6 +867,7 @@ pub async fn get_credentials(
             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
             message: format!("Failed to get AWS credentials: {e}"),
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })
 }
@@ -877,6 +885,7 @@ pub fn sign_request(
     region: &str,
     service: &str,
     provider_type: &str,
+    api_type: ApiType,
 ) -> Result<reqwest::header::HeaderMap, Error> {
     let identity: Identity = credentials.clone().into();
 
@@ -894,6 +903,7 @@ pub fn sign_request(
                 status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                 message: format!("Failed to build signing params: {e}"),
                 provider_type: provider_type.to_string(),
+                api_type,
             })
         })?;
 
@@ -907,6 +917,7 @@ pub fn sign_request(
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: format!("Invalid header value: {e}"),
                     provider_type: provider_type.to_string(),
+                    api_type,
                 })
             })
         })
@@ -925,6 +936,7 @@ pub fn sign_request(
             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
             message: format!("Failed to create signable request: {e}"),
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })?;
 
@@ -936,6 +948,7 @@ pub fn sign_request(
                 status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                 message: format!("Failed to sign request: {e}"),
                 provider_type: provider_type.to_string(),
+                api_type,
             })
         })?
         .into_parts();
@@ -954,6 +967,7 @@ pub fn sign_request(
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: format!("Invalid header name from signing: {e}"),
                     provider_type: provider_type.to_string(),
+                    api_type,
                 })
             })?;
         let header_value = reqwest::header::HeaderValue::from_str(value).map_err(|e| {
@@ -963,6 +977,7 @@ pub fn sign_request(
                 status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                 message: format!("Invalid header value from signing: {e}"),
                 provider_type: provider_type.to_string(),
+                api_type,
             })
         })?;
         // Only insert if the header isn't already present (preserve user-provided headers)
@@ -995,6 +1010,7 @@ pub async fn send_aws_request(
     service: &str,
     provider_type: &str,
     raw_request: &str,
+    api_type: ApiType,
 ) -> Result<AwsRequestResponse, Error> {
     // Build headers with content-type and accept
     let mut headers = extra_headers;
@@ -1017,6 +1033,7 @@ pub async fn send_aws_request(
         region,
         service,
         provider_type,
+        api_type,
     )?;
 
     // Send request
@@ -1033,6 +1050,7 @@ pub async fn send_aws_request(
                 raw_request: Some(raw_request.to_string()),
                 raw_response: None,
                 provider_type: provider_type.to_string(),
+                api_type,
             })
         })?;
 
@@ -1044,6 +1062,7 @@ pub async fn send_aws_request(
             raw_request: Some(raw_request.to_string()),
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })?;
 
@@ -1053,6 +1072,7 @@ pub async fn send_aws_request(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(raw_response),
             provider_type: provider_type.to_string(),
+            api_type,
         }));
     }
 
@@ -1066,6 +1086,7 @@ pub async fn send_aws_request(
 ///
 /// This is used when an API key is configured instead of IAM credentials.
 /// Uses `Authorization: Bearer <token>` header instead of SigV4 signing.
+#[expect(clippy::too_many_arguments)]
 pub async fn send_aws_request_with_api_key(
     http_client: &TensorzeroHttpClient,
     url: &str,
@@ -1074,6 +1095,7 @@ pub async fn send_aws_request_with_api_key(
     api_key: &SecretString,
     provider_type: &str,
     raw_request: &str,
+    api_type: ApiType,
 ) -> Result<AwsRequestResponse, Error> {
     // Build headers with content-type, accept, and authorization
     let mut headers = extra_headers;
@@ -1109,6 +1131,7 @@ pub async fn send_aws_request_with_api_key(
                 raw_request: Some(raw_request.to_string()),
                 raw_response: None,
                 provider_type: provider_type.to_string(),
+                api_type,
             })
         })?;
 
@@ -1120,6 +1143,7 @@ pub async fn send_aws_request_with_api_key(
             raw_request: Some(raw_request.to_string()),
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })?;
 
@@ -1129,6 +1153,7 @@ pub async fn send_aws_request_with_api_key(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(raw_response),
             provider_type: provider_type.to_string(),
+            api_type,
         }));
     }
 
@@ -1318,9 +1343,15 @@ mod tests {
         let sdk_config = SdkConfig::builder().build();
         let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
-            .await
-            .expect("resolve should succeed");
+        let result = resolve_request_credentials(
+            &creds,
+            &sdk_config,
+            &dynamic_api_keys,
+            "test",
+            ApiType::ChatCompletions,
+        )
+        .await
+        .expect("resolve should succeed");
         assert_eq!(
             result.access_key_id(),
             "AKIATEST",
@@ -1338,9 +1369,15 @@ mod tests {
         let sdk_config = SdkConfig::builder().build();
         let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
-            .await
-            .expect("resolve should succeed");
+        let result = resolve_request_credentials(
+            &creds,
+            &sdk_config,
+            &dynamic_api_keys,
+            "test",
+            ApiType::ChatCompletions,
+        )
+        .await
+        .expect("resolve should succeed");
         assert_eq!(
             result.session_token(),
             Some("mysessiontoken"),
@@ -1361,9 +1398,15 @@ mod tests {
             ("aws_secret_key", "dynamicsecret"),
         ]));
 
-        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
-            .await
-            .expect("resolve should succeed");
+        let result = resolve_request_credentials(
+            &creds,
+            &sdk_config,
+            &dynamic_api_keys,
+            "test",
+            ApiType::ChatCompletions,
+        )
+        .await
+        .expect("resolve should succeed");
         assert_eq!(
             result.access_key_id(),
             "AKIADYNAMIC",
@@ -1390,9 +1433,15 @@ mod tests {
             ("aws_session_token", "dynamicsession"),
         ]));
 
-        let result = resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test")
-            .await
-            .expect("resolve should succeed");
+        let result = resolve_request_credentials(
+            &creds,
+            &sdk_config,
+            &dynamic_api_keys,
+            "test",
+            ApiType::ChatCompletions,
+        )
+        .await
+        .expect("resolve should succeed");
         assert_eq!(
             result.session_token(),
             Some("dynamicsession"),
@@ -1411,8 +1460,14 @@ mod tests {
         let dynamic_api_keys =
             make_credentials(HashMap::from([("aws_secret_key", "dynamicsecret")]));
 
-        let result =
-            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
+        let result = resolve_request_credentials(
+            &creds,
+            &sdk_config,
+            &dynamic_api_keys,
+            "test",
+            ApiType::ChatCompletions,
+        )
+        .await;
         assert!(
             result.is_err(),
             "Should error when access_key_id is missing"
@@ -1434,8 +1489,14 @@ mod tests {
         let sdk_config = SdkConfig::builder().build();
         let dynamic_api_keys = make_credentials(HashMap::from([("aws_access_key", "AKIADYNAMIC")]));
 
-        let result =
-            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
+        let result = resolve_request_credentials(
+            &creds,
+            &sdk_config,
+            &dynamic_api_keys,
+            "test",
+            ApiType::ChatCompletions,
+        )
+        .await;
         assert!(
             result.is_err(),
             "Should error when secret_access_key is missing"
@@ -1460,8 +1521,14 @@ mod tests {
             ("aws_secret_key", "dynamicsecret"),
         ]));
 
-        let result =
-            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
+        let result = resolve_request_credentials(
+            &creds,
+            &sdk_config,
+            &dynamic_api_keys,
+            "test",
+            ApiType::ChatCompletions,
+        )
+        .await;
         assert!(
             result.is_err(),
             "Should error when session_token is missing"
@@ -1479,8 +1546,14 @@ mod tests {
         let sdk_config = SdkConfig::builder().build();
         let dynamic_api_keys = make_credentials(HashMap::new());
 
-        let result =
-            resolve_request_credentials(&creds, &sdk_config, &dynamic_api_keys, "test").await;
+        let result = resolve_request_credentials(
+            &creds,
+            &sdk_config,
+            &dynamic_api_keys,
+            "test",
+            ApiType::ChatCompletions,
+        )
+        .await;
         assert!(
             result.is_err(),
             "Sdk credentials should error when no credentials provider is configured"

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use uuid::Uuid;
 
 /// The type of API used for a model inference.
@@ -11,6 +12,18 @@ pub enum ApiType {
     ChatCompletions,
     Responses,
     Embeddings,
+    Other,
+}
+
+impl fmt::Display for ApiType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ApiType::ChatCompletions => write!(f, "chat_completions"),
+            ApiType::Responses => write!(f, "responses"),
+            ApiType::Embeddings => write!(f, "embeddings"),
+            ApiType::Other => write!(f, "other"),
+        }
+    }
 }
 
 /// A single entry in the raw usage array, representing usage data from one model inference.

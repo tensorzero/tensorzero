@@ -103,6 +103,15 @@ pub enum OpenAIAPIType {
     Responses,
 }
 
+impl From<OpenAIAPIType> for ApiType {
+    fn from(api_type: OpenAIAPIType) -> Self {
+        match api_type {
+            OpenAIAPIType::ChatCompletions => ApiType::ChatCompletions,
+            OpenAIAPIType::Responses => ApiType::Responses,
+        }
+    }
+}
+
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -329,6 +338,7 @@ impl WrappedProvider for OpenAIProvider {
                             raw_request: Some(raw_request.clone()),
                             raw_response: Some(raw_response.clone()),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            api_type: self.api_type.into(),
                         })
                     })?;
 
@@ -352,6 +362,7 @@ impl WrappedProvider for OpenAIProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: self.api_type.into(),
                     })
                 })?;
 
@@ -416,12 +427,14 @@ impl InferenceProvider for OpenAIProvider {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
 
+        let api_type: ApiType = self.api_type.into();
         let InjectedResponse {
             response: res,
             raw_request,
             headers,
         } = inject_extra_request_data_and_send_with_headers(
             PROVIDER_TYPE,
+            api_type,
             &request.request.extra_body,
             &request.request.extra_headers,
             model_provider,
@@ -448,6 +461,7 @@ impl InferenceProvider for OpenAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type,
                 })
             })?;
 
@@ -463,6 +477,7 @@ impl InferenceProvider for OpenAIProvider {
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(raw_response.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type,
                             })
                         })?;
                     let latency = Latency::NonStreaming {
@@ -488,6 +503,7 @@ impl InferenceProvider for OpenAIProvider {
                             raw_request: Some(raw_request.clone()),
                             raw_response: Some(raw_response.clone()),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            api_type,
                         })
                     })?;
 
@@ -524,6 +540,7 @@ impl InferenceProvider for OpenAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type,
                 })
             })?;
             Err(handle_openai_error(
@@ -532,6 +549,7 @@ impl InferenceProvider for OpenAIProvider {
                 &raw_response,
                 PROVIDER_TYPE,
                 request_id.as_deref(),
+                api_type,
             ))
         }
     }
@@ -591,6 +609,7 @@ impl InferenceProvider for OpenAIProvider {
                     headers,
                 } = inject_extra_request_data_and_send_eventsource_with_headers(
                     PROVIDER_TYPE,
+                    ApiType::Responses,
                     &request.extra_body,
                     &request.extra_headers,
                     model_provider,
@@ -646,6 +665,7 @@ impl InferenceProvider for OpenAIProvider {
                     headers,
                 } = inject_extra_request_data_and_send_eventsource_with_headers(
                     PROVIDER_TYPE,
+                    ApiType::ChatCompletions,
                     &request.extra_body,
                     &request.extra_headers,
                     model_provider,
@@ -731,6 +751,7 @@ impl InferenceProvider for OpenAIProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: self.api_type.into(),
                     raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                     raw_response: None,
                 })
@@ -744,6 +765,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
         let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
@@ -752,6 +774,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: Some(text.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
         let batch_params = OpenAIBatchParams {
@@ -829,6 +852,7 @@ impl InferenceProvider for OpenAIProvider {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
             })
@@ -842,6 +866,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
         let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
@@ -850,6 +875,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: Some(text.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
         let status: BatchStatus = response.status.into();
@@ -868,6 +894,7 @@ impl InferenceProvider for OpenAIProvider {
                         ),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: self.api_type.into(),
                     })
                 })?;
                 let response = self
@@ -958,6 +985,7 @@ impl EmbeddingProvider for OpenAIProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::Embeddings,
             &FullExtraBodyConfig::default(), // No overrides supported
             &Default::default(),             // No extra headers for embeddings yet
             model_provider_data,
@@ -976,6 +1004,7 @@ impl EmbeddingProvider for OpenAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Embeddings,
                 })
             })?;
 
@@ -989,6 +1018,7 @@ impl EmbeddingProvider for OpenAIProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?;
             let latency = Latency::NonStreaming {
@@ -1015,10 +1045,12 @@ impl EmbeddingProvider for OpenAIProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?,
                 PROVIDER_TYPE,
                 None,
+                ApiType::Embeddings,
             ))
         }
     }
@@ -1054,7 +1086,7 @@ pub fn stream_openai(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, request_id_for_error.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), ApiType::ChatCompletions, *e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -1075,6 +1107,7 @@ pub fn stream_openai(
                                     raw_request: Some(raw_request.clone()),
                                     raw_response: Some(message.data.clone()),
                                     provider_type: provider_type.clone(),
+                                    api_type: ApiType::ChatCompletions,
                                 })
                             });
 
@@ -1138,6 +1171,7 @@ impl OpenAIProvider {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
 
@@ -1154,10 +1188,12 @@ impl OpenAIProvider {
                         raw_request: None,
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: self.api_type.into(),
                     })
                 })?,
                 PROVIDER_TYPE,
                 None,
+                self.api_type.into(),
             ));
         }
 
@@ -1169,6 +1205,7 @@ impl OpenAIProvider {
                 raw_response,
                 provider_type: PROVIDER_TYPE.to_string(),
             },
+            self.api_type.into(),
             TryInto::try_into,
         )
         .await
@@ -1258,11 +1295,13 @@ pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
         ErrorDetails::FatalStreamError {
             message,
             provider_type,
+            api_type,
             raw_request,
             raw_response,
         } => Error::new(ErrorDetails::FatalStreamError {
             message: format!("{message} [request_id: {request_id}]"),
             provider_type: provider_type.clone(),
+            api_type: *api_type,
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         }),
@@ -1272,23 +1311,27 @@ pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
             raw_request,
             raw_response,
             provider_type,
+            api_type,
         } => Error::new(ErrorDetails::InferenceClient {
             status_code: *status_code,
             message: format!("{message} [request_id: {request_id}]"),
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
             provider_type: provider_type.clone(),
+            api_type: *api_type,
         }),
         ErrorDetails::InferenceServer {
             message,
             raw_request,
             raw_response,
             provider_type,
+            api_type,
         } => Error::new(ErrorDetails::InferenceServer {
             message: format!("{message} [request_id: {request_id}]"),
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
             provider_type: provider_type.clone(),
+            api_type: *api_type,
         }),
         _ => error,
     }
@@ -1300,6 +1343,7 @@ pub(super) fn handle_openai_error(
     response_body: &str,
     provider_type: &str,
     request_id: Option<&str>,
+    api_type: ApiType,
 ) -> Error {
     let message = match request_id {
         Some(id) => format!("{response_body} [request_id: {id}]"),
@@ -1315,6 +1359,7 @@ pub(super) fn handle_openai_error(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type,
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
@@ -1322,6 +1367,7 @@ pub(super) fn handle_openai_error(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type,
         }
         .into(),
     }
@@ -1387,6 +1433,7 @@ where
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         })
@@ -1398,6 +1445,7 @@ where
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         })
@@ -1408,6 +1456,7 @@ where
             raw_request: None,
             raw_response: Some(text.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
     Ok(response.id)
@@ -2677,6 +2726,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -2692,6 +2742,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {
@@ -2825,6 +2876,7 @@ fn openai_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -2878,6 +2930,7 @@ fn openai_to_tensorzero_chunk(
                                 raw_request: None,
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }))?
                             .clone()
                     }
@@ -2973,6 +3026,7 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
                 raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
             })
         })?;
 
@@ -3077,6 +3131,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
                 raw_request: None,
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -3101,6 +3156,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
 
         // Convert message content to ContentBlocks
@@ -3216,6 +3272,7 @@ mod tests {
             "Unauthorized access",
             PROVIDER_TYPE,
             None,
+            ApiType::ChatCompletions,
         );
         let details = unauthorized.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3225,6 +3282,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Unauthorized access");
@@ -3241,6 +3299,7 @@ mod tests {
             "Unauthorized access",
             PROVIDER_TYPE,
             Some("req_abc123"),
+            ApiType::ChatCompletions,
         );
         let details = unauthorized_with_id.get_details();
         if let ErrorDetails::InferenceClient { message, .. } = details {
@@ -3254,6 +3313,7 @@ mod tests {
             "Forbidden access",
             PROVIDER_TYPE,
             None,
+            ApiType::ChatCompletions,
         );
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3263,6 +3323,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Forbidden access");
@@ -3279,6 +3340,7 @@ mod tests {
             "Rate limit exceeded",
             PROVIDER_TYPE,
             None,
+            ApiType::ChatCompletions,
         );
         let details = rate_limit.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3288,6 +3350,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Rate limit exceeded");
@@ -3304,6 +3367,7 @@ mod tests {
             "Server error",
             PROVIDER_TYPE,
             None,
+            ApiType::ChatCompletions,
         );
         let details = server_error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
@@ -3312,6 +3376,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Server error");
@@ -4166,6 +4231,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         // Test a correct new tool chunk
@@ -5625,6 +5691,7 @@ mod tests {
         let error = Error::new(ErrorDetails::FatalStreamError {
             message: "Stream error".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
         });
@@ -5640,6 +5707,7 @@ mod tests {
             status_code: Some(reqwest::StatusCode::BAD_REQUEST),
             message: "Bad request".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
         });
@@ -5654,6 +5722,7 @@ mod tests {
         let error = Error::new(ErrorDetails::InferenceServer {
             message: "Server error".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
         });
@@ -5668,6 +5737,7 @@ mod tests {
         let error = Error::new(ErrorDetails::InferenceServer {
             message: "Server error".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
         });
