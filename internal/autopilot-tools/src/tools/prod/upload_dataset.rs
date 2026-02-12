@@ -45,7 +45,7 @@ impl UploadDatasetFormat {
     pub fn schema(&self) -> arrow::datatypes::Schema {
         match self {
             UploadDatasetFormat::V1 => {
-                let fields = vec![Field::new("serialized_datapoint", DataType::Utf8, false)];
+                let fields = vec![Field::new("serialized_datapoint", DataType::Utf8, true)];
                 arrow::datatypes::Schema::new(fields.clone())
             }
         }
@@ -108,14 +108,25 @@ pub async fn upload_dataset_parquet(
         .map_err(|e| anyhow::Error::msg(format!("Failed to create Parquet writer: {e}")))?;
 
     // Paginate through all pages
-    let page_limit = row_limit.unwrap_or(PAGE_SIZE);
-    let mut offset = 0;
+    let mut offset = 0u32;
     loop {
+        // Calculate page size: always use PAGE_SIZE, but cap to remaining row_limit
+        let page_size = match row_limit {
+            Some(limit) => {
+                let remaining = limit.saturating_sub(offset);
+                if remaining == 0 {
+                    break;
+                }
+                PAGE_SIZE.min(remaining)
+            }
+            None => PAGE_SIZE,
+        };
+
         let response = client
             .list_datapoints(
                 dataset_name.to_string(),
                 ListDatapointsRequest {
-                    limit: Some(page_limit),
+                    limit: Some(page_size),
                     offset: Some(offset),
                     ..Default::default()
                 },
@@ -128,7 +139,7 @@ pub async fn upload_dataset_parquet(
             break;
         }
 
-        let mut builder = ArrayBuilder::from_arrow(schema.fields())?;
+        let mut builder = ArrayBuilder::from_arrow(&schema.fields())?;
         for datapoint in response.datapoints {
             let serialized = serde_json::to_string(&datapoint)
                 .map_err(|e| anyhow::Error::msg(format!("Failed to serialize datapoint: {e}")))?;
@@ -154,7 +165,7 @@ pub async fn upload_dataset_parquet(
 
         offset += page_count;
 
-        if page_count < page_limit {
+        if page_count < page_size {
             break;
         }
     }
