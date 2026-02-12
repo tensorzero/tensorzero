@@ -509,18 +509,11 @@ const eventStreamComponents = {
   [UUID_LINK_ELEMENT]: ({ uuid }: { uuid: string }) => <UuidLink uuid={uuid} />,
 };
 
-function EventStreamMarkdown({
-  children,
-  className,
-}: {
-  children: string;
-  className?: string;
-}) {
+function EventStreamMarkdown({ children }: { children: string }) {
   return (
     <Markdown
       remarkPlugins={eventStreamRemarkPlugins}
       extraComponents={eventStreamComponents}
-      className={className}
     >
       {children}
     </Markdown>
