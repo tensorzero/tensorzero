@@ -505,8 +505,8 @@ class EventErrorBoundary extends Component<
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidLinkComponents = {
   a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
-    if (href?.startsWith("uuid://")) {
-      return <UuidLink uuid={href.slice("uuid://".length)} />;
+    if (href?.startsWith("#uuid:")) {
+      return <UuidLink uuid={href.slice("#uuid:".length)} />;
     }
     return (
       <a
