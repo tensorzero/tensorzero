@@ -34,27 +34,40 @@ Here's a sample response trace:
 
 [Tool Call] think: {'thought': 'I have established that Carl David Anderson, who won the Nobel Prize for discovering the positron, was born in New York City. Based on the information from the cuisine of New York City, some iconic dishes include New York-style pizza, bagels with lox, and pastrami on rye. I need to decide on one common dish to summarize.'}
 
-[Tool Call] answer_question: {'answer': 'The scientist who discovered the positron was Carl David Anderson, born in New York City. A common dish associated with New York City is the New York-style bagel, often served with cream cheese and lox. This iconic dish reflects the city’s rich culinary diversity, particularly its Jewish heritage.\n\nFor more information, see the Wikipedia pages on [Carl David Anderson](https://en.wikipedia.org/wiki/Carl_David_Anderson) and [Cuisine of New York City](https://en.wikipedia.org/wiki/Cuisine_of_New_York_City).'}
+[Tool Call] answer_question: {'answer': 'The scientist who discovered the positron was Carl David Anderson, born in New York City. A common dish associated with New York City is the New York-style bagel, often served with cream cheese and lox. This iconic dish reflects the city\'s rich culinary diversity, particularly its Jewish heritage.\n\nFor more information, see the Wikipedia pages on [Carl David Anderson](https://en.wikipedia.org/wiki/Carl_David_Anderson) and [Cuisine of New York City](https://en.wikipedia.org/wiki/Cuisine_of_New_York_City).'}
 ```
 
 ## Getting Started
 
-### TensorZero
-
-We provide a configuration file for the multi-hop retrieval agent in the `config/tensorzero.toml` file.
-It includes a function with the four tools that the agent can use to answer queries.
-
-We also provide a starter system prompt in the `functions/multi_hop_rag_agent/baseline/system_template.txt` file.
-This system prompt instructs the agent to use the available tools to answer the question.
-Feel free to edit it to tune the behavior of the agent!
-
 ### Prerequisites
 
-1. Install Python 3.10+
-2. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
+1. Install [Docker](https://www.docker.com/).
+2. Install Python 3.10+.
 3. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 
 ### Setup
 
-1. Set the `OPENAI_API_KEY` environment variable.
-2. Run the `main.ipynb` Jupyter notebook.
+1. Create a `.env` file with your API key (see `.env.example`):
+
+   ```bash
+   cp .env.example .env
+   # Edit .env and set your OPENAI_API_KEY
+   ```
+
+2. Start the services (ClickHouse, Postgres, TensorZero Gateway, and UI):
+
+   ```bash
+   docker compose up
+   ```
+
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
+
+   ```bash
+   uv sync
+   ```
+
+4. Run the `main.ipynb` Jupyter notebook.
+
+### Exploring Results
+
+Once the services are running, you can explore the inferences and analytics in the TensorZero UI at [http://localhost:4000](http://localhost:4000).
