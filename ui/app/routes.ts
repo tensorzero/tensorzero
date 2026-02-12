@@ -34,11 +34,6 @@ export default [
     route("evaluations/cancel", "routes/api/evaluations/cancel.route.ts"),
 
     route(
-      "evaluations/:evaluation_run_id/cancel",
-      "routes/api/evaluations/$evaluation_run_id/cancel.route.ts",
-    ),
-
-    route(
       "function/:function_name/feedback_counts",
       "routes/api/function/$function_name/feedback_counts.route.ts",
     ),
