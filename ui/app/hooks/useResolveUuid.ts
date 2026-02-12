@@ -24,7 +24,9 @@ export function useResolveUuid(uuid: string): {
   const normalizedUuid = uuid.toLowerCase();
   const cached = resolveCache.get(normalizedUuid);
   const [data, setData] = useState<ResolveUuidResponse | null>(cached ?? null);
-  const fetcher = useFetcher<ResolveUuidResponse>();
+  const fetcher = useFetcher<ResolveUuidResponse>({
+    key: `resolve-uuid-${normalizedUuid}`,
+  });
 
   useEffect(() => {
     if (resolveCache.has(normalizedUuid)) {

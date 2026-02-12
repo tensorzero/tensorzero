@@ -40,18 +40,26 @@ export function UuidLink({ uuid }: { uuid: string }) {
 
   // Not yet resolved, multiple types, or no types → plain text
   if (!data || data.object_types.length !== 1) {
-    return <span className="font-mono">{uuid}</span>;
+    return (
+      <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
+        {uuid}
+      </code>
+    );
   }
 
   const url = getUrlForResolvedObject(uuid, data.object_types[0]);
   if (!url) {
-    return <span className="font-mono">{uuid}</span>;
+    return (
+      <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
+        {uuid}
+      </code>
+    );
   }
 
   return (
     <Link
       to={url}
-      className="font-mono text-orange-500 no-underline hover:underline"
+      className="rounded bg-orange-50 px-1 py-0.5 font-mono text-xs text-orange-500 no-underline hover:underline"
     >
       {uuid}
     </Link>
