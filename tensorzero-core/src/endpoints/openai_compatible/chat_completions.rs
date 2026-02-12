@@ -134,15 +134,7 @@ pub async fn chat_completions_handler(
     let output = match inference_result {
         Ok(data) => data.output,
         Err(e) => {
-            let raw_entries = if include_raw_response {
-                e.extract_raw_response_entries()
-            } else {
-                None
-            };
-            let body = e.build_response_body(true, raw_entries);
-            let mut resp = (e.status_code(), Json(body)).into_response();
-            resp.extensions_mut().insert(e);
-            return Ok(resp);
+            return Ok(e.into_response_with_raw_entries(true, include_raw_response));
         }
     };
 

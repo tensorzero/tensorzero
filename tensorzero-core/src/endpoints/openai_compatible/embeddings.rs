@@ -13,6 +13,8 @@ use tensorzero_auth::middleware::RequestApiKeyExtension;
 use super::types::embeddings::{OpenAICompatibleEmbeddingParams, OpenAIEmbeddingResponse};
 use super::{OpenAICompatibleError, OpenAIStructuredJson};
 
+// TODO: Include raw_response entries in error responses when include_raw_response is true,
+// similar to how chat_completions.rs handles inference errors with raw_response data.
 pub async fn embeddings_handler(
     State(AppStateData {
         config,

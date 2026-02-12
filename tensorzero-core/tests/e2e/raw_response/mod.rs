@@ -4,6 +4,7 @@
 
 mod cache;
 mod embeddings;
+mod error;
 mod openai_compatible;
 
 use futures::StreamExt;

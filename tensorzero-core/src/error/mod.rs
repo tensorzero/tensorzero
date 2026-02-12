@@ -186,6 +186,23 @@ impl Error {
         }
     }
 
+    /// Builds an HTTP error response, optionally including raw response entries from failed providers.
+    pub fn into_response_with_raw_entries(
+        self,
+        openai_format: bool,
+        include_raw_response: bool,
+    ) -> Response {
+        let raw_response_entries = if include_raw_response {
+            self.extract_raw_response_entries()
+        } else {
+            None
+        };
+        let body = self.build_response_body(openai_format, raw_response_entries);
+        let mut response = (self.status_code(), Json(body)).into_response();
+        response.extensions_mut().insert(self);
+        response
+    }
+
     /// Builds the JSON response body for this error.
     ///
     /// When `openai_format` is true, returns `{"error": {"message": "..."}}` (OpenAI-compatible).
@@ -2069,8 +2086,8 @@ mod tests {
         assert_eq!(raw_response.len(), 1, "should have one raw_response entry");
         assert_eq!(raw_response[0]["provider_type"], "openai");
         assert!(
-            raw_response[0].get("model_inference_id").is_none(),
-            "model_inference_id should be omitted when None"
+            raw_response[0]["model_inference_id"].is_null(),
+            "model_inference_id should be null when None"
         );
     }
 
