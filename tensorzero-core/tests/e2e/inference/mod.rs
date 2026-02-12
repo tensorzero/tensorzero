@@ -87,13 +87,10 @@ async fn test_inference_dryrun() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check ClickHouse
+    // Check ClickHouse - no inference should be written when dryrun is true
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
+    assert!(result.is_none());
 }
 
 #[tokio::test]

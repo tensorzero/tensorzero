@@ -12,7 +12,7 @@ use tensorzero::{
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_core::db::test_helpers::poll_result_until_some;
+use tensorzero_core::db::test_helpers::{poll_result_until_some, TestDatabaseHelpers};
 use tensorzero_core::{
     cache::{CacheEnabledMode, CacheOptions},
     config::provider_types::ProviderTypesConfig,
@@ -508,8 +508,7 @@ pub async fn test_dicl_inference_request_simple() {
     ));
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
-    // Wait for 1 second
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.flush_pending_writes().await;
     // Launch the dicl inference request
     let payload = json!({
         "function_name": function_name,
@@ -1068,8 +1067,7 @@ async fn test_dicl_json_request() {
     ));
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
-    // Wait for 1 second
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.flush_pending_writes().await;
     // Launch the dicl inference request
     let payload = json!({
         "function_name": function_name,
@@ -1164,9 +1162,10 @@ async fn test_dicl_json_request() {
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_model_inferences_clickhouse(&clickhouse, inference_id).await
+    })
+    .await;
     println!("ClickHouse - ModelInference: {result:#?}");
     assert_eq!(result.len(), 2);
     for model_inference in result {
@@ -1351,8 +1350,7 @@ max_tokens = 100
     ));
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
-    // Wait for 1 second for ClickHouse to process
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.flush_pending_writes().await;
     // Query about a completely unrelated topic (programming/software)
     // The max_distance should filter out all geography examples due to high cosine distance
     let params = ClientInferenceParams {
@@ -1507,8 +1505,7 @@ max_tokens = 100
     ));
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
-    // Wait for 1 second for ClickHouse to process
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.flush_pending_writes().await;
     // Query about a similar topic (Harry Potter author, similar to Lord of the Rings question)
     // The max_distance=0.6 should keep relevant examples
     let params = ClientInferenceParams {
