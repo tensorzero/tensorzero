@@ -9,6 +9,11 @@ interface MdastText {
   value: string;
 }
 
+interface MdastInlineCode {
+  type: "inlineCode";
+  value: string;
+}
+
 interface MdastLink {
   type: "link";
   url: string;
@@ -20,16 +25,29 @@ interface MdastParent {
   children: MdastNode[];
 }
 
-type MdastNode = MdastText | MdastLink | MdastParent | { type: string };
+type MdastNode =
+  | MdastText
+  | MdastInlineCode
+  | MdastLink
+  | MdastParent
+  | { type: string };
+
+/** Regex that matches a string that is exactly one UUID (with optional whitespace). */
+const EXACT_UUID_RE = /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;
 
 /**
- * Remark plugin that transforms UUID patterns in text nodes into
- * link nodes with `uuid://` scheme URLs.
+ * Remark plugin that transforms UUID patterns into link nodes
+ * with `#uuid:` fragment URLs (fragment identifiers survive
+ * ReactMarkdown's URL sanitization, unlike custom protocols).
  *
- * Operates at the AST level, so it correctly skips:
+ * Handles:
+ * - UUIDs in plain text nodes (split into text + link fragments)
+ * - `inlineCode` nodes whose entire value is a UUID (replaced with a link)
+ *
+ * Correctly skips:
  * - Link URLs (the `url` property, not in children)
  * - Fenced code blocks (`code` nodes)
- * - Inline code (`inlineCode` nodes)
+ * - Inline code containing mixed content (only pure-UUID inline code is linked)
  */
 export function remarkUuidLinks() {
   return (tree: MdastParent) => {
@@ -38,7 +56,7 @@ export function remarkUuidLinks() {
 }
 
 /** Node types whose content should NOT be transformed. */
-const SKIP_TYPES = new Set(["code", "inlineCode", "link"]);
+const SKIP_TYPES = new Set(["code", "link"]);
 
 function visitParent(node: MdastParent) {
   const newChildren: MdastNode[] = [];
@@ -52,6 +70,19 @@ function visitParent(node: MdastParent) {
       } else {
         newChildren.push(...parts);
         changed = true;
+      }
+    } else if (child.type === "inlineCode") {
+      const codeNode = child as MdastInlineCode;
+      if (EXACT_UUID_RE.test(codeNode.value)) {
+        const uuid = codeNode.value.trim();
+        newChildren.push({
+          type: "link",
+          url: `#uuid:${uuid}`,
+          children: [{ type: "text", value: uuid }],
+        });
+        changed = true;
+      } else {
+        newChildren.push(child);
       }
     } else if (SKIP_TYPES.has(child.type)) {
       newChildren.push(child);
@@ -85,7 +116,7 @@ function splitTextOnUuids(textNode: MdastText): MdastNode[] {
 
     results.push({
       type: "link",
-      url: `uuid://${match[0]}`,
+      url: `#uuid:${match[0]}`,
       children: [{ type: "text", value: match[0] }],
     });
 
