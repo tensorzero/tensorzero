@@ -280,43 +280,221 @@ async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimeP
 }
 
 /// Builds the query for model latency quantiles.
-/// For Minute, queries raw data. For Hour/Day/Week/Month/Cumulative, queries materialized views.
+/// For Minute, queries raw data. For larger windows, computes from histogram rollups.
 fn build_model_latency_quantiles_query(time_window: &TimeWindow) -> QueryBuilder<sqlx::Postgres> {
-    // For Hour/Day/Week/Month/Cumulative, use precomputed materialized views
-    // For Minute, compute from raw data since the data volume is small
+    // For larger windows, compute from histogram rollups to avoid scanning model_inferences.
+    // For Minute, compute from raw data since the data volume is small.
     match time_window {
         TimeWindow::Minute => build_model_latency_quantiles_raw_query(time_window),
-        TimeWindow::Hour => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles_hour")
-        }
-        TimeWindow::Day => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles_day")
-        }
-        TimeWindow::Week => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles_week")
-        }
-        TimeWindow::Month => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles_month")
-        }
-        TimeWindow::Cumulative => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles")
-        }
+        TimeWindow::Hour => build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_minute",
+            "minute",
+            Some("1 hour"),
+        ),
+        TimeWindow::Day => build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_hour",
+            "hour",
+            Some("1 day"),
+        ),
+        TimeWindow::Week => build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_hour",
+            "hour",
+            Some("1 week"),
+        ),
+        TimeWindow::Month => build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_hour",
+            "hour",
+            Some("1 month"),
+        ),
+        TimeWindow::Cumulative => build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_hour",
+            "hour",
+            None,
+        ),
     }
 }
 
-/// Builds a query to read from a precomputed materialized view.
-fn build_model_latency_quantiles_view_query(table_name: &str) -> QueryBuilder<sqlx::Postgres> {
-    let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
-        "SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM ",
+/// Builds a query to compute quantiles from histogram rollups.
+fn build_model_latency_quantiles_histogram_query(
+    source_table: &str,
+    source_time_column: &str,
+    time_window: Option<&str>,
+) -> QueryBuilder<sqlx::Postgres> {
+    let num_quantiles = POSTGRES_QUANTILES.len();
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        "WITH params AS (
+            SELECT 64.0::DOUBLE PRECISION AS buckets_per_power_of_two
+        ),
+        model_counts AS (
+            SELECT
+                model_name,
+                SUM(inference_count)::BIGINT AS count
+            FROM tensorzero.model_provider_statistics
+            WHERE TRUE",
     );
-    qb.push(table_name);
-    qb.push(" ORDER BY model_name");
-    qb
+
+    push_now_window_filter(&mut query_builder, "minute", time_window);
+    query_builder.push(
+        "
+            GROUP BY model_name
+        ),
+        hist AS (
+            SELECT
+                model_name,
+                metric,
+                bucket_id,
+                SUM(bucket_count)::DOUBLE PRECISION AS bucket_count
+            FROM ",
+    );
+    query_builder.push(source_table);
+    query_builder.push(
+        "
+            WHERE TRUE",
+    );
+    push_now_window_filter(&mut query_builder, source_time_column, time_window);
+    query_builder.push(
+        "
+            GROUP BY model_name, metric, bucket_id
+        ),
+        cdf AS (
+            SELECT
+                h.model_name,
+                h.metric,
+                h.bucket_id,
+                h.bucket_count,
+                SUM(h.bucket_count) OVER (
+                    PARTITION BY h.model_name, h.metric
+                    ORDER BY h.bucket_id
+                ) AS cumulative_count,
+                SUM(h.bucket_count) OVER (
+                    PARTITION BY h.model_name, h.metric
+                    ORDER BY h.bucket_id
+                ) - h.bucket_count AS cumulative_before,
+                CASE
+                    WHEN h.bucket_id < 0 THEN 0.0
+                    ELSE POWER(2.0, h.bucket_id::DOUBLE PRECISION / p.buckets_per_power_of_two)
+                END AS lower_ms,
+                CASE
+                    WHEN h.bucket_id < 0 THEN 1.0
+                    ELSE POWER(2.0, (h.bucket_id + 1)::DOUBLE PRECISION / p.buckets_per_power_of_two)
+                END AS upper_ms
+            FROM hist h
+            CROSS JOIN params p
+        ),
+        metric_counts AS (
+            SELECT
+                model_name,
+                metric,
+                MAX(cumulative_count) AS sample_count
+            FROM cdf
+            GROUP BY model_name, metric
+        ),
+        targets AS (
+            SELECT
+                mc.model_name,
+                mc.metric,
+                q.quantile,
+                (1.0 + q.quantile * (mc.sample_count - 1.0)) AS rank_target
+            FROM metric_counts mc
+            CROSS JOIN LATERAL UNNEST(ARRAY[",
+    );
+    query_builder.push(&*POSTGRES_QUANTILES_ARRAY_STRING);
+    query_builder.push(
+        "]::DOUBLE PRECISION[]) AS q(quantile)
+        ),
+        picked_buckets AS (
+            SELECT DISTINCT ON (t.model_name, t.metric, t.quantile)
+                t.model_name,
+                t.metric,
+                t.quantile,
+                t.rank_target,
+                c.cumulative_before,
+                c.bucket_count,
+                c.lower_ms,
+                c.upper_ms
+            FROM targets t
+            JOIN cdf c
+              ON c.model_name = t.model_name
+             AND c.metric = t.metric
+             AND c.cumulative_count >= t.rank_target
+            ORDER BY t.model_name, t.metric, t.quantile, c.bucket_id
+        ),
+        quantile_values AS (
+            SELECT
+                model_name,
+                metric,
+                quantile,
+                CASE
+                    WHEN bucket_count <= 0 THEN NULL
+                    WHEN lower_ms <= 0.0 THEN upper_ms * LEAST(
+                        1.0,
+                        GREATEST(0.0, (rank_target - cumulative_before) / bucket_count)
+                    )
+                    ELSE lower_ms * POWER(
+                        upper_ms / NULLIF(lower_ms, 0.0),
+                        LEAST(
+                            1.0,
+                            GREATEST(0.0, (rank_target - cumulative_before) / bucket_count)
+                        )
+                    )
+                END AS quantile_ms
+            FROM picked_buckets
+        ),
+        quantile_arrays AS (
+            SELECT
+                model_name,
+                metric,
+                ARRAY_AGG(quantile_ms ORDER BY quantile) AS quantiles
+            FROM quantile_values
+            GROUP BY model_name, metric
+        )
+        SELECT
+            mc.model_name,
+            COALESCE(
+                response.quantiles,
+                array_fill(NULL::DOUBLE PRECISION, ARRAY[",
+    );
+    query_builder.push(num_quantiles.to_string());
+    query_builder.push(
+        "])
+            ) AS response_time_ms_quantiles,
+            COALESCE(
+                ttft.quantiles,
+                array_fill(NULL::DOUBLE PRECISION, ARRAY[",
+    );
+    query_builder.push(num_quantiles.to_string());
+    query_builder.push(
+        "])
+            ) AS ttft_ms_quantiles,
+            mc.count
+        FROM model_counts mc
+        LEFT JOIN quantile_arrays response
+          ON response.model_name = mc.model_name
+         AND response.metric = 'response_time_ms'
+        LEFT JOIN quantile_arrays ttft
+          ON ttft.model_name = mc.model_name
+         AND ttft.metric = 'ttft_ms'
+        ORDER BY mc.model_name",
+    );
+
+    query_builder
+}
+
+/// Pushes an optional window filter anchored to `NOW()`.
+fn push_now_window_filter(
+    query_builder: &mut QueryBuilder<sqlx::Postgres>,
+    time_column: &str,
+    time_window: Option<&str>,
+) {
+    if let Some(time_window) = time_window {
+        query_builder.push(" AND ");
+        query_builder.push(time_column);
+        query_builder.push(" >= NOW() - INTERVAL '");
+        query_builder.push(time_window);
+        query_builder.push("' AND ");
+        query_builder.push(time_column);
+        query_builder.push(" <= NOW()");
+    }
 }
 
 /// Builds a query to compute latency quantiles from raw model_inferences data.
@@ -474,7 +652,9 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::test_helpers::assert_query_equals;
+    use crate::db::test_helpers::{
+        assert_query_contains, assert_query_does_not_contain, assert_query_equals,
+    };
 
     // =========================================================================
     // Model usage timeseries query tests
@@ -614,71 +794,91 @@ mod tests {
     #[test]
     fn test_build_model_latency_quantiles_query_hour() {
         let qb = build_model_latency_quantiles_query(&TimeWindow::Hour);
-        assert_query_equals(
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles_hour ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 hour'
+            AND minute <= NOW()
+            GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_minute WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 hour'
+            AND minute <= NOW()
+            GROUP BY model_name, metric, bucket_id",
         );
     }
 
     #[test]
     fn test_build_model_latency_quantiles_query_day() {
         let qb = build_model_latency_quantiles_query(&TimeWindow::Day);
-        assert_query_equals(
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles_day ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 day'
+            AND minute <= NOW()
+            GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_hour WHERE TRUE
+            AND hour >= NOW() - INTERVAL '1 day'
+            AND hour <= NOW()
+            GROUP BY model_name, metric, bucket_id",
         );
     }
 
     #[test]
     fn test_build_model_latency_quantiles_query_week() {
         let qb = build_model_latency_quantiles_query(&TimeWindow::Week);
-        assert_query_equals(
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles_week ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 week'
+            AND minute <= NOW()
+            GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_hour WHERE TRUE
+            AND hour >= NOW() - INTERVAL '1 week'
+            AND hour <= NOW()
+            GROUP BY model_name, metric, bucket_id",
         );
     }
 
     #[test]
     fn test_build_model_latency_quantiles_query_month() {
         let qb = build_model_latency_quantiles_query(&TimeWindow::Month);
-        assert_query_equals(
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles_month ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 month'
+            AND minute <= NOW()
+            GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_hour WHERE TRUE
+            AND hour >= NOW() - INTERVAL '1 month'
+            AND hour <= NOW()
+            GROUP BY model_name, metric, bucket_id",
         );
     }
 
     #[test]
     fn test_build_model_latency_quantiles_query_cumulative() {
         let qb = build_model_latency_quantiles_query(&TimeWindow::Cumulative);
-        assert_query_equals(
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE GROUP BY model_name",
         );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_hour WHERE TRUE GROUP BY model_name, metric, bucket_id",
+        );
+        assert_query_does_not_contain(qb.sql().as_str(), "NOW() - INTERVAL");
     }
 
     // =========================================================================
