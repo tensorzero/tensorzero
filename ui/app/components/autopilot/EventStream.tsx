@@ -12,6 +12,7 @@ import {
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
+import { renderRichText } from "~/components/autopilot/RichText";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -576,7 +577,7 @@ function EventItem({
                   "font-mono",
               )}
             >
-              {summary.description}
+              {renderRichText(summary.description)}
             </p>
           )}
         </>
