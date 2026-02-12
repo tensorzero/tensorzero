@@ -35,6 +35,11 @@ test("cancel a running evaluation and verify partial results", async ({
     "true",
   );
 
+  // Wait for at least one datapoint to complete before cancelling.
+  // The start event fires before any datapoints are processed, so clicking
+  // Stop immediately could result in 0 completed datapoints.
+  await page.waitForTimeout(2_000);
+
   // Click the Stop button
   const stopButton = page.getByRole("button", { name: "Stop" });
   await expect(stopButton).toBeVisible();
