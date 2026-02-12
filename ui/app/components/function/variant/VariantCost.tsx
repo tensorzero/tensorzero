@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import {
   ChartContainer,
   ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
@@ -206,9 +205,7 @@ export function VariantCostChart({
               ))}
             </AreaChart>
           </ChartContainer>
-          <ChartLegend
-            content={<ChartLegendContent className="font-mono text-xs" />}
-          />
+          <ChartLegend items={variantNames} colors={CHART_COLORS} />
         </CardContent>
       </Card>
     </div>

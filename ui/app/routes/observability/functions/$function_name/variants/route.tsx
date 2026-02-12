@@ -22,6 +22,7 @@ import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { TimeWindow } from "~/types/tensorzero";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
+import { VariantCostChart } from "~/components/function/variant/VariantCost";
 import type { Route } from "./+types/route";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
@@ -134,6 +135,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const limit = Number(url.searchParams.get("limit")) || 10;
   const metric_name = url.searchParams.get("metric_name") || undefined;
   const time_granularity = url.searchParams.get("time_granularity") || "week";
+  const cost_time_granularity = (url.searchParams.get("cost_time_granularity") ||
+    "week") as TimeWindow;
 
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
@@ -170,6 +173,17 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       afterInference,
     ),
     inferenceCountData: countInferencesForVariant(function_name, variant_name),
+    // Cost for this variant only (filter from function cost_by_variant)
+    variantCostData: getTensorZeroClient()
+      .getFunctionCostByVariant(
+        function_name,
+        cost_time_granularity,
+        10,
+      )
+      .then((res) =>
+        res.cost.filter((row) => row.variant_name === variant_name),
+      )
+      .catch(() => []),
   };
 }
 
@@ -423,6 +437,28 @@ function MetricsSection({
   );
 }
 
+function CostSection({
+  variantCostData,
+  locationKey,
+}: {
+  variantCostData: Promise<import("~/types/tensorzero").VariantCost[]>;
+  locationKey: string | undefined;
+}) {
+  return (
+    <SectionLayout>
+      <SectionHeader heading="Cost" />
+      <Suspense
+        key={`variant-cost-${locationKey}`}
+        fallback={<Skeleton className="h-64 w-full" />}
+      >
+        <Await resolve={variantCostData}>
+          {(cost) => <VariantCostChart variant_cost={cost} />}
+        </Await>
+      </Suspense>
+    </SectionLayout>
+  );
+}
+
 function InferencesSection({
   inferencesTableData,
   inferenceCountData,
@@ -456,6 +492,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     variant_name,
     metricsWithFeedbackData,
     variantPerformanceData,
+    variantCostData,
     inferencesTableData,
     inferenceCountData,
   } = loaderData;
@@ -529,6 +566,11 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
         <MetricsSection
           metricsWithFeedbackData={metricsWithFeedbackData}
           variantPerformanceData={variantPerformanceData}
+          locationKey={location.key}
+        />
+
+        <CostSection
+          variantCostData={variantCostData}
           locationKey={location.key}
         />
 
