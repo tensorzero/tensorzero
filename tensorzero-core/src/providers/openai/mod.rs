@@ -703,6 +703,7 @@ impl InferenceProvider for OpenAIProvider {
         client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        let api_type: ApiType = self.api_type.into();
         let api_key = self
             .credentials
             .get_api_key(dynamic_api_keys)
@@ -751,7 +752,7 @@ impl InferenceProvider for OpenAIProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
-                    api_type: self.api_type.into(),
+                    api_type,
                     raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                     raw_response: None,
                 })
@@ -765,7 +766,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
-                api_type: self.api_type.into(),
+                api_type,
             })
         })?;
         let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
@@ -774,7 +775,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: Some(text.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
-                api_type: self.api_type.into(),
+                api_type,
             })
         })?;
         let batch_params = OpenAIBatchParams {
@@ -824,6 +825,7 @@ impl InferenceProvider for OpenAIProvider {
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
+        let api_type: ApiType = self.api_type.into();
         let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
         let mut request_url =
             get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
@@ -852,7 +854,7 @@ impl InferenceProvider for OpenAIProvider {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
-                api_type: self.api_type.into(),
+                api_type,
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
             })
@@ -866,7 +868,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
-                api_type: self.api_type.into(),
+                api_type,
             })
         })?;
         let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
@@ -875,7 +877,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: Some(text.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
-                api_type: self.api_type.into(),
+                api_type,
             })
         })?;
         let status: BatchStatus = response.status.into();
@@ -894,7 +896,7 @@ impl InferenceProvider for OpenAIProvider {
                         ),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
-                        api_type: self.api_type.into(),
+                        api_type,
                     })
                 })?;
                 let response = self

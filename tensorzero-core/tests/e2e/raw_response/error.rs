@@ -35,7 +35,7 @@ fn assert_error_raw_response_entry(entry: &Value) {
         .expect("raw_response entry should have api_type");
     let api_type_str = api_type.as_str().expect("api_type should be a string");
     assert!(
-        ["chat_completions", "responses", "embeddings"].contains(&api_type_str),
+        ["chat_completions", "responses", "embeddings", "other"].contains(&api_type_str),
         "api_type should be a valid value, got: {api_type_str}"
     );
 
