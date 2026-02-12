@@ -1,6 +1,13 @@
 import { EXACT_UUID_RE, splitTextOnUuids, UUID_REGEX } from "~/utils/uuid";
 
 /**
+ * The custom HTML element name used to bridge remark (AST) to React.
+ * Remark plugin sets `data.hName` to this value; the component map
+ * in the consumer maps this element name to the `UuidLink` component.
+ */
+export const UUID_LINK_ELEMENT = "uuid-link";
+
+/**
  * MDAST node types used by this plugin.
  * Minimal definitions to avoid a dependency on @types/mdast.
  */
@@ -14,12 +21,6 @@ interface MdastInlineCode {
   value: string;
 }
 
-interface MdastLink {
-  type: "link";
-  url: string;
-  children: MdastNode[];
-}
-
 interface MdastParent {
   type: string;
   children: MdastNode[];
@@ -28,30 +29,32 @@ interface MdastParent {
 type MdastNode =
   | MdastText
   | MdastInlineCode
-  | MdastLink
   | MdastParent
-  | { type: string };
+  | { type: string; data?: Record<string, unknown> };
 
-function uuidLink(uuid: string): MdastLink {
+function uuidLinkNode(uuid: string): MdastNode {
   return {
-    type: "link",
-    url: `#uuid:${uuid}`,
+    type: "uuidLink",
+    data: {
+      hName: UUID_LINK_ELEMENT,
+      hProperties: { uuid },
+    },
     children: [{ type: "text", value: uuid }],
-  };
+  } as MdastNode;
 }
 
 /**
- * Remark plugin that transforms UUID patterns into link nodes
- * with `#uuid:` fragment URLs (fragment identifiers survive
- * ReactMarkdown's URL sanitization, unlike custom protocols).
+ * Remark plugin that transforms UUID patterns into custom `uuidLink` nodes.
+ * Uses `data.hName` / `data.hProperties` to bridge to React — the consumer
+ * maps the `UUID_LINK_ELEMENT` element name to a React component.
  *
  * Handles:
- * - UUIDs in plain text nodes (split into text + link fragments)
- * - `inlineCode` nodes whose entire value is a UUID (replaced with a link)
+ * - UUIDs in plain text nodes (split into text + uuidLink fragments)
+ * - `inlineCode` nodes whose entire value is a UUID (replaced with uuidLink)
  *
- * Correctly skips:
- * - Link URLs (the `url` property, not in children)
+ * Skips:
  * - Fenced code blocks (`code` nodes)
+ * - Existing links (`link` nodes)
  * - Inline code containing mixed content (only pure-UUID inline code is linked)
  */
 export function remarkUuidLinks() {
@@ -79,7 +82,7 @@ function visitParent(node: MdastParent) {
     } else if (child.type === "inlineCode") {
       const codeNode = child as MdastInlineCode;
       if (EXACT_UUID_RE.test(codeNode.value)) {
-        newChildren.push(uuidLink(codeNode.value.trim()));
+        newChildren.push(uuidLinkNode(codeNode.value.trim()));
         changed = true;
       } else {
         newChildren.push(child);
@@ -114,6 +117,6 @@ function splitTextToMdast(textNode: MdastText): MdastNode[] {
   const segments = splitTextOnUuids(textNode.value);
   return segments.map(
     (seg): MdastNode =>
-      seg.isUuid ? uuidLink(seg.text) : { type: "text", value: seg.text },
+      seg.isUuid ? uuidLinkNode(seg.text) : { type: "text", value: seg.text },
   );
 }

@@ -212,8 +212,10 @@ interface MarkdownProps {
   className?: string;
   /** Optional extra remark plugins to apply (e.g. UUID link processing). */
   remarkPlugins?: React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"];
-  /** Optional extra component overrides merged on top of the defaults. */
-  extraComponents?: Components;
+  /** Optional component overrides merged on top of the defaults.
+   *  Accepts both standard HTML elements and custom element names
+   *  (e.g. from remark plugins that set `data.hName`). */
+  extraComponents?: Components & Record<string, React.ComponentType<never>>;
 }
 
 export function Markdown({
