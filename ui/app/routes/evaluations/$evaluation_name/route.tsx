@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { AlertCircle, Loader2, StopCircle } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import type { Route } from "./+types/route";
@@ -28,7 +28,6 @@ import {
   useLocation,
   useNavigate,
   useFetcher,
-  useRevalidator,
 } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
@@ -49,6 +48,7 @@ import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
+import { useCancelEvaluation } from "./useCancelEvaluation";
 import { useReadOnly } from "~/context/read-only";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -446,10 +446,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const isReadOnly = useReadOnly();
   const { toast } = useToast();
   const fetcher = useFetcher();
-  const revalidator = useRevalidator();
-  const [isCancelling, setIsCancelling] = useState(false);
-  const any_evaluation_is_running =
-    running_evaluation_run_ids.length > 0 && !isCancelling;
+  const { isCancelling, anyEvaluationIsRunning, handleCancelEvaluation } =
+    useCancelEvaluation({
+      runningEvaluationRunIds: running_evaluation_run_ids,
+    });
 
   const [selectedRows, setSelectedRows] = useState<
     Map<string, SelectedRowData>
@@ -466,54 +466,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   }
   const function_name = evaluation_config.function_name;
 
-  useAutoRefresh(any_evaluation_is_running);
-
-  // Reset cancel state once server confirms no more running evaluations
-  useEffect(() => {
-    if (isCancelling && running_evaluation_run_ids.length === 0) {
-      setIsCancelling(false);
-    }
-  }, [isCancelling, running_evaluation_run_ids]);
-
-  // Direct fetch (not useFetcher) because we may need to cancel multiple
-  // evaluation runs in parallel, and useFetcher only supports one in-flight request.
-  const handleCancelEvaluation = useCallback(async () => {
-    setIsCancelling(true);
-    try {
-      const results = await Promise.all(
-        running_evaluation_run_ids.map(async (runId) => {
-          const response = await fetch(
-            `/api/evaluations/${encodeURIComponent(runId)}/cancel`,
-            { method: "POST" },
-          );
-          return (await response.json()) as {
-            success: boolean;
-            error?: string;
-          };
-        }),
-      );
-      const failed = results.filter((r) => !r.success && r.error);
-      if (failed.length > 0) {
-        toast.error({
-          title: "Failed to stop evaluation",
-          description: failed.map((r) => r.error).join(", "),
-        });
-        setIsCancelling(false);
-        return;
-      }
-    } catch (error) {
-      toast.error({
-        title: "Failed to stop evaluation",
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
-      setIsCancelling(false);
-      return;
-    }
-    toast.success({ title: "Evaluation stopped" });
-    // Trigger revalidation — the effect above resets isCancelling once
-    // the loader confirms no more running evaluations.
-    revalidator.revalidate();
-  }, [running_evaluation_run_ids, toast, revalidator]);
+  useAutoRefresh(anyEvaluationIsRunning);
 
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
@@ -596,7 +549,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                   evaluation_name={evaluation_name}
                   data={resolvedData}
                   evaluator_names={evaluator_names}
-                  any_evaluation_is_running={any_evaluation_is_running}
+                  any_evaluation_is_running={anyEvaluationIsRunning}
                   has_selected_runs={has_selected_runs}
                   offset={offset}
                   limit={limit}

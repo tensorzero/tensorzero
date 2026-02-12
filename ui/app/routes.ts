@@ -31,6 +31,8 @@ export default [
       "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
     ),
 
+    route("evaluations/cancel", "routes/api/evaluations/cancel.route.ts"),
+
     route(
       "evaluations/:evaluation_run_id/cancel",
       "routes/api/evaluations/$evaluation_run_id/cancel.route.ts",
