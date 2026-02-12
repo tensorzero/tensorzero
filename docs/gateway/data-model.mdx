@@ -22,17 +22,17 @@ For other variant types, there might be more associated rows.
 | `episode_id`              |        UUID         | Must be a UUIDv7                                                                                         |
 | `input`                   |    String (JSON)    | `input` field in the `/inference` request body                                                           |
 | `output`                  |    String (JSON)    | Array of content blocks                                                                                  |
-| `tool_params`             |    String (JSON)    | Object with any tool parameters (e.g. `tool_choice`, `tools_available`) used for the inference           |
+| `tool_params`             |    String (JSON)    | **Deprecated.** Only present for legacy data. Use `dynamic_tools`, `dynamic_provider_tools`, `allowed_tools`, `tool_choice`, and `parallel_tool_calls` instead. |
 | `inference_params`        |    String (JSON)    | Object with any inference parameters per variant type (e.g. `{"chat_completion": {"temperature": 0.5}}`) |
 | `processing_time_ms`      |       UInt32        |                                                                                                          |
 | `timestamp`               |      DateTime       | Materialized from `id` (using `UUIDv7ToDateTime` function)                                               |
 | `tags`                    | Map(String, String) | User-assigned tags (e.g. `{"user_id": "123"}`)                                                           |
 | `extra_body`              |  Nullable(String)   | Additional request body parameters passed through to the model provider                                  |
 | `ttft_ms`                 |  Nullable(UInt32)   | Time to first token (only available in streaming inferences)                                             |
-| `dynamic_tools`           |   Array(String)     | Dynamic tool definitions provided at inference time                                                      |
-| `dynamic_provider_tools`  |   Array(String)     | Dynamic provider tool definitions provided at inference time                                             |
-| `allowed_tools`           |  Nullable(String)   | Allowed tools specification                                                                              |
-| `tool_choice`             |  Nullable(String)   | Tool choice specification                                                                                |
+| `dynamic_tools`           |   Array(String)     | Dynamic tool definitions provided at inference time (each element is a JSON string)                      |
+| `dynamic_provider_tools`  |   Array(String)     | Dynamic provider tool definitions provided at inference time (each element is a JSON string)             |
+| `allowed_tools`           |  Nullable(String)   | Allowed tools specification (JSON string)                                                                |
+| `tool_choice`             |  Nullable(String)   | Tool choice specification (JSON string)                                                                  |
 | `parallel_tool_calls`     |  Nullable(Bool)     | Whether parallel tool calls are allowed                                                                  |
 | `snapshot_hash`           | Nullable(UInt256)   | Configuration snapshot hash for data provenance                                                          |
 
@@ -83,7 +83,7 @@ This is the inference request you'd make if you had called the model provider di
 | `system`              |                                        Nullable(String)                                         | The `system` input to the model                            |
 | `input_messages`      |                                      Array(RequestMessage)                                      | The user and assistant messages input to the model         |
 | `output`              |                                       Array(ContentBlock)                                       | The output of the model                                    |
-| `finish_reason`       | Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown', 'stop_sequence'))    | Reason the model stopped generating                        |
+| `finish_reason`       | Nullable(Enum('stop', 'length', 'tool_call', 'content_filter', 'unknown', 'stop_sequence'))     | Reason the model stopped generating                        |
 | `snapshot_hash`       |                                        Nullable(UInt256)                                        | Configuration snapshot hash for data provenance            |
 
 A `RequestMessage` is an object with shape `{role: "user" | "assistant", content: List[ContentBlock]}` (content blocks are defined [here](/gateway/api-reference/inference/#content-block)).
@@ -175,7 +175,7 @@ The `ModelInferenceCache` table stores cached model inference results to avoid d
 | `is_deleted`      |                                              Bool                                               | Soft deletion flag, defaults to false                |
 | `input_tokens`    |                                        Nullable(UInt32)                                         | Cached input token count                             |
 | `output_tokens`   |                                        Nullable(UInt32)                                         | Cached output token count                            |
-| `finish_reason`   | Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown', 'stop_sequence'))    | Cached finish reason                                 |
+| `finish_reason`   | Nullable(Enum('stop', 'length', 'tool_call', 'content_filter', 'unknown', 'stop_sequence'))     | Cached finish reason                                 |
 
 The table uses the `ReplacingMergeTree` engine with `timestamp` and `is_deleted` columns for deduplication.
 It is partitioned by month and ordered by the composite cache key `(short_cache_key, long_cache_key)`.
