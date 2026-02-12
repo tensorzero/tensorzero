@@ -147,3 +147,22 @@ export function formatTooltipTimestamp(
       return `${year}-${month}-${day}`;
   }
 }
+
+/**
+ * Decimal places for cost chart so small costs stay visible (e.g. $0.0000123).
+ * Used for Y-axis, legend, and tooltip in VariantCostChart.
+ */
+export function costDecimalPlaces(maxCost: number): number {
+  if (maxCost <= 0) return 2;
+  if (maxCost >= 0.01) return 2;
+  if (maxCost >= 0.0001) return 4;
+  if (maxCost >= 0.000001) return 6;
+  return 8;
+}
+
+/**
+ * Format cost for chart display (Y-axis, legend, tooltip) with fixed decimal places.
+ */
+export function formatCostForChart(value: number, decimals: number): string {
+  return `$${Number(value).toFixed(decimals)}`;
+}

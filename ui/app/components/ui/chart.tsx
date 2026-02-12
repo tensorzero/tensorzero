@@ -353,11 +353,50 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config];
 }
 
+/**
+ * Standalone legend that takes explicit items and colors (e.g. for cost chart).
+ * Use this when not using Recharts' built-in Legend payload (avoids layout issues).
+ */
+function ChartLegendList({
+  items,
+  colors,
+  valueByKey,
+  formatValue = (n: number) => n.toLocaleString(),
+}: {
+  items: string[];
+  colors: readonly string[];
+  valueByKey?: Record<string, number>;
+  formatValue?: (n: number) => string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-4 pt-6">
+      {items.map((name, index) => {
+        const value = valueByKey?.[name];
+        return (
+          <div key={name} className="flex items-center gap-1.5">
+            <div
+              className="h-2 w-2 shrink-0 rounded-[2px]"
+              style={{
+                backgroundColor: colors[index % colors.length],
+              }}
+            />
+            <span className="font-mono text-xs">
+              {name}
+              {value !== undefined ? ` ${formatValue(value)}` : null}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
+  ChartLegendList,
   ChartStyle,
 };

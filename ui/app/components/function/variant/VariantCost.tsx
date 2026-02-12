@@ -2,6 +2,8 @@ import type { VariantCost } from "~/types/tensorzero";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   CHART_COLORS,
+  costDecimalPlaces,
+  formatCostForChart,
   formatXAxisTimestamp,
   formatTooltipTimestamp,
 } from "~/utils/chart";
@@ -9,7 +11,7 @@ import {
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import {
   ChartContainer,
-  ChartLegend,
+  ChartLegendList,
   ChartTooltip,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
@@ -17,7 +19,9 @@ import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 const styles = {
   empty: "text-muted-foreground py-8 text-center text-sm",
+  emptySummary: "text-muted-foreground mt-2 text-center text-xs",
   coverage: "text-muted-foreground mt-3 text-center text-xs",
+  totalCost: "text-muted-foreground mb-2 text-center text-sm font-medium",
 };
 
 export type VariantCostData = {
@@ -65,8 +69,11 @@ export function transformVariantCost(parsedRows: VariantCost[]): {
 
 export function VariantCostChart({
   variant_cost,
+  totalInferenceCount,
 }: {
   variant_cost: VariantCost[];
+  /** When cost array is empty, use this to show fraction of inferences without cost (e.g. function page). */
+  totalInferenceCount?: number;
 }) {
   const [time_granularity, onTimeGranularityChange] = useTimeGranularityParam(
     "cost_time_granularity",
@@ -81,6 +88,12 @@ export function VariantCostChart({
             No cost data yet. Cost is recorded when models have cost
             configuration.
           </p>
+          {totalInferenceCount !== undefined && totalInferenceCount > 0 && (
+            <p className={styles.emptySummary}>
+              Total cost: $0. 0 of {totalInferenceCount.toLocaleString()}{" "}
+              inferences have cost data (100% without cost).
+            </p>
+          )}
         </CardContent>
       </Card>
     );
@@ -94,6 +107,30 @@ export function VariantCostChart({
   );
   const inferencesWithCost = variant_cost.reduce(
     (sum, row) => sum + (row.inferences_with_cost ?? 0),
+    0,
+  );
+
+  const totalCostByVariant = variant_cost.reduce<Record<string, number>>(
+    (acc, row) => {
+      const name = row.variant_name;
+      acc[name] = (acc[name] ?? 0) + (row.total_cost ?? 0);
+      return acc;
+    },
+    {},
+  );
+
+  const maxCostInLegend = Math.max(0, ...Object.values(totalCostByVariant));
+  const maxCostInChart = Math.max(
+    0,
+    ...data.flatMap((row) =>
+      variantNames.map((name) => Number(row[name]) || 0),
+    ),
+  );
+  const maxCost = Math.max(maxCostInLegend, maxCostInChart);
+  const costDecimals = costDecimalPlaces(maxCost);
+
+  const totalCost = Object.values(totalCostByVariant).reduce(
+    (sum, v) => sum + v,
     0,
   );
 
@@ -113,11 +150,16 @@ export function VariantCostChart({
     <div className="space-y-8">
       <Card>
         <CardHeader className="flex flex-row items-start justify-between">
-          <TimeGranularitySelector
-            time_granularity={time_granularity}
-            onTimeGranularityChange={onTimeGranularityChange}
-            includeCumulative={true}
-          />
+          <div className="flex flex-col gap-1">
+            <p className={styles.totalCost}>
+              Total cost: {formatCostForChart(totalCost, costDecimals)}
+            </p>
+            <TimeGranularitySelector
+              time_granularity={time_granularity}
+              onTimeGranularityChange={onTimeGranularityChange}
+              includeCumulative={true}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfig}>
@@ -133,16 +175,17 @@ export function VariantCostChart({
                 }
               />
               <YAxis
+                width={88}
                 tickLine={false}
                 tickMargin={10}
                 axisLine={true}
                 label={{
                   value: "Cost ($)",
                   angle: -90,
-                  position: "insideLeft",
+                  position: "outsideLeft",
                 }}
                 tickFormatter={(value) =>
-                  `$${Number(value).toFixed(4)}`
+                  formatCostForChart(Number(value), costDecimals)
                 }
               />
               <ChartTooltip
@@ -180,7 +223,7 @@ export function VariantCostChart({
                                   {entry.name}
                                 </span>
                                 <span className="text-foreground ml-2 font-mono font-medium tabular-nums">
-                                  ${Number(entry.value).toFixed(6)}
+                                  {formatCostForChart(Number(entry.value), costDecimals)}
                                 </span>
                               </div>
                             </div>
@@ -192,7 +235,7 @@ export function VariantCostChart({
                               Total
                             </span>
                             <span className="text-foreground font-mono font-medium tabular-nums">
-                              ${total.toFixed(6)}
+                              {formatCostForChart(total, costDecimals)}
                             </span>
                           </div>
                         </div>
@@ -215,16 +258,25 @@ export function VariantCostChart({
               ))}
             </AreaChart>
           </ChartContainer>
-          <ChartLegend items={variantNames} colors={CHART_COLORS} />
+          <ChartLegendList
+            items={variantNames}
+            colors={CHART_COLORS}
+            valueByKey={totalCostByVariant}
+            formatValue={(n) => formatCostForChart(n, costDecimals)}
+          />
           {totalInferences > 0 && (
             <p className={styles.coverage}>
-              Cost tracked for{" "}
               {inferencesWithCost === totalInferences ? (
-                <>all {totalInferences.toLocaleString()} inferences</>
+                <>All {totalInferences.toLocaleString()} inferences have cost data.</>
               ) : (
                 <>
                   {inferencesWithCost.toLocaleString()} of{" "}
-                  {totalInferences.toLocaleString()} inferences
+                  {totalInferences.toLocaleString()} inferences have cost data (
+                  {Math.round(
+                    (100 * (totalInferences - inferencesWithCost)) /
+                      totalInferences,
+                  )}
+                  % without cost).
                 </>
               )}
             </p>

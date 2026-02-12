@@ -10,10 +10,10 @@ import {
 } from "~/components/ui/card";
 import {
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
+  ChartLegendList,
   ChartTooltip,
 } from "~/components/ui/chart";
+import { CHART_COLORS } from "~/utils/chart";
 
 export type VariantWeight = {
   variant_name: string;
@@ -97,11 +97,14 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
               ))}
             </Pie>
             <ChartTooltip content={<CustomTooltipContent />} />
-            <ChartLegend
-              content={<ChartLegendContent className="font-mono text-xs" />}
-            />
           </PieChart>
         </ChartContainer>
+        <ChartLegendList
+          items={variantWeights.map((v) => v.variant_name)}
+          colors={variantWeights.map(
+            (v) => chartConfig[v.variant_name]?.color ?? CHART_COLORS[0],
+          )}
+        />
       </CardContent>
     </Card>
   );

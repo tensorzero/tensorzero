@@ -416,7 +416,10 @@ function SectionsContent({
 
       <SectionLayout>
         <SectionHeader heading="Cost" />
-        <VariantCostChart variant_cost={variant_cost} />
+        <VariantCostChart
+          variant_cost={variant_cost}
+          totalInferenceCount={num_inferences}
+        />
       </SectionLayout>
 
       <SectionLayout>
