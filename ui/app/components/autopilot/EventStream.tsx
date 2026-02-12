@@ -13,7 +13,10 @@ import {
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { UuidLink } from "~/components/autopilot/UuidLink";
-import { remarkUuidLinks } from "~/components/autopilot/remarkUuidLinks";
+import {
+  remarkUuidLinks,
+  UUID_LINK_ELEMENT,
+} from "~/components/autopilot/remarkUuidLinks";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -503,21 +506,7 @@ class EventErrorBoundary extends Component<
  */
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidLinkComponents = {
-  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
-    if (href?.startsWith("#uuid:")) {
-      return <UuidLink uuid={href.slice("#uuid:".length)} />;
-    }
-    return (
-      <a
-        href={href}
-        className="text-fg-brand hover:underline"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        {children}
-      </a>
-    );
-  },
+  [UUID_LINK_ELEMENT]: ({ uuid }: { uuid: string }) => <UuidLink uuid={uuid} />,
 };
 
 function EventItem({
