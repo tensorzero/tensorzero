@@ -34,6 +34,7 @@ use tensorzero::test_helpers::{
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero_core::poll_clickhouse_for_result;
 
 #[tokio::test]
@@ -72,9 +73,15 @@ pub async fn test_dont_cache_invalid_tool_call() {
     };
     client.inference(params.clone()).await.unwrap();
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    poll_result_until_some(async || {
+        if logs_contain("Skipping cache write") {
+            Some(())
+        } else {
+            None
+        }
+    })
+    .await;
     let clickhouse = get_clickhouse().await;
-    assert!(logs_contain("Skipping cache write"));
 
     // Run again, and check that we get a cache miss
     let res = client.inference(params).await.unwrap();
@@ -151,9 +158,15 @@ pub async fn test_dont_cache_tool_call_schema_error() {
         })
     );
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    poll_result_until_some(async || {
+        if logs_contain("Skipping cache write") {
+            Some(())
+        } else {
+            None
+        }
+    })
+    .await;
     let clickhouse = get_clickhouse().await;
-    assert!(logs_contain("Skipping cache write"));
 
     // Run again, and check that we get a cache miss
     let res = client.inference(params).await.unwrap();
@@ -380,9 +393,11 @@ pub async fn check_test_streaming_cache_with_err(
     assert!(processing_time_ms > 0);
 
     // Check ClickHouse - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_model_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     println!("ClickHouse - ModelInference: {result:#?}");
 

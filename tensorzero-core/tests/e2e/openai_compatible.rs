@@ -16,6 +16,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     select_model_inference_clickhouse,
 };
 use tensorzero_core::endpoints::openai_compatible::OpenAIStructuredJson;
+use tensorzero_core::poll_clickhouse_for_result;
 use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -91,16 +92,15 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -283,10 +283,7 @@ async fn test_openai_compatible_dryrun() {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check ClickHouse
+    // Check ClickHouse - no inference should be written when dryrun is true
     let clickhouse = get_clickhouse().await;
 
     let chat_result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
@@ -364,16 +361,15 @@ async fn test_openai_compatible_route_with_default_function(
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -542,16 +538,15 @@ async fn test_openai_compatible_route_with_json_mode_on() {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -682,16 +677,15 @@ async fn test_openai_compatible_route_with_json_schema() {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -1110,14 +1104,13 @@ async fn test_openai_compatible_file_with_custom_filename() {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     // Verify the input was stored correctly with the custom filename
     let input: Value =
@@ -1172,8 +1165,6 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("First request response: {response_json:#?}");
-    // Sleep to allow ClickHouse writes
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Extract inference_id from response
     let inference_id: Uuid = response_json
         .get("id")
@@ -1187,16 +1178,20 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
     let clickhouse = get_clickhouse().await;
 
     // Validate ChatInference table
-    let chat_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let chat_inference = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     println!("ClickHouse - ChatInference: {chat_inference:#?}");
 
     // Validate ModelInference table
-    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let model_inference = poll_clickhouse_for_result!(select_model_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     println!("ClickHouse - ModelInference: {model_inference:#?}");
 
