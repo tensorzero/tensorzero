@@ -25,7 +25,8 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_chat_inference_clickhouse,
     select_json_datapoint_clickhouse, select_json_inference_clickhouse,
 };
-use tensorzero_core::db::test_helpers::poll_result_until_some;
+use tensorzero_core::poll_clickhouse_for_result;
+use tensorzero_core::db::test_helpers::{poll_result_until_some, TestDatabaseHelpers};
 
 #[tokio::test]
 async fn test_datapoint_insert_synthetic_chat() {
@@ -66,9 +67,11 @@ async fn test_datapoint_insert_synthetic_chat() {
 
     assert_eq!(id, datapoint_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
 
     let updated_at = datapoint
         .as_object_mut()
@@ -603,9 +606,11 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
 
     assert_eq!(id, datapoint_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
 
     let updated_at = datapoint
         .as_object_mut()
@@ -695,9 +700,11 @@ async fn test_datapoint_insert_synthetic_json() {
         .unwrap();
     assert_eq!(id, datapoint_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
     let snapshot_hash = datapoint
         .as_object_mut()
         .unwrap()
@@ -814,9 +821,11 @@ async fn test_datapoint_insert_synthetic_json() {
         .await
         .unwrap();
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
     let snapshot_hash = datapoint
         .as_object_mut()
         .unwrap()
@@ -894,9 +903,11 @@ async fn test_datapoint_insert_synthetic_json() {
     assert_eq!(status, StatusCode::OK);
 
     // Check that the datapoint was inserted into clickhouse
-    let datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
-    assert!(datapoint.is_some());
-    let datapoint = datapoint.unwrap();
+    let datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        new_datapoint_id
+    )
+    .await);
     let datapoint = serde_json::from_value::<JsonInferenceDatapoint>(datapoint).unwrap();
     assert_eq!(datapoint.source_inference_id, Some(source_inference_id));
     assert!(datapoint.is_custom);
@@ -935,9 +946,11 @@ async fn test_datapoint_insert_synthetic_json() {
     let status = resp.status();
     assert_eq!(status, StatusCode::OK);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        new_datapoint_id
+    )
+    .await);
     let snapshot_hash = datapoint
         .as_object_mut()
         .unwrap()
@@ -1051,9 +1064,11 @@ async fn test_create_delete_datapoint_json() {
         .into_iter()
         .map(|datapoint| serde_json::from_value::<JsonInferenceDatapoint>(datapoint).unwrap())
         .collect::<Vec<_>>();
-    let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
+    let datapoints = poll_clickhouse_for_result!(select_json_dataset_clickhouse(
+        &clickhouse,
+        &dataset_name
+    )
+    .await);
     assert_eq!(datapoints.len(), 2);
 
     for (datapoint, list_datapoint) in datapoints.iter().zip(list_datapoints.iter()) {
@@ -1513,9 +1528,11 @@ async fn test_datapoint_insert_output_inherit_chat() {
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        datapoint_id
+    )
+    .await);
 
     let updated_at = datapoint
         .as_object_mut()
@@ -1582,11 +1599,17 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .await
         .unwrap();
 
-    assert!(
-        select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
+    poll_result_until_some(async || {
+        if select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
             .await
             .is_none()
-    );
+        {
+            Some(())
+        } else {
+            None
+        }
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -1804,8 +1827,8 @@ async fn test_datapoint_insert_output_demonstration_chat() {
         response.text().await.unwrap()
     );
 
-    // Sleep to ensure that we wrote to ClickHouse
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    poll_result_until_some(async || select_chat_inference_clickhouse(&clickhouse, inference_id).await)
+        .await;
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
@@ -1831,9 +1854,11 @@ async fn test_datapoint_insert_output_demonstration_chat() {
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        datapoint_id
+    )
+    .await);
 
     let updated_at = datapoint
         .as_object_mut()
@@ -1953,9 +1978,11 @@ async fn test_datapoint_insert_output_inherit_json() {
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        datapoint_id
+    )
+    .await);
     // We remove the snapshot hash and assert it is a string
     let snapshot_hash = datapoint
         .as_object_mut()
@@ -2017,11 +2044,17 @@ async fn test_datapoint_insert_output_inherit_json() {
         .await
         .unwrap();
 
-    assert!(
-        select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
+    poll_result_until_some(async || {
+        if select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
             .await
             .is_none()
-    );
+        {
+            Some(())
+        } else {
+            None
+        }
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -2084,9 +2117,11 @@ async fn test_datapoint_insert_output_none_json() {
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        datapoint_id
+    )
+    .await);
     // We remove the snapshot hash and assert it is a string
     let snapshot_hash = datapoint
         .as_object_mut()
@@ -2180,8 +2215,8 @@ async fn test_datapoint_insert_output_demonstration_json() {
         response.text().await.unwrap()
     );
 
-    // Sleep to allow writing demonstration before making datapoint
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    poll_result_until_some(async || select_json_inference_clickhouse(&clickhouse, inference_id).await)
+        .await;
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
@@ -2207,9 +2242,11 @@ async fn test_datapoint_insert_output_demonstration_json() {
         Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
     assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        datapoint_id
+    )
+    .await);
     // We remove the snapshot hash and assert it is a string
     let snapshot_hash = datapoint
         .as_object_mut()
@@ -2387,9 +2424,11 @@ async fn test_datapoint_insert_missing_output_chat() {
         .unwrap();
     assert_eq!(id, datapoint_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
 
     // We remove the snapshot hash and assert it is a string
     let snapshot_hash = datapoint
@@ -2467,9 +2506,11 @@ async fn test_datapoint_insert_null_output_chat() {
         .unwrap();
     assert_eq!(id, datapoint_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
     // We remove the snapshot hash and assert it is a string
     let snapshot_hash = datapoint
         .as_object_mut()
@@ -2546,9 +2587,11 @@ async fn test_datapoint_insert_missing_output_json() {
         .unwrap();
     assert_eq!(id, datapoint_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
     // We remove the snapshot hash and assert it is a string
     let snapshot_hash = datapoint
         .as_object_mut()
@@ -2621,9 +2664,11 @@ async fn test_datapoint_insert_null_output_json() {
         .unwrap();
     assert_eq!(id, datapoint_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let mut datapoint = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
 
     datapoint
         .as_object_mut()
@@ -2934,16 +2979,20 @@ async fn test_stale_dataset_with_datapoints() {
     assert_eq!(datapoints_after.len(), 0);
 
     // Verify the datapoints still exist in the database but are marked as staled
-    let chat_datapoint1 = select_chat_datapoint_clickhouse(&clickhouse, chat_datapoint_id1)
-        .await
-        .unwrap();
+    let chat_datapoint1 = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        chat_datapoint_id1
+    )
+    .await);
     println!("chat_datapoint1: {chat_datapoint1:?}");
     assert!(chat_datapoint1["staled_at"].as_str().is_some());
     assert_ne!(chat_datapoint1["staled_at"].as_str().unwrap(), "");
 
-    let json_datapoint1 = select_json_datapoint_clickhouse(&clickhouse, json_datapoint_id1)
-        .await
-        .unwrap();
+    let json_datapoint1 = poll_clickhouse_for_result!(select_json_datapoint_clickhouse(
+        &clickhouse,
+        json_datapoint_id1
+    )
+    .await);
     assert!(json_datapoint1["staled_at"].as_str().is_some());
     assert_ne!(json_datapoint1["staled_at"].as_str().unwrap(), "");
 }
@@ -2996,9 +3045,11 @@ async fn test_stale_dataset_already_staled() {
     assert_eq!(stale_result1.num_staled_datapoints, 1);
 
     // Verify the datapoint is staled
-    let datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let datapoint = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
     let staled_at = datapoint["staled_at"].as_str().unwrap();
 
     // Wait for 500ms
@@ -3017,9 +3068,11 @@ async fn test_stale_dataset_already_staled() {
     assert_eq!(num_staled_datapoints, 0);
 
     // Verify the datapoint is still staled
-    let datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
-        .await
-        .unwrap();
+    let datapoint = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        id
+    )
+    .await);
     let new_staled_at = datapoint["staled_at"].as_str().unwrap();
     assert_eq!(staled_at, new_staled_at);
 }
@@ -3058,9 +3111,11 @@ async fn test_stale_dataset_mixed_staled_fresh() {
     assert!(resp.status().is_success());
 
     // Verify it's staled
-    let datapoint1 = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id1)
-        .await
-        .unwrap();
+    let datapoint1 = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        datapoint_id1
+    )
+    .await);
     let staled_at = datapoint1["staled_at"].as_str().unwrap();
 
     // Insert second datapoint after the first was staled
@@ -3092,14 +3147,18 @@ async fn test_stale_dataset_mixed_staled_fresh() {
     assert_eq!(num_staled_datapoints, 1);
 
     // Verify both datapoints are staled
-    let datapoint2 = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id2)
-        .await
-        .unwrap();
+    let datapoint2 = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        datapoint_id2
+    )
+    .await);
     assert!(datapoint2["staled_at"].as_str().is_some());
 
-    let datapoint1 = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id1)
-        .await
-        .unwrap();
+    let datapoint1 = poll_clickhouse_for_result!(select_chat_datapoint_clickhouse(
+        &clickhouse,
+        datapoint_id1
+    )
+    .await);
     let new_staled_at = datapoint1["staled_at"].as_str().unwrap();
     assert_eq!(staled_at, new_staled_at);
 }
@@ -3183,8 +3242,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         .await
         .unwrap();
 
-    // Sleep for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.flush_pending_writes().await;
 
     // Verify the initial datapoint has the correct tool call IDs
     let datapoint = clickhouse
@@ -3248,8 +3306,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
 
     assert!(resp.status().is_success());
 
-    // Sleep for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    clickhouse.flush_pending_writes().await;
 
     // Verify IDs are still preserved after update
     let datapoint = clickhouse

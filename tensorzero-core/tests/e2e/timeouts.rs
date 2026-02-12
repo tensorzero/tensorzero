@@ -17,6 +17,7 @@ use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 
 // Variant timeout tests
 
@@ -609,9 +610,15 @@ timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
     );
     // The first two providers should time out, but the third one shouldn't
     // (since the top-level model timeout will trigger first)
-    assert!(logs_contain("Model provider first_timeout timed out"));
-    assert!(logs_contain("Model provider first_timeout timed out"));
-    assert!(!logs_contain("third_timeout"));
+    poll_result_until_some(async || {
+        if logs_contain("Model provider first_timeout timed out") && !logs_contain("third_timeout")
+        {
+            Some(())
+        } else {
+            None
+        }
+    })
+    .await;
 }
 
 #[tokio::test]

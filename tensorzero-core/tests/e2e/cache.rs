@@ -7,7 +7,6 @@ use reqwest_sse_stream::Event;
 use reqwest_sse_stream::RequestBuilderExt;
 use serde_json::Value;
 use serde_json::json;
-use std::time::Duration;
 use tensorzero::CacheParamsOptions;
 use tensorzero::ClientInferenceParams;
 use tensorzero::DynamicToolParams;
@@ -188,7 +187,6 @@ pub async fn test_streaming_cache_with_err() {
     // When the stream includes an error, we should not cache the response (we pass `expect_cached = false`
     // for both calls)
     let original_content = check_test_streaming_cache_with_err(episode_id, seed, true, false).await;
-    tokio::time::sleep(Duration::from_secs(1)).await;
     let cached_content = check_test_streaming_cache_with_err(episode_id, seed, true, false).await;
     assert_eq!(original_content, cached_content);
 }
@@ -199,13 +197,80 @@ pub async fn test_streaming_cache_without_err() {
     // Generate random u32
     let seed = rand::rng().random_range(0..u32::MAX);
 
-    // When the stream does not include an error, we should cache the response (we pass `expect_cached = true`
-    // for the second call)
+    // When the stream does not include an error, we should cache the response
     let original_content =
         check_test_streaming_cache_with_err(episode_id, seed, false, false).await;
-    tokio::time::sleep(Duration::from_secs(5)).await;
-    let cached_content = check_test_streaming_cache_with_err(episode_id, seed, false, true).await;
+    let cached_content = poll_result_until_some(async || {
+        check_test_streaming_cache_cached(episode_id, seed, false).await
+    })
+    .await;
     assert_eq!(original_content, cached_content);
+}
+
+/// Runs streaming inference and returns Some(content) if the response was cached (input_tokens==0).
+async fn check_test_streaming_cache_cached(
+    episode_id: Uuid,
+    seed: u32,
+    inject_err: bool,
+) -> Option<String> {
+    let input_variant_name = if inject_err { "err_in_stream" } else { "test" };
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": input_variant_name,
+        "episode_id": episode_id,
+        "params": { "chat_completion": { "seed": seed } },
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{ "role": "user", "content": "My test input string" }]
+        },
+        "stream": true,
+        "cache_options": {"enabled": "on", "lookback_s": 10}
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut full_content = String::new();
+    let mut input_tokens = 0u64;
+    let mut output_tokens = 0u64;
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                if serde_json::from_str::<Value>(&message.data)
+                    .unwrap()
+                    .get("error")
+                    .is_some()
+                {
+                    continue;
+                }
+                let chunk_json: Value = serde_json::from_str(&message.data).unwrap();
+                let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
+                if !content_blocks.is_empty() {
+                    let content = content_blocks[0].get("text").unwrap().as_str().unwrap();
+                    full_content.push_str(content);
+                }
+                if let Some(usage) = chunk_json.get("usage") {
+                    input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+                    output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+                }
+            }
+        }
+    }
+
+    if input_tokens == 0 {
+        Some(full_content)
+    } else {
+        None
+    }
 }
 
 pub async fn check_test_streaming_cache_with_err(

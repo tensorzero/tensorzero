@@ -18,6 +18,7 @@ use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse,
 };
+use tensorzero_core::poll_clickhouse_for_result;
 use tensorzero_core::tool::ToolChoice;
 use uuid::Uuid;
 
@@ -95,14 +96,13 @@ async fn test_inference_full_tool_params_round_trip() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep to allow ClickHouse writes to complete
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Step 2: Retrieve from ClickHouse and verify storage format (ToolCallConfigDatabaseInsert)
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
@@ -226,7 +226,8 @@ async fn test_inference_only_static_tools() {
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     println!("Inference ID: {inference_id}");
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+    poll_clickhouse_for_result!(select_chat_inference_clickhouse(&clickhouse, inference_id).await);
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
@@ -317,7 +318,8 @@ async fn test_inference_only_dynamic_tools() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+    poll_clickhouse_for_result!(select_chat_inference_clickhouse(&clickhouse, inference_id).await);
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
@@ -386,13 +388,13 @@ async fn test_inference_no_tool_params() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Retrieve from ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
@@ -478,7 +480,8 @@ async fn test_tool_strict_flag_preserved() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+    poll_clickhouse_for_result!(select_chat_inference_clickhouse(&clickhouse, inference_id).await);
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
@@ -569,13 +572,13 @@ async fn test_allowed_tools_restriction() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Retrieve from ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
@@ -699,13 +702,13 @@ async fn test_allowed_tools_uses_key_not_display_name() {
         "Raw name should be the display name"
     );
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Verify the tool was available and stored correctly
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
