@@ -139,7 +139,7 @@ pub async fn upload_dataset_parquet(
             break;
         }
 
-        let mut builder = ArrayBuilder::from_arrow(&schema.fields())?;
+        let mut builder = ArrayBuilder::from_arrow(schema.fields())?;
         for datapoint in response.datapoints {
             let serialized = serde_json::to_string(&datapoint)
                 .map_err(|e| anyhow::Error::msg(format!("Failed to serialize datapoint: {e}")))?;
