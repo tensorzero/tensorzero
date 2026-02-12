@@ -69,6 +69,7 @@ fn create_mock_chat_response(text: &str) -> InferenceResponse {
         usage: Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            cost: None,
         },
         raw_usage: None,
         original_response: None,
@@ -794,6 +795,7 @@ fn mock_client_with_empty_chat_response() -> MockTensorZeroClient {
                 usage: Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(0),
+                    cost: None,
                 },
                 raw_usage: None,
                 original_response: None,
@@ -824,6 +826,7 @@ fn mock_client_with_empty_json_response() -> MockTensorZeroClient {
                 usage: Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(0),
+                    cost: None,
                 },
                 raw_usage: None,
                 original_response: None,

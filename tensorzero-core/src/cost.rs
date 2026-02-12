@@ -30,6 +30,19 @@
 //!     Expression { pointers, cost_expr },    // multiple named pointers + formula
 //! }
 //! ```
+//!
+//! ## Decimal Precision Note
+//!
+//! Cost rates are deserialized from TOML as `rust_decimal::Decimal` using the
+//! crate-wide `serde-float` feature. This means TOML float values pass through
+//! `f64` before becoming `Decimal`, which can introduce tiny precision errors
+//! for values not exactly representable in binary (e.g., `0.1`, `0.2`).
+//! Values like `0.25`, `0.50`, `1.50`, `3.00` are exact.
+//!
+//! In practice, the error is on the order of 1e-17 per unit — far below any
+//! meaningful cost threshold. If exact decimal precision is ever required,
+//! consider switching to `rust_decimal`'s `serde-with-arbitrary-precision`
+//! feature or accepting string-quoted values in config.
 
 use std::fmt;
 use std::str::FromStr;
@@ -874,7 +887,7 @@ required = true
                     "cost_per_million should be 1.5"
                 );
             }
-            _ => panic!("Expected PerMillion rate"),
+            UninitializedCostRate::PerUnit { .. } => panic!("Expected PerMillion rate"),
         }
     }
 
@@ -894,7 +907,7 @@ cost_per_unit = 0.25
                     "cost_per_unit should be 0.25"
                 );
             }
-            _ => panic!("Expected PerUnit rate"),
+            UninitializedCostRate::PerMillion { .. } => panic!("Expected PerUnit rate"),
         }
         assert!(!entry.required, "required should default to false");
     }
@@ -925,7 +938,7 @@ required = true
                     "pointer_streaming should match"
                 );
             }
-            _ => panic!("Expected Split pointer config"),
+            CostPointerConfig::Unified { .. } => panic!("Expected Split pointer config"),
         }
         assert!(entry.required, "required should be true");
     }

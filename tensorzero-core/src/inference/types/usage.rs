@@ -102,16 +102,16 @@ fn streaming_max<T: PartialOrd + std::fmt::Display + Copy>(
         (_, None) => current,
         (None, chunk_value) => chunk_value,
         (Some(current_value), Some(chunk_value)) => {
-            if let Some(field_name) = warn_field_name {
-                if current_value > chunk_value {
-                    tracing::warn!(
-                        "Unexpected non-cumulative `{field_name}` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-                    );
-                    debug_assert!(
-                        false,
-                        "Unexpected non-cumulative `{field_name}` in streaming response ({current_value} > {chunk_value}); using the higher value."
-                    );
-                }
+            if let Some(field_name) = warn_field_name
+                && current_value > chunk_value
+            {
+                tracing::warn!(
+                    "Unexpected non-cumulative `{field_name}` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                );
+                debug_assert!(
+                    false,
+                    "Unexpected non-cumulative `{field_name}` in streaming response ({current_value} > {chunk_value}); using the higher value."
+                );
             }
             if current_value < chunk_value {
                 Some(chunk_value)
