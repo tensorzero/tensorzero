@@ -12,9 +12,8 @@ import {
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
-import { renderTextWithUuidLinks } from "~/components/autopilot/UuidLink";
-import { remarkUuidLinks } from "~/components/autopilot/remarkUuidLinks";
 import { UuidLink } from "~/components/autopilot/UuidLink";
+import { remarkUuidLinks } from "~/components/autopilot/remarkUuidLinks";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -599,16 +598,17 @@ function EventItem({
           ) : event.payload.type === "tool_call" ? (
             <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (
-            <p
+            <Markdown
+              remarkPlugins={uuidRemarkPlugins}
+              extraComponents={uuidLinkComponents}
               className={cn(
-                "text-fg-secondary text-sm whitespace-pre-wrap",
                 (event.payload.type === "tool_result" ||
                   event.payload.type === "error") &&
                   "font-mono",
               )}
             >
-              {renderTextWithUuidLinks(summary.description)}
-            </p>
+              {summary.description}
+            </Markdown>
           )}
         </>
       )}
@@ -661,9 +661,12 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
-      <p className="text-fg-secondary text-sm whitespace-pre-wrap">
-        {renderTextWithUuidLinks(message.text)}
-      </p>
+      <Markdown
+        remarkPlugins={uuidRemarkPlugins}
+        extraComponents={uuidLinkComponents}
+      >
+        {message.text}
+      </Markdown>
     </div>
   );
 }
