@@ -47,6 +47,7 @@ import type {
   GetEvaluationStatisticsResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
+  GetFunctionCostByVariantResponse,
   GetFunctionThroughputByVariantResponse,
   GetInferencesRequest,
   GetInferencesResponse,
@@ -790,6 +791,29 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetFunctionThroughputByVariantResponse;
+  }
+
+  /**
+   * Fetches function cost data grouped by variant and time period (#6264).
+   * Returns total cost, inference count, and inferences_with_cost for coverage.
+   */
+  async getFunctionCostByVariant(
+    functionName: string,
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<GetFunctionCostByVariantResponse> {
+    const searchParams = new URLSearchParams({
+      time_window: timeWindow,
+      max_periods: maxPeriods.toString(),
+    });
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/cost_by_variant?${searchParams.toString()}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetFunctionCostByVariantResponse;
   }
 
   /**

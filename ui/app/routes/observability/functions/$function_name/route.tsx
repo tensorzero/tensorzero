@@ -20,6 +20,7 @@ import { useFunctionConfig } from "~/context/config";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { Suspense, useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
+import { VariantCostChart } from "~/components/function/variant/VariantCost";
 import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
 import {
   PageHeader,
@@ -96,6 +97,11 @@ function SectionsSkeleton() {
       </SectionLayout>
 
       <SectionLayout>
+        <SectionHeader heading="Cost" />
+        <Skeleton className="h-64 w-full" />
+      </SectionLayout>
+
+      <SectionLayout>
         <SectionHeader heading="Metrics" />
         <Skeleton className="mb-4 h-10 w-64" />
         <Skeleton className="h-64 w-full" />
@@ -156,6 +162,7 @@ type FetchParams = {
   metric_name: string | undefined;
   time_granularity: TimeWindow;
   throughput_time_granularity: TimeWindow;
+  cost_time_granularity: TimeWindow;
   feedback_time_granularity: TimeWindow;
 };
 
@@ -170,6 +177,7 @@ async function fetchFunctionDetailData(params: FetchParams) {
     metric_name,
     time_granularity,
     throughput_time_granularity,
+    cost_time_granularity,
     feedback_time_granularity,
   } = params;
 
@@ -203,6 +211,11 @@ async function fetchFunctionDetailData(params: FetchParams) {
     )
     .then((response) => response.throughput);
 
+  const variantCostPromise = tensorZeroClient
+    .getFunctionCostByVariant(function_name, cost_time_granularity, 10)
+    .then((response) => response.cost)
+    .catch(() => []); // Endpoint may not exist yet (backend #6264)
+
   // Get feedback timeseries
   // For now, we only fetch this for track_and_stop experimentation
   // but the underlying query is general and could be used for other experimentation types
@@ -233,6 +246,7 @@ async function fetchFunctionDetailData(params: FetchParams) {
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
+    variant_cost,
     feedback_timeseries,
     variant_sampling_probabilities,
   ] = await Promise.all([
@@ -241,6 +255,7 @@ async function fetchFunctionDetailData(params: FetchParams) {
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
     variantThroughputPromise,
+    variantCostPromise,
     feedbackTimeseriesPromise,
     variantSamplingProbabilitiesPromise,
   ]);
@@ -264,6 +279,7 @@ async function fetchFunctionDetailData(params: FetchParams) {
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
+    variant_cost,
     feedback_timeseries,
     variant_sampling_probabilities,
   };
@@ -281,6 +297,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     "week") as TimeWindow;
   const throughput_time_granularity = (url.searchParams.get(
     "throughput_time_granularity",
+  ) || "week") as TimeWindow;
+  const cost_time_granularity = (url.searchParams.get(
+    "cost_time_granularity",
   ) || "week") as TimeWindow;
   const feedback_time_granularity = (url.searchParams.get(
     "cumulative_feedback_time_granularity",
@@ -307,6 +326,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       metric_name,
       time_granularity,
       throughput_time_granularity,
+      cost_time_granularity,
       feedback_time_granularity,
     }),
   };
@@ -329,6 +349,7 @@ function SectionsContent({
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
+    variant_cost,
     feedback_timeseries,
     variant_sampling_probabilities,
   } = data;
@@ -391,6 +412,11 @@ function SectionsContent({
       <SectionLayout>
         <SectionHeader heading="Throughput" />
         <VariantThroughput variant_throughput={variant_throughput} />
+      </SectionLayout>
+
+      <SectionLayout>
+        <SectionHeader heading="Cost" />
+        <VariantCostChart variant_cost={variant_cost} />
       </SectionLayout>
 
       <SectionLayout>

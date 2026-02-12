@@ -19,3 +19,22 @@ export type * from "tensorzero-node";
 export interface AutopilotStatusResponse {
   enabled: boolean;
 }
+
+/**
+ * Cost aggregation row from GET /internal/functions/{name}/cost_by_variant.
+ * Backend: VariantCost (#6264).
+ */
+export interface VariantCost {
+  period_start: string;
+  variant_name: string;
+  total_cost: number;
+  inference_count: number;
+  inferences_with_cost: number;
+}
+
+/**
+ * Response for the cost by variant endpoint.
+ */
+export interface GetFunctionCostByVariantResponse {
+  cost: VariantCost[];
+}
