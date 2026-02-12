@@ -14,7 +14,6 @@ use std::borrow::{Cow, ToOwned};
 use std::io::Write;
 use std::pin::Pin;
 use std::time::Duration;
-use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use tracing::instrument;
 use url::Url;
@@ -2557,11 +2556,9 @@ impl<'a> OpenAIBatchRequest<'a> {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct OpenAIUsage {
-    pub prompt_tokens: Option<u32>,
-    pub completion_tokens: Option<u32>,
-}
+pub(super) use tensorzero_types_providers::openai::{
+    OpenAIFinishReason, OpenAIResponseToolCall, OpenAIUsage,
+};
 
 impl From<OpenAIUsage> for Usage {
     fn from(usage: OpenAIUsage) -> Self {
@@ -2595,46 +2592,20 @@ impl From<OpenAIEmbeddingUsage> for Usage {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct OpenAIResponseFunctionCall {
-    name: String,
-    arguments: String,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct OpenAIResponseCustomCall {
-    name: String,
-    input: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-pub(super) enum OpenAIResponseToolCall {
-    Function {
-        id: String,
-        function: OpenAIResponseFunctionCall,
-    },
-    Custom {
-        id: String,
-        custom: OpenAIResponseCustomCall,
-    },
-}
-
-impl From<OpenAIResponseToolCall> for ToolCall {
-    fn from(openai_tool_call: OpenAIResponseToolCall) -> Self {
-        match openai_tool_call {
-            OpenAIResponseToolCall::Function { id, function } => ToolCall {
-                id,
-                name: function.name,
-                arguments: function.arguments,
-            },
-            OpenAIResponseToolCall::Custom { id, custom } => ToolCall {
-                id,
-                name: custom.name,
-                arguments: custom.input,
-            },
-        }
+pub(super) fn openai_response_tool_call_to_tensorzero_tool_call(
+    openai_tool_call: OpenAIResponseToolCall,
+) -> ToolCall {
+    match openai_tool_call {
+        OpenAIResponseToolCall::Function { id, function } => ToolCall {
+            id,
+            name: function.name,
+            arguments: function.arguments,
+        },
+        OpenAIResponseToolCall::Custom { id, custom } => ToolCall {
+            id,
+            name: custom.name,
+            arguments: custom.input,
+        },
     }
 }
 
@@ -2648,18 +2619,6 @@ pub(super) struct OpenAIResponseMessage {
     pub(super) reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum OpenAIFinishReason {
-    Stop,
-    Length,
-    ContentFilter,
-    ToolCalls,
-    FunctionCall,
-    #[serde(other)]
-    Unknown,
 }
 
 impl From<OpenAIFinishReason> for FinishReason {
@@ -2751,7 +2710,9 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         };
         let raw_usage = openai_usage_from_raw_response(&raw_response).map(|usage| {
@@ -3151,7 +3112,9 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
 
@@ -3212,6 +3175,7 @@ mod tests {
     };
     use crate::tool::ToolCallConfig;
     use crate::utils::testing::capture_logs;
+    use tensorzero_types_providers::openai::OpenAIResponseFunctionCall;
 
     use super::*;
 

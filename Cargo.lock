@@ -365,7 +365,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "autopilot-client",
- "config-writer",
+ "config-applier",
  "durable",
  "durable-tools",
  "mockall",
@@ -1351,7 +1351,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "config-writer"
+name = "config-applier"
 version = "2026.2.0"
 dependencies = [
  "pathdiff",
@@ -6483,7 +6483,7 @@ dependencies = [
 name = "tensorzero-node"
 version = "2026.2.0"
 dependencies = [
- "config-writer",
+ "config-applier",
  "napi",
  "napi-build",
  "napi-derive",
@@ -6573,6 +6573,8 @@ version = "2026.2.0"
 dependencies = [
  "serde",
  "serde_json",
+ "serde_path_to_error",
+ "tensorzero-derive",
 ]
 
 [[package]]

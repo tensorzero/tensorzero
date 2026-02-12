@@ -38,9 +38,9 @@ use uuid::Uuid;
 #[clap(rename_all = "snake_case")]
 pub enum CacheEnabledMode {
     On,
+    #[default]
     Off,
     ReadOnly,
-    #[default]
     WriteOnly,
 }
 

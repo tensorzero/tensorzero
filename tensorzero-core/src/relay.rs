@@ -525,6 +525,7 @@ impl TensorzeroRelay {
             },
             internal_dynamic_variant_config: None,
             episode_id: None,
+            namespace: None,
             dryrun: None,
             // Filter out internal tags (those starting with "tensorzero::") before forwarding
             // to the downstream gateway, as they will be rejected by tag validation

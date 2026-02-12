@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
@@ -23,7 +24,7 @@ pub struct FailingToolParams {
 pub struct FailingTool;
 
 impl ToolMetadata for FailingTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = ();
     type LlmParams = FailingToolParams;
 

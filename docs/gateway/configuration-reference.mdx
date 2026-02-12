@@ -227,6 +227,7 @@ The `batch_writes` object supports the following fields:
 - `enabled` (boolean): Must be set to `true` to enable batch writes
 - `flush_interval_ms` (integer, optional): Maximum time in milliseconds to wait before flushing a batch (default: `100`)
 - `max_rows` (integer, optional): Maximum number of rows to collect before flushing a batch (default: `1000`)
+- `max_rows_postgres` (integer, optional): Maximum number of rows to collect before flushing a Postgres batch (default: `max_rows`)
 
 ```toml tensorzero.toml
 [gateway]

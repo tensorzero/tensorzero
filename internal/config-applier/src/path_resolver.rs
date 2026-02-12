@@ -7,7 +7,7 @@
 //! system_template = { __tensorzero_remapped_path = "/abs/path/template.minijinja", __data = "template content..." }
 //! ```
 //!
-//! This module reverses that process for the config writer: it extracts the inline content,
+//! This module reverses that process for the config applier: it extracts the inline content,
 //! determines canonical file paths, and rewrites the TOML to use relative path references.
 //!
 //! # Algorithm
@@ -51,7 +51,7 @@ use std::path::{Component, Path, PathBuf};
 
 use toml_edit::{Item, Value};
 
-use crate::error::ConfigWriterError;
+use crate::error::ConfigApplierError;
 use tensorzero_config_paths::{PathComponent, TARGET_PATH_COMPONENTS};
 
 // ============================================================================
@@ -95,7 +95,7 @@ pub fn extract_resolved_paths(
     glob_base: &Path,
     toml_file_dir: &Path,
     matched_prefix: &[&str],
-) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+) -> Result<Vec<FileToWrite>, ConfigApplierError> {
     let mut files = Vec::new();
 
     // Build the base path from the prefix
@@ -134,13 +134,13 @@ pub fn extract_resolved_paths(
 /// "my_func"    → accepted
 /// ".hidden"    → accepted (valid filename)
 /// ```
-pub fn validate_path_component(name: &str, field_name: &str) -> Result<(), ConfigWriterError> {
+pub fn validate_path_component(name: &str, field_name: &str) -> Result<(), ConfigApplierError> {
     let path = Path::new(name);
     let mut components = path.components();
 
     match (components.next(), components.next()) {
         (Some(Component::Normal(os_str)), None) if os_str == name => Ok(()),
-        _ => Err(ConfigWriterError::InvalidPathComponent {
+        _ => Err(ConfigApplierError::InvalidPathComponent {
             field_name: field_name.to_string(),
             value: name.to_string(),
             reason: "name must be a valid single path component".to_string(),
@@ -149,9 +149,12 @@ pub fn validate_path_component(name: &str, field_name: &str) -> Result<(), Confi
 }
 
 /// Compute a relative path from a base directory to a target file.
-pub fn compute_relative_path(from_dir: &Path, to_file: &Path) -> Result<String, ConfigWriterError> {
+pub fn compute_relative_path(
+    from_dir: &Path,
+    to_file: &Path,
+) -> Result<String, ConfigApplierError> {
     pathdiff::diff_paths(to_file, from_dir)
-        .ok_or_else(|| ConfigWriterError::Path {
+        .ok_or_else(|| ConfigApplierError::Path {
             message: format!(
                 "Cannot compute relative path from `{}` to `{}`",
                 from_dir.display(),
@@ -159,7 +162,7 @@ pub fn compute_relative_path(from_dir: &Path, to_file: &Path) -> Result<String, 
             ),
         })?
         .to_str()
-        .ok_or_else(|| ConfigWriterError::Path {
+        .ok_or_else(|| ConfigApplierError::Path {
             message: format!("Path contains invalid UTF-8: {}", to_file.display()),
         })
         .map(|s| s.to_string())
@@ -196,7 +199,7 @@ fn process_pattern_suffix(
     path_so_far: &Path,
     glob_base: &Path,
     toml_file_dir: &Path,
-) -> Result<Vec<FileToWrite>, ConfigWriterError> {
+) -> Result<Vec<FileToWrite>, ConfigApplierError> {
     let mut files = Vec::new();
 
     let Some(first) = pattern_suffix.first() else {
@@ -279,7 +282,7 @@ fn process_pattern_suffix(
 fn extract_resolved_path_data(
     item: &Item,
     key_path: &str,
-) -> Result<Option<(String, String)>, ConfigWriterError> {
+) -> Result<Option<(String, String)>, ConfigApplierError> {
     let Some(table) = item.as_table() else {
         return Ok(None);
     };
@@ -291,14 +294,14 @@ fn extract_resolved_path_data(
     let data = table
         .get("__data")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
+        .ok_or_else(|| ConfigApplierError::InvalidResolvedPathData {
             message: format!("`{key_path}` must contain string `__data`"),
         })?;
 
     let original_path = table
         .get("__tensorzero_remapped_path")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ConfigWriterError::InvalidResolvedPathData {
+        .ok_or_else(|| ConfigApplierError::InvalidResolvedPathData {
             message: format!("`{key_path}` must contain string `__tensorzero_remapped_path`"),
         })?;
 
@@ -325,7 +328,7 @@ fn canonical_file_path(base_dir: &Path, terminal_key: &str) -> PathBuf {
         let grandparent = base_dir.parent().unwrap_or(base_dir);
         let grandparent_name = grandparent.file_name().and_then(|s| s.to_str());
 
-        // Currently the config writer only handles templates (variants, evaluators, fusers),
+        // Currently the config applier only handles templates (variants, evaluators, fusers),
         // not schemas. The schemas case is included for completeness but not actively used.
         let ext = match grandparent_name {
             Some("schemas") => ".json",

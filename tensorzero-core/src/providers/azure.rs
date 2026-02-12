@@ -45,7 +45,8 @@ use super::chat_completions::{
 };
 use super::openai::{
     OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
-    StreamOptions, SystemOrDeveloper, handle_openai_error, prepare_openai_messages, stream_openai,
+    StreamOptions, SystemOrDeveloper, handle_openai_error,
+    openai_response_tool_call_to_tensorzero_tool_call, prepare_openai_messages, stream_openai,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -861,7 +862,9 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
 

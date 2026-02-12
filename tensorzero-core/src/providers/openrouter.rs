@@ -3684,7 +3684,7 @@ mod tests {
         let chunk_json = json!({
             "id": "gen-1768936600-test",
             "provider": "xAI",
-            "model": "x-ai/grok-3-mini",
+            "model": "x-ai/grok-code-fast-1",
             "object": "chat.completion.chunk",
             "created": 1768936600,
             "choices": [{
