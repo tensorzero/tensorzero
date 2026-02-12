@@ -25,26 +25,27 @@ export type InferenceUsage = z.infer<typeof inferenceUsageSchema>;
 export function getTotalInferenceUsage(
   model_inferences: ParsedModelInferenceRow[],
 ): InferenceUsage {
-  return model_inferences.reduce(
-    (acc, curr) => {
-      // Cost aggregation uses partial-sum semantics: if any model inference
-      // reports cost, we sum the known values (treating missing as 0).
-      // Only if ALL model inferences lack cost data does the total stay null.
-      // This intentionally differs from the Rust backend's poison semantics
-      // (where any missing cost makes the total unknown), because in the UI
-      // showing partial cost data is more useful than showing nothing.
-      const costSum =
-        acc.cost == null && curr.cost == null
-          ? null
-          : (acc.cost ?? 0) + (curr.cost ?? 0);
-      return {
-        input_tokens: acc.input_tokens + (curr.input_tokens ?? 0),
-        output_tokens: acc.output_tokens + (curr.output_tokens ?? 0),
-        cost: costSum,
-      };
-    },
-    { input_tokens: 0, output_tokens: 0, cost: null as number | null },
+  if (model_inferences.length === 0) {
+    return { input_tokens: 0, output_tokens: 0, cost: null };
+  }
+
+  const input_tokens = model_inferences.reduce(
+    (sum, mi) => sum + (mi.input_tokens ?? 0),
+    0,
   );
+  const output_tokens = model_inferences.reduce(
+    (sum, mi) => sum + (mi.output_tokens ?? 0),
+    0,
+  );
+
+  // Cost uses poison semantics: if any model inference has null cost,
+  // the total is null. This matches the Rust backend behavior.
+  const hasNullCost = model_inferences.some((mi) => mi.cost == null);
+  const cost = hasNullCost
+    ? null
+    : model_inferences.reduce((sum, mi) => sum + mi.cost!, 0);
+
+  return { input_tokens, output_tokens, cost };
 }
 
 /**

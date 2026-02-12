@@ -298,8 +298,8 @@ describe("getTotalInferenceUsage", () => {
     expect(result.cost).toBeNull();
   });
 
-  // --- Mixed: some with cost, some without (partial-sum semantics) ---
-  it("sums known costs and treats missing as 0 (partial-sum semantics)", () => {
+  // --- Mixed: some with cost, some without (poison semantics) ---
+  it("returns null cost when any inference is missing cost (poison semantics)", () => {
     const result = getTotalInferenceUsage([
       makeModelInference({
         input_tokens: 100,
@@ -314,11 +314,11 @@ describe("getTotalInferenceUsage", () => {
     ]);
     expect(result.input_tokens).toBe(300);
     expect(result.output_tokens).toBe(150);
-    // Partial-sum: the known cost is returned (treating missing as 0)
-    expect(result.cost).toBe(0.003);
+    // Poison semantics: any null makes the total null
+    expect(result.cost).toBeNull();
   });
 
-  it("handles mixed costs with the missing one first in the array", () => {
+  it("returns null cost when missing inference comes first in the array", () => {
     const result = getTotalInferenceUsage([
       makeModelInference({
         input_tokens: 200,
@@ -333,7 +333,7 @@ describe("getTotalInferenceUsage", () => {
     ]);
     expect(result.input_tokens).toBe(300);
     expect(result.output_tokens).toBe(150);
-    expect(result.cost).toBe(0.005);
+    expect(result.cost).toBeNull();
   });
 
   // --- Zero cost is distinct from missing cost ---
@@ -376,15 +376,14 @@ describe("getTotalInferenceUsage", () => {
   });
 
   // --- Three-way mix: some with cost, some without, some with zero ---
-  it("handles three-way mix of present, zero, and missing costs", () => {
+  it("returns null for three-way mix of present, zero, and missing costs", () => {
     const result = getTotalInferenceUsage([
       makeModelInference({ cost: 0.01 }),
       makeModelInference({ cost: 0 }),
-      makeModelInference({}), // missing cost
+      makeModelInference({}), // missing cost — poisons the total
       makeModelInference({ cost: 0.02 }),
     ]);
-    // Partial-sum: 0.01 + 0 + 0 + 0.02 = 0.03
-    expect(result.cost).toBeCloseTo(0.03, 10);
+    expect(result.cost).toBeNull();
   });
 
   // --- Negative costs (caching discounts) ---
@@ -404,12 +403,11 @@ describe("getTotalInferenceUsage", () => {
     expect(result.cost).toBeCloseTo(-0.003, 10);
   });
 
-  it("sums negative costs with missing costs using partial-sum semantics", () => {
+  it("returns null when mixing negative costs with missing costs (poison semantics)", () => {
     const result = getTotalInferenceUsage([
       makeModelInference({ cost: -0.001 }),
-      makeModelInference({}), // missing
+      makeModelInference({}), // missing — poisons the total
     ]);
-    // Partial-sum: -0.001 + 0 = -0.001
-    expect(result.cost).toBeCloseTo(-0.001, 10);
+    expect(result.cost).toBeNull();
   });
 });
