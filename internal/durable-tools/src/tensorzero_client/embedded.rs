@@ -25,7 +25,9 @@ use tensorzero_core::endpoints::datasets::v1::types::{
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
-use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
+use tensorzero_core::endpoints::internal::autopilot::{
+    create_event, list_events, list_sessions, s3_initiate_upload,
+};
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
@@ -34,8 +36,8 @@ use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
     CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListSessionsParams,
-    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, TensorZeroClient,
-    TensorZeroClientError,
+    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, S3UploadRequest,
+    S3UploadResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -168,6 +170,23 @@ impl TensorZeroClient for EmbeddedClient {
         list_sessions(autopilot_client, params).await.map_err(|e| {
             TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
         })
+    }
+
+    async fn s3_initiate_upload(
+        &self,
+        request: S3UploadRequest,
+    ) -> Result<S3UploadResponse, TensorZeroClientError> {
+        let autopilot_client = self
+            .app_state
+            .autopilot_client
+            .as_ref()
+            .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+
+        s3_initiate_upload(autopilot_client, request)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
     }
 
     async fn action(

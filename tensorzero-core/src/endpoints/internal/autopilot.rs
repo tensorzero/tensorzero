@@ -20,7 +20,7 @@ use autopilot_client::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
     CreateEventResponse, EventPayload, GatewayListConfigWritesResponse, GatewayListEventsResponse,
     GatewayStreamUpdate, ListConfigWritesParams, ListEventsParams, ListSessionsParams,
-    ListSessionsResponse, StreamEventsParams,
+    ListSessionsResponse, S3UploadRequest, S3UploadResponse, StreamEventsParams,
 };
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -53,6 +53,14 @@ pub struct ApproveAllToolCallsGatewayRequest {
     /// Only approve tool calls with event IDs <= this value.
     /// Prevents race condition where new tool calls arrive after client fetched the list.
     pub last_tool_call_event_id: Uuid,
+}
+
+/// HTTP request body for initiating an S3 upload.
+///
+/// This is the request type used by the HTTP handler.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct S3InitiateUploadGatewayRequest {
+    pub tool_call_event_id: Uuid,
 }
 
 /// Response for the autopilot status endpoint.
@@ -182,6 +190,19 @@ pub async fn list_config_writes(
         .map_err(Error::from)
 }
 
+/// Initiate an S3 upload via the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn s3_initiate_upload(
+    autopilot_client: &AutopilotClient,
+    request: S3UploadRequest,
+) -> Result<S3UploadResponse, Error> {
+    autopilot_client
+        .s3_initiate_upload(request)
+        .await
+        .map_err(Error::from)
+}
+
 // =============================================================================
 // HTTP Handlers
 // =============================================================================
@@ -306,6 +327,23 @@ pub async fn list_config_writes_handler(
 ) -> Result<Json<GatewayListConfigWritesResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
     let response = list_config_writes(&client, session_id, params).await?;
+    Ok(Json(response))
+}
+
+/// Handler for `POST /internal/autopilot/v1/aws/s3_initiate_upload`
+///
+/// Initiates an S3 upload via the Autopilot API.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "autopilot.s3_initiate_upload", skip_all)]
+pub async fn s3_initiate_upload_handler(
+    State(app_state): AppState,
+    StructuredJson(http_request): StructuredJson<S3InitiateUploadGatewayRequest>,
+) -> Result<Json<S3UploadResponse>, Error> {
+    let client = get_autopilot_client(&app_state)?;
+    let request = S3UploadRequest {
+        tool_call_event_id: http_request.tool_call_event_id,
+    };
+    let response = s3_initiate_upload(&client, request).await?;
     Ok(Json(response))
 }
 
