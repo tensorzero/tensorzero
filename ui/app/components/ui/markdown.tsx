@@ -210,11 +210,7 @@ const components: Components = {
 interface MarkdownProps {
   children: string;
   className?: string;
-  /** Optional extra remark plugins to apply (e.g. UUID link processing). */
   remarkPlugins?: React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"];
-  /** Optional component overrides merged on top of the defaults.
-   *  Accepts both standard HTML elements and custom element names
-   *  (e.g. from remark plugins that set `data.hName`). */
   extraComponents?: Components & Record<string, React.ComponentType<never>>;
 }
 
@@ -224,13 +220,16 @@ export function Markdown({
   remarkPlugins: extraRemarkPlugins,
   extraComponents,
 }: MarkdownProps) {
+  const mergedPlugins = extraRemarkPlugins
+    ? [remarkGfm, ...extraRemarkPlugins]
+    : [remarkGfm];
   const mergedComponents = extraComponents
     ? { ...components, ...extraComponents }
     : components;
   return (
     <div className={cn("text-fg-secondary text-sm", className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, ...(extraRemarkPlugins ?? [])]}
+        remarkPlugins={mergedPlugins}
         components={mergedComponents}
       >
         {children}
