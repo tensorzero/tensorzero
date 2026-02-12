@@ -1,20 +1,7 @@
-/**
- * Regex matching UUID-like strings (v1-v7 format).
- * Uses the global flag so it can be used with `String.prototype.matchAll`.
- *
- * IMPORTANT: Always reset `lastIndex` before use since the `g` flag is stateful.
- */
 const UUID_REGEX =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
-/** Regex that matches a string that is exactly one UUID (with optional surrounding whitespace). */
-export const EXACT_UUID_RE =
-  /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;
-
-/**
- * Split a string into segments, separating UUID matches from surrounding text.
- * Returns an array of `{ text: string, isUuid: boolean }` segments in order.
- */
+/** Split text into segments, separating UUID matches from surrounding text. */
 export function splitTextOnUuids(
   text: string,
 ): { text: string; isUuid: boolean }[] {

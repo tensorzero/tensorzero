@@ -3,10 +3,8 @@ import { useFetcher } from "react-router";
 import type { ResolveUuidResponse } from "~/types/tensorzero";
 
 /**
- * Hook that resolves a UUID to determine what type of object it represents.
- *
- * Uses a keyed `useFetcher` so that all instances resolving the same UUID
- * share a single fetch and cached result via React Router's global state.
+ * Resolves a UUID to its entity type. Keyed fetcher deduplicates
+ * concurrent requests and caches results across component instances.
  */
 export function useResolveUuid(uuid: string): {
   data: ResolveUuidResponse | null;

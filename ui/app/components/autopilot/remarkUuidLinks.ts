@@ -1,23 +1,11 @@
-import { EXACT_UUID_RE, splitTextOnUuids } from "~/utils/uuid";
+import { splitTextOnUuids } from "~/utils/uuid";
 
-/**
- * The custom HTML element name used to bridge remark (AST) to React.
- * Remark plugin sets `data.hName` to this value; the component map
- * in the consumer maps this element name to the `UuidLink` component.
- */
+/** Custom element name bridging remark AST to React via `data.hName`. */
 export const UUID_LINK_ELEMENT = "uuid-link";
 
-/**
- * MDAST node types used by this plugin.
- * Minimal definitions to avoid a dependency on @types/mdast.
- */
+/** Minimal MDAST types to avoid a `@types/mdast` dependency. */
 interface MdastText {
   type: "text";
-  value: string;
-}
-
-interface MdastInlineCode {
-  type: "inlineCode";
   value: string;
 }
 
@@ -28,7 +16,6 @@ interface MdastParent {
 
 type MdastNode =
   | MdastText
-  | MdastInlineCode
   | MdastParent
   | { type: string; data?: Record<string, unknown> };
 
@@ -43,27 +30,13 @@ function uuidLinkNode(uuid: string): MdastNode {
   } as MdastNode;
 }
 
-/**
- * Remark plugin that transforms UUID patterns into custom `uuidLink` nodes.
- * Uses `data.hName` / `data.hProperties` to bridge to React — the consumer
- * maps the `UUID_LINK_ELEMENT` element name to a React component.
- *
- * Handles:
- * - UUIDs in plain text nodes (split into text + uuidLink fragments)
- * - `inlineCode` nodes whose entire value is a UUID (replaced with uuidLink)
- *
- * Skips:
- * - Fenced code blocks (`code` nodes)
- * - Existing links (`link` nodes)
- * - Inline code containing mixed content (only pure-UUID inline code is linked)
- */
+/** Remark plugin that transforms UUID patterns into custom `uuidLink` nodes. */
 export function remarkUuidLinks() {
   return (tree: MdastParent) => {
     visitParent(tree);
   };
 }
 
-/** Node types whose content should NOT be transformed. */
 const SKIP_TYPES = new Set(["code", "link"]);
 
 function visitParent(node: MdastParent) {
@@ -80,9 +53,9 @@ function visitParent(node: MdastParent) {
         changed = true;
       }
     } else if (child.type === "inlineCode") {
-      const codeNode = child as MdastInlineCode;
-      if (EXACT_UUID_RE.test(codeNode.value)) {
-        newChildren.push(uuidLinkNode(codeNode.value.trim()));
+      const segments = splitTextOnUuids((child as MdastText).value);
+      if (segments.length === 1 && segments[0].isUuid) {
+        newChildren.push(uuidLinkNode(segments[0].text));
         changed = true;
       } else {
         newChildren.push(child);
@@ -102,10 +75,6 @@ function visitParent(node: MdastParent) {
   }
 }
 
-/**
- * Split a text MDAST node into text + uuidLink nodes.
- * Returns the original node unchanged if no UUIDs are found.
- */
 function splitTextToMdast(textNode: MdastText): MdastNode[] {
   const segments = splitTextOnUuids(textNode.value);
   if (!segments.some((s) => s.isUuid)) {
