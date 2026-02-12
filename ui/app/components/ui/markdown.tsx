@@ -7,6 +7,8 @@ import {
   type CodeEditorProps,
   type Language,
 } from "~/components/ui/code-editor";
+import { UuidLink } from "~/components/autopilot/UuidLink";
+import { UUID_REGEX } from "~/components/autopilot/RichText";
 import { cn } from "~/utils/common";
 
 // Common spacing for block elements
@@ -167,17 +169,23 @@ const components: Components = {
     </blockquote>
   ),
 
-  // Links
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      className="text-fg-brand hover:underline"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {children}
-    </a>
-  ),
+  // Links — uuid:// links are rendered as UuidLink components
+  a: ({ href, children }) => {
+    if (href?.startsWith("uuid://")) {
+      const uuid = href.slice("uuid://".length);
+      return <UuidLink uuid={uuid} />;
+    }
+    return (
+      <a
+        href={href}
+        className="text-fg-brand hover:underline"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
+    );
+  },
 
   // Strong and emphasis
   strong: ({ children }) => (
@@ -207,16 +215,31 @@ const components: Components = {
   td: ({ children }) => <td className={TABLE_CELL_BASE}>{children}</td>,
 };
 
+/**
+ * Preprocess markdown text to wrap UUID patterns in markdown links
+ * with a `uuid://` scheme. The `a` component handler detects these
+ * and renders UuidLink components.
+ *
+ * UUIDs that are already inside markdown links or code blocks will be
+ * handled naturally — markdown links won't be double-wrapped since
+ * the regex won't match within `[text](url)` link syntax, and code
+ * blocks are rendered by CodeEditor which doesn't process links.
+ */
+function preprocessUuidLinks(text: string): string {
+  return text.replace(UUID_REGEX, (match) => `[${match}](uuid://${match})`);
+}
+
 interface MarkdownProps {
   children: string;
   className?: string;
 }
 
 export function Markdown({ children, className }: MarkdownProps) {
+  const processed = preprocessUuidLinks(children);
   return (
     <div className={cn("text-fg-secondary text-sm", className)}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {children}
+        {processed}
       </ReactMarkdown>
     </div>
   );
