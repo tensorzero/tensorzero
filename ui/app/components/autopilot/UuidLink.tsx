@@ -21,7 +21,8 @@ function getUrlForResolvedObject(
     case "demonstration_feedback":
       return null;
     default:
-      return null;
+      const _exhaustiveCheck: never = obj;
+      return _exhaustiveCheck;
   }
 }
 
