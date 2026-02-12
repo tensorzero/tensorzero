@@ -3,10 +3,6 @@ import { useResolveUuid } from "~/hooks/useResolveUuid";
 import type { ResolvedObject } from "~/types/tensorzero";
 import { toDatapointUrl, toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
 
-/**
- * Given a resolved object, return the URL to navigate to.
- * Returns null for object types that don't have a detail page (e.g. feedback).
- */
 function getUrlForResolvedObject(
   uuid: string,
   obj: ResolvedObject,
@@ -30,29 +26,20 @@ function getUrlForResolvedObject(
   }
 }
 
-function UuidCode({ children }: { children: string }) {
-  return (
-    <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
-      {children}
-    </code>
-  );
-}
-
-/**
- * Renders a UUID as an orange link if it resolves to exactly one known entity,
- * otherwise renders it as plain monospace text.
- */
 export function UuidLink({ uuid }: { uuid: string }) {
   const { data } = useResolveUuid(uuid);
 
-  // Not yet resolved, multiple types, or no types → plain text
-  if (!data || data.object_types.length !== 1) {
-    return <UuidCode>{uuid}</UuidCode>;
-  }
+  const url =
+    data?.object_types.length === 1
+      ? getUrlForResolvedObject(uuid, data.object_types[0])
+      : null;
 
-  const url = getUrlForResolvedObject(uuid, data.object_types[0]);
   if (!url) {
-    return <UuidCode>{uuid}</UuidCode>;
+    return (
+      <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
+        {uuid}
+      </code>
+    );
   }
 
   return (
