@@ -51,7 +51,7 @@ export function UuidLink({ uuid }: { uuid: string }) {
   return (
     <Link
       to={url}
-      className="text-fg-brand font-mono no-underline hover:underline"
+      className="font-mono text-orange-500 no-underline hover:underline"
     >
       {uuid}
     </Link>
