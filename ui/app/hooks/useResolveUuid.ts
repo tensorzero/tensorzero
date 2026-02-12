@@ -1,39 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { ResolveUuidResponse } from "~/types/tensorzero";
 
 /**
- * Module-level cache for UUID resolution results.
- * Persists across component instances within a session to avoid
- * redundant API calls for the same UUID.
- */
-const resolveCache = new Map<string, ResolveUuidResponse>();
-
-/**
  * Hook that resolves a UUID to determine what type of object it represents.
- * Uses a module-level cache to avoid duplicate fetches for the same UUID.
  *
- * Returns the cached result immediately if available, otherwise triggers
- * a fetch to the resolve_uuid API route.
+ * Uses a keyed `useFetcher` so that all instances resolving the same UUID
+ * share a single fetch and cached result via React Router's global state.
  */
 export function useResolveUuid(uuid: string): {
   data: ResolveUuidResponse | null;
   isLoading: boolean;
 } {
-  // Normalize to lowercase for consistent cache hits (UUIDs are case-insensitive)
   const normalizedUuid = uuid.toLowerCase();
-  const cached = resolveCache.get(normalizedUuid);
-  const [data, setData] = useState<ResolveUuidResponse | null>(cached ?? null);
   const fetcher = useFetcher<ResolveUuidResponse>({
     key: `resolve-uuid-${normalizedUuid}`,
   });
 
   useEffect(() => {
-    if (resolveCache.has(normalizedUuid)) {
-      setData(resolveCache.get(normalizedUuid)!);
-      return;
-    }
-
     if (fetcher.state === "idle" && !fetcher.data) {
       fetcher.load(
         `/api/tensorzero/resolve_uuid/${encodeURIComponent(normalizedUuid)}`,
@@ -44,15 +28,8 @@ export function useResolveUuid(uuid: string): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [normalizedUuid]);
 
-  useEffect(() => {
-    if (fetcher.data) {
-      resolveCache.set(normalizedUuid, fetcher.data);
-      setData(fetcher.data);
-    }
-  }, [fetcher.data, normalizedUuid]);
-
   return {
-    data,
-    isLoading: !data && fetcher.state !== "idle",
+    data: fetcher.data ?? null,
+    isLoading: fetcher.state !== "idle",
   };
 }

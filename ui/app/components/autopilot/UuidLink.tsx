@@ -17,7 +17,6 @@ function getUrlForResolvedObject(
     case "episode":
       return toEpisodeUrl(uuid);
     case "chat_datapoint":
-      return toDatapointUrl(obj.dataset_name, uuid);
     case "json_datapoint":
       return toDatapointUrl(obj.dataset_name, uuid);
     case "boolean_feedback":

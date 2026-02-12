@@ -4,7 +4,7 @@
  *
  * IMPORTANT: Always reset `lastIndex` before use since the `g` flag is stateful.
  */
-export const UUID_REGEX =
+const UUID_REGEX =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 /** Regex that matches a string that is exactly one UUID (with optional surrounding whitespace). */

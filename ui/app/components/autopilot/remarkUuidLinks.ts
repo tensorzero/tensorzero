@@ -1,4 +1,4 @@
-import { EXACT_UUID_RE, splitTextOnUuids, UUID_REGEX } from "~/utils/uuid";
+import { EXACT_UUID_RE, splitTextOnUuids } from "~/utils/uuid";
 
 /**
  * The custom HTML element name used to bridge remark (AST) to React.
@@ -103,18 +103,14 @@ function visitParent(node: MdastParent) {
 }
 
 /**
- * Split a text MDAST node into text + link nodes using the shared
- * `splitTextOnUuids` utility. Returns the original node unchanged
- * if no UUIDs are found.
+ * Split a text MDAST node into text + uuidLink nodes.
+ * Returns the original node unchanged if no UUIDs are found.
  */
 function splitTextToMdast(textNode: MdastText): MdastNode[] {
-  // Quick check: does the text contain anything UUID-like?
-  UUID_REGEX.lastIndex = 0;
-  if (!UUID_REGEX.test(textNode.value)) {
+  const segments = splitTextOnUuids(textNode.value);
+  if (!segments.some((s) => s.isUuid)) {
     return [textNode];
   }
-
-  const segments = splitTextOnUuids(textNode.value);
   return segments.map(
     (seg): MdastNode =>
       seg.isUuid ? uuidLinkNode(seg.text) : { type: "text", value: seg.text },
