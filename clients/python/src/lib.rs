@@ -69,8 +69,9 @@ use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
     InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ListEpisodesParams, ListInferencesParams, OptimizationJobHandle, PostgresConfig,
+    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1692,6 +1693,41 @@ impl TensorZeroGateway {
         )
     }
 
+    /// List episodes with pagination.
+    ///
+    /// :param limit: Maximum number of episodes to return (max 100).
+    /// :param before: Return episodes before this episode_id (UUID string).
+    /// :param after: Return episodes after this episode_id (UUID string).
+    /// :return: A `ListEpisodesResponse` object.
+    #[pyo3(signature = (*, limit, before=None, after=None))]
+    fn list_episodes(
+        this: PyRef<'_, Self>,
+        limit: u32,
+        before: Option<String>,
+        after: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let before = before.map(|s| s.parse()).transpose().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid `before` UUID: {e}"))
+        })?;
+        let after = after.map(|s| s.parse()).transpose().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid `after` UUID: {e}"))
+        })?;
+        let fut = client.list_episodes(ListEpisodesParams {
+            limit,
+            before,
+            after,
+        });
+        let response =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        convert_response_to_python_dataclass(
+            this.py(),
+            &response,
+            "tensorzero",
+            "ListEpisodesResponse",
+        )
+    }
+
     /// Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
     /// There are two things that need to happen in this function:
     /// 1. We need to resolve all network resources (e.g. images) in the stored samples.
@@ -2972,6 +3008,46 @@ impl AsyncTensorZeroGateway {
                     &response,
                     "tensorzero",
                     "GetInferencesResponse",
+                ),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// List episodes with pagination.
+    ///
+    /// :param limit: Maximum number of episodes to return (max 100).
+    /// :param before: Return episodes before this episode_id (UUID string).
+    /// :param after: Return episodes after this episode_id (UUID string).
+    /// :return: A `ListEpisodesResponse` object.
+    #[pyo3(signature = (*, limit, before=None, after=None))]
+    fn list_episodes<'a>(
+        this: PyRef<'a, Self>,
+        limit: u32,
+        before: Option<String>,
+        after: Option<String>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let before = before.map(|s| s.parse()).transpose().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid `before` UUID: {e}"))
+        })?;
+        let after = after.map(|s| s.parse()).transpose().map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid `after` UUID: {e}"))
+        })?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .list_episodes(ListEpisodesParams {
+                    limit,
+                    before,
+                    after,
+                })
+                .await;
+            Python::attach(|py| match res {
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    &response,
+                    "tensorzero",
+                    "ListEpisodesResponse",
                 ),
                 Err(e) => Err(convert_error(py, e)),
             })

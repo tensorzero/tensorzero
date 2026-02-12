@@ -2144,6 +2144,46 @@ class GetInferencesResponse:
 
 
 @dataclass(kw_only=True)
+class EpisodeByIdRow:
+    """
+    A row representing an episode with aggregated inference data.
+    """
+
+    episode_id: str
+    """
+    The unique identifier of the episode (UUID).
+    """
+    count: int
+    """
+    The number of inferences in this episode.
+    """
+    start_time: str
+    """
+    The start time of the episode (ISO 8601 / RFC 3339).
+    """
+    end_time: str
+    """
+    The end time of the episode (ISO 8601 / RFC 3339).
+    """
+    last_inference_id: str
+    """
+    The ID of the last inference in the episode (UUID).
+    """
+
+
+@dataclass(kw_only=True)
+class ListEpisodesResponse:
+    """
+    Response containing the requested episodes.
+    """
+
+    episodes: list[EpisodeByIdRow]
+    """
+    The retrieved episodes.
+    """
+
+
+@dataclass(kw_only=True)
 class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
     """
     Create datapoints from an inference query.

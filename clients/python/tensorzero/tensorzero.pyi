@@ -57,6 +57,7 @@ from .generated_types import (
     InferenceFilter,
     Input,
     ListDatapointsRequest,
+    ListEpisodesResponse,
     ListInferencesRequest,
     StoredInference,
     UpdateDatapointMetadataRequest,
@@ -923,6 +924,22 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
+    def list_episodes(
+        self,
+        *,
+        limit: int,
+        before: Optional[str] = None,
+        after: Optional[str] = None,
+    ) -> ListEpisodesResponse:
+        """
+        List episodes with pagination.
+
+        :param limit: Maximum number of episodes to return (max 100).
+        :param before: Return episodes before this episode_id (UUID string).
+        :param after: Return episodes after this episode_id (UUID string).
+        :return: A `ListEpisodesResponse` object.
+        """
+
     def experimental_list_inferences(
         self,
         *,
@@ -1484,6 +1501,22 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param request: A `ListInferencesRequest` object with filter parameters.
         :return: A `GetInferencesResponse` object.
+        """
+
+    async def list_episodes(
+        self,
+        *,
+        limit: int,
+        before: Optional[str] = None,
+        after: Optional[str] = None,
+    ) -> ListEpisodesResponse:
+        """
+        List episodes with pagination.
+
+        :param limit: Maximum number of episodes to return (max 100).
+        :param before: Return episodes before this episode_id (UUID string).
+        :param after: Return episodes after this episode_id (UUID string).
+        :return: A `ListEpisodesResponse` object.
         """
 
     async def experimental_list_inferences(
