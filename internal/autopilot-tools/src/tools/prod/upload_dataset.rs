@@ -107,10 +107,15 @@ pub async fn upload_dataset_parquet(
     let mut writer = AsyncArrowWriter::try_new(buf_writer, schema.clone(), Some(props))
         .map_err(|e| anyhow::Error::msg(format!("Failed to create Parquet writer: {e}")))?;
 
-    // Paginate through all pages
-    let page_limit = row_limit.unwrap_or(PAGE_SIZE);
+    // Paginate through dataset pages and stop once we've uploaded `row_limit` rows.
     let mut offset = 0;
     loop {
+        let remaining_rows = row_limit.map(|limit| limit.saturating_sub(offset));
+        let page_limit = remaining_rows.map_or(PAGE_SIZE, |remaining| remaining.min(PAGE_SIZE));
+        if page_limit == 0 {
+            break;
+        }
+
         let response = client
             .list_datapoints(
                 dataset_name.to_string(),
@@ -123,13 +128,19 @@ pub async fn upload_dataset_parquet(
             .await
             .map_err(|e| anyhow::Error::msg(format!("Failed to list datapoints: {e}")))?;
 
-        let page_count = response.datapoints.len() as u32;
+        let mut datapoints = response.datapoints;
+        if let Some(remaining) = remaining_rows {
+            // Defensive truncate in case the API ever over-returns beyond the requested limit.
+            datapoints.truncate(remaining as usize);
+        }
+
+        let page_count = datapoints.len() as u32;
         if page_count == 0 {
             break;
         }
 
         let mut builder = ArrayBuilder::from_arrow(schema.fields())?;
-        for datapoint in response.datapoints {
+        for datapoint in datapoints {
             let serialized = serde_json::to_string(&datapoint)
                 .map_err(|e| anyhow::Error::msg(format!("Failed to serialize datapoint: {e}")))?;
             builder
@@ -154,7 +165,7 @@ pub async fn upload_dataset_parquet(
 
         offset += page_count;
 
-        if page_count < page_limit {
+        if page_count < page_limit || matches!(row_limit, Some(limit) if offset >= limit) {
             break;
         }
     }

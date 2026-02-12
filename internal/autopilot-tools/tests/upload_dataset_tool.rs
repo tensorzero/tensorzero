@@ -198,61 +198,25 @@ async fn test_upload_dataset_parquet_multi_page() {
     }
 }
 
-/// Test that `row_limit` controls the page size used for pagination.
+/// Test that `row_limit` caps total uploaded rows.
 #[tokio::test]
-async fn test_upload_dataset_parquet_with_row_limit() {
+async fn test_upload_dataset_parquet_respects_row_limit_total() {
     let datapoints_page1: Vec<_> = (0..100)
         .map(|_| create_mock_chat_datapoint(Uuid::now_v7(), "test_dataset", "test_function"))
         .collect();
-    let datapoints_page2: Vec<_> = (0..100)
-        .map(|_| create_mock_chat_datapoint(Uuid::now_v7(), "test_dataset", "test_function"))
-        .collect();
-    let datapoints_page3: Vec<_> = (0..50)
-        .map(|_| create_mock_chat_datapoint(Uuid::now_v7(), "test_dataset", "test_function"))
-        .collect();
-
-    // Keep clones to verify serialized content later
-    let all_datapoints: Vec<_> = datapoints_page1
-        .iter()
-        .chain(datapoints_page2.iter())
-        .chain(datapoints_page3.iter())
-        .cloned()
-        .collect();
-
+    let expected_datapoints = datapoints_page1.clone();
     let response1 = create_mock_get_datapoints_response(datapoints_page1);
-    let response2 = create_mock_get_datapoints_response(datapoints_page2);
-    let response3 = create_mock_get_datapoints_response(datapoints_page3);
 
     let mut mock_client = MockTensorZeroClient::new();
-    let mut seq = mockall::Sequence::new();
 
-    // With row_limit=100, the function should request pages of 100
+    // With row_limit=100, exactly 100 datapoints should be uploaded, even if more exist.
     mock_client
         .expect_list_datapoints()
         .times(1)
-        .in_sequence(&mut seq)
         .withf(|name, req| {
             name == "test_dataset" && req.offset == Some(0) && req.limit == Some(100)
         })
         .return_once(move |_, _| Ok(response1));
-
-    mock_client
-        .expect_list_datapoints()
-        .times(1)
-        .in_sequence(&mut seq)
-        .withf(|name, req| {
-            name == "test_dataset" && req.offset == Some(100) && req.limit == Some(100)
-        })
-        .return_once(move |_, _| Ok(response2));
-
-    mock_client
-        .expect_list_datapoints()
-        .times(1)
-        .in_sequence(&mut seq)
-        .withf(|name, req| {
-            name == "test_dataset" && req.offset == Some(200) && req.limit == Some(100)
-        })
-        .return_once(move |_, _| Ok(response3));
 
     let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
     let path = ObjectStorePath::from("test/dataset.parquet");
@@ -267,7 +231,10 @@ async fn test_upload_dataset_parquet_with_row_limit() {
     .await
     .expect("upload_dataset_parquet should succeed");
 
-    assert_eq!(total_rows, 250, "Expected 250 rows to be uploaded");
+    assert_eq!(
+        total_rows, 100,
+        "Expected row_limit to cap uploaded rows at 100"
+    );
 
     // Read back the Parquet file and verify row contents
     let get_result = store
@@ -289,7 +256,10 @@ async fn test_upload_dataset_parquet_with_row_limit() {
         .expect("Should be able to read all record batches");
 
     let total: usize = batches.iter().map(|b| b.num_rows()).sum();
-    assert_eq!(total, 250, "Expected 250 total rows in Parquet file");
+    assert_eq!(
+        total, 100,
+        "Expected Parquet file to contain exactly row_limit rows"
+    );
 
     // Verify each row matches the expected serialized datapoint
     let mut row_idx = 0;
@@ -302,7 +272,7 @@ async fn test_upload_dataset_parquet_with_row_limit() {
             .downcast_ref::<StringArray>()
             .expect("`serialized_datapoint` column should be a StringArray");
         for i in 0..batch.num_rows() {
-            let expected = serde_json::to_string(&all_datapoints[row_idx])
+            let expected = serde_json::to_string(&expected_datapoints[row_idx])
                 .expect("Should be able to serialize datapoint");
             assert_eq!(
                 arr.value(i),
