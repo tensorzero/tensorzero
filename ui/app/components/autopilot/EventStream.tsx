@@ -13,6 +13,8 @@ import {
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { renderRichText } from "~/components/autopilot/RichText";
+import { remarkUuidLinks } from "~/components/autopilot/remarkUuidLinks";
+import { UuidLink } from "~/components/autopilot/UuidLink";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -496,6 +498,29 @@ class EventErrorBoundary extends Component<
   }
 }
 
+/**
+ * Remark plugins and component overrides for rendering UUID-aware markdown.
+ * Defined at module level so references are stable across renders.
+ */
+const uuidRemarkPlugins = [remarkUuidLinks];
+const uuidLinkComponents = {
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+    if (href?.startsWith("uuid://")) {
+      return <UuidLink uuid={href.slice("uuid://".length)} />;
+    }
+    return (
+      <a
+        href={href}
+        className="text-fg-brand hover:underline"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
+    );
+  },
+};
+
 function EventItem({
   event,
   isPending = false,
@@ -565,7 +590,12 @@ function EventItem({
         <>
           {event.payload.type === "message" &&
           event.payload.role === "assistant" ? (
-            <Markdown>{summary.description}</Markdown>
+            <Markdown
+              remarkPlugins={uuidRemarkPlugins}
+              extraComponents={uuidLinkComponents}
+            >
+              {summary.description}
+            </Markdown>
           ) : event.payload.type === "tool_call" ? (
             <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (

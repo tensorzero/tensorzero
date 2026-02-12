@@ -20,28 +20,32 @@ export function useResolveUuid(uuid: string): {
   data: ResolveUuidResponse | null;
   isLoading: boolean;
 } {
-  const cached = resolveCache.get(uuid);
+  // Normalize to lowercase for consistent cache hits (UUIDs are case-insensitive)
+  const normalizedUuid = uuid.toLowerCase();
+  const cached = resolveCache.get(normalizedUuid);
   const [data, setData] = useState<ResolveUuidResponse | null>(cached ?? null);
   const fetcher = useFetcher<ResolveUuidResponse>();
 
   useEffect(() => {
-    if (resolveCache.has(uuid)) {
-      setData(resolveCache.get(uuid)!);
+    if (resolveCache.has(normalizedUuid)) {
+      setData(resolveCache.get(normalizedUuid)!);
       return;
     }
 
     if (fetcher.state === "idle" && !fetcher.data) {
-      fetcher.load(`/api/tensorzero/resolve_uuid/${encodeURIComponent(uuid)}`);
+      fetcher.load(
+        `/api/tensorzero/resolve_uuid/${encodeURIComponent(normalizedUuid)}`,
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uuid]);
+  }, [normalizedUuid]);
 
   useEffect(() => {
     if (fetcher.data) {
-      resolveCache.set(uuid, fetcher.data);
+      resolveCache.set(normalizedUuid, fetcher.data);
       setData(fetcher.data);
     }
-  }, [fetcher.data, uuid]);
+  }, [fetcher.data, normalizedUuid]);
 
   return {
     data,
