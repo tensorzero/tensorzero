@@ -1,4 +1,4 @@
-import { UUID_REGEX } from "~/components/autopilot/RichText";
+import { EXACT_UUID_RE, splitTextOnUuids, UUID_REGEX } from "~/utils/uuid";
 
 /**
  * MDAST node types used by this plugin.
@@ -32,9 +32,13 @@ type MdastNode =
   | MdastParent
   | { type: string };
 
-/** Regex that matches a string that is exactly one UUID (with optional whitespace). */
-const EXACT_UUID_RE =
-  /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;
+function uuidLink(uuid: string): MdastLink {
+  return {
+    type: "link",
+    url: `#uuid:${uuid}`,
+    children: [{ type: "text", value: uuid }],
+  };
+}
 
 /**
  * Remark plugin that transforms UUID patterns into link nodes
@@ -65,7 +69,7 @@ function visitParent(node: MdastParent) {
 
   for (const child of node.children) {
     if (child.type === "text") {
-      const parts = splitTextOnUuids(child as MdastText);
+      const parts = splitTextToMdast(child as MdastText);
       if (parts.length === 1 && parts[0] === child) {
         newChildren.push(child);
       } else {
@@ -75,12 +79,7 @@ function visitParent(node: MdastParent) {
     } else if (child.type === "inlineCode") {
       const codeNode = child as MdastInlineCode;
       if (EXACT_UUID_RE.test(codeNode.value)) {
-        const uuid = codeNode.value.trim();
-        newChildren.push({
-          type: "link",
-          url: `#uuid:${uuid}`,
-          children: [{ type: "text", value: uuid }],
-        });
+        newChildren.push(uuidLink(codeNode.value.trim()));
         changed = true;
       } else {
         newChildren.push(child);
@@ -100,33 +99,21 @@ function visitParent(node: MdastParent) {
   }
 }
 
-function splitTextOnUuids(textNode: MdastText): MdastNode[] {
-  const text = textNode.value;
+/**
+ * Split a text MDAST node into text + link nodes using the shared
+ * `splitTextOnUuids` utility. Returns the original node unchanged
+ * if no UUIDs are found.
+ */
+function splitTextToMdast(textNode: MdastText): MdastNode[] {
+  // Quick check: does the text contain anything UUID-like?
   UUID_REGEX.lastIndex = 0;
-
-  const results: MdastNode[] = [];
-  let lastIndex = 0;
-
-  for (const match of text.matchAll(UUID_REGEX)) {
-    const matchStart = match.index;
-    const matchEnd = matchStart + match[0].length;
-
-    if (matchStart > lastIndex) {
-      results.push({ type: "text", value: text.slice(lastIndex, matchStart) });
-    }
-
-    results.push({
-      type: "link",
-      url: `#uuid:${match[0]}`,
-      children: [{ type: "text", value: match[0] }],
-    });
-
-    lastIndex = matchEnd;
+  if (!UUID_REGEX.test(textNode.value)) {
+    return [textNode];
   }
 
-  if (lastIndex < text.length) {
-    results.push({ type: "text", value: text.slice(lastIndex) });
-  }
-
-  return results.length > 0 ? results : [textNode];
+  const segments = splitTextOnUuids(textNode.value);
+  return segments.map(
+    (seg): MdastNode =>
+      seg.isUuid ? uuidLink(seg.text) : { type: "text", value: seg.text },
+  );
 }
