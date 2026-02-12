@@ -17,6 +17,7 @@ import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 const styles = {
   empty: "text-muted-foreground py-8 text-center text-sm",
+  coverage: "text-muted-foreground mt-3 text-center text-xs",
 };
 
 export type VariantCostData = {
@@ -86,6 +87,15 @@ export function VariantCostChart({
   }
 
   const { data, variantNames } = transformVariantCost(variant_cost);
+
+  const totalInferences = variant_cost.reduce(
+    (sum, row) => sum + (row.inference_count ?? 0),
+    0,
+  );
+  const inferencesWithCost = variant_cost.reduce(
+    (sum, row) => sum + (row.inferences_with_cost ?? 0),
+    0,
+  );
 
   const chartConfig: Record<string, { label: string; color: string }> =
     variantNames.reduce(
@@ -206,6 +216,19 @@ export function VariantCostChart({
             </AreaChart>
           </ChartContainer>
           <ChartLegend items={variantNames} colors={CHART_COLORS} />
+          {totalInferences > 0 && (
+            <p className={styles.coverage}>
+              Cost tracked for{" "}
+              {inferencesWithCost === totalInferences ? (
+                <>all {totalInferences.toLocaleString()} inferences</>
+              ) : (
+                <>
+                  {inferencesWithCost.toLocaleString()} of{" "}
+                  {totalInferences.toLocaleString()} inferences
+                </>
+              )}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
