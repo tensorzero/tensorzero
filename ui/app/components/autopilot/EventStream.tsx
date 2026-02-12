@@ -500,25 +500,11 @@ class EventErrorBoundary extends Component<
   }
 }
 
-/**
- * Markdown renderer for EventStream content.
- * Includes plugins for interactive elements (e.g. UUID resolution).
- */
-const eventStreamRemarkPlugins = [remarkUuidLinks];
-const eventStreamComponents = {
+/** Stable references for UUID-enriched markdown rendering. */
+const uuidRemarkPlugins = [remarkUuidLinks];
+const uuidComponents = {
   [UUID_LINK_ELEMENT]: ({ uuid }: { uuid: string }) => <UuidLink uuid={uuid} />,
 };
-
-function EventStreamMarkdown({ children }: { children: string }) {
-  return (
-    <Markdown
-      remarkPlugins={eventStreamRemarkPlugins}
-      extraComponents={eventStreamComponents}
-    >
-      {children}
-    </Markdown>
-  );
-}
 
 function EventItem({
   event,
@@ -589,7 +575,12 @@ function EventItem({
         <>
           {event.payload.type === "message" &&
           event.payload.role === "assistant" ? (
-            <EventStreamMarkdown>{summary.description}</EventStreamMarkdown>
+            <Markdown
+              remarkPlugins={uuidRemarkPlugins}
+              extraComponents={uuidComponents}
+            >
+              {summary.description}
+            </Markdown>
           ) : event.payload.type === "tool_call" ? (
             <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (
