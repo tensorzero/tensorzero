@@ -500,11 +500,9 @@ class EventErrorBoundary extends Component<
   }
 }
 
-/** Stable references for UUID-enriched markdown rendering. */
+/** Stable references to avoid re-creating on each render. */
 const uuidRemarkPlugins = [remarkUuidLinks];
-const uuidComponents = {
-  [UUID_LINK_ELEMENT]: ({ uuid }: { uuid: string }) => <UuidLink uuid={uuid} />,
-};
+const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
 function EventItem({
   event,

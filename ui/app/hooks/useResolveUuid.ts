@@ -21,8 +21,6 @@ export function useResolveUuid(uuid: string): {
         `/api/tensorzero/resolve_uuid/${encodeURIComponent(normalizedUuid)}`,
       );
     }
-    // Intentionally omit `fetcher` — including it causes infinite re-fetch loops
-    // because each fetch mutates fetcher state, which would re-trigger the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [normalizedUuid]);
 
