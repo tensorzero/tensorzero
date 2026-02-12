@@ -47,10 +47,10 @@ class RawResponseEntry:
     This contains the original provider-specific response string for debugging and advanced use cases.
     """
 
-    model_inference_id: UUID
     provider_type: str
     api_type: ApiType
     data: str
+    model_inference_id: Optional[UUID] = None
 
 
 @dataclass
@@ -286,7 +286,7 @@ def parse_raw_usage(
 
 def parse_raw_response_entry(entry: Dict[str, Any]) -> RawResponseEntry:
     return RawResponseEntry(
-        model_inference_id=UUID(entry["model_inference_id"]),
+        model_inference_id=UUID(entry["model_inference_id"]) if entry.get("model_inference_id") else None,
         provider_type=entry["provider_type"],
         api_type=entry["api_type"],
         data=entry["data"],

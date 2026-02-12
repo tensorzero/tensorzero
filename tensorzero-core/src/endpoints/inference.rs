@@ -999,7 +999,7 @@ fn create_previous_raw_response_chunk(
                     .map(|entry| entry.api_type)
                     .unwrap_or(ApiType::ChatCompletions);
                 vec![RawResponseEntry {
-                    model_inference_id: r.id,
+                    model_inference_id: Some(r.id),
                     provider_type: r.model_provider_name.to_string(),
                     api_type,
                     data: r.raw_response.clone(),
@@ -1535,7 +1535,7 @@ impl InferenceResponse {
                             .map(|entry| entry.api_type)
                             .unwrap_or(ApiType::ChatCompletions);
                         vec![RawResponseEntry {
-                            model_inference_id: r.id,
+                            model_inference_id: Some(r.id),
                             provider_type: r.model_provider_name.to_string(),
                             api_type,
                             data: r.raw_response.clone(),
