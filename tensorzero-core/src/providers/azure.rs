@@ -237,6 +237,7 @@ impl InferenceProvider for AzureProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -257,6 +258,7 @@ impl InferenceProvider for AzureProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -266,6 +268,7 @@ impl InferenceProvider for AzureProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -289,6 +292,7 @@ impl InferenceProvider for AzureProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -299,6 +303,7 @@ impl InferenceProvider for AzureProvider {
                 &response,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -337,6 +342,7 @@ impl InferenceProvider for AzureProvider {
             .header("api-key", api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -414,6 +420,7 @@ impl EmbeddingProvider for AzureProvider {
 
         let (response, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::Embeddings,
             &FullExtraBodyConfig::default(), // No overrides supported
             &Default::default(),             // No extra headers for embeddings yet
             model_provider_data,
@@ -432,6 +439,7 @@ impl EmbeddingProvider for AzureProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Embeddings,
                 })
             })?;
             let response: AzureEmbeddingResponse =
@@ -444,6 +452,7 @@ impl EmbeddingProvider for AzureProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?;
             let latency = Latency::NonStreaming {
@@ -464,6 +473,7 @@ impl EmbeddingProvider for AzureProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Embeddings,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -474,6 +484,7 @@ impl EmbeddingProvider for AzureProvider {
                 &response_text,
                 PROVIDER_TYPE,
                 None,
+                ApiType::Embeddings,
             ))
         }
     }
@@ -486,6 +497,7 @@ fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error>
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing URL: {e:?}"),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: None,
             })
@@ -508,6 +520,7 @@ fn get_azure_embedding_url(endpoint: &Url, deployment_id: &str) -> Result<Url, E
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing URL: {e:?}"),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
                 raw_request: None,
                 raw_response: None,
             })
@@ -547,6 +560,7 @@ fn into_embedding_provider_response(
             raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
             raw_response: None,
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Embeddings,
         })
     })?;
     let embeddings = response
@@ -816,6 +830,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
             }
@@ -844,6 +859,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {
