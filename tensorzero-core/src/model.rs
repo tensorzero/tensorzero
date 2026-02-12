@@ -27,7 +27,7 @@ use crate::config::{
     OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
 use crate::cost::{
-    CostConfig, UninitializedCostConfig, compute_cost_from_response, load_cost_config,
+    CostConfig, ResponseMode, UninitializedCostConfig, compute_cost_from_response, load_cost_config,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -770,7 +770,7 @@ fn wrap_provider_stream(
                 // Compute cost from this chunk's raw response immediately
                 chunk_usage.cost = cost_config
                     .as_ref()
-                    .and_then(|cfg| compute_cost_from_response(&chunk.raw_response, cfg, true));
+                    .and_then(|cfg| compute_cost_from_response(&chunk.raw_response, cfg, ResponseMode::Streaming));
                 usages.push(chunk_usage);
             }
 
@@ -1934,7 +1934,11 @@ impl ModelProvider {
         let mut provider_inference_response = res?;
         // Compute cost from the raw response immediately after receiving it
         provider_inference_response.usage.cost = self.cost.as_ref().and_then(|cfg| {
-            compute_cost_from_response(&provider_inference_response.raw_response, cfg, false)
+            compute_cost_from_response(
+                &provider_inference_response.raw_response,
+                cfg,
+                ResponseMode::NonStreaming,
+            )
         });
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down

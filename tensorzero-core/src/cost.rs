@@ -42,13 +42,20 @@
 //! not `Decimal(0.1000000000000000055...)`. String values are also accepted
 //! for users who prefer quoting (`cost_per_million = "0.1"`).
 
-use std::fmt;
-use std::str::FromStr;
-
 use rust_decimal::Decimal;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, ErrorDetails};
+
+/// Whether the response was obtained via streaming or non-streaming inference.
+///
+/// Used to select the appropriate JSON Pointer when a cost config has
+/// separate `pointer_nonstreaming` / `pointer_streaming` fields.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResponseMode {
+    NonStreaming,
+    Streaming,
+}
 
 /// The Rust type used for cost values throughout TensorZero.
 ///
@@ -118,79 +125,6 @@ mod decimal_from_value {
         }
 
         deserializer.deserialize_any(DecimalVisitor)
-    }
-}
-
-// ─── Validated JSON Pointer ──────────────────────────────────────────────────
-
-/// A validated JSON Pointer (RFC 6901).
-///
-/// Must either be empty (`""`) or start with `/`.
-/// Validation happens at deserialization time, so invalid pointers are rejected
-/// early during config loading.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct JsonPointer(String);
-
-impl JsonPointer {
-    /// Create a new `JsonPointer`, validating the format.
-    pub fn new(s: impl Into<String>) -> Result<Self, String> {
-        let s = s.into();
-        if !s.is_empty() && !s.starts_with('/') {
-            return Err(format!(
-                "JSON Pointer must be empty or start with `/` (got `{s}`)"
-            ));
-        }
-        Ok(Self(s))
-    }
-
-    /// Return the pointer as a string slice.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for JsonPointer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl FromStr for JsonPointer {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::new(s)
-    }
-}
-
-impl Serialize for JsonPointer {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for JsonPointer {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        Self::new(s).map_err(serde::de::Error::custom)
-    }
-}
-
-#[cfg(feature = "ts-bindings")]
-impl ts_rs::TS for JsonPointer {
-    type WithoutGenerics = Self;
-    type OptionInnerType = Self;
-
-    fn name(_cfg: &ts_rs::Config) -> String {
-        "string".to_string()
-    }
-
-    fn inline(_cfg: &ts_rs::Config) -> String {
-        "string".to_string()
-    }
-
-    fn output_path() -> Option<std::path::PathBuf> {
-        None
     }
 }
 
@@ -267,13 +201,46 @@ impl From<UninitializedCostRate> for CostRate {
     }
 }
 
+/// Concrete type alias for a parsed JSON Pointer (RFC 6901) from the `json_pointer` crate.
+type JsonPtr = json_pointer::JsonPointer<String, Vec<String>>;
+
+/// A normalized pointer config used at runtime.
+///
+/// Pointers are parsed and validated at config load time using the `json_pointer` crate.
+#[derive(Clone, Debug)]
+pub enum NormalizedCostPointerConfig {
+    /// A single pointer used for both streaming and non-streaming responses.
+    Unified { pointer: JsonPtr },
+    /// Separate pointers for streaming and non-streaming responses.
+    Split {
+        pointer_nonstreaming: JsonPtr,
+        pointer_streaming: JsonPtr,
+    },
+}
+
+impl NormalizedCostPointerConfig {
+    /// Get the appropriate pointer for the given response mode.
+    pub fn get_pointer(&self, mode: ResponseMode) -> &JsonPtr {
+        match self {
+            NormalizedCostPointerConfig::Unified { pointer } => pointer,
+            NormalizedCostPointerConfig::Split {
+                pointer_nonstreaming,
+                pointer_streaming,
+            } => match mode {
+                ResponseMode::Streaming => pointer_streaming,
+                ResponseMode::NonStreaming => pointer_nonstreaming,
+            },
+        }
+    }
+}
+
 /// A normalized cost config entry used at runtime.
 ///
 /// All rates are normalized to per-unit, and pointers are validated.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct CostConfigEntry {
     /// JSON Pointer configuration for extracting the value from the response.
-    pub pointer: CostPointerConfig,
+    pub pointer: NormalizedCostPointerConfig,
 
     /// Normalized rate (always per-unit).
     pub rate: CostRate,
@@ -283,13 +250,27 @@ pub struct CostConfigEntry {
     pub required: bool,
 }
 
-impl From<UninitializedCostConfigEntry> for CostConfigEntry {
-    fn from(entry: UninitializedCostConfigEntry) -> Self {
-        CostConfigEntry {
-            pointer: entry.pointer,
+impl TryFrom<UninitializedCostConfigEntry> for CostConfigEntry {
+    type Error = Error;
+
+    fn try_from(entry: UninitializedCostConfigEntry) -> Result<Self, Self::Error> {
+        let pointer = match entry.pointer {
+            CostPointerConfig::Unified { pointer } => NormalizedCostPointerConfig::Unified {
+                pointer: parse_json_pointer(&pointer)?,
+            },
+            CostPointerConfig::Split {
+                pointer_nonstreaming,
+                pointer_streaming,
+            } => NormalizedCostPointerConfig::Split {
+                pointer_nonstreaming: parse_json_pointer(&pointer_nonstreaming)?,
+                pointer_streaming: parse_json_pointer(&pointer_streaming)?,
+            },
+        };
+        Ok(CostConfigEntry {
+            pointer,
             rate: entry.rate.into(),
             required: entry.required,
-        }
+        })
     }
 }
 
@@ -303,10 +284,10 @@ impl CostConfigEntry {
     fn compute_contribution(
         &self,
         response_json: &serde_json::Value,
-        streaming: bool,
+        mode: ResponseMode,
     ) -> Result<Decimal, ()> {
-        let pointer = self.pointer.get_pointer(streaming);
-        let value = response_json.pointer(pointer.as_str());
+        let pointer = self.pointer.get_pointer(mode);
+        let value = pointer.get(response_json).ok();
 
         match value {
             Some(v) => {
@@ -343,9 +324,7 @@ pub type CostConfig = Vec<CostConfigEntry>;
 /// This is called at config load time. All rates are converted to per-unit
 /// and JSON pointers are validated.
 pub fn load_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, Error> {
-    let entries: Vec<CostConfigEntry> = config.into_iter().map(CostConfigEntry::from).collect();
-    validate_cost_config(&entries)?;
-    Ok(entries)
+    config.into_iter().map(CostConfigEntry::try_from).collect()
 }
 
 // ─── JSON Pointer configuration ──────────────────────────────────────────────
@@ -359,31 +338,12 @@ pub fn load_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, E
 #[serde(untagged)]
 pub enum CostPointerConfig {
     /// A single pointer used for both streaming and non-streaming responses.
-    Unified { pointer: JsonPointer },
+    Unified { pointer: String },
     /// Separate pointers for streaming and non-streaming responses.
     Split {
-        pointer_nonstreaming: JsonPointer,
-        pointer_streaming: JsonPointer,
+        pointer_nonstreaming: String,
+        pointer_streaming: String,
     },
-}
-
-impl CostPointerConfig {
-    /// Get the appropriate pointer for the given streaming mode.
-    pub fn get_pointer(&self, streaming: bool) -> &JsonPointer {
-        match self {
-            CostPointerConfig::Unified { pointer } => pointer,
-            CostPointerConfig::Split {
-                pointer_nonstreaming,
-                pointer_streaming,
-            } => {
-                if streaming {
-                    pointer_streaming
-                } else {
-                    pointer_nonstreaming
-                }
-            }
-        }
-    }
 }
 
 // ─── Cost computation ────────────────────────────────────────────────────────
@@ -400,7 +360,7 @@ impl CostPointerConfig {
 pub fn compute_cost_from_response(
     raw_response: &str,
     cost_config: &[CostConfigEntry],
-    streaming: bool,
+    mode: ResponseMode,
 ) -> Option<Decimal> {
     if cost_config.is_empty() {
         return None;
@@ -416,7 +376,7 @@ pub fn compute_cost_from_response(
         }
     };
 
-    compute_cost_from_json(&response_json, cost_config, streaming)
+    compute_cost_from_json(&response_json, cost_config, mode)
 }
 
 /// Compute the cost from a parsed JSON value using the given cost configuration.
@@ -429,7 +389,7 @@ pub fn compute_cost_from_response(
 pub fn compute_cost_from_json(
     response_json: &serde_json::Value,
     cost_config: &[CostConfigEntry],
-    streaming: bool,
+    mode: ResponseMode,
 ) -> Option<Decimal> {
     if cost_config.is_empty() {
         return None;
@@ -438,7 +398,7 @@ pub fn compute_cost_from_json(
     let mut total_cost = Decimal::ZERO;
 
     for entry in cost_config {
-        match entry.compute_contribution(response_json, streaming) {
+        match entry.compute_contribution(response_json, mode) {
             Ok(contribution) => total_cost += contribution,
             Err(()) => return None,
         }
@@ -467,48 +427,20 @@ fn json_value_to_decimal(value: &serde_json::Value) -> Option<Decimal> {
     }
 }
 
-/// Validate a normalized cost configuration.
+/// Parse a JSON Pointer string into a validated `json_pointer::JsonPointer`.
 ///
-/// This checks that all JSON pointers are valid (non-empty pointers start with `/`).
-/// Since `JsonPointer` validates on construction, this is a secondary check.
-fn validate_cost_config(cost_config: &[CostConfigEntry]) -> Result<(), Error> {
-    for (i, entry) in cost_config.iter().enumerate() {
-        match &entry.pointer {
-            CostPointerConfig::Unified { pointer } => {
-                if !pointer.as_str().is_empty() && !pointer.as_str().starts_with('/') {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Cost entry {i}: `pointer` must start with `/` (got `{pointer}`)"
-                        ),
-                    }));
-                }
-            }
-            CostPointerConfig::Split {
-                pointer_nonstreaming,
-                pointer_streaming,
-            } => {
-                if !pointer_nonstreaming.as_str().is_empty()
-                    && !pointer_nonstreaming.as_str().starts_with('/')
-                {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Cost entry {i}: `pointer_nonstreaming` must start with `/` (got `{pointer_nonstreaming}`)"
-                        ),
-                    }));
-                }
-                if !pointer_streaming.as_str().is_empty()
-                    && !pointer_streaming.as_str().starts_with('/')
-                {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "Cost entry {i}: `pointer_streaming` must start with `/` (got `{pointer_streaming}`)"
-                        ),
-                    }));
-                }
-            }
-        }
+/// Empty strings are treated as pointing to the document root (valid per RFC 6901).
+fn parse_json_pointer(pointer: &str) -> Result<JsonPtr, Error> {
+    if pointer.is_empty() {
+        // Empty pointer is valid per RFC 6901 (points to root).
+        // The `json_pointer` crate represents this as an empty segments list.
+        return Ok(json_pointer::JsonPointer::new(Vec::<String>::new()));
     }
-    Ok(())
+    pointer.parse::<JsonPtr>().map_err(|e| {
+        Error::new(ErrorDetails::Config {
+            message: format!("Invalid JSON Pointer `{pointer}`: {e:?}"),
+        })
+    })
 }
 
 // ─── Helper to build normalized config entries in tests ──────────────────────
@@ -516,8 +448,8 @@ fn validate_cost_config(cost_config: &[CostConfigEntry]) -> Result<(), Error> {
 #[cfg(test)]
 fn make_entry(pointer: &str, cost_per_unit: Decimal, required: bool) -> CostConfigEntry {
     CostConfigEntry {
-        pointer: CostPointerConfig::Unified {
-            pointer: JsonPointer::new(pointer).unwrap(),
+        pointer: NormalizedCostPointerConfig::Unified {
+            pointer: parse_json_pointer(pointer).unwrap(),
         },
         rate: CostRate { cost_per_unit },
         required,
@@ -576,7 +508,7 @@ mod tests {
             }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         // input: 1000 * 1.50 / 1_000_000 = 0.001500
         // output: 500 * 3.00 / 1_000_000 = 0.001500
         // total: 0.003000
@@ -601,7 +533,7 @@ mod tests {
             }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         // 3 * 0.25 = 0.75
         assert_eq!(
             cost,
@@ -616,7 +548,7 @@ mod tests {
 
         let response = json!({ "usage": {} });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost, None,
             "cost should be None when required field is missing"
@@ -630,7 +562,7 @@ mod tests {
         let config = vec![make_entry("/usage/input_tokens", Decimal::new(15, 7), true)];
 
         let response = json!({ "usage": {} });
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost, None,
             "cost should be None when required field is missing"
@@ -653,7 +585,7 @@ mod tests {
 
         let response = json!({ "usage": {} });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost,
             Some(Decimal::ZERO),
@@ -676,7 +608,7 @@ mod tests {
             }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost, None,
             "cost should be None when computed cost is negative"
@@ -686,16 +618,16 @@ mod tests {
     #[test]
     fn test_compute_cost_empty_config() {
         let response = json!({ "usage": { "input_tokens": 100 } });
-        let cost = compute_cost_from_json(&response, &[], false);
+        let cost = compute_cost_from_json(&response, &[], ResponseMode::NonStreaming);
         assert_eq!(cost, None, "cost should be None with empty config");
     }
 
     #[test]
     fn test_compute_cost_split_pointer() {
         let config = vec![CostConfigEntry {
-            pointer: CostPointerConfig::Split {
-                pointer_nonstreaming: JsonPointer::new("/usage/total_tokens").unwrap(),
-                pointer_streaming: JsonPointer::new("/usage/stream_tokens").unwrap(),
+            pointer: NormalizedCostPointerConfig::Split {
+                pointer_nonstreaming: parse_json_pointer("/usage/total_tokens").unwrap(),
+                pointer_streaming: parse_json_pointer("/usage/stream_tokens").unwrap(),
             },
             rate: CostRate {
                 cost_per_unit: Decimal::new(200, 2) / MILLION, // 2.00 per million
@@ -710,8 +642,8 @@ mod tests {
             "usage": { "stream_tokens": 300 }
         });
 
-        let cost_ns = compute_cost_from_json(&response_ns, &config, false);
-        let cost_s = compute_cost_from_json(&response_s, &config, true);
+        let cost_ns = compute_cost_from_json(&response_ns, &config, ResponseMode::NonStreaming);
+        let cost_s = compute_cost_from_json(&response_s, &config, ResponseMode::Streaming);
 
         // non-streaming: 500 * 2.00 / 1_000_000 = 0.001000
         assert_eq!(
@@ -735,7 +667,7 @@ mod tests {
             "usage": { "tokens": "not_a_number" }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost, None,
             "cost should be None when value cannot be parsed as a number"
@@ -766,7 +698,7 @@ mod tests {
             }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         // input: 1000 * 1.50 / 1_000_000 = 0.001500
         // cached: 600 * (-0.75) / 1_000_000 = -0.000450
         // total: 0.001050
@@ -800,7 +732,7 @@ mod tests {
             }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost, None,
             "cost should be None when caching discount exceeds base cost"
@@ -816,7 +748,7 @@ mod tests {
         )];
 
         let raw_response = r#"{"usage": {"input_tokens": 1000}}"#;
-        let cost = compute_cost_from_response(raw_response, &config, false);
+        let cost = compute_cost_from_response(raw_response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost,
             Some(Decimal::new(1500, 6)),
@@ -829,7 +761,7 @@ mod tests {
         let config = vec![make_entry("/usage/input_tokens", Decimal::new(15, 7), true)];
 
         let raw_response = "not valid json";
-        let cost = compute_cost_from_response(raw_response, &config, false);
+        let cost = compute_cost_from_response(raw_response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost, None,
             "should return None for unparseable JSON response"
@@ -849,7 +781,7 @@ mod tests {
             "usage": { "tokens": "2000" }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         // 2000 * 1.50 / 1_000_000 = 0.003000
         assert_eq!(
             cost,
@@ -866,7 +798,7 @@ mod tests {
             "usage": { "tokens": true }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost, None,
             "should return None when value is a boolean (not a number)"
@@ -881,7 +813,7 @@ mod tests {
             "usage": { "input_tokens": 0 }
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert_eq!(
             cost,
             Some(Decimal::ZERO),
@@ -902,7 +834,7 @@ mod tests {
             "cost": 0.0035
         });
 
-        let cost = compute_cost_from_json(&response, &config, false);
+        let cost = compute_cost_from_json(&response, &config, ResponseMode::NonStreaming);
         assert!(
             cost.is_some(),
             "should handle float values from provider responses"
@@ -930,7 +862,7 @@ required = true
         assert_eq!(
             entry.pointer,
             CostPointerConfig::Unified {
-                pointer: JsonPointer::new("/usage/input_tokens").unwrap()
+                pointer: "/usage/input_tokens".to_string()
             },
             "pointer should be unified"
         );
@@ -1002,14 +934,17 @@ required = true
 
     #[test]
     fn test_deserialization_invalid_pointer_from_toml() {
+        // Deserialization succeeds (it's just a String), but load_cost_config rejects it
         let toml_str = r#"
 pointer = "no_leading_slash"
 cost_per_million = 1.50
 "#;
-        let result: Result<UninitializedCostConfigEntry, _> = toml::from_str(toml_str);
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("TOML deserialization should succeed");
+        let result = load_cost_config(vec![entry]);
         assert!(
             result.is_err(),
-            "should reject pointer without leading slash at parse time"
+            "should reject pointer without leading slash at config load time"
         );
     }
 
@@ -1021,7 +956,9 @@ pointer_nonstreaming = "bad"
 pointer_streaming = "/ok"
 cost_per_million = 1.50
 "#;
-        let result: Result<UninitializedCostConfigEntry, _> = toml::from_str(toml_str);
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("TOML deserialization should succeed");
+        let result = load_cost_config(vec![entry]);
         assert!(
             result.is_err(),
             "should reject split pointer_nonstreaming without leading slash"
@@ -1033,7 +970,9 @@ pointer_nonstreaming = "/ok"
 pointer_streaming = "bad"
 cost_per_million = 1.50
 "#;
-        let result: Result<UninitializedCostConfigEntry, _> = toml::from_str(toml_str);
+        let entry: UninitializedCostConfigEntry =
+            toml::from_str(toml_str).expect("TOML deserialization should succeed");
+        let result = load_cost_config(vec![entry]);
         assert!(
             result.is_err(),
             "should reject split pointer_streaming without leading slash"
@@ -1202,7 +1141,7 @@ cost_per_unit = 1.0
     fn test_uninitialized_to_normalized_per_million() {
         let uninitialized = UninitializedCostConfigEntry {
             pointer: CostPointerConfig::Unified {
-                pointer: JsonPointer::new("/usage/input_tokens").unwrap(),
+                pointer: "/usage/input_tokens".to_string(),
             },
             rate: UninitializedCostRate::PerMillion {
                 cost_per_million: Decimal::new(150, 2), // 1.50
@@ -1210,7 +1149,7 @@ cost_per_unit = 1.0
             required: true,
         };
 
-        let normalized: CostConfigEntry = uninitialized.into();
+        let normalized: CostConfigEntry = uninitialized.try_into().unwrap();
         assert_eq!(
             normalized.rate.cost_per_unit,
             Decimal::new(15, 7), // 0.0000015
@@ -1223,7 +1162,7 @@ cost_per_unit = 1.0
     fn test_uninitialized_to_normalized_per_unit() {
         let uninitialized = UninitializedCostConfigEntry {
             pointer: CostPointerConfig::Unified {
-                pointer: JsonPointer::new("/usage/web_searches").unwrap(),
+                pointer: "/usage/web_searches".to_string(),
             },
             rate: UninitializedCostRate::PerUnit {
                 cost_per_unit: Decimal::new(25, 2), // 0.25
@@ -1231,7 +1170,7 @@ cost_per_unit = 1.0
             required: false,
         };
 
-        let normalized: CostConfigEntry = uninitialized.into();
+        let normalized: CostConfigEntry = uninitialized.try_into().unwrap();
         assert_eq!(
             normalized.rate.cost_per_unit,
             Decimal::new(25, 2),
@@ -1247,7 +1186,7 @@ cost_per_unit = 1.0
         let config = vec![
             UninitializedCostConfigEntry {
                 pointer: CostPointerConfig::Unified {
-                    pointer: JsonPointer::new("/usage/input_tokens").unwrap(),
+                    pointer: "/usage/input_tokens".to_string(),
                 },
                 rate: UninitializedCostRate::PerMillion {
                     cost_per_million: Decimal::new(150, 2),
@@ -1256,8 +1195,8 @@ cost_per_unit = 1.0
             },
             UninitializedCostConfigEntry {
                 pointer: CostPointerConfig::Split {
-                    pointer_nonstreaming: JsonPointer::new("/usage/output_tokens").unwrap(),
-                    pointer_streaming: JsonPointer::new("/usage/stream_output_tokens").unwrap(),
+                    pointer_nonstreaming: "/usage/output_tokens".to_string(),
+                    pointer_streaming: "/usage/stream_output_tokens".to_string(),
                 },
                 rate: UninitializedCostRate::PerMillion {
                     cost_per_million: Decimal::new(300, 2),
@@ -1280,20 +1219,20 @@ cost_per_unit = 1.0
         );
     }
 
-    // ── JsonPointer validation ───────────────────────────────────────────
+    // ── JSON Pointer validation (via json_pointer crate) ──────────────────
 
     #[test]
     fn test_json_pointer_valid() {
         assert!(
-            JsonPointer::new("/usage/tokens").is_ok(),
+            parse_json_pointer("/usage/tokens").is_ok(),
             "valid pointer with leading slash"
         );
         assert!(
-            JsonPointer::new("").is_ok(),
+            parse_json_pointer("").is_ok(),
             "empty pointer is valid per RFC 6901"
         );
         assert!(
-            JsonPointer::new("/a/b/c").is_ok(),
+            parse_json_pointer("/a/b/c").is_ok(),
             "nested pointer is valid"
         );
     }
@@ -1301,11 +1240,11 @@ cost_per_unit = 1.0
     #[test]
     fn test_json_pointer_invalid() {
         assert!(
-            JsonPointer::new("no_slash").is_err(),
+            parse_json_pointer("no_slash").is_err(),
             "should reject pointer without leading slash"
         );
         assert!(
-            JsonPointer::new("usage/tokens").is_err(),
+            parse_json_pointer("usage/tokens").is_err(),
             "should reject pointer without leading slash"
         );
     }
@@ -1327,7 +1266,7 @@ cost_per_unit = 1.0
                 .collect()
         };
         let config = load_cost_config(entries).unwrap();
-        compute_cost_from_response(raw_response, &config, false)
+        compute_cost_from_response(raw_response, &config, ResponseMode::NonStreaming)
     }
 
     #[test]

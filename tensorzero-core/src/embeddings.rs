@@ -11,7 +11,7 @@ use crate::cache::{
 };
 use crate::config::provider_types::ProviderTypesConfig;
 use crate::cost::{
-    CostConfig, UninitializedCostConfig, compute_cost_from_response, load_cost_config,
+    CostConfig, ResponseMode, UninitializedCostConfig, compute_cost_from_response, load_cost_config,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -638,10 +638,9 @@ impl EmbeddingProviderInfo {
             response_fut.await?
         };
         // Compute cost from the raw response immediately after receiving it
-        response.usage.cost = self
-            .cost
-            .as_ref()
-            .and_then(|cfg| compute_cost_from_response(&response.raw_response, cfg, false));
+        response.usage.cost = self.cost.as_ref().and_then(|cfg| {
+            compute_cost_from_response(&response.raw_response, cfg, ResponseMode::NonStreaming)
+        });
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
