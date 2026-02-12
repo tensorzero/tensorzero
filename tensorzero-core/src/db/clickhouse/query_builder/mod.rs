@@ -2461,19 +2461,19 @@ FORMAT JSONEachRow";
         assert_eq!(chat_inference.variant_name, "test_variant");
         assert_eq!(
             chat_inference.input,
-            StoredInput {
+            Some(StoredInput {
                 system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
-            }
+            })
         );
         assert_eq!(
             chat_inference.output,
-            vec!["Hello! How can I help you today?".to_string().into()]
+            Some(vec!["Hello! How can I help you today?".to_string().into()])
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert::new_for_test(
+            Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![],
                 vec![],
                 AllowedTools {
@@ -2482,7 +2482,7 @@ FORMAT JSONEachRow";
                 },
                 ToolChoice::None,
                 Some(false),
-            )
+            ))
         );
 
         // Test the Python version (singly serialized)
@@ -2508,18 +2508,18 @@ FORMAT JSONEachRow";
         assert_eq!(chat_inference.variant_name, "test_variant");
         assert_eq!(
             chat_inference.input,
-            StoredInput {
+            Some(StoredInput {
                 system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
-            }
+            })
         );
         assert_eq!(
             chat_inference.output,
-            vec!["Hello! How can I help you today?".to_string().into()]
+            Some(vec!["Hello! How can I help you today?".to_string().into()])
         );
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert::new_for_test(
+            Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![],
                 vec![],
                 AllowedTools {
@@ -2528,7 +2528,7 @@ FORMAT JSONEachRow";
                 },
                 ToolChoice::None,
                 Some(false),
-            )
+            ))
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
     }
@@ -2558,7 +2558,7 @@ FORMAT JSONEachRow";
         };
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert::default()
+            Some(ToolCallConfigDatabaseInsert::default())
         );
         assert_eq!(
             chat_inference.dispreferred_outputs,
@@ -2622,17 +2622,17 @@ FORMAT JSONEachRow";
         assert_eq!(json_inference.variant_name, "test_variant");
         assert_eq!(
             json_inference.input,
-            StoredInput {
+            Some(StoredInput {
                 system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
-            }
+            })
         );
         assert_eq!(
             json_inference.output,
-            JsonInferenceOutput {
+            Some(JsonInferenceOutput {
                 raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
                 parsed: Some(json!({"answer":"Goodbye"})),
-            }
+            })
         );
         assert_eq!(
             json_inference.episode_id,
@@ -2644,7 +2644,7 @@ FORMAT JSONEachRow";
         );
         assert_eq!(
             json_inference.output_schema,
-            json!({"type": "object", "properties": {"output": {"type": "string"}}})
+            Some(json!({"type": "object", "properties": {"output": {"type": "string"}}}))
         );
         assert!(json_inference.dispreferred_outputs.is_empty());
 
@@ -2671,17 +2671,17 @@ FORMAT JSONEachRow";
         assert_eq!(json_inference.variant_name, "test_variant");
         assert_eq!(
             json_inference.input,
-            StoredInput {
+            Some(StoredInput {
                 system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
-            }
+            })
         );
         assert_eq!(
             json_inference.output,
-            JsonInferenceOutput {
+            Some(JsonInferenceOutput {
                 raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
                 parsed: Some(json!({"answer":"Goodbye"})),
-            }
+            })
         );
         assert_eq!(
             json_inference.episode_id,
@@ -2693,7 +2693,7 @@ FORMAT JSONEachRow";
         );
         assert_eq!(
             json_inference.output_schema,
-            json!({"type": "object", "properties": {"output": {"type": "string"}}})
+            Some(json!({"type": "object", "properties": {"output": {"type": "string"}}}))
         );
         assert!(json_inference.dispreferred_outputs.is_empty());
     }

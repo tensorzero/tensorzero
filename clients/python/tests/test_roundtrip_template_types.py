@@ -100,6 +100,7 @@ async def test_async_template_content_roundtrip_complete_flow(
     # Step 3: Verify stored input Template (StoredInputMessageContentTemplate)
     # ============================================================================
 
+    assert stored_inference.input is not None, "Stored inference input must not be None"
     input_messages = stored_inference.input.messages
     assert input_messages is not None, "Input messages must not be None"
     assert len(input_messages) >= 1, "Should have at least 1 input message"
@@ -192,6 +193,7 @@ async def test_async_template_content_roundtrip_complete_flow(
     follow_up_inference = follow_up_stored.inferences[0]
 
     # Verify template in follow-up input
+    assert follow_up_inference.input is not None, "Follow-up inference input must not be None"
     follow_up_messages = follow_up_inference.input.messages
     assert follow_up_messages is not None, "Follow-up messages must not be None"
 
@@ -334,6 +336,7 @@ def test_sync_template_content_roundtrip_complete_flow(sync_client: TensorZeroGa
     # Step 3: Verify StoredInputMessageContentTemplate
     # ============================================================================
 
+    assert stored_inference.input is not None, "Stored inference input must not be None"
     input_messages_sync = stored_inference.input.messages
     assert input_messages_sync is not None, "Input messages must not be None"
 

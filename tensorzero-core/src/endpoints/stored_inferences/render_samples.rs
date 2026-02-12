@@ -41,7 +41,7 @@ pub async fn render_samples<T: StoredSample>(
             let _permit = semaphore.acquire().await.ok()?;
 
             // Resolve the input
-            let resolved_input = sample.input().clone().reresolve(&*config).await.ok()?;
+            let resolved_input = sample.input()?.clone().reresolve(&*config).await.ok()?;
 
             // Render the sample
             render_stored_sample(sample, resolved_input, &config, &variants)

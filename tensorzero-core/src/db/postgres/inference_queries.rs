@@ -1118,53 +1118,56 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredChatInferenceDatabas
         let variant_name: String = row.try_get("variant_name")?;
         let episode_id: Uuid = row.try_get("episode_id")?;
         let timestamp: DateTime<Utc> = row.try_get("timestamp")?;
-        let input: Json<StoredInput> = row.try_get("input")?;
-        let output: Json<Vec<ContentBlockChatOutput>> = row.try_get("output")?;
+        let input: Option<Json<StoredInput>> = row.try_get("input").unwrap_or(None);
+        let output: Option<Json<Vec<ContentBlockChatOutput>>> =
+            row.try_get("output").unwrap_or(None);
         let dispreferred_output: Option<Json<Vec<ContentBlockChatOutput>>> =
             row.try_get("dispreferred_output")?;
         let tags: Json<HashMap<String, String>> = row.try_get("tags")?;
-        let extra_body: Json<UnfilteredInferenceExtraBody> = row.try_get("extra_body")?;
-        let inference_params: Json<InferenceParams> = row.try_get("inference_params")?;
+        let extra_body: Option<Json<UnfilteredInferenceExtraBody>> =
+            row.try_get("extra_body").unwrap_or(None);
+        let inference_params: Option<Json<InferenceParams>> =
+            row.try_get("inference_params").unwrap_or(None);
         let processing_time_ms: Option<i32> = row.try_get("processing_time_ms")?;
         let ttft_ms: Option<i32> = row.try_get("ttft_ms")?;
 
-        // Get chat-specific fields for tool_params reconstruction
-        let dynamic_tools: Vec<Tool> = row.try_get::<Json<Vec<Tool>>, _>("dynamic_tools")?.0;
-        let dynamic_provider_tools: Vec<ProviderTool> = row
-            .try_get::<Json<Vec<ProviderTool>>, _>("dynamic_provider_tools")?
-            .0;
-        let allowed_tools: Option<AllowedTools> = row
-            .try_get::<Option<Json<AllowedTools>>, _>("allowed_tools")?
-            .map(|v| v.0);
-        let tool_choice: Option<ToolChoice> = row
-            .try_get::<Option<Json<ToolChoice>>, _>("tool_choice")?
-            .map(|v| v.0);
-        let parallel_tool_calls: Option<bool> = row.try_get("parallel_tool_calls")?;
+        // Get chat-specific fields for tool_params reconstruction.
+        // These columns may be absent if the data has been moved to a separate table.
+        let dynamic_tools: Option<Json<Vec<Tool>>> = row.try_get("dynamic_tools").unwrap_or(None);
+        let dynamic_provider_tools: Option<Json<Vec<ProviderTool>>> =
+            row.try_get("dynamic_provider_tools").unwrap_or(None);
+        let allowed_tools: Option<Json<AllowedTools>> =
+            row.try_get("allowed_tools").unwrap_or(None);
+        let tool_choice: Option<Json<ToolChoice>> = row.try_get("tool_choice").unwrap_or(None);
+        let parallel_tool_calls: Option<bool> = row.try_get("parallel_tool_calls").unwrap_or(None);
 
-        let tool_params = ToolCallConfigDatabaseInsert::from_stored_values(
-            dynamic_tools,
-            dynamic_provider_tools,
-            allowed_tools,
-            tool_choice,
-            parallel_tool_calls,
-        )
-        .unwrap_or_default();
+        // Only construct tool_params if at least dynamic_tools is present
+        let tool_params = dynamic_tools.map(|dt| {
+            ToolCallConfigDatabaseInsert::from_stored_values(
+                dt.0,
+                dynamic_provider_tools.map(|v| v.0).unwrap_or_default(),
+                allowed_tools.map(|v| v.0),
+                tool_choice.map(|v| v.0),
+                parallel_tool_calls,
+            )
+            .unwrap_or_default()
+        });
 
         let dispreferred_outputs = dispreferred_output.map(|d| vec![d.0]).unwrap_or_default();
 
         Ok(StoredChatInferenceDatabase {
             function_name,
             variant_name,
-            input: input.0,
-            output: output.0,
+            input: input.map(|v| v.0),
+            output: output.map(|v| v.0),
             dispreferred_outputs,
             timestamp,
             episode_id,
             inference_id: id,
             tool_params,
             tags: tags.0,
-            extra_body: extra_body.0,
-            inference_params: inference_params.0,
+            extra_body: extra_body.map(|v| v.0),
+            inference_params: inference_params.map(|v| v.0),
             processing_time_ms: processing_time_ms.map(|v| v as u64),
             ttft_ms: ttft_ms.map(|v| v as u64),
         })
@@ -1180,14 +1183,16 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredJsonInference {
         let variant_name: String = row.try_get("variant_name")?;
         let episode_id: Uuid = row.try_get("episode_id")?;
         let timestamp: DateTime<Utc> = row.try_get("timestamp")?;
-        let input: Json<StoredInput> = row.try_get("input")?;
-        let output: Json<JsonInferenceOutput> = row.try_get("output")?;
+        let input: Option<Json<StoredInput>> = row.try_get("input").unwrap_or(None);
+        let output: Option<Json<JsonInferenceOutput>> = row.try_get("output").unwrap_or(None);
         let dispreferred_output: Option<Json<JsonInferenceOutput>> =
             row.try_get("dispreferred_output")?;
-        let output_schema: Value = row.try_get("output_schema")?;
+        let output_schema: Option<Value> = row.try_get("output_schema").unwrap_or(None);
         let tags: Json<HashMap<String, String>> = row.try_get("tags")?;
-        let extra_body: Json<UnfilteredInferenceExtraBody> = row.try_get("extra_body")?;
-        let inference_params: Json<InferenceParams> = row.try_get("inference_params")?;
+        let extra_body: Option<Json<UnfilteredInferenceExtraBody>> =
+            row.try_get("extra_body").unwrap_or(None);
+        let inference_params: Option<Json<InferenceParams>> =
+            row.try_get("inference_params").unwrap_or(None);
         let processing_time_ms: Option<i32> = row.try_get("processing_time_ms")?;
         let ttft_ms: Option<i32> = row.try_get("ttft_ms")?;
 
@@ -1196,16 +1201,16 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredJsonInference {
         Ok(StoredJsonInference {
             function_name,
             variant_name,
-            input: input.0,
-            output: output.0,
+            input: input.map(|v| v.0),
+            output: output.map(|v| v.0),
             dispreferred_outputs,
             timestamp,
             episode_id,
             inference_id: id,
             output_schema,
             tags: tags.0,
-            extra_body: extra_body.0,
-            inference_params: inference_params.0,
+            extra_body: extra_body.map(|v| v.0),
+            inference_params: inference_params.map(|v| v.0),
             processing_time_ms: processing_time_ms.map(|v| v as u64),
             ttft_ms: ttft_ms.map(|v| v as u64),
         })
