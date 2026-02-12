@@ -34,22 +34,31 @@ pub fn convert_subtables_to_inline(table: &mut Table) {
         if let Item::Table(sub_table) = item {
             // Recurse first (bottom-up conversion)
             convert_subtables_to_inline(sub_table);
-            // Convert this Table to an InlineTable
-            let inline = table_to_inline(sub_table);
-            table.insert(&key, Item::Value(Value::InlineTable(inline)));
+            // Convert this Table to an InlineTable if possible, otherwise leave as regular table
+            if let Ok(inline) = table_to_inline(sub_table) {
+                table.insert(&key, Item::Value(Value::InlineTable(inline)));
+            }
         }
     }
 }
 
 /// Convert a `Table` to an `InlineTable`, preserving all values.
-fn table_to_inline(table: &Table) -> InlineTable {
+/// Returns `Err(())` if the table contains entries that can't be represented inline
+/// (e.g. sub-tables or arrays of tables).
+fn table_to_inline(table: &Table) -> Result<InlineTable, ()> {
     let mut inline = InlineTable::new();
     for (key, item) in table {
-        if let Some(value) = item.as_value() {
-            inline.insert(key, value.clone());
+        match item {
+            Item::Value(value) => {
+                inline.insert(key, value.clone());
+            }
+            Item::Table(_) | Item::ArrayOfTables(_) => {
+                return Err(());
+            }
+            Item::None => {}
         }
     }
-    inline
+    Ok(inline)
 }
 
 /// Ensure a table exists at the given path, creating it if necessary.
@@ -176,4 +185,102 @@ pub fn upsert_evaluator(
     let evaluators_table = ensure_table(doc, &["evaluations", evaluation_name, "evaluators"])?;
     evaluators_table.insert(evaluator_name, evaluator_item);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use toml_edit::ArrayOfTables;
+
+    #[test]
+    fn test_table_to_inline_succeeds_with_values_only() {
+        let mut table = Table::new();
+        table.insert("key1", Item::Value(Value::from("value1")));
+        table.insert("key2", Item::Value(Value::from(42)));
+
+        let result = table_to_inline(&table);
+        assert!(
+            result.is_ok(),
+            "table with only values should convert to inline"
+        );
+
+        let inline = result.expect("already checked Ok");
+        assert_eq!(
+            inline.get("key1").and_then(|v| v.as_str()),
+            Some("value1"),
+            "expected key1 to be preserved in inline table"
+        );
+        assert_eq!(
+            inline.get("key2").and_then(|v| v.as_integer()),
+            Some(42),
+            "expected key2 to be preserved in inline table"
+        );
+    }
+
+    #[test]
+    fn test_table_to_inline_rejects_sub_table() {
+        let mut table = Table::new();
+        table.insert("key1", Item::Value(Value::from("value1")));
+        table.insert("nested", Item::Table(Table::new()));
+
+        let result = table_to_inline(&table);
+        assert!(
+            result.is_err(),
+            "table with a sub-table should fail to convert to inline"
+        );
+    }
+
+    #[test]
+    fn test_table_to_inline_rejects_array_of_tables() {
+        let mut table = Table::new();
+        table.insert("key1", Item::Value(Value::from("value1")));
+        table.insert("items", Item::ArrayOfTables(ArrayOfTables::new()));
+
+        let result = table_to_inline(&table);
+        assert!(
+            result.is_err(),
+            "table with an array of tables should fail to convert to inline"
+        );
+    }
+
+    #[test]
+    fn test_convert_subtables_to_inline_preserves_unconvertible_table() {
+        let mut root = Table::new();
+
+        // Create a sub-table that contains an ArrayOfTables (can't be inlined)
+        let mut sub = Table::new();
+        sub.insert("name", Item::Value(Value::from("test")));
+        sub.insert("items", Item::ArrayOfTables(ArrayOfTables::new()));
+        root.insert("section", Item::Table(sub));
+
+        convert_subtables_to_inline(&mut root);
+
+        // The section should still be a regular Table since it couldn't be inlined
+        assert!(
+            root.get("section")
+                .expect("section should still exist")
+                .is_table(),
+            "sub-table with ArrayOfTables should remain a regular table"
+        );
+    }
+
+    #[test]
+    fn test_convert_subtables_to_inline_converts_convertible_table() {
+        let mut root = Table::new();
+
+        // Create a sub-table with only values (can be inlined)
+        let mut sub = Table::new();
+        sub.insert("a", Item::Value(Value::from(1)));
+        sub.insert("b", Item::Value(Value::from(2)));
+        root.insert("section", Item::Table(sub));
+
+        convert_subtables_to_inline(&mut root);
+
+        // The section should now be an inline table
+        let item = root.get("section").expect("section should still exist");
+        assert!(
+            item.as_value().and_then(|v| v.as_inline_table()).is_some(),
+            "sub-table with only values should be converted to inline table"
+        );
+    }
 }
