@@ -511,7 +511,7 @@ const uuidLinkComponents = {
     return (
       <a
         href={href}
-        className="text-fg-brand hover:underline"
+        className="text-orange-500 hover:underline"
         target="_blank"
         rel="noopener noreferrer"
       >

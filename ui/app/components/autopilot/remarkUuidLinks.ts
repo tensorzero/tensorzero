@@ -33,7 +33,8 @@ type MdastNode =
   | { type: string };
 
 /** Regex that matches a string that is exactly one UUID (with optional whitespace). */
-const EXACT_UUID_RE = /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;
+const EXACT_UUID_RE =
+  /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;
 
 /**
  * Remark plugin that transforms UUID patterns into link nodes
