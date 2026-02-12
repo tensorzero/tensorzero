@@ -38,7 +38,7 @@ export function remarkUuidLinks() {
 }
 
 /** Node types whose content should NOT be transformed. */
-const SKIP_TYPES = new Set(["code", "inlineCode"]);
+const SKIP_TYPES = new Set(["code", "inlineCode", "link"]);
 
 function visitParent(node: MdastParent) {
   const newChildren: MdastNode[] = [];

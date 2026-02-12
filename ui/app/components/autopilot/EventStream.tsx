@@ -662,7 +662,7 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <Skeleton className="h-4 w-32" />
       </div>
       <p className="text-fg-secondary text-sm whitespace-pre-wrap">
-        {message.text}
+        {renderRichText(message.text)}
       </p>
     </div>
   );
