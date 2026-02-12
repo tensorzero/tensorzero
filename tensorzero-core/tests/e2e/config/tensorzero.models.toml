@@ -652,6 +652,10 @@ routing = ["good"]
 [models.test.providers.good]
 type = "dummy"
 model_name = "good"
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
 
 [models.error]
 routing = ["error"]
@@ -677,6 +681,10 @@ routing = ["json"]
 [models.json.providers.json]
 type = "dummy"
 model_name = "json"
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
 
 [models.json_goodbye]
 routing = ["dummy"]

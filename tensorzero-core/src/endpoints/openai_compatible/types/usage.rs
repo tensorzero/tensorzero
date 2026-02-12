@@ -3,7 +3,7 @@
 //! This module provides types for token usage reporting in OpenAI-compatible responses,
 //! including prompt tokens, completion tokens, and total token counts.
 
-use rust_decimal::Decimal;
+use crate::cost::Cost;
 use serde::Serialize;
 
 use crate::inference::types::Usage;
@@ -16,9 +16,9 @@ pub struct OpenAICompatibleUsage {
     pub completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_tokens: Option<u32>,
-    /// Cost of this inference in dollars (TensorZero extension).
+    /// Cost of this inference in dollars.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tensorzero_cost: Option<Decimal>,
+    pub tensorzero_cost: Option<Cost>,
 }
 
 impl OpenAICompatibleUsage {
@@ -27,7 +27,7 @@ impl OpenAICompatibleUsage {
             prompt_tokens: Some(0),
             completion_tokens: Some(0),
             total_tokens: Some(0),
-            tensorzero_cost: Some(Decimal::ZERO),
+            tensorzero_cost: Some(Cost::ZERO),
         }
     }
 

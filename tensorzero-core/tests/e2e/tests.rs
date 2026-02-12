@@ -12,6 +12,7 @@ mod clickhouse;
 #[macro_use]
 mod common;
 mod config;
+mod cost;
 mod datasets;
 mod db;
 mod dicl;

@@ -10,6 +10,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write,
 };
 use crate::config::provider_types::ProviderTypesConfig;
+use crate::cost::compute_cost_from_response;
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
@@ -569,7 +570,9 @@ pub struct EmbeddingProviderInfo {
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
     pub extra_headers: Option<ExtraHeadersConfig>,
-    /// Cost configuration for computing embedding cost from raw provider responses.
+    /// Normalized cost configuration for computing embedding cost from raw provider responses.
+    /// Rates are always stored as cost-per-unit after normalization at config load time.
+    #[serde(skip)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub cost: Option<crate::cost::CostConfig>,
 }
@@ -634,7 +637,7 @@ impl EmbeddingProviderInfo {
         };
         // Compute cost from the raw response if cost config is provided
         if let Some(cost_config) = &self.cost {
-            response.usage.cost = crate::cost::compute_cost_from_response(
+            response.usage.cost = compute_cost_from_response(
                 &response.raw_response,
                 cost_config,
                 false, // embeddings are never streaming
@@ -669,7 +672,7 @@ pub struct UninitializedEmbeddingProviderConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
     /// Cost configuration for computing embedding cost from raw provider responses.
     #[serde(default)]
-    pub cost: Option<crate::cost::CostConfig>,
+    pub cost: Option<crate::cost::UninitializedCostConfig>,
 }
 
 impl UninitializedEmbeddingProviderConfig {
@@ -689,7 +692,7 @@ impl UninitializedEmbeddingProviderConfig {
 
         let extra_body = self.extra_body;
         let extra_headers = self.extra_headers;
-        let cost = self.cost;
+        let cost = self.cost.map(crate::cost::load_cost_config).transpose()?;
 
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {

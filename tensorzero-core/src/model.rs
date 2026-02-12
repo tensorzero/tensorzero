@@ -26,6 +26,7 @@ use crate::config::with_skip_credential_validation;
 use crate::config::{
     OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
+use crate::cost::compute_cost_from_response;
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
@@ -132,6 +133,15 @@ impl UninitializedModelConfig {
                 } else {
                     load_future.await
                 };
+                let cost = provider
+                    .cost
+                    .map(crate::cost::load_cost_config)
+                    .transpose()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("models.{model_name}.providers.{name}.cost: {e}"),
+                        })
+                    })?;
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
@@ -145,7 +155,7 @@ impl UninitializedModelConfig {
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
-                        cost: provider.cost,
+                        cost,
                     },
                 ))
             }
@@ -752,11 +762,12 @@ fn wrap_provider_stream(
         let mut errored = false;
 
         // IMPORTANT: We should NOT modify chunks here, as they'll be re-processed downstream (e.g. `create_stream`).
+        // Note: `Usage` derives `Copy`, so `chunk.usage` is copied (not moved) into `chunk_usage`.
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref() && let Some(mut chunk_usage) = chunk.usage {
                 // Compute cost from this chunk's raw response if cost config is provided
                 if let Some(cost_config) = &cost_config {
-                    chunk_usage.cost = crate::cost::compute_cost_from_response(
+                    chunk_usage.cost = compute_cost_from_response(
                         &chunk.raw_response,
                         cost_config,
                         true, // streaming
@@ -867,7 +878,7 @@ pub struct UninitializedModelProvider {
     /// API response and stored in the database.
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
-    pub cost: Option<crate::cost::CostConfig>,
+    pub cost: Option<crate::cost::UninitializedCostConfig>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -883,17 +894,16 @@ pub struct ModelProvider {
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
     pub discard_unknown_chunks: bool,
-    /// Cost configuration for computing inference cost from raw provider responses.
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    /// Normalized cost configuration for computing inference cost from raw provider responses.
+    /// Rates are always stored as cost-per-unit after normalization at config load time.
+    #[serde(skip)]
     pub cost: Option<crate::cost::CostConfig>,
 }
 
 impl ModelProvider {
     fn validate(&self, global_outbound_http_timeout: &chrono::Duration) -> Result<(), Error> {
         self.timeouts.validate(global_outbound_http_timeout)?;
-        if let Some(cost_config) = &self.cost {
-            crate::cost::validate_cost_config(cost_config)?;
-        }
+        // Cost config is validated at load time via `load_cost_config`
         Ok(())
     }
     fn non_streaming_total_timeout(&self) -> Option<Duration> {
@@ -1921,7 +1931,7 @@ impl ModelProvider {
         let mut provider_inference_response = res?;
         // Compute cost from the raw response if cost config is provided
         if let Some(cost_config) = &self.cost {
-            provider_inference_response.usage.cost = crate::cost::compute_cost_from_response(
+            provider_inference_response.usage.cost = compute_cost_from_response(
                 &provider_inference_response.raw_response,
                 cost_config,
                 false, // non-streaming

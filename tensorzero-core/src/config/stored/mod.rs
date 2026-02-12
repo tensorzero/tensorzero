@@ -88,7 +88,7 @@ pub struct StoredEmbeddingProviderConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
     /// Cost configuration for computing embedding cost from raw provider responses.
     #[serde(default)]
-    pub cost: Option<crate::cost::CostConfig>,
+    pub cost: Option<crate::cost::UninitializedCostConfig>,
 }
 
 impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfig {

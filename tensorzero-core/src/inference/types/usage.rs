@@ -85,6 +85,43 @@ impl Usage {
     }
 }
 
+/// Take the maximum of two `Option<T>` values, keeping `Some` over `None`.
+///
+/// If both are `Some`, returns the larger value.
+/// If only one is `Some`, returns that value.
+/// If both are `None`, returns `None`.
+///
+/// When `warn_field_name` is `Some`, a non-cumulative warning (current > chunk) is
+/// logged for token fields. Cost fields pass `None` to skip the warning.
+fn streaming_max<T: PartialOrd + std::fmt::Display + Copy>(
+    current: Option<T>,
+    chunk: Option<T>,
+    warn_field_name: Option<&str>,
+) -> Option<T> {
+    match (current, chunk) {
+        (_, None) => current,
+        (None, chunk_value) => chunk_value,
+        (Some(current_value), Some(chunk_value)) => {
+            if let Some(field_name) = warn_field_name {
+                if current_value > chunk_value {
+                    tracing::warn!(
+                        "Unexpected non-cumulative `{field_name}` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                    );
+                    debug_assert!(
+                        false,
+                        "Unexpected non-cumulative `{field_name}` in streaming response ({current_value} > {chunk_value}); using the higher value."
+                    );
+                }
+            }
+            if current_value < chunk_value {
+                Some(chunk_value)
+            } else {
+                Some(current_value)
+            }
+        }
+    }
+}
+
 /// Aggregate `Usage` from a single streaming model inference.
 ///
 /// Different model providers report usage differently while streaming:
@@ -108,65 +145,19 @@ where
 {
     usages
         .into_iter()
-        .fold(Usage::default(), |mut acc, chunk_usage| {
-            let Usage {
-                input_tokens: chunk_input_tokens,
-                output_tokens: chunk_output_tokens,
-                cost: chunk_cost,
-            } = chunk_usage;
-
-            acc.input_tokens = match (acc.input_tokens, chunk_input_tokens) {
-                (_, None) => acc.input_tokens,
-                (None, chunk_value) => chunk_value,
-                (Some(current_value), Some(chunk_value)) => {
-                    if current_value > chunk_value {
-                        tracing::warn!(
-                            "Unexpected non-cumulative `input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-                        );
-                        debug_assert!(false, "Unexpected non-cumulative `input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
-                    }
-
-                    if current_value < chunk_value {
-                        Some(chunk_value)
-                    } else {
-                        Some(current_value)
-                    }
-                }
-            };
-
-            acc.output_tokens = match (acc.output_tokens, chunk_output_tokens) {
-                (_, None) => acc.output_tokens,
-                (None, chunk_value) => chunk_value,
-                (Some(current_value), Some(chunk_value)) => {
-                    if current_value > chunk_value {
-                        tracing::warn!(
-                            "Unexpected non-cumulative `output_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-                        );
-                        debug_assert!(false, "Unexpected non-cumulative `output_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
-                    }
-
-                    if current_value < chunk_value {
-                        Some(chunk_value)
-                    } else {
-                        Some(current_value)
-                    }
-                }
-            };
-
-            // Aggregate cost using max (same strategy as tokens)
-            acc.cost = match (acc.cost, chunk_cost) {
-                (_, None) => acc.cost,
-                (None, chunk_value) => chunk_value,
-                (Some(current_value), Some(chunk_value)) => {
-                    if current_value < chunk_value {
-                        Some(chunk_value)
-                    } else {
-                        Some(current_value)
-                    }
-                }
-            };
-
-            acc
+        .fold(Usage::default(), |acc, chunk_usage| Usage {
+            input_tokens: streaming_max(
+                acc.input_tokens,
+                chunk_usage.input_tokens,
+                Some("input_tokens"),
+            ),
+            output_tokens: streaming_max(
+                acc.output_tokens,
+                chunk_usage.output_tokens,
+                Some("output_tokens"),
+            ),
+            // Cost uses the same max strategy but without the non-cumulative warning
+            cost: streaming_max(acc.cost, chunk_usage.cost, None),
         })
 }
 

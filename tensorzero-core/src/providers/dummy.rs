@@ -213,7 +213,11 @@ pub static DUMMY_INFER_RESPONSE_RAW: &str = r#"{
       "logprobs": null,
       "finish_reason": null
     }
-  ]
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 10
+  }
 }"#;
 
 pub static ALTERNATE_INFER_RESPONSE_CONTENT: &str =
@@ -820,6 +824,9 @@ impl InferenceProvider for DummyProvider {
             }
         };
 
+        // Include usage in the final chunk's raw_response so cost can be computed from it
+        let final_raw_response =
+            r#"{"usage": {"prompt_tokens": 10, "completion_tokens": 10}}"#.to_string();
         let base_stream = stream.chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
             content: vec![],
             usage: Some(self.get_model_usage(content_chunk_len as u32)),
@@ -830,7 +837,7 @@ impl InferenceProvider for DummyProvider {
                 data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
             }]),
             finish_reason,
-            raw_response: String::new(),
+            raw_response: final_raw_response,
             provider_latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
         })));
 

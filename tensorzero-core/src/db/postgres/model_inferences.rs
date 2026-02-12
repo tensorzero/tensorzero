@@ -719,6 +719,26 @@ mod tests {
         );
     }
 
+    /// Number of columns in the `model_inferences` INSERT statement.
+    /// Update this constant when adding/removing columns in `build_insert_model_inferences_query`.
+    const MODEL_INFERENCES_INSERT_COLUMNS: usize = 18;
+
+    /// Generate the expected VALUES clause for a multi-row INSERT with `num_rows` rows
+    /// and `cols_per_row` bind parameters per row.
+    ///
+    /// Example: `expected_values_clause(2, 3)` => `"($1, $2, $3), ($4, $5, $6)"`
+    fn expected_values_clause(num_rows: usize, cols_per_row: usize) -> String {
+        (0..num_rows)
+            .map(|row| {
+                let params: Vec<String> = (1..=cols_per_row)
+                    .map(|col| format!("${}", row * cols_per_row + col))
+                    .collect();
+                format!("({})", params.join(", "))
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     #[test]
     fn test_build_insert_model_inferences_query_single_row() {
         let rows = vec![StoredModelInference {
@@ -746,17 +766,19 @@ mod tests {
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
 
-        assert_query_equals(
-            sql,
+        let expected = format!(
             r"
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, raw_request, raw_response, system,
                 input_messages, output, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            ) VALUES {}
             ",
+            expected_values_clause(1, MODEL_INFERENCES_INSERT_COLUMNS)
         );
+
+        assert_query_equals(sql, &expected);
     }
 
     #[test]
@@ -808,17 +830,18 @@ mod tests {
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
 
-        assert_query_equals(
-            sql,
+        let expected = format!(
             r"
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, raw_request, raw_response, system,
                 input_messages, output, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18),
-            ($19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+            ) VALUES {}
             ",
+            expected_values_clause(2, MODEL_INFERENCES_INSERT_COLUMNS)
         );
+
+        assert_query_equals(sql, &expected);
     }
 }
