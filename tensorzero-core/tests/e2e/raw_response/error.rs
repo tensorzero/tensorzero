@@ -13,16 +13,13 @@ use crate::common::get_gateway_endpoint;
 
 /// Helper to assert a raw_response entry in an error response has valid structure.
 ///
-/// Error entries differ from success entries: `model_inference_id` should be `null`
-/// (since the inference failed before a `model_inference_id` could be assigned).
+/// Error entries differ from success entries: `model_inference_id` should be absent
+/// (since the inference failed before a `model_inference_id` could be assigned,
+/// and `None` values are omitted via `skip_serializing_if`).
 fn assert_error_raw_response_entry(entry: &Value) {
     assert!(
-        entry.get("model_inference_id").is_some(),
-        "raw_response entry should have model_inference_id field"
-    );
-    assert!(
-        entry["model_inference_id"].is_null(),
-        "model_inference_id should be null for error entries (no successful model inference)"
+        entry.get("model_inference_id").is_none(),
+        "model_inference_id should be absent for error entries (no successful model inference)"
     );
 
     let provider_type = entry
