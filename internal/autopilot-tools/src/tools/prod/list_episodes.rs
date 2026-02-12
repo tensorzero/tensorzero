@@ -57,7 +57,9 @@ impl ToolMetadata for ListEpisodesTool {
             "properties": {
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum number of episodes to return (max 100)."
+                    "description": "Maximum number of episodes to return (max 100).",
+                    "minimum": 1,
+                    "maximum": 100
                 },
                 "before": {
                     "anyOf": [
