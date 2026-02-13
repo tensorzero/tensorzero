@@ -1,12 +1,13 @@
 import type { Route } from "./+types/inference_preview.route";
-import { data } from "react-router";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { logger } from "~/utils/logger";
 
+// Returns preview data or null (never throws, to avoid crashing the
+// page via the ErrorBoundary when loaded by a fetcher).
 export async function loader({ params }: Route.LoaderArgs) {
   const { inference_id } = params;
   if (!inference_id) {
-    throw data("Inference ID is required", { status: 400 });
+    return Response.json(null);
   }
 
   try {
@@ -17,7 +18,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     });
 
     if (response.inferences.length === 0) {
-      throw data("Inference not found", { status: 404 });
+      return Response.json(null);
     }
 
     const inference = response.inferences[0];
@@ -25,10 +26,7 @@ export async function loader({ params }: Route.LoaderArgs) {
       timestamp: inference.timestamp,
     });
   } catch (error) {
-    if (error instanceof Response) {
-      throw error;
-    }
     logger.error("Failed to fetch inference preview:", error);
-    throw data("Failed to fetch inference preview", { status: 500 });
+    return Response.json(null);
   }
 }
