@@ -596,3 +596,143 @@ model_name = "good"
     assert!(output_tokens > 0, "output_tokens should be positive");
     assert!(cost > 0.0, "cost should be positive");
 }
+
+// ============================================================================
+// Cost Config Location Tests
+// ============================================================================
+
+/// Test that cost is NOT present when cost config is on the relay but not on downstream.
+/// The relay forwards requests to downstream, so only the downstream's cost config matters.
+/// The relay's local provider config (including cost) is ignored for relayed requests.
+#[tokio::test]
+async fn test_relay_cost_config_on_relay_only_non_streaming() {
+    // Downstream has NO cost config
+    let downstream_config = r#"
+[models.cost_model]
+routing = ["dummy_no_cost"]
+
+[models.cost_model.providers.dummy_no_cost]
+type = "dummy"
+model_name = "good"
+"#;
+
+    // Relay HAS cost config, but it doesn't matter — relay forwards to downstream
+    let relay_config = r#"
+[models.cost_model]
+routing = ["relay_dummy_with_cost"]
+
+[models.cost_model.providers.relay_dummy_with_cost]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "cost_model",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let usage = body
+        .get("usage")
+        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+
+    // Cost should NOT be present — downstream doesn't have cost config,
+    // and the relay's cost config is irrelevant for relayed requests
+    assert!(
+        usage.get("cost").is_none(),
+        "cost should not be present when only the relay (not downstream) has cost config. Usage: {usage}"
+    );
+}
+
+/// Same as above but streaming — cost config on relay only should not produce cost.
+#[tokio::test]
+async fn test_relay_cost_config_on_relay_only_streaming() {
+    let downstream_config = r#"
+[models.cost_model]
+routing = ["dummy_no_cost"]
+
+[models.cost_model.providers.dummy_no_cost]
+type = "dummy"
+model_name = "good"
+"#;
+
+    let relay_config = r#"
+[models.cost_model]
+routing = ["relay_dummy_with_cost"]
+
+[models.cost_model.providers.relay_dummy_with_cost]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "cost_model",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true
+        }))
+        .eventsource()
+        .await
+        .unwrap();
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        if let Some(usage) = chunk.get("usage") {
+            assert!(
+                usage.get("cost").is_none(),
+                "cost should not be present in streaming when only relay has cost config. Usage: {usage}"
+            );
+        }
+    }
+}
