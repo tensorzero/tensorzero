@@ -42,6 +42,7 @@ reqwest = { version = "0.12.28", features = [
     "http2",
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
+serde_ignored = "0.1"
 serde_path_to_error = "0.1.17"
 uuid = { version = "1.20.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }

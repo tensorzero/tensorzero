@@ -3567,3 +3567,36 @@ async fn test_experimentation_namespace_track_and_stop_rejected() {
         "Error should mention the namespace name: {err_msg}"
     );
 }
+
+#[tokio::test]
+async fn test_gateway_unknown_field() {
+    let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+        bogus_field = "should not be here"
+
+        [functions]
+
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        model_name = "good"
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Config should fail to load with unknown gateway field");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("Unknown field(s) in config"),
+        "Error should mention unknown fields: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("bogus_field"),
+        "Error should mention the specific unknown field name: {err_msg}"
+    );
+}

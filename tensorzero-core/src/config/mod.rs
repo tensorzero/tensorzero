@@ -1743,16 +1743,32 @@ impl TryFrom<toml::Table> for UninitializedConfig {
     type Error = Error;
 
     fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
-        // First deserialize into TOML-specific config, then convert to runtime config
-        let toml_config: TomlUninitializedConfig = serde_path_to_error::deserialize(table)
-            .map_err(|e| {
-                let path = e.path().clone();
-                Error::new(ErrorDetails::Config {
-                    // Extract the underlying message from the toml error, as
-                    // the path-tracking from the toml crate will be incorrect
-                    message: format!("{}: {}", path, e.into_inner().message()),
-                })
-            })?;
+        // First deserialize into TOML-specific config, then convert to runtime config.
+        // We compose `serde_ignored` with `serde_path_to_error` to reject unknown fields
+        // while still providing good error paths. This catches typos in TOML config files.
+        let mut track = serde_path_to_error::Track::new();
+        let path_de = serde_path_to_error::Deserializer::new(table, &mut track);
+        let mut ignored_keys = Vec::new();
+        let result: Result<TomlUninitializedConfig, _> =
+            serde_ignored::deserialize(path_de, |path| {
+                ignored_keys.push(path.to_string());
+            });
+
+        let toml_config = result.map_err(|e| {
+            let path = track.path();
+            Error::new(ErrorDetails::Config {
+                // Extract the underlying message from the toml error, as
+                // the path-tracking from the toml crate will be incorrect
+                message: format!("{path}: {}", e.message()),
+            })
+        })?;
+
+        if !ignored_keys.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!("Unknown field(s) in config: {}", ignored_keys.join(", ")),
+            }));
+        }
+
         Ok(toml_config.into())
     }
 }
