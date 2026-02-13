@@ -97,7 +97,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (sessionId === "new") {
     const url = new URL(request.url);
     const initialMessage = url.searchParams.get("message") ?? undefined;
-
     return {
       sessionId: "new",
       eventsData: {
@@ -109,217 +108,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       isNewSession: true,
       configApplyEnabled,
       initialMessage,
-    };
-  }
-
-  // --- PROTOTYPE: Remove this entire `if (sessionId === "mock")` block once real
-  // backend events include `ask_user_question` payloads. This mock session provides
-  // fake events + question data for visual prototyping of the question UI. ---
-  if (sessionId === "mock") {
-    const mockEvents: GatewayEvent[] = [
-      {
-        id: "mock-001",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 120000).toISOString(),
-        payload: {
-          type: "message",
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Let's optimize the extract_keywords function. The accuracy is too low.",
-            },
-          ],
-        },
-      },
-      {
-        id: "mock-002",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 90000).toISOString(),
-        payload: {
-          type: "message",
-          role: "assistant",
-          content: [
-            {
-              type: "text",
-              text: "I'll analyze the `extract_keywords` function. Let me first look at recent inference data and evaluation scores to understand what's going wrong.\n\nI'll start by examining the function's current configuration and recent performance metrics.",
-            },
-          ],
-        },
-      },
-      {
-        id: "mock-003",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 80000).toISOString(),
-        payload: {
-          type: "tool_call",
-          name: "list_inferences",
-          arguments: {
-            function_name: "extract_keywords",
-            limit: 50,
-            order_by: "created_at",
-          },
-          side_info: {
-            tool_call_event_id: "mock-003",
-            session_id: "mock-session",
-            config_snapshot_hash: "abc123",
-            optimization: null,
-          },
-        },
-      },
-      {
-        id: "mock-004",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 75000).toISOString(),
-        payload: {
-          type: "tool_call_authorization",
-          source: { type: "ui" },
-          tool_call_event_id: "mock-003",
-          status: { type: "approved" },
-        },
-      },
-      {
-        id: "mock-005",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 70000).toISOString(),
-        payload: {
-          type: "tool_result",
-          tool_call_event_id: "mock-003",
-          outcome: {
-            type: "success",
-            result: {
-              inferences: [
-                { id: "inf-001", score: 0.42 },
-                { id: "inf-002", score: 0.38 },
-                { id: "inf-003", score: 0.55 },
-              ],
-              average_score: 0.45,
-            },
-          },
-        },
-      },
-      {
-        id: "mock-006",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 60000).toISOString(),
-        payload: {
-          type: "status_update",
-          status_update: {
-            type: "text",
-            text: "Analyzing 50 recent inferences for extract_keywords...",
-          },
-        },
-      },
-      {
-        id: "mock-007",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 55000).toISOString(),
-        payload: {
-          type: "message",
-          role: "assistant",
-          content: [
-            {
-              type: "text",
-              text: "I see the issue. The current variant `gpt4o_keywords_v2` is underperforming. Let me pull the evaluation breakdown and check if there's a pattern in the failures.",
-            },
-          ],
-        },
-      },
-      {
-        id: "mock-008",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 50000).toISOString(),
-        payload: {
-          type: "tool_call",
-          name: "list_evaluation_results",
-          arguments: {
-            function_name: "extract_keywords",
-            metric_name: "keyword_accuracy",
-            limit: 20,
-          },
-          side_info: {
-            tool_call_event_id: "mock-008",
-            session_id: "mock-session",
-            config_snapshot_hash: "def456",
-            optimization: null,
-          },
-        },
-      },
-      {
-        id: "mock-009",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 48000).toISOString(),
-        payload: {
-          type: "tool_call_authorization",
-          source: { type: "ui" },
-          tool_call_event_id: "mock-008",
-          status: { type: "approved" },
-        },
-      },
-      {
-        id: "mock-010",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 45000).toISOString(),
-        payload: {
-          type: "tool_result",
-          tool_call_event_id: "mock-008",
-          outcome: {
-            type: "success",
-            result: {
-              evaluations: [
-                { id: "eval-001", score: 0.35, tags: ["medical"] },
-                { id: "eval-002", score: 0.72, tags: ["general"] },
-                { id: "eval-003", score: 0.28, tags: ["legal"] },
-              ],
-            },
-          },
-        },
-      },
-      {
-        id: "mock-011",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 40000).toISOString(),
-        payload: {
-          type: "message",
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Yeah, we get a lot of medical and legal documents. Those are the ones failing the most.",
-            },
-          ],
-        },
-      },
-      {
-        id: "mock-012",
-        session_id: "mock-session",
-        created_at: new Date(Date.now() - 30000).toISOString(),
-        payload: {
-          type: "message",
-          role: "assistant",
-          content: [
-            {
-              type: "text",
-              text: "That confirms my analysis. The average accuracy score is **0.45** across the last 50 inferences, but domain-specific documents (medical, legal) score significantly lower at **0.31** compared to **0.72** for general content.\n\nThe main issues are:\n\n1. **Keyword extraction misses domain-specific terms** — the model doesn't recognize specialized vocabulary in medical/legal contexts\n2. **Over-extraction** — returning too many generic terms that dilute precision\n3. **No domain awareness** — the current prompt doesn't differentiate between content types\n\nI'd like to propose an optimization approach. Let me ask you a few questions to make sure we're aligned on the right strategy.",
-            },
-          ],
-        },
-      },
-    ] as unknown as GatewayEvent[];
-    // --- END PROTOTYPE ---
-
-    return {
-      sessionId: "mock",
-      eventsData: {
-        events: mockEvents,
-        hasMoreEvents: false,
-        pendingToolCalls: [] as GatewayEvent[],
-        status: {
-          status: "idle",
-        } as AutopilotStatus,
-      },
-      isNewSession: true,
-      initialMessage: undefined,
     };
   }
 
@@ -614,9 +402,6 @@ function AutopilotSessionEventsPageContent({
     OptimisticMessage[]
   >([]);
 
-  // Preserve chat input draft text across question card visibility changes
-  const [chatDraftText, setChatDraftText] = useState("");
-
   // Track autopilot status for disabling submit
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>({
     status: "idle",
@@ -835,115 +620,6 @@ function AutopilotSessionEventsPageContent({
       }
     }
   }, [interruptFetcher.state, interruptFetcher.data, toast, sessionId]);
-
-  // --- PROTOTYPE: Remove this entire block (through "END PROTOTYPE") once the backend
-  // delivers `ask_user_question` events via SSE. Replace with:
-  //   1. Parse `ask_user_question` events from the SSE stream
-  //   2. Derive `pendingQuestion` from the latest unanswered question event
-  //   3. On submit/skip, POST the answer/skip to the autopilot API
-  //   4. Answered/Skipped cards will render from resolved events in the stream
-  // The PendingQuestionCard, AnsweredQuestionCard, and SkippedQuestionCard
-  // components are production-ready — only this mock wiring needs replacement. ---
-  const [mockQuestionVisible, setMockQuestionVisible] = useState(true);
-  const [submittedResponses, setSubmittedResponses] = useState<Record<
-    string,
-    UserQuestionAnswer
-  > | null>(null);
-  const [questionSkipped, setQuestionSkipped] = useState(false);
-
-  const mockQuestionPayload: UserQuestionsPayload = {
-    questions: [
-      {
-        format: "multiple_choice",
-        id: "a1b2c3d4-0001-4000-8000-000000000001",
-        question:
-          "The `extract_keywords` function currently uses a single-shot prompt with **GPT-4o**. We've identified that domain-specific documents (medical, legal, financial) consistently score below **0.35** accuracy while general content scores **0.72**. Which optimization strategy would you like to pursue to address this domain-specific performance gap?",
-        header: "Strategy",
-        options: [
-          {
-            id: "opt-a1b2c3d4-0001-0001-8000-000000000001",
-            label: "Domain-specific fine-tuning with curated examples",
-            description:
-              "Collect 500+ labeled examples from each underperforming domain (medical, legal, financial) and fine-tune a dedicated model. Estimated 2-3 weeks of data curation plus 1 week of training and evaluation.",
-          },
-          {
-            id: "opt-a1b2c3d4-0001-0002-8000-000000000001",
-            label: "Dynamic prompt engineering with domain detection",
-            description:
-              "Add a classification step to detect the document domain, then route to domain-specific system prompts with specialized terminology lists and extraction rules for each vertical.",
-          },
-          {
-            id: "opt-a1b2c3d4-0001-0003-8000-000000000001",
-            label: "Best-of-N sampling with domain-aware scoring",
-            description:
-              "Generate 5 candidate extractions per inference and use a domain-specific scoring function that weights terminology precision. Higher cost per inference but no training data required.",
-          },
-          {
-            id: "opt-a1b2c3d4-0001-0004-8000-000000000001",
-            label: "Hybrid retrieval-augmented approach",
-            description:
-              "Maintain a vector database of domain-specific keywords and terminology for each vertical. At inference time, retrieve relevant terms and inject them as context into the extraction prompt to guide the model.",
-          },
-        ],
-        multi_select: false,
-      },
-      {
-        format: "multiple_choice",
-        id: "a1b2c3d4-0002-4000-8000-000000000001",
-        question:
-          "Given the current performance characteristics, which metrics should we prioritize when evaluating the optimization? Select all that are important to your use case.",
-        header: "Metrics",
-        options: [
-          {
-            id: "opt-a1b2c3d4-0002-0001-8000-000000000001",
-            label: "Domain-specific keyword precision",
-            description:
-              "Percentage of extracted keywords that are actually relevant domain terms (currently 0.31 for medical/legal vs 0.72 for general)",
-          },
-          {
-            id: "opt-a1b2c3d4-0002-0002-8000-000000000001",
-            label: "End-to-end latency (p95)",
-            description:
-              "95th percentile response time including any additional processing steps. Current p95 is 850ms, target is under 500ms for production SLA.",
-          },
-          {
-            id: "opt-a1b2c3d4-0002-0003-8000-000000000001",
-            label: "Cost per 1000 inferences",
-            description:
-              "Total API cost including any additional model calls for classification, retrieval, or scoring. Current cost is $2.40/1k inferences.",
-          },
-          {
-            id: "opt-a1b2c3d4-0002-0004-8000-000000000001",
-            label: "Cross-domain generalization",
-            description:
-              "Ensure improvements in one domain don't degrade performance in others. Measured as the minimum accuracy across all domains.",
-          },
-        ],
-        multi_select: true,
-      },
-      {
-        format: "free_response",
-        id: "a1b2c3d4-0003-4000-8000-000000000001",
-        question:
-          "Please describe any additional constraints, requirements, or context that should inform the optimization approach. For example: budget limits, deployment timeline, compliance requirements, specific model preferences, or known edge cases that are particularly important to handle correctly.",
-        header: "Constraints",
-      },
-    ],
-  };
-
-  const handleQuestionSubmit = (
-    _eventId: string,
-    responses: Record<string, UserQuestionAnswer>,
-  ) => {
-    setSubmittedResponses(responses);
-    setMockQuestionVisible(false);
-  };
-
-  const handleQuestionSkip = () => {
-    setQuestionSkipped(true);
-    setMockQuestionVisible(false);
-  };
-  // --- END PROTOTYPE ---
 
   // Interruptible when actively processing (not idle or failed)
   const isInterruptible =
@@ -1170,26 +846,6 @@ function AutopilotSessionEventsPageContent({
               )}
             </Await>
           </Suspense>
-          {/* PROTOTYPE: Remove these two blocks. Once wired to real events,
-              AnsweredQuestionCard / SkippedQuestionCard should render inline
-              within EventStream.tsx based on resolved `ask_user_question_result` events. */}
-          {submittedResponses && (
-            <AnsweredQuestionCard
-              payload={mockQuestionPayload}
-              responses={submittedResponses}
-              eventId="mock-question-001"
-              timestamp={new Date().toISOString()}
-              className="mt-4"
-            />
-          )}
-          {questionSkipped && !submittedResponses && (
-            <SkippedQuestionCard
-              payload={mockQuestionPayload}
-              eventId="mock-question-001"
-              timestamp={new Date().toISOString()}
-              className="mt-4"
-            />
-          )}
         </div>
       </div>
 
@@ -1230,35 +886,17 @@ function AutopilotSessionEventsPageContent({
                   isInCooldown={isInCooldown}
                 />
               )}
-              {/* PROTOTYPE: Replace mockQuestionVisible with a real `pendingQuestion`
-                  derived from SSE events. Question card + chat input shown together —
-                  chat input is editable but submit disabled until questions are
-                  answered or explicitly skipped. */}
-              {mockQuestionVisible && (
-                <PendingQuestionCard
-                  eventId="mock-question-001"
-                  payload={mockQuestionPayload}
-                  isLoading={false}
-                  onSubmit={handleQuestionSubmit}
-                  onSkip={handleQuestionSkip}
-                  tabLayout="horizontal"
-                />
-              )}
               <ChatInput
                 sessionId={isNewSession ? NIL_UUID : sessionId}
                 onMessageSent={handleMessageSent}
                 onMessageFailed={handleMessageFailed}
                 isNewSession={isNewSession}
-                disabled={
-                  isEventsLoading || hasLoadError || mockQuestionVisible
-                }
+                disabled={isEventsLoading || hasLoadError}
                 submitDisabled={submitDisabled}
                 isInterruptible={isInterruptible}
                 isInterrupting={interruptFetcher.state !== "idle"}
                 onInterrupt={handleInterruptSession}
                 initialMessage={initialMessage}
-                draftText={chatDraftText}
-                onDraftTextChange={setChatDraftText}
               />
             </div>
           </div>
