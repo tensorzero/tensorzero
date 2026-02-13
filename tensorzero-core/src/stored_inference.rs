@@ -21,8 +21,8 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
-    ResolvedRequestMessage, Text,
+    ContentBlockChatOutput, FunctionType, JsonInferenceOutput, ModelInput, RequestMessage,
+    ResolvedInput, ResolvedRequestMessage, Text,
 };
 use crate::tool::{
     DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert,
@@ -57,6 +57,7 @@ pub trait StoredSample {
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
+    pub function_type: FunctionType,
     pub input: Option<StoredInput>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
@@ -477,6 +478,7 @@ impl StoredSample for StoredInferenceDatabase {
         match self {
             StoredInferenceDatabase::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
+                function_type: FunctionType::Chat,
                 input: example.input,
                 episode_id: Some(example.episode_id),
                 inference_id: Some(example.inference_id),
@@ -500,6 +502,7 @@ impl StoredSample for StoredInferenceDatabase {
                     .collect();
                 SimpleStoredSampleInfo {
                     function_name: example.function_name,
+                    function_type: FunctionType::Json,
                     input: example.input,
                     episode_id: Some(example.episode_id),
                     inference_id: Some(example.inference_id),
@@ -544,6 +547,7 @@ pub enum StoredOutput {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RenderedSample {
     pub function_name: String,
+    pub function_type: FunctionType,
     pub input: ModelInput,
     pub stored_input: StoredInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
@@ -560,6 +564,7 @@ impl RenderedSample {
     pub fn into_lazy_rendered_sample(self) -> LazyRenderedSample {
         LazyRenderedSample {
             function_name: self.function_name,
+            function_type: self.function_type,
             system_input: self.input.system,
             messages: self
                 .input
@@ -584,18 +589,25 @@ impl RenderedSample {
     /// This method handles the conversion from RenderedSample (which has StoredInput and StoredOutput)
     /// to CreateDatapointRequest (which expects Input and type-specific output).
     ///
-    /// The type discrimination (Chat vs JSON) is based on the stored_output enum variant.
+    /// The type discrimination (Chat vs JSON) is based on the `function_type` field.
     pub fn into_create_datapoint_request(self) -> Result<CreateDatapointRequest, Error> {
         // Convert StoredInput to Input
         let input = self.stored_input.into_input();
 
-        // Use stored_output to determine whether this is a Chat or JSON datapoint
-        match self.stored_output {
-            Some(StoredOutput::Json(json_output)) => {
-                // JSON function datapoint
-                let output = json_output
-                    .raw
-                    .map(|raw| JsonDatapointOutputUpdate { raw: Some(raw) });
+        match self.function_type {
+            FunctionType::Json => {
+                let output = match self.stored_output {
+                    Some(StoredOutput::Json(json_output)) => json_output
+                        .raw
+                        .map(|raw| JsonDatapointOutputUpdate { raw: Some(raw) }),
+                    None => None,
+                    Some(StoredOutput::Chat(_)) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: "Expected JSON output for JSON function, got Chat output"
+                                .to_string(),
+                        }));
+                    }
+                };
 
                 Ok(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
                     function_name: self.function_name,
@@ -607,18 +619,15 @@ impl RenderedSample {
                     name: None,
                 }))
             }
-            Some(StoredOutput::Chat(_)) | None => {
-                // Chat function datapoint
-                Ok(CreateDatapointRequest::Chat(CreateChatDatapointRequest {
-                    function_name: self.function_name,
-                    episode_id: self.episode_id,
-                    input,
-                    output: self.output,
-                    dynamic_tool_params: self.tool_params,
-                    tags: Some(self.tags),
-                    name: None,
-                }))
-            }
+            FunctionType::Chat => Ok(CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                function_name: self.function_name,
+                episode_id: self.episode_id,
+                input,
+                output: self.output,
+                dynamic_tool_params: self.tool_params,
+                tags: Some(self.tags),
+                name: None,
+            })),
         }
     }
 }
@@ -626,6 +635,7 @@ impl RenderedSample {
 /// Like `RenderedSample`, but holds `RequestMessage`s instead of `ResolvedRequestMessage`s
 pub struct LazyRenderedSample {
     pub function_name: String,
+    pub function_type: FunctionType,
     pub system_input: Option<String>,
     // This is a a `Vec<ResolvedRequestMessage>` in `RenderedSample`
     pub messages: Vec<RequestMessage>,
@@ -822,6 +832,7 @@ pub async fn render_stored_sample<T: StoredSample>(
 ) -> Result<RenderedSample, Error> {
     let SimpleStoredSampleInfo {
         function_name,
+        function_type,
         input: _,
         output,
         stored_output,
@@ -843,6 +854,7 @@ pub async fn render_stored_sample<T: StoredSample>(
 
     Ok(RenderedSample {
         function_name,
+        function_type,
         episode_id,
         inference_id,
         input: model_input,
@@ -993,6 +1005,7 @@ mod tests {
 
         RenderedSample {
             function_name: "test_function".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("Test system prompt".to_string()),
                 messages: vec![],
@@ -1038,6 +1051,7 @@ mod tests {
 
         RenderedSample {
             function_name: "json_function".to_string(),
+            function_type: FunctionType::Json,
             input: ModelInput {
                 system: Some("JSON system prompt".to_string()),
                 messages: vec![],

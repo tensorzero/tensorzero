@@ -562,8 +562,9 @@ mod tests {
         function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
-            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            ContentBlockChatOutput, FunctionType, ModelInput, ResolvedContentBlock,
+            ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, System, Text,
         },
         jsonschema_util::JSONSchema,
         model_table::ProviderTypeDefaultCredentials,
@@ -763,6 +764,7 @@ mod tests {
     fn create_test_rendered_sample() -> RenderedSample {
         RenderedSample {
             function_name: "test_function".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("Test system".to_string()),
                 messages: vec![ResolvedRequestMessage {

@@ -8,7 +8,7 @@ use crate::config::snapshot::SnapshotHash;
 use crate::endpoints::datasets::Datapoint;
 use crate::error::Error;
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
+use crate::inference::types::{ContentBlockChatOutput, FunctionType, JsonInferenceOutput, Text};
 use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
     serialize_none_as_empty_map,
@@ -282,6 +282,7 @@ impl StoredSample for StoredDatapoint {
         match self {
             StoredDatapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
+                function_type: FunctionType::Chat,
                 input: Some(datapoint.input),
                 output: datapoint.output.clone(),
                 stored_output: datapoint.output.map(StoredOutput::Chat),
@@ -300,6 +301,7 @@ impl StoredSample for StoredDatapoint {
                 });
                 SimpleStoredSampleInfo {
                     function_name: datapoint.function_name,
+                    function_type: FunctionType::Json,
                     input: Some(datapoint.input),
                     output,
                     stored_output,

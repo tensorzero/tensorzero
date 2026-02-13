@@ -294,6 +294,7 @@ fn generate_text_example() -> RenderedSample {
     })];
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![ResolvedRequestMessage {
@@ -346,6 +347,7 @@ fn generate_tool_call_example() -> RenderedSample {
     )];
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![
@@ -487,6 +489,7 @@ fn generate_image_example() -> RenderedSample {
     })];
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![ResolvedRequestMessage {
