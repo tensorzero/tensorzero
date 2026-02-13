@@ -3,9 +3,9 @@
 #![expect(clippy::unreachable)]
 use serde_json::json;
 use tensorzero::{
-    BooleanMetricFilter, Client, ClientExt, ClientInferenceParams, FloatComparisonOperator,
-    FloatMetricFilter, InferenceFilter, InferenceOutput, Input, InputMessage, InputMessageContent,
-    ListEpisodesRequest,
+    BooleanMetricFilter, Client, ClientExt, ClientInferenceParams, FeedbackParams,
+    FloatComparisonOperator, FloatMetricFilter, InferenceFilter, InferenceOutput, Input,
+    InputMessage, InputMessageContent, ListEpisodesRequest,
 };
 use tensorzero_core::inference::types::{Arguments, Text};
 use uuid::Uuid;
@@ -180,20 +180,37 @@ tensorzero::make_gateway_test_functions!(test_list_episodes_with_function_name);
 
 /// Test listing episodes with a boolean metric filter (POST path)
 async fn test_list_episodes_with_boolean_filter(client: Client) {
-    // Create some test inferences
-    for _ in 0..3 {
-        let _ = create_test_inference(&client).await;
-    }
+    // Create an inference and submit boolean feedback for it
+    let inference_id = create_test_inference(&client).await;
+
+    client
+        .feedback(FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "task_success".to_string(),
+            value: json!(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     // Wait for async writes to be visible
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    // Filter with a boolean metric that no inference should match
-    let response = client
+    // Get unfiltered count for comparison
+    let unfiltered = client
         .list_episodes(ListEpisodesRequest {
-            limit: 10,
+            limit: 100,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Filter by the boolean metric we just submitted
+    let filtered = client
+        .list_episodes(ListEpisodesRequest {
+            limit: 100,
             filters: Some(InferenceFilter::BooleanMetric(BooleanMetricFilter {
-                metric_name: "nonexistent_bool_metric".to_string(),
+                metric_name: "task_success".to_string(),
                 value: true,
             })),
             ..Default::default()
@@ -202,8 +219,12 @@ async fn test_list_episodes_with_boolean_filter(client: Client) {
         .unwrap();
 
     assert!(
-        response.episodes.is_empty(),
-        "Expected no episodes matching a non-existent boolean metric filter"
+        !filtered.episodes.is_empty(),
+        "Expected at least one episode matching the boolean metric filter"
+    );
+    assert!(
+        filtered.episodes.len() <= unfiltered.episodes.len(),
+        "Filtered episodes should be a subset of unfiltered episodes"
     );
 }
 
@@ -211,21 +232,38 @@ tensorzero::make_gateway_test_functions!(test_list_episodes_with_boolean_filter)
 
 /// Test listing episodes with a float metric filter (POST path)
 async fn test_list_episodes_with_float_filter(client: Client) {
-    // Create some test inferences
-    for _ in 0..3 {
-        let _ = create_test_inference(&client).await;
-    }
+    // Create an inference and submit float feedback for it
+    let inference_id = create_test_inference(&client).await;
+
+    client
+        .feedback(FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "user_rating".to_string(),
+            value: json!(4.5),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     // Wait for async writes to be visible
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    // Filter with a float metric that no inference should match
-    let response = client
+    // Get unfiltered count for comparison
+    let unfiltered = client
         .list_episodes(ListEpisodesRequest {
-            limit: 10,
+            limit: 100,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Filter by the float metric we just submitted (>= 4.0 should match our 4.5)
+    let filtered = client
+        .list_episodes(ListEpisodesRequest {
+            limit: 100,
             filters: Some(InferenceFilter::FloatMetric(FloatMetricFilter {
-                metric_name: "nonexistent_float_metric".to_string(),
-                value: 0.5,
+                metric_name: "user_rating".to_string(),
+                value: 4.0,
                 comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
             })),
             ..Default::default()
@@ -234,8 +272,12 @@ async fn test_list_episodes_with_float_filter(client: Client) {
         .unwrap();
 
     assert!(
-        response.episodes.is_empty(),
-        "Expected no episodes matching a non-existent float metric filter"
+        !filtered.episodes.is_empty(),
+        "Expected at least one episode matching the float metric filter"
+    );
+    assert!(
+        filtered.episodes.len() <= unfiltered.episodes.len(),
+        "Filtered episodes should be a subset of unfiltered episodes"
     );
 }
 
@@ -243,28 +285,55 @@ tensorzero::make_gateway_test_functions!(test_list_episodes_with_float_filter);
 
 /// Test listing episodes with combined filters (AND, POST path)
 async fn test_list_episodes_combined_filters(client: Client) {
-    // Create some test inferences
-    for _ in 0..3 {
-        let _ = create_test_inference(&client).await;
-    }
+    // Create an inference and submit both boolean and float feedback for it
+    let inference_id = create_test_inference(&client).await;
+
+    client
+        .feedback(FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "task_success".to_string(),
+            value: json!(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    client
+        .feedback(FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "user_rating".to_string(),
+            value: json!(5.0),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     // Wait for async writes to be visible
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    // Combine a boolean filter and a float filter with AND
-    let response = client
+    // Get unfiltered count for comparison
+    let unfiltered = client
         .list_episodes(ListEpisodesRequest {
-            limit: 10,
+            limit: 100,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Combine a boolean filter and a float filter with AND
+    let filtered = client
+        .list_episodes(ListEpisodesRequest {
+            limit: 100,
             function_name: Some("basic_test".to_string()),
             filters: Some(InferenceFilter::And {
                 children: vec![
                     InferenceFilter::BooleanMetric(BooleanMetricFilter {
-                        metric_name: "nonexistent_bool".to_string(),
+                        metric_name: "task_success".to_string(),
                         value: true,
                     }),
                     InferenceFilter::FloatMetric(FloatMetricFilter {
-                        metric_name: "nonexistent_float".to_string(),
-                        value: 1.0,
+                        metric_name: "user_rating".to_string(),
+                        value: 4.0,
                         comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
                     }),
                 ],
@@ -275,8 +344,12 @@ async fn test_list_episodes_combined_filters(client: Client) {
         .unwrap();
 
     assert!(
-        response.episodes.is_empty(),
-        "Expected no episodes matching combined non-existent filters"
+        !filtered.episodes.is_empty(),
+        "Expected at least one episode matching the combined filters"
+    );
+    assert!(
+        filtered.episodes.len() <= unfiltered.episodes.len(),
+        "Filtered episodes should be a subset of unfiltered episodes"
     );
 }
 
@@ -291,7 +364,7 @@ fn test_list_episodes_request_serialization() {
         after: None,
         function_name: Some("my_function".to_string()),
         filters: Some(InferenceFilter::BooleanMetric(BooleanMetricFilter {
-            metric_name: "my_metric".to_string(),
+            metric_name: "task_success".to_string(),
             value: true,
         })),
     };
