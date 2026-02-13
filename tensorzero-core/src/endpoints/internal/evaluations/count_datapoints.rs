@@ -6,6 +6,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use super::types::{CountDatapointsParams, DatapointStatsResponse};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -19,12 +20,13 @@ pub async fn count_datapoints_handler(
     State(app_state): AppState,
     Query(params): Query<CountDatapointsParams>,
 ) -> Result<Json<DatapointStatsResponse>, Error> {
-    let response = count_datapoints_internal(
-        &app_state.clickhouse_connection_info,
-        params.function_name,
-        params.evaluation_run_ids,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response =
+        count_datapoints_internal(&database, params.function_name, params.evaluation_run_ids)
+            .await?;
     Ok(Json(response))
 }
 

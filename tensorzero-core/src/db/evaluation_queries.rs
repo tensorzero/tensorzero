@@ -14,8 +14,8 @@ use crate::function::FunctionConfigType;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, StoredInput};
 use crate::serde_util::deserialize_json_string;
 
-/// Database struct for deserializing evaluation run info from ClickHouse.
-#[derive(Debug, Deserialize)]
+/// Database struct for deserializing evaluation run info.
+#[derive(Debug, Deserialize, sqlx::FromRow)]
 pub struct EvaluationRunInfoRow {
     pub evaluation_run_id: Uuid,
     pub evaluation_name: String,
@@ -25,16 +25,16 @@ pub struct EvaluationRunInfoRow {
     pub last_inference_timestamp: DateTime<Utc>,
 }
 
-/// Database struct for deserializing evaluation run search results from ClickHouse.
-#[derive(Debug, Deserialize)]
+/// Database struct for deserializing evaluation run search results.
+#[derive(Debug, Deserialize, sqlx::FromRow)]
 pub struct EvaluationRunSearchResult {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
 }
 
-/// Database struct for deserializing evaluation run info by IDs from ClickHouse.
+/// Database struct for deserializing evaluation run info by IDs.
 /// This is a simpler struct than `EvaluationRunInfoRow` - used when querying by specific run IDs.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, sqlx::FromRow)]
 pub struct EvaluationRunInfoByIdRow {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
@@ -68,9 +68,9 @@ pub struct InferenceEvaluationHumanFeedbackRow {
     pub evaluator_inference_id: Uuid,
 }
 
-/// Internal struct for deserializing evaluation results from ClickHouse.
+/// Internal struct for deserializing evaluation results.
 /// The output fields are kept as strings and converted to typed structs based on function type.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, sqlx::FromRow)]
 pub(crate) struct RawEvaluationResultRow {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -78,6 +78,7 @@ pub(crate) struct RawEvaluationResultRow {
     pub evaluation_run_id: Uuid,
     pub evaluator_inference_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_json_string")]
+    #[sqlx(json)]
     pub input: StoredInput,
     pub generated_output: String,
     pub reference_output: Option<String>,

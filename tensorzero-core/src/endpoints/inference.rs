@@ -25,7 +25,7 @@ use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use crate::cache::{CacheOptions, CacheParamsOptions};
+use crate::cache::{CacheManager, CacheOptions, CacheParamsOptions};
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{
     Config, ErrorContext, Namespace, OtlpConfig, SchemaData, UninitializedVariantInfo,
@@ -194,6 +194,7 @@ pub async fn inference_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         ..
@@ -215,11 +216,13 @@ pub async fn inference_handler(
             .extra_overhead_labels
             .push(Label::new("function_name", "tensorzero::default"));
     }
+    let include_raw_response = params.include_raw_response;
     let inference_output = Box::pin(inference(
         config,
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         params,
@@ -244,7 +247,7 @@ pub async fn inference_handler(
                 }
             }
         }
-        Err(e) => e.into_response(),
+        Err(e) => e.into_response_with_raw_entries(false, include_raw_response),
     };
     response.extensions_mut().insert(metric_data);
     response
@@ -302,6 +305,7 @@ pub async fn inference(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    cache_manager: CacheManager,
     deferred_tasks: TaskTracker,
     rate_limiting_manager: Arc<RateLimitingManager>,
     mut params: Params,
@@ -466,6 +470,7 @@ pub async fn inference(
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
+        cache_manager,
         tags: tags.clone(),
         rate_limiting_manager,
         otlp_config: config.gateway.export.otlp.clone(),
@@ -999,7 +1004,7 @@ fn create_previous_raw_response_chunk(
                     .map(|entry| entry.api_type)
                     .unwrap_or(ApiType::ChatCompletions);
                 vec![RawResponseEntry {
-                    model_inference_id: r.id,
+                    model_inference_id: Some(r.id),
                     provider_type: r.model_provider_name.to_string(),
                     api_type,
                     data: r.raw_response.clone(),
@@ -1535,7 +1540,7 @@ impl InferenceResponse {
                             .map(|entry| entry.api_type)
                             .unwrap_or(ApiType::ChatCompletions);
                         vec![RawResponseEntry {
-                            model_inference_id: r.id,
+                            model_inference_id: Some(r.id),
                             provider_type: r.model_provider_name.to_string(),
                             api_type,
                             data: r.raw_response.clone(),
@@ -1884,6 +1889,7 @@ pub struct InferenceClients {
     pub postgres_connection_info: PostgresConnectionInfo,
     pub credentials: Arc<InferenceCredentials>,
     pub cache_options: CacheOptions,
+    pub cache_manager: CacheManager,
     pub tags: Arc<HashMap<String, String>>,
     pub rate_limiting_manager: Arc<RateLimitingManager>,
     pub otlp_config: OtlpConfig,

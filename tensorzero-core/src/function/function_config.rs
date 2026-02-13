@@ -110,6 +110,14 @@ impl FunctionConfigType {
             FunctionConfigType::Json => "JsonInferenceDatapoint",
         }
     }
+
+    /// Returns the Postgres datapoint table name for the given function type.
+    pub fn postgres_datapoint_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_datapoints",
+            FunctionConfigType::Json => "tensorzero.json_datapoints",
+        }
+    }
 }
 
 impl FunctionConfig {

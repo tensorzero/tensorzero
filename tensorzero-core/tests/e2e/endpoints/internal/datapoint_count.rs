@@ -100,7 +100,6 @@ async fn fetch_datapoint_count(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_datapoint_count_counts_new_datapoints() {
-    skip_for_postgres!();
     let client = Client::new();
     let dataset_name = format!("datapoints-count-{}", Uuid::now_v7());
 
@@ -137,7 +136,6 @@ async fn test_get_datapoint_count_counts_new_datapoints() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_datapoint_count_filters_by_function_name() {
-    skip_for_postgres!();
     let client = Client::new();
     let dataset_name = format!("datapoints-count-filter-{}", Uuid::now_v7());
 

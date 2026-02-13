@@ -1,10 +1,17 @@
 use std::future::Future;
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::config::OtlpConfig;
+use crate::config::gateway::ModelInferenceCacheConfig;
 use crate::db::cache::CacheQueries;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::valkey::ValkeyConnectionInfo;
+use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
+use crate::feature_flags::ENABLE_POSTGRES_WRITE;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -19,6 +26,84 @@ use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use uuid::Uuid;
+
+/// Manager for cache operations, wrapping a `dyn CacheQueries` backend.
+///
+/// Uses Valkey if available, otherwise falls back to ClickHouse.
+#[derive(Clone)]
+pub struct CacheManager {
+    client: Arc<dyn CacheQueries>,
+}
+
+impl CacheManager {
+    pub fn new(client: Arc<dyn CacheQueries>) -> Self {
+        Self { client }
+    }
+
+    /// Select the appropriate cache backend.
+    ///
+    /// When `ENABLE_POSTGRES_WRITE` is off (legacy mode), uses ClickHouse.
+    /// When `ENABLE_POSTGRES_WRITE` is on, uses Valkey if available, otherwise disabled.
+    pub fn new_from_connections(
+        valkey_connection_info: &ValkeyConnectionInfo,
+        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        cache_config: &ModelInferenceCacheConfig,
+    ) -> Self {
+        if !ENABLE_POSTGRES_WRITE.get() {
+            return Self::new(Arc::new(clickhouse_connection_info.clone()));
+        }
+        match valkey_connection_info {
+            ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
+                ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+            )),
+            ValkeyConnectionInfo::Disabled => {
+                tracing::warn!(
+                    "Postgres is used for data writes, but `TENSORZERO_VALKEY_URL` is not set; falling back to ClickHouse for cache writes if configured."
+                );
+                Self::new(Arc::new(clickhouse_connection_info.clone()))
+            }
+        }
+    }
+
+    /// Create a disabled cache manager (no-op: lookups return `None`, writes succeed immediately).
+    /// TODO(shuyangli): It's not test-only because tensorzero-optimizers/src/dicl.rs uses it; validate if this is appropriate.
+    pub fn disabled() -> Self {
+        Self::new(Arc::new(DisabledCacheQueries))
+    }
+}
+
+#[async_trait]
+impl CacheQueries for CacheManager {
+    async fn cache_lookup(
+        &self,
+        cache_key: &CacheKey,
+        max_age_s: Option<u32>,
+    ) -> Result<Option<String>, Error> {
+        self.client.cache_lookup(cache_key, max_age_s).await
+    }
+
+    async fn cache_write(&self, cache_key: &CacheKey, data: &str) -> Result<(), Error> {
+        self.client.cache_write(cache_key, data).await
+    }
+}
+
+/// No-op cache backend: lookups return `None`, writes succeed immediately.
+struct DisabledCacheQueries;
+
+#[async_trait]
+impl CacheQueries for DisabledCacheQueries {
+    async fn cache_lookup(
+        &self,
+        _cache_key: &CacheKey,
+        _max_age_s: Option<u32>,
+    ) -> Result<Option<String>, Error> {
+        Ok(None)
+    }
+
+    async fn cache_write(&self, _cache_key: &CacheKey, _data: &str) -> Result<(), Error> {
+        Ok(())
+    }
+}
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(
@@ -294,14 +379,20 @@ pub struct EmbeddingCacheData {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct NonStreamingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
     pub blocks: Vec<ContentBlockOutput>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct StreamingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
     pub chunks: Vec<CachedProviderInferenceResponseChunk>,
 }
 
@@ -311,7 +402,7 @@ fn spawn_maybe_cache_write<
 >(
     cache_key: CacheKey,
     cache_data: CacheData<T>,
-    cache_backend: C,
+    cache_manager: C,
     cache_validation_info: CacheValidationInfo,
 ) {
     spawn_ignoring_shutdown(async move {
@@ -327,7 +418,7 @@ fn spawn_maybe_cache_write<
                     return;
                 }
             };
-            if let Err(e) = cache_backend.cache_write(&cache_key, &data_json).await {
+            if let Err(e) = cache_manager.cache_write(&cache_key, &data_json).await {
                 tracing::warn!("Failed to write to cache: {e}");
             }
         } else {
@@ -355,13 +446,13 @@ pub fn start_cache_write<
     T: Serialize + CacheOutput + Send + Sync + 'static,
     C: CacheQueries + Clone + 'static,
 >(
-    cache_backend: &C,
+    cache_manager: &C,
     cache_key: CacheKey,
     cache_data: CacheData<T>,
     cache_validation_info: CacheValidationInfo,
 ) -> Result<(), Error> {
-    let cache_backend = cache_backend.clone();
-    spawn_maybe_cache_write(cache_key, cache_data, cache_backend, cache_validation_info);
+    let cache_manager = cache_manager.clone();
+    spawn_maybe_cache_write(cache_key, cache_data, cache_manager, cache_validation_info);
     Ok(())
 }
 
@@ -377,7 +468,7 @@ pub struct CachedProviderInferenceResponseChunk {
 
 // This starts a trailing write to the cache (without blocking the http response)
 pub fn start_cache_write_streaming<C: CacheQueries + Clone + 'static>(
-    cache_backend: &C,
+    cache_manager: &C,
     cache_key: CacheKey,
     chunks: Vec<ProviderInferenceResponseChunk>,
     raw_request: &str,
@@ -404,7 +495,7 @@ pub fn start_cache_write_streaming<C: CacheQueries + Clone + 'static>(
             .collect(),
     };
     let raw_request = raw_request.to_string();
-    let cache_backend = cache_backend.clone();
+    let cache_manager = cache_manager.clone();
     spawn_maybe_cache_write(
         cache_key,
         CacheData {
@@ -415,19 +506,19 @@ pub fn start_cache_write_streaming<C: CacheQueries + Clone + 'static>(
             output_tokens,
             finish_reason,
         },
-        cache_backend,
+        cache_manager,
         CacheValidationInfo { tool_config },
     );
     Ok(())
 }
 
 pub async fn embedding_cache_lookup(
-    cache_backend: &impl CacheQueries,
+    cache_manager: &impl CacheQueries,
     request: &EmbeddingModelProviderRequest<'_>,
     max_age_s: Option<u32>,
 ) -> Result<Option<EmbeddingModelResponse>, Error> {
     let result = cache_lookup_inner::<EmbeddingCacheData>(
-        cache_backend,
+        cache_manager,
         request.get_cache_key()?,
         max_age_s,
     )
@@ -436,12 +527,12 @@ pub async fn embedding_cache_lookup(
 }
 
 pub async fn cache_lookup(
-    cache_backend: &impl CacheQueries,
+    cache_manager: &impl CacheQueries,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
     let result = cache_lookup_inner::<NonStreamingCacheData>(
-        cache_backend,
+        cache_manager,
         request.get_cache_key()?,
         max_age_s,
     )
@@ -452,11 +543,11 @@ pub async fn cache_lookup(
 }
 
 pub async fn cache_lookup_streaming(
-    cache_backend: &impl CacheQueries,
+    cache_manager: &impl CacheQueries,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
 ) -> Result<Option<StreamResponse>, Error> {
-    let result = cache_lookup_inner(cache_backend, request.get_cache_key()?, max_age_s).await?;
+    let result = cache_lookup_inner(cache_manager, request.get_cache_key()?, max_age_s).await?;
     Ok(result.map(|result| {
         StreamResponse::from_cache(
             result,
@@ -467,11 +558,11 @@ pub async fn cache_lookup_streaming(
 }
 
 pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
-    cache_backend: &impl CacheQueries,
+    cache_manager: &impl CacheQueries,
     cache_key: CacheKey,
     max_age_s: Option<u32>,
 ) -> Result<Option<CacheData<T>>, Error> {
-    let response = cache_backend.cache_lookup(&cache_key, max_age_s).await?;
+    let response = cache_manager.cache_lookup(&cache_key, max_age_s).await?;
     match response {
         None => Ok(None),
         Some(json) => {
@@ -493,6 +584,24 @@ mod tests {
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
 
     use super::*;
+
+    #[tokio::test]
+    async fn test_disabled_returns_none() {
+        let cache = CacheManager::disabled();
+        let key = CacheKey::from(blake3::hash(b"test"));
+        let result = cache.cache_lookup(&key, None).await.unwrap();
+        assert!(result.is_none(), "disabled backend should return None");
+    }
+
+    #[tokio::test]
+    async fn test_disabled_write_succeeds() {
+        let cache = CacheManager::disabled();
+        let key = CacheKey::from(blake3::hash(b"test"));
+        cache
+            .cache_write(&key, r#"{"output":"test"}"#)
+            .await
+            .expect("disabled backend write should succeed");
+    }
 
     /// This test ensures that if we make a small change to the ModelInferenceRequest,
     /// the cache key will change.

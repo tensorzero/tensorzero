@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use uuid::Uuid;
 
 /// The type of API used for a model inference.
@@ -13,17 +12,6 @@ pub enum ApiType {
     Responses,
     Embeddings,
     Other,
-}
-
-impl fmt::Display for ApiType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ApiType::ChatCompletions => write!(f, "chat_completions"),
-            ApiType::Responses => write!(f, "responses"),
-            ApiType::Embeddings => write!(f, "embeddings"),
-            ApiType::Other => write!(f, "other"),
-        }
-    }
 }
 
 /// A single entry in the raw usage array, representing usage data from one model inference.
@@ -57,9 +45,10 @@ pub fn raw_usage_entries_from_value(
 /// This preserves the original provider-specific response string that TensorZero normalizes.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct RawResponseEntry {
-    pub model_inference_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_inference_id: Option<Uuid>,
     pub provider_type: String,
     pub api_type: ApiType,
     pub data: String,
