@@ -68,6 +68,19 @@ async fn test_setup_pgcron_is_idempotent() {
         refresh_views_count, 1,
         "Should have exactly one 'tensorzero_refresh_materialized_views' job after running setup twice"
     );
+
+    // Verify there's exactly one job for incremental model provider statistics refresh
+    let refresh_model_provider_stats_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_refresh_model_provider_statistics_incremental'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("Should be able to query cron.job table");
+
+    assert_eq!(
+        refresh_model_provider_stats_count, 1,
+        "Should have exactly one 'tensorzero_refresh_model_provider_statistics_incremental' job after running setup twice"
+    );
 }
 
 /// Tests that `check_pgcron_configured_correctly` returns an error when pg_cron is not installed.

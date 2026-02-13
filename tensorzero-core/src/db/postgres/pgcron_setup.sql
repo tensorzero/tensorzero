@@ -39,12 +39,20 @@ BEGIN
             $$
         );
 
-        -- Refresh materialized views every 5 minutes
+        -- Incrementally refresh model provider statistics every 5 minutes, with a 10 minute lookback window
+        PERFORM cron.schedule(
+            'tensorzero_refresh_model_provider_statistics_incremental',
+            '*/5 * * * *',
+            $$
+            SELECT tensorzero.refresh_model_provider_statistics_incremental(INTERVAL '10 minutes');
+            $$
+        );
+
+        -- Refresh remaining materialized views every 5 minutes
         PERFORM cron.schedule(
             'tensorzero_refresh_materialized_views',
             '*/5 * * * *',
             $$
-            REFRESH MATERIALIZED VIEW tensorzero.model_provider_statistics;
             REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles;
             REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_hour;
             REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_day;
@@ -53,7 +61,7 @@ BEGIN
             $$
         );
 
-        RAISE NOTICE 'pg_cron jobs scheduled for partition management and materialized view refresh';
+        RAISE NOTICE 'pg_cron jobs scheduled for partition management, incremental stats refresh, and materialized view refresh';
     ELSE
         RAISE WARNING 'pg_cron extension not available';
     END IF;

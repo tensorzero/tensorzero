@@ -343,17 +343,6 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
                 })
             })
         }
-        ToolError::Serialization(err) => {
-            let failure = ToolFailure::Serialization {
-                message: err.to_string(),
-            };
-            serde_json::to_value(failure).unwrap_or_else(|e| {
-                serde_json::json!({
-                    "kind": "serialization",
-                    "message": format!("Failed to serialize serialization error: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                })
-            })
-        }
     }
 }
 
@@ -363,7 +352,6 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 #[serde(tag = "kind")]
 pub enum ToolFailure {
     Control { message: String },
-    Serialization { message: String },
     Tool { error: NonControlToolError },
     Database { message: String },
 }
