@@ -148,11 +148,16 @@ fn build_episode_query(
     // Finally, we order by episode_id_uint correctly and limit the result to limit
     let limit_overestimate = 5 * limit;
 
+    let with_prefix = if has_filters {
+        format!("WITH {filtered_episodes_cte},")
+    } else {
+        "WITH".to_string()
+    };
+
     let query = if should_reverse_results {
         format!(
             r"
-            {filtered_episodes_cte}
-            WITH potentially_duplicated_episode_ids AS (
+            {with_prefix} potentially_duplicated_episode_ids AS (
                 SELECT episode_id_uint
                 FROM EpisodeById
                 WHERE {where_clause}
@@ -187,8 +192,7 @@ fn build_episode_query(
     } else {
         format!(
             r"
-            {filtered_episodes_cte}
-            WITH potentially_duplicated_episode_ids AS (
+            {with_prefix} potentially_duplicated_episode_ids AS (
                 SELECT episode_id_uint
                 FROM EpisodeById
                 WHERE {where_clause}
@@ -245,7 +249,7 @@ fn build_filtered_episodes_cte(
             param_idx_counter,
         );
         Ok(format!(
-            r"WITH filtered_episodes AS (
+            r"filtered_episodes AS (
                 SELECT DISTINCT episode_id_uint
                 FROM InferenceByEpisodeId
                 WHERE function_name = {fn_param}
@@ -338,7 +342,7 @@ fn build_filtered_episodes_from_inference_tables(
     let json_joins_sql = json_joins.get_clauses().join("\n");
 
     Ok(format!(
-        r"WITH filtered_episodes AS (
+        r"filtered_episodes AS (
             SELECT DISTINCT toUInt128(episode_id) AS episode_id_uint
             FROM ChatInference AS i
             {chat_joins_sql}

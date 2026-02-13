@@ -222,6 +222,7 @@ export * from "./ListConfigWritesParams";
 export * from "./ListDatapointsRequest";
 export * from "./ListDatasetsRequest";
 export * from "./ListDatasetsResponse";
+export * from "./ListEpisodesRequest";
 export * from "./ListEpisodesResponse";
 export * from "./ListEvaluationRunsResponse";
 export * from "./ListEventsParams";

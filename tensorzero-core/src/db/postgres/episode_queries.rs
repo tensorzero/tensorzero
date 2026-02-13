@@ -93,12 +93,13 @@ fn build_query_episode_table(
     let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("");
 
     if has_filters {
-        // When filtering, alias each table as `i` so that apply_inference_filter
-        // can reference `i.*` columns (i.tags, i.created_at, i.id, i.episode_id).
+        // When filtering, first find matching episode IDs via a filtered_episodes CTE,
+        // then aggregate from ALL inferences for those episodes (so count, start_time,
+        // end_time, and last_inference_id reflect the full episode, not just filtered inferences).
         query_builder.push(
             r"
-        WITH all_inferences AS (
-            SELECT i.episode_id, i.id, i.created_at FROM tensorzero.chat_inferences i
+        WITH filtered_episodes AS (
+            SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
             WHERE 1=1",
         );
 
@@ -111,20 +112,27 @@ fn build_query_episode_table(
 
         query_builder.push(
             r"
+            UNION
+            SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
+            WHERE 1=1",
+        );
+
+        if let Some(fn_name) = function_name {
+            query_builder.push(" AND i.function_name = ");
+            query_builder.push_bind(fn_name.to_string());
+        }
+
+        apply_inference_filter(&mut query_builder, filters, config)?;
+
+        query_builder.push(
+            r"
+        ),
+        all_inferences AS (
+            SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+            WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
             UNION ALL
-            SELECT i.episode_id, i.id, i.created_at FROM tensorzero.json_inferences i
-            WHERE 1=1",
-        );
-
-        if let Some(fn_name) = function_name {
-            query_builder.push(" AND i.function_name = ");
-            query_builder.push_bind(fn_name.to_string());
-        }
-
-        apply_inference_filter(&mut query_builder, filters, config)?;
-
-        query_builder.push(
-            r"
+            SELECT episode_id, id, created_at FROM tensorzero.json_inferences
+            WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
         ),",
         );
     } else {
@@ -412,12 +420,19 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH all_inferences AS (
-                SELECT i.episode_id, i.id, i.created_at FROM tensorzero.chat_inferences i
+            WITH filtered_episodes AS (
+                SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
                 WHERE 1=1 AND i.function_name = $1
-                UNION ALL
-                SELECT i.episode_id, i.id, i.created_at FROM tensorzero.json_inferences i
+                UNION
+                SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
                 WHERE 1=1 AND i.function_name = $2
+            ),
+            all_inferences AS (
+                SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+                UNION ALL
+                SELECT episode_id, id, created_at FROM tensorzero.json_inferences
+                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
             ),
             episode_aggregates AS (
                 SELECT
@@ -459,12 +474,19 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH all_inferences AS (
-                SELECT i.episode_id, i.id, i.created_at FROM tensorzero.chat_inferences i
+            WITH filtered_episodes AS (
+                SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
                 WHERE 1=1 AND i.function_name = $1
-                UNION ALL
-                SELECT i.episode_id, i.id, i.created_at FROM tensorzero.json_inferences i
+                UNION
+                SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
                 WHERE 1=1 AND i.function_name = $2
+            ),
+            all_inferences AS (
+                SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+                UNION ALL
+                SELECT episode_id, id, created_at FROM tensorzero.json_inferences
+                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
             ),
             episode_aggregates AS (
                 SELECT
@@ -507,12 +529,19 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH all_inferences AS (
-                SELECT i.episode_id, i.id, i.created_at FROM tensorzero.chat_inferences i
+            WITH filtered_episodes AS (
+                SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
                 WHERE 1=1 AND (i.tags ? $1 AND i.tags->>$2 = $3)
-                UNION ALL
-                SELECT i.episode_id, i.id, i.created_at FROM tensorzero.json_inferences i
+                UNION
+                SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
                 WHERE 1=1 AND (i.tags ? $4 AND i.tags->>$5 = $6)
+            ),
+            all_inferences AS (
+                SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+                UNION ALL
+                SELECT episode_id, id, created_at FROM tensorzero.json_inferences
+                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
             ),
             episode_aggregates AS (
                 SELECT
@@ -555,12 +584,19 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH all_inferences AS (
-                SELECT i.episode_id, i.id, i.created_at FROM tensorzero.chat_inferences i
+            WITH filtered_episodes AS (
+                SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
                 WHERE 1=1 AND i.function_name = $1 AND (i.tags ? $2 AND i.tags->>$3 = $4)
-                UNION ALL
-                SELECT i.episode_id, i.id, i.created_at FROM tensorzero.json_inferences i
+                UNION
+                SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
                 WHERE 1=1 AND i.function_name = $5 AND (i.tags ? $6 AND i.tags->>$7 = $8)
+            ),
+            all_inferences AS (
+                SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+                UNION ALL
+                SELECT episode_id, id, created_at FROM tensorzero.json_inferences
+                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
             ),
             episode_aggregates AS (
                 SELECT
