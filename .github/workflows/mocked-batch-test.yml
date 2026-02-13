@@ -37,6 +37,7 @@ on:
 permissions:
   contents: read
   actions: read
+  id-token: write
 
 jobs:
   mocked-batch-tests:
@@ -81,33 +82,19 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Download mock-provider-api-container
-        continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Load container images
+        uses: ./.github/actions/load-container-images
         with:
-          name: build-mock-provider-api-container
-          path: .
+          distribution-mode: registry
+          registry-images: gateway
+          optional-registry-images: mock-provider-api
+          sha: ${{ github.sha }}
 
-      - name: Download gateway-container
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-gateway-container
-          path: .
-
-      - name: Load mock-provider-api-container
-        id: load-mock-provider-api
-        continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
+      - name: Set `mock-provider-api` image tag when available
         run: |
-          docker load < mock-provider-api-container.tar
-
-      - name: Load gateway-container
-        run: |
-          docker load < gateway-container.tar
-
-      - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
-        if: steps.load-mock-provider-api.outcome == 'success' # Only run if artifact was successfully loaded
-        run: |
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          if docker image inspect tensorzero/mock-provider-api:sha-${{ github.sha }} >/dev/null 2>&1; then
+            echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          fi
 
       # This is for postgres migrations to run the correct gateway
       - name: Set container image tags
