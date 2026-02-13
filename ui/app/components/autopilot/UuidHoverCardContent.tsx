@@ -1,12 +1,17 @@
 import { Link } from "react-router";
 import type { ResolvedObject } from "~/types/tensorzero";
 import { useEntityPreview } from "~/hooks/useEntityPreview";
-import { formatDate, getRelativeTimeString } from "~/utils/date";
+import { getRelativeTimeString } from "~/utils/date";
+import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
 
 interface InferencePreview {
   timestamp: string;
-  processing_time_ms: number | null;
 }
 
 interface EpisodePreview {
@@ -71,24 +76,13 @@ function InferenceHoverContent({
 
   return (
     <div className="flex flex-col gap-2">
-      <TypeBadge>{`Inference · ${obj.function_type}`}</TypeBadge>
+      <div className="flex items-baseline justify-between">
+        <TypeBadge>{`Inference · ${obj.function_type}`}</TypeBadge>
+        <LazyTimestamp data={data} isLoading={isLoading} />
+      </div>
       <div className="flex flex-col gap-1">
         <InfoRow label="Function" value={obj.function_name} mono />
         <InfoRow label="Variant" value={obj.variant_name} mono />
-        <LazyInfoRow
-          label="Timestamp"
-          data={data}
-          isLoading={isLoading}
-          render={(d) => formatTimestamp(d.timestamp)}
-        />
-        <LazyInfoRow
-          label="Latency"
-          data={data}
-          isLoading={isLoading}
-          render={(d) =>
-            d.processing_time_ms !== null ? `${d.processing_time_ms} ms` : "—"
-          }
-        />
       </div>
       <ViewDetailsLink url={url} />
     </div>
@@ -199,18 +193,41 @@ function LazyInfoRow<T>({
   );
 }
 
+function LazyTimestamp({
+  data,
+  isLoading,
+}: {
+  data: InferencePreview | null;
+  isLoading: boolean;
+}) {
+  if (data) {
+    const date = new Date(data.timestamp);
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-muted-foreground cursor-default text-xs">
+            {getRelativeTimeString(date)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="border-border bg-bg-secondary text-fg-primary border shadow-lg">
+          <TimestampTooltip timestamp={data.timestamp} />
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+  if (isLoading) {
+    return <span className="bg-muted h-3 w-16 animate-pulse rounded" />;
+  }
+  return null;
+}
+
 function ViewDetailsLink({ url }: { url: string }) {
   return (
     <Link
       to={url}
-      className="text-muted-foreground hover:text-foreground mt-1 border-t pt-2 text-xs transition-colors"
+      className="text-muted-foreground hover:text-foreground -mx-3 mt-1 border-t px-3 pt-2 text-xs transition-colors"
     >
       View details &rarr;
     </Link>
   );
-}
-
-function formatTimestamp(timestamp: string): string {
-  const date = new Date(timestamp);
-  return `${formatDate(date)} · ${getRelativeTimeString(date)}`;
 }
