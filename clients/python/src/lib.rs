@@ -1692,6 +1692,25 @@ impl TensorZeroGateway {
         )
     }
 
+    /// List episodes with optional filtering, pagination, and sorting.
+    ///
+    /// :param request: A `ListEpisodesRequest` object with filter parameters.
+    /// :return: A `ListEpisodesResponse` object.
+    #[pyo3(signature = (*, request))]
+    fn list_episodes(this: PyRef<'_, Self>, request: Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let request = deserialize_from_pyobj(this.py(), &request)?;
+        let fut = client.list_episodes(request);
+        let response =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        convert_response_to_python_dataclass(
+            this.py(),
+            &response,
+            "tensorzero",
+            "ListEpisodesResponse",
+        )
+    }
+
     /// Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
     /// There are two things that need to happen in this function:
     /// 1. We need to resolve all network resources (e.g. images) in the stored samples.
@@ -2972,6 +2991,31 @@ impl AsyncTensorZeroGateway {
                     &response,
                     "tensorzero",
                     "GetInferencesResponse",
+                ),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// List episodes with optional filtering, pagination, and sorting.
+    ///
+    /// :param request: A `ListEpisodesRequest` object with filter parameters.
+    /// :return: A `ListEpisodesResponse` object.
+    #[pyo3(signature = (*, request))]
+    fn list_episodes<'a>(
+        this: PyRef<'a, Self>,
+        request: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let request = deserialize_from_pyobj(this.py(), &request)?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.list_episodes(request).await;
+            Python::attach(|py| match res {
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    &response,
+                    "tensorzero",
+                    "ListEpisodesResponse",
                 ),
                 Err(e) => Err(convert_error(py, e)),
             })

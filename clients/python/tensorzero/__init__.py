@@ -28,6 +28,7 @@ from .generated_types import (
     CreateDatapointsResponse,
     DatapointMetadataUpdate,
     DeleteDatapointsResponse,
+    EpisodeByIdRow,
     ExtraBody,
     ExtraHeader,
     FunctionTool,
@@ -51,6 +52,8 @@ from .generated_types import (
     JsonDatapointOutputUpdate,
     JsonInferenceOutput,
     ListDatapointsRequest,
+    ListEpisodesRequest,
+    ListEpisodesResponse,
     ListInferencesRequest,
     ModelProviderExtraBody,
     ModelProviderExtraBodyDelete,
@@ -236,6 +239,7 @@ __all__ = [
     "DiclOptimizationConfig",  # DEPRECATED
     "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
     "DynamicEvaluationRunResponse",  # DEPRECATED
+    "EpisodeByIdRow",
     "EvaluatorStatsDict",
     "ExtraBody",
     "ExtraHeader",
@@ -280,6 +284,8 @@ __all__ = [
     "JsonInferenceResponse",
     "LegacyDatapoint",
     "ListDatapointsRequest",
+    "ListEpisodesRequest",
+    "ListEpisodesResponse",
     "ListInferencesRequest",
     "Message",
     "MixtureOfNConfig",

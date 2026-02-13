@@ -127,6 +127,15 @@ Detail = Literal["low", "high", "auto"]
 
 
 @dataclass(kw_only=True)
+class EpisodeByIdRow:
+    count: int
+    end_time: str
+    episode_id: str
+    last_inference_id: str
+    start_time: str
+
+
+@dataclass(kw_only=True)
 class ProviderExtraBody:
     """
     DEPRECATED: Use `ModelProvider` instead.
@@ -638,6 +647,11 @@ class ListDatasetsResponse:
     """
     List of dataset metadata.
     """
+
+
+@dataclass(kw_only=True)
+class ListEpisodesResponse:
+    episodes: list[EpisodeByIdRow]
 
 
 @dataclass(kw_only=True)

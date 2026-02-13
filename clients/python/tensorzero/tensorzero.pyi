@@ -57,6 +57,8 @@ from .generated_types import (
     InferenceFilter,
     Input,
     ListDatapointsRequest,
+    ListEpisodesRequest,
+    ListEpisodesResponse,
     ListInferencesRequest,
     StoredInference,
     UpdateDatapointMetadataRequest,
@@ -923,6 +925,18 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
+    def list_episodes(
+        self,
+        *,
+        request: ListEpisodesRequest,
+    ) -> ListEpisodesResponse:
+        """
+        List episodes with optional filtering, pagination, and sorting.
+
+        :param request: A `ListEpisodesRequest` object with filter parameters.
+        :return: A `ListEpisodesResponse` object.
+        """
+
     def experimental_list_inferences(
         self,
         *,
@@ -1484,6 +1498,18 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param request: A `ListInferencesRequest` object with filter parameters.
         :return: A `GetInferencesResponse` object.
+        """
+
+    async def list_episodes(
+        self,
+        *,
+        request: ListEpisodesRequest,
+    ) -> ListEpisodesResponse:
+        """
+        List episodes with optional filtering, pagination, and sorting.
+
+        :param request: A `ListEpisodesRequest` object with filter parameters.
+        :return: A `ListEpisodesResponse` object.
         """
 
     async def experimental_list_inferences(
