@@ -763,15 +763,17 @@ fn wrap_provider_stream(
         let mut buffer = vec![];
         let mut errored = false;
 
-        // IMPORTANT: We should NOT modify chunks here, as they'll be re-processed downstream (e.g. `create_stream`).
-        // Note: `Usage` derives `Copy`, so `chunk.usage` is copied (not moved) into `chunk_usage`.
-        while let Some(chunk) = stream.next().await {
-            if let Ok(chunk) = chunk.as_ref() && let Some(mut chunk_usage) = chunk.usage {
-                // Compute cost from this chunk's raw response immediately
-                chunk_usage.cost = cost_config
-                    .as_ref()
-                    .and_then(|cfg| compute_cost_from_response(&chunk.raw_response, cfg, ResponseMode::Streaming));
-                usages.push(chunk_usage);
+        // Enrich each chunk's usage with cost (computed from the raw response) before yielding.
+        // Downstream consumers (e.g. `create_stream`) will see the cost in the chunk's usage.
+        while let Some(mut chunk) = stream.next().await {
+            if let Ok(ref mut chunk_inner) = chunk {
+                if let Some(ref mut chunk_usage) = chunk_inner.usage {
+                    // Compute cost from this chunk's raw response and attach it to the chunk
+                    chunk_usage.cost = cost_config
+                        .as_ref()
+                        .and_then(|cfg| compute_cost_from_response(&chunk_inner.raw_response, cfg, ResponseMode::Streaming));
+                    usages.push(*chunk_usage);
+                }
             }
 
             // We can skip cloning the chunk if we know we're not going to write to the cache

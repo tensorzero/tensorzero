@@ -752,3 +752,120 @@ type = "chat_completion"
 model = "openai::gpt-4o-mini"
 system_template = "../../../../ui/fixtures/config/functions/compact_context/baseline/system_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
+
+# ── Cost tracking test functions (all dummy models) ──────────────────────────
+
+# Best-of-N with dummy models.
+# Candidates use "test" (has cost config) and "json" (has cost config).
+# Evaluator uses "best_of_n_evaluator" (no cost config).
+# Expected: total cost is None due to poison semantics (evaluator has no cost).
+[functions.cost_test_best_of_n]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.cost_test_best_of_n.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.cost_test_best_of_n.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.cost_test_best_of_n.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.cost_test_best_of_n.variants.best_of_n.evaluator]
+model = "best_of_n_evaluator"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Mixture-of-N with dummy models.
+# Candidates use "test" (has cost config).
+# Fuser uses "alternate" (no cost config).
+# Expected: total cost is None due to poison semantics (fuser has no cost).
+[functions.cost_test_mixture_of_n]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.cost_test_mixture_of_n.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.cost_test_mixture_of_n.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.cost_test_mixture_of_n.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.cost_test_mixture_of_n.variants.mixture_of_n.fuser]
+model = "alternate"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Best-of-N where ALL models have cost config.
+# Candidates use "test" (has cost), evaluator uses "best_of_n_evaluator_with_cost"
+# (dummy `best_of_n_0_with_usage`: same evaluator content but raw_response has usage).
+# Expected: total cost is the sum of all model inference costs.
+[functions.cost_test_best_of_n_all_cost]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.cost_test_best_of_n_all_cost.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.cost_test_best_of_n_all_cost.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.cost_test_best_of_n_all_cost.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.cost_test_best_of_n_all_cost.variants.best_of_n.evaluator]
+model = "best_of_n_evaluator_with_cost"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Mixture-of-N where ALL models have cost config.
+# Candidates use "test" (has cost), fuser uses "test" (has cost).
+# Expected: total cost is the sum of all model inference costs.
+[functions.cost_test_mixture_of_n_all_cost]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.cost_test_mixture_of_n_all_cost.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.cost_test_mixture_of_n_all_cost.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.cost_test_mixture_of_n_all_cost.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.cost_test_mixture_of_n_all_cost.variants.mixture_of_n.fuser]
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"

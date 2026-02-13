@@ -714,6 +714,21 @@ routing = ["best_of_n_evaluator"]
 type = "dummy"
 model_name = "best_of_n_0"
 
+# Same evaluator as `best_of_n_evaluator` but with cost config.
+# Uses `best_of_n_0_with_usage` which returns evaluator content AND
+# standard usage in its raw_response so cost pointers can work.
+[models.best_of_n_evaluator_with_cost]
+routing = ["best_of_n_evaluator_with_cost"]
+
+[models.best_of_n_evaluator_with_cost.providers.best_of_n_evaluator_with_cost]
+type = "dummy"
+model_name = "best_of_n_0_with_usage"
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+
+
 [models.test_key]
 routing = ["dummy"]
 

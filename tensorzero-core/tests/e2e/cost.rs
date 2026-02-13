@@ -97,6 +97,22 @@ async fn make_streaming_inference(function_name: &str) -> Value {
 
 // ─── Non-streaming cost tests ────────────────────────────────────────────────
 
+/// Helper to extract a Decimal cost from a JSON value (handles both number and string).
+fn json_cost_to_decimal(cost: &Value) -> Decimal {
+    match cost {
+        Value::Number(n) => {
+            // serde_json Number — convert via its string representation to avoid f64 noise
+            let s = n.to_string();
+            s.parse::<Decimal>()
+                .unwrap_or_else(|e| panic!("failed to parse cost number `{s}` as Decimal: {e}"))
+        }
+        Value::String(s) => s
+            .parse::<Decimal>()
+            .unwrap_or_else(|e| panic!("failed to parse cost string `{s}` as Decimal: {e}")),
+        other => panic!("cost should be a number or string, got: {other:?}"),
+    }
+}
+
 /// Verify that cost is present in the non-streaming API response for a model
 /// with cost configuration.
 #[tokio::test]
@@ -110,12 +126,7 @@ async fn test_cost_in_non_streaming_response() {
         "usage should include cost for a model with cost configuration"
     );
 
-    // Parse cost as Decimal for comparison
-    let cost_str = cost.unwrap().as_str().unwrap_or_else(|| {
-        // cost might be a number, not a string
-        panic!("cost should be a string or number, got: {cost:?}");
-    });
-    let cost_decimal: Decimal = cost_str.parse().unwrap();
+    let cost_decimal = json_cost_to_decimal(cost.unwrap());
     assert_eq!(
         cost_decimal,
         expected_dummy_cost(),
@@ -144,14 +155,7 @@ async fn test_cost_stored_in_clickhouse_non_streaming() {
         "cost should be stored in ClickHouse model inference"
     );
 
-    // ClickHouse returns Decimal as a string
-    let cost_str = cost.unwrap().as_str().unwrap_or_else(|| {
-        panic!(
-            "ClickHouse cost should be a string, got: {:?}",
-            cost.unwrap()
-        );
-    });
-    let cost_decimal: Decimal = cost_str.parse().unwrap();
+    let cost_decimal = json_cost_to_decimal(cost.unwrap());
     assert_eq!(
         cost_decimal,
         expected_dummy_cost(),
@@ -216,4 +220,254 @@ async fn test_no_cost_when_not_configured() {
         cost.is_none() || cost.unwrap().is_null(),
         "cost should be absent when model has no cost configuration"
     );
+}
+
+// ─── Advanced variant cost tests (poison semantics) ─────────────────────────
+//
+// These tests verify that when an advanced variant combines multiple model
+// inferences and some have cost while others don't, the total cost is None
+// (poison semantics).
+
+/// Helper to make an inference request with a specific variant.
+async fn make_inference_with_variant(
+    function_name: &str,
+    variant_name: &str,
+    stream: bool,
+) -> Value {
+    let payload = json!({
+        "function_name": function_name,
+        "variant_name": variant_name,
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": stream,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        response.status().is_success(),
+        "inference request failed for {function_name}/{variant_name}: {}",
+        response.status()
+    );
+    response.json::<Value>().await.unwrap()
+}
+
+/// Helper to make a streaming inference with a specific variant and return the last chunk.
+async fn make_streaming_inference_with_variant(function_name: &str, variant_name: &str) -> Value {
+    let payload = json!({
+        "function_name": function_name,
+        "variant_name": variant_name,
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+
+    assert!(!chunks.is_empty(), "expected at least one chunk");
+    serde_json::from_str(chunks.last().unwrap()).unwrap()
+}
+
+/// Helper to assert that cost is absent (None) in a usage object.
+fn assert_cost_absent(usage: &Value, context: &str) {
+    let cost = usage.get("cost");
+    assert!(
+        cost.is_none() || cost.unwrap().is_null(),
+        "cost should be absent for {context} (poison semantics)"
+    );
+}
+
+/// DICL: embedding model has no cost config, LLM has cost config.
+/// Total cost should be None (poison semantics).
+#[tokio::test]
+async fn test_cost_dicl_poison_non_streaming() {
+    let response = make_inference_with_variant("basic_test", "dummy_dicl", false).await;
+    let usage = response.get("usage").expect("response should have usage");
+    assert_cost_absent(usage, "DICL non-streaming (embedding has no cost)");
+}
+
+/// DICL streaming: same poison semantics.
+#[tokio::test]
+async fn test_cost_dicl_poison_streaming() {
+    let last_chunk = make_streaming_inference_with_variant("basic_test", "dummy_dicl").await;
+    if let Some(usage) = last_chunk.get("usage") {
+        assert_cost_absent(usage, "DICL streaming (embedding has no cost)");
+    }
+}
+
+/// Best-of-N: candidates have cost config, evaluator does not.
+/// Total cost should be None (poison semantics).
+#[tokio::test]
+async fn test_cost_best_of_n_poison_non_streaming() {
+    let response = make_inference_with_variant("cost_test_best_of_n", "best_of_n", false).await;
+    let usage = response.get("usage").expect("response should have usage");
+    assert_cost_absent(usage, "best-of-N non-streaming (evaluator has no cost)");
+}
+
+/// Best-of-N streaming: same poison semantics.
+#[tokio::test]
+async fn test_cost_best_of_n_poison_streaming() {
+    let last_chunk =
+        make_streaming_inference_with_variant("cost_test_best_of_n", "best_of_n").await;
+    if let Some(usage) = last_chunk.get("usage") {
+        assert_cost_absent(usage, "best-of-N streaming (evaluator has no cost)");
+    }
+}
+
+/// Mixture-of-N: candidates have cost config, fuser does not.
+/// Total cost should be None (poison semantics).
+#[tokio::test]
+async fn test_cost_mixture_of_n_poison_non_streaming() {
+    let response =
+        make_inference_with_variant("cost_test_mixture_of_n", "mixture_of_n", false).await;
+    let usage = response.get("usage").expect("response should have usage");
+    assert_cost_absent(usage, "mixture-of-N non-streaming (fuser has no cost)");
+}
+
+/// Mixture-of-N streaming: same poison semantics.
+#[tokio::test]
+async fn test_cost_mixture_of_n_poison_streaming() {
+    let last_chunk =
+        make_streaming_inference_with_variant("cost_test_mixture_of_n", "mixture_of_n").await;
+    if let Some(usage) = last_chunk.get("usage") {
+        assert_cost_absent(usage, "mixture-of-N streaming (fuser has no cost)");
+    }
+}
+
+// ─── Advanced variant cost tests (all providers have cost) ──────────────────
+//
+// When ALL model providers in an advanced variant have cost configured,
+// the total cost should be the sum of all individual costs.
+//
+// Each dummy model inference returns 10 prompt_tokens + 10 completion_tokens.
+// With cost_per_million = 1.50 (prompt) and 2.00 (completion):
+//   per-inference cost = 10 * 1.50/1M + 10 * 2.00/1M = 0.000035
+//
+// Best-of-N (2 candidates + 1 evaluator = 3 inferences): 3 * 0.000035 = 0.000105
+// Mixture-of-N (2 candidates + 1 fuser = 3 inferences): 3 * 0.000035 = 0.000105
+
+fn expected_three_inference_cost() -> Decimal {
+    // 3 * 0.000035 = 0.000105
+    Decimal::new(105, 6)
+}
+
+/// Best-of-N with all cost: candidates + evaluator all have cost config.
+/// Total cost should be the sum of all model inference costs.
+#[tokio::test]
+async fn test_cost_best_of_n_all_cost_non_streaming() {
+    let response =
+        make_inference_with_variant("cost_test_best_of_n_all_cost", "best_of_n", false).await;
+    let usage = response.get("usage").expect("response should have usage");
+    let cost = usage.get("cost");
+    assert!(
+        cost.is_some(),
+        "usage should include cost when all providers have cost config (best-of-N)"
+    );
+    let cost_decimal = json_cost_to_decimal(cost.unwrap());
+    assert_eq!(
+        cost_decimal,
+        expected_three_inference_cost(),
+        "best-of-N total cost should be sum of 3 model inference costs"
+    );
+}
+
+/// Best-of-N streaming with all cost.
+#[tokio::test]
+async fn test_cost_best_of_n_all_cost_streaming() {
+    let last_chunk =
+        make_streaming_inference_with_variant("cost_test_best_of_n_all_cost", "best_of_n").await;
+    if let Some(usage) = last_chunk.get("usage") {
+        let cost = usage.get("cost");
+        assert!(
+            cost.is_some(),
+            "usage should include cost when all providers have cost config (best-of-N streaming)"
+        );
+        let cost_decimal = json_cost_to_decimal(cost.unwrap());
+        assert_eq!(
+            cost_decimal,
+            expected_three_inference_cost(),
+            "best-of-N streaming total cost should be sum of 3 model inference costs"
+        );
+    }
+}
+
+/// Mixture-of-N with all cost: candidates + fuser all have cost config.
+/// Total cost should be the sum of all model inference costs.
+#[tokio::test]
+async fn test_cost_mixture_of_n_all_cost_non_streaming() {
+    let response =
+        make_inference_with_variant("cost_test_mixture_of_n_all_cost", "mixture_of_n", false).await;
+    let usage = response.get("usage").expect("response should have usage");
+    let cost = usage.get("cost");
+    assert!(
+        cost.is_some(),
+        "usage should include cost when all providers have cost config (mixture-of-N)"
+    );
+    let cost_decimal = json_cost_to_decimal(cost.unwrap());
+    assert_eq!(
+        cost_decimal,
+        expected_three_inference_cost(),
+        "mixture-of-N total cost should be sum of 3 model inference costs"
+    );
+}
+
+/// Mixture-of-N streaming with all cost.
+#[tokio::test]
+async fn test_cost_mixture_of_n_all_cost_streaming() {
+    let last_chunk =
+        make_streaming_inference_with_variant("cost_test_mixture_of_n_all_cost", "mixture_of_n")
+            .await;
+    if let Some(usage) = last_chunk.get("usage") {
+        let cost = usage.get("cost");
+        assert!(
+            cost.is_some(),
+            "usage should include cost when all providers have cost config (mixture-of-N streaming)"
+        );
+        let cost_decimal = json_cost_to_decimal(cost.unwrap());
+        assert_eq!(
+            cost_decimal,
+            expected_three_inference_cost(),
+            "mixture-of-N streaming total cost should be sum of 3 model inference costs"
+        );
+    }
 }

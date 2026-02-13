@@ -823,6 +823,17 @@ embedding_model = "openai::text-embedding-3-small"
 k = 3
 max_tokens = 100
 
+# Dummy DICL variant for cost E2E tests.
+# Model has cost config (test), embedding model does not (dummy-embedding-model).
+# This tests poison semantics: embedding cost is None → total cost is None.
+[functions.basic_test.variants.dummy_dicl]
+type = "experimental_dynamic_in_context_learning"
+model = "test"
+embedding_model = "dummy-embedding-model"
+k = 0
+weight = 0
+max_tokens = 100
+
 ## Reasoning variants for usage tests
 
 [functions.basic_test.variants.anthropic-haiku-4-5-thinking]

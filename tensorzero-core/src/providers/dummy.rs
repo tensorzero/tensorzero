@@ -464,7 +464,7 @@ impl InferenceProvider for DummyProvider {
             "json_diff_schema" => vec![DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA.to_string().into()],
             "json_beatles_1" => vec![r#"{"names":["John", "George"]}"#.to_string().into()],
             "json_beatles_2" => vec![r#"{"names":["Paul", "Ringo"]}"#.to_string().into()],
-            "best_of_n_0" => {
+            "best_of_n_0" | "best_of_n_0_with_usage" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
             }
             "best_of_n_1" => {
@@ -632,6 +632,9 @@ impl InferenceProvider for DummyProvider {
             #[expect(clippy::unwrap_used)]
             "bad_tool" => serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),
             "best_of_n_0" => r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string(),
+            // Same evaluator content as `best_of_n_0`, but raw_response includes standard usage
+            // fields so cost pointers can extract token counts (for cost tracking E2E tests).
+            "best_of_n_0_with_usage" => DUMMY_INFER_RESPONSE_RAW.to_string(),
             "best_of_n_1" => r#"{"thinking": "hmmm", "answer_choice": 1}"#.to_string(),
             "best_of_n_big" => r#"{"thinking": "hmmm", "answer_choice": 100}"#.to_string(),
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
