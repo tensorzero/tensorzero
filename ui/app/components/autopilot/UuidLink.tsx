@@ -41,7 +41,7 @@ export function UuidLink({ uuid }: { uuid: string }) {
     <code
       className={cn(
         "relative rounded px-1.5 py-0.5 font-mono text-xs font-medium transition-colors duration-300",
-        url ? "bg-orange-50 text-orange-500" : "bg-muted",
+        url ? "bg-orange-50 text-orange-400" : "bg-muted",
       )}
     >
       {url ? (
