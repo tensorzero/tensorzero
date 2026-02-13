@@ -794,6 +794,7 @@ impl RuntimeOverlay {
             global_outbound_http_timeout,
             relay,
             metrics,
+            cache,
         } = &config.gateway;
 
         Self {
@@ -817,6 +818,7 @@ impl RuntimeOverlay {
                 ),
                 relay: relay.as_ref().map(|relay| relay.original_config.clone()),
                 metrics: metrics.clone(),
+                cache: cache.clone(),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),

@@ -21,6 +21,7 @@ pub async fn embeddings_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         ..
@@ -36,6 +37,7 @@ pub async fn embeddings_handler(
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         embedding_params,

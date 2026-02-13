@@ -16,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
+use crate::cache::CacheManager;
 use crate::config::{
     BatchWritesConfig, Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::UnwrittenConfig,
 };
@@ -77,6 +78,12 @@ impl Drop for GatewayHandle {
                 .app_state
                 .clickhouse_connection_info
                 .batcher_join_handle();
+            // Drop the cache manager early to release any ClickHouse references
+            // held by the ClickHouse cache backend. Otherwise the batch writer can
+            // stay alive and block shutdown.
+            let old_cache_manager =
+                std::mem::replace(&mut self.app_state.cache_manager, CacheManager::disabled());
+            drop(old_cache_manager);
             // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
             // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
             self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -161,6 +168,7 @@ pub struct AppStateData {
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
     pub valkey_connection_info: ValkeyConnectionInfo,
+    pub cache_manager: CacheManager,
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
     pub deferred_tasks: TaskTracker,
@@ -274,6 +282,11 @@ impl GatewayHandle {
             )
             .unwrap(),
         );
+        let cache_manager = CacheManager::new_from_connections(
+            &ValkeyConnectionInfo::Disabled,
+            &clickhouse_connection_info,
+            &config.gateway.cache,
+        );
         Self {
             app_state: AppStateData {
                 config,
@@ -281,6 +294,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info: ValkeyConnectionInfo::Disabled,
+                cache_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache: None,
@@ -365,6 +379,11 @@ impl GatewayHandle {
         )
         .await?;
 
+        let cache_manager = CacheManager::new_from_connections(
+            &valkey_connection_info,
+            &clickhouse_connection_info,
+            &config.gateway.cache,
+        );
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -372,6 +391,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info,
+                cache_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache,
@@ -405,12 +425,18 @@ impl AppStateData {
             &valkey_connection_info,
             &postgres_connection_info,
         )?);
+        let cache_manager = CacheManager::new_from_connections(
+            &valkey_connection_info,
+            &clickhouse_connection_info,
+            &config.gateway.cache,
+        );
         Ok(Self {
             config,
             http_client,
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            cache_manager,
             deferred_tasks,
             auth_cache: None,
             config_snapshot_cache: None,
@@ -843,6 +869,7 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
             relay: None,
             metrics: Default::default(),
+            cache: Default::default(),
         };
 
         let config = Config {
@@ -915,6 +942,7 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
             relay: None,
             metrics: Default::default(),
+            cache: Default::default(),
         };
 
         let config = Config {
@@ -952,6 +980,7 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
             relay: None,
             metrics: Default::default(),
+            cache: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
@@ -988,6 +1017,7 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
             relay: None,
             metrics: Default::default(),
+            cache: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
