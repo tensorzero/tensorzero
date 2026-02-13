@@ -891,3 +891,680 @@ cost = [
         "Streaming response should include cost from downstream"
     );
 }
+
+// ============================================================================
+// Advanced Variant Tests
+// ============================================================================
+
+/// Test cost propagation through relay with best-of-n variant (non-streaming).
+/// The relay orchestrates best-of-n (2 candidates + 1 evaluator), forwarding
+/// each model call to downstream where cost is computed.
+#[tokio::test]
+async fn test_relay_cost_best_of_n_non_streaming() {
+    // Downstream has cost config on both candidate and evaluator models
+    let downstream_config = r#"
+[models.candidate_model]
+routing = ["dummy_candidate"]
+
+[models.candidate_model.providers.dummy_candidate]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+
+[models.evaluator_model]
+routing = ["dummy_evaluator"]
+
+[models.evaluator_model.providers.dummy_evaluator]
+type = "dummy"
+model_name = "best_of_n_0_with_usage"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+"#;
+
+    // Relay defines the best-of-n function, forwarding model calls to downstream
+    let relay_config = r#"
+[functions.best_of_n_cost_test]
+type = "chat"
+
+[functions.best_of_n_cost_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.best_of_n_cost_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.best_of_n_cost_test.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.best_of_n_cost_test.variants.best_of_n.evaluator]
+model = "evaluator_model"
+
+[models.candidate_model]
+routing = ["relay_candidate"]
+
+[models.candidate_model.providers.relay_candidate]
+type = "dummy"
+model_name = "good"
+
+[models.evaluator_model]
+routing = ["relay_evaluator"]
+
+[models.evaluator_model.providers.relay_evaluator]
+type = "dummy"
+model_name = "best_of_n_0_with_usage"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "best_of_n_cost_test",
+            "variant_name": "best_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let usage = body
+        .get("usage")
+        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+
+    // Cost should be present (all 3 model inferences have cost config)
+    let cost = usage
+        .get("cost")
+        .unwrap_or_else(|| {
+            panic!("Best-of-n with all cost configs should have cost in usage. Body: {body}")
+        })
+        .as_f64()
+        .expect("cost should be a number");
+
+    // Should be > single inference cost (0.000035) since we have 2 candidates + 1 evaluator
+    assert!(
+        cost > 0.000035,
+        "Best-of-n cost should be greater than single inference cost (0.000035), got {cost}"
+    );
+}
+
+/// Test cost propagation through relay with best-of-n variant (streaming).
+#[tokio::test]
+async fn test_relay_cost_best_of_n_streaming() {
+    let downstream_config = r#"
+[models.candidate_model]
+routing = ["dummy_candidate"]
+
+[models.candidate_model.providers.dummy_candidate]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+
+[models.evaluator_model]
+routing = ["dummy_evaluator"]
+
+[models.evaluator_model.providers.dummy_evaluator]
+type = "dummy"
+model_name = "best_of_n_0_with_usage"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+"#;
+
+    let relay_config = r#"
+[functions.best_of_n_cost_test]
+type = "chat"
+
+[functions.best_of_n_cost_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.best_of_n_cost_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.best_of_n_cost_test.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.best_of_n_cost_test.variants.best_of_n.evaluator]
+model = "evaluator_model"
+
+[models.candidate_model]
+routing = ["relay_candidate"]
+
+[models.candidate_model.providers.relay_candidate]
+type = "dummy"
+model_name = "good"
+
+[models.evaluator_model]
+routing = ["relay_evaluator"]
+
+[models.evaluator_model.providers.relay_evaluator]
+type = "dummy"
+model_name = "best_of_n_0_with_usage"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "best_of_n_cost_test",
+            "variant_name": "best_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true
+        }))
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut found_cost = false;
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        if let Some(usage) = chunk.get("usage") {
+            if let Some(cost) = usage.get("cost") {
+                found_cost = true;
+                let cost = cost.as_f64().expect("cost should be a number");
+                assert!(
+                    cost > 0.000035,
+                    "Best-of-n streaming cost should be > single inference cost (0.000035), got {cost}"
+                );
+            }
+        }
+    }
+
+    assert!(
+        found_cost,
+        "Best-of-n streaming relay should include cost in usage"
+    );
+}
+
+/// Test cost propagation through relay with mixture-of-n variant (non-streaming).
+/// The relay orchestrates mixture-of-n (2 candidates + 1 fuser), forwarding
+/// each model call to downstream where cost is computed.
+#[tokio::test]
+async fn test_relay_cost_mixture_of_n_non_streaming() {
+    // Downstream has cost config on both candidate and fuser models
+    let downstream_config = r#"
+[models.candidate_model]
+routing = ["dummy_candidate"]
+
+[models.candidate_model.providers.dummy_candidate]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+
+[models.fuser_model]
+routing = ["dummy_fuser"]
+
+[models.fuser_model.providers.dummy_fuser]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+"#;
+
+    // Relay defines the mixture-of-n function
+    let relay_config = r#"
+[functions.mixture_of_n_cost_test]
+type = "chat"
+
+[functions.mixture_of_n_cost_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.mixture_of_n_cost_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.mixture_of_n_cost_test.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.mixture_of_n_cost_test.variants.mixture_of_n.fuser]
+model = "fuser_model"
+
+[models.candidate_model]
+routing = ["relay_candidate"]
+
+[models.candidate_model.providers.relay_candidate]
+type = "dummy"
+model_name = "good"
+
+[models.fuser_model]
+routing = ["relay_fuser"]
+
+[models.fuser_model.providers.relay_fuser]
+type = "dummy"
+model_name = "good"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "mixture_of_n_cost_test",
+            "variant_name": "mixture_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let usage = body
+        .get("usage")
+        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+
+    // Cost should be present (all 3 model inferences have cost config)
+    let cost = usage
+        .get("cost")
+        .unwrap_or_else(|| {
+            panic!("Mixture-of-n with all cost configs should have cost in usage. Body: {body}")
+        })
+        .as_f64()
+        .expect("cost should be a number");
+
+    // Should be > single inference cost since we have 2 candidates + 1 fuser
+    assert!(
+        cost > 0.000035,
+        "Mixture-of-n cost should be greater than single inference cost (0.000035), got {cost}"
+    );
+}
+
+/// Test cost propagation through relay with mixture-of-n variant (streaming).
+#[tokio::test]
+async fn test_relay_cost_mixture_of_n_streaming() {
+    let downstream_config = r#"
+[models.candidate_model]
+routing = ["dummy_candidate"]
+
+[models.candidate_model.providers.dummy_candidate]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+
+[models.fuser_model]
+routing = ["dummy_fuser"]
+
+[models.fuser_model.providers.dummy_fuser]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+"#;
+
+    let relay_config = r#"
+[functions.mixture_of_n_cost_test]
+type = "chat"
+
+[functions.mixture_of_n_cost_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.mixture_of_n_cost_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.mixture_of_n_cost_test.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.mixture_of_n_cost_test.variants.mixture_of_n.fuser]
+model = "fuser_model"
+
+[models.candidate_model]
+routing = ["relay_candidate"]
+
+[models.candidate_model.providers.relay_candidate]
+type = "dummy"
+model_name = "good"
+
+[models.fuser_model]
+routing = ["relay_fuser"]
+
+[models.fuser_model.providers.relay_fuser]
+type = "dummy"
+model_name = "good"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "mixture_of_n_cost_test",
+            "variant_name": "mixture_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true
+        }))
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut found_cost = false;
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        if let Some(usage) = chunk.get("usage") {
+            if let Some(cost) = usage.get("cost") {
+                found_cost = true;
+                let cost = cost.as_f64().expect("cost should be a number");
+                assert!(
+                    cost > 0.000035,
+                    "Mixture-of-n streaming cost should be > single inference cost (0.000035), got {cost}"
+                );
+            }
+        }
+    }
+
+    assert!(
+        found_cost,
+        "Mixture-of-n streaming relay should include cost in usage"
+    );
+}
+
+/// Test cost with best-of-n through relay when evaluator has no cost config (poison semantics).
+/// Candidates have cost, evaluator doesn't → total cost should be None.
+#[tokio::test]
+async fn test_relay_cost_best_of_n_poison_non_streaming() {
+    // Downstream: candidates have cost config, evaluator does NOT
+    let downstream_config = r#"
+[models.candidate_model]
+routing = ["dummy_candidate"]
+
+[models.candidate_model.providers.dummy_candidate]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+
+[models.evaluator_model]
+routing = ["dummy_evaluator"]
+
+[models.evaluator_model.providers.dummy_evaluator]
+type = "dummy"
+model_name = "best_of_n_0"
+"#;
+
+    let relay_config = r#"
+[functions.best_of_n_poison_test]
+type = "chat"
+
+[functions.best_of_n_poison_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.best_of_n_poison_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.best_of_n_poison_test.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.best_of_n_poison_test.variants.best_of_n.evaluator]
+model = "evaluator_model"
+
+[models.candidate_model]
+routing = ["relay_candidate"]
+
+[models.candidate_model.providers.relay_candidate]
+type = "dummy"
+model_name = "good"
+
+[models.evaluator_model]
+routing = ["relay_evaluator"]
+
+[models.evaluator_model.providers.relay_evaluator]
+type = "dummy"
+model_name = "best_of_n_0"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "best_of_n_poison_test",
+            "variant_name": "best_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let usage = body
+        .get("usage")
+        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+
+    // Cost should be None (poison semantics: evaluator has no cost config)
+    assert!(
+        usage.get("cost").is_none(),
+        "Best-of-n cost should be absent when evaluator lacks cost config (poison semantics). Usage: {usage}"
+    );
+}
+
+/// Test cost with mixture-of-n through relay when fuser has no cost config (poison semantics).
+#[tokio::test]
+async fn test_relay_cost_mixture_of_n_poison_non_streaming() {
+    // Downstream: candidates have cost config, fuser does NOT
+    let downstream_config = r#"
+[models.candidate_model]
+routing = ["dummy_candidate"]
+
+[models.candidate_model.providers.dummy_candidate]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+
+[models.fuser_model]
+routing = ["dummy_fuser"]
+
+[models.fuser_model.providers.dummy_fuser]
+type = "dummy"
+model_name = "good"
+"#;
+
+    let relay_config = r#"
+[functions.mixture_of_n_poison_test]
+type = "chat"
+
+[functions.mixture_of_n_poison_test.variants.candidate0]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.mixture_of_n_poison_test.variants.candidate1]
+type = "chat_completion"
+weight = 0
+model = "candidate_model"
+
+[functions.mixture_of_n_poison_test.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["candidate0", "candidate1"]
+
+[functions.mixture_of_n_poison_test.variants.mixture_of_n.fuser]
+model = "fuser_model"
+
+[models.candidate_model]
+routing = ["relay_candidate"]
+
+[models.candidate_model.providers.relay_candidate]
+type = "dummy"
+model_name = "good"
+
+[models.fuser_model]
+routing = ["relay_fuser"]
+
+[models.fuser_model.providers.relay_fuser]
+type = "dummy"
+model_name = "good"
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "function_name": "mixture_of_n_poison_test",
+            "variant_name": "mixture_of_n",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let usage = body
+        .get("usage")
+        .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
+
+    // Cost should be None (poison semantics: fuser has no cost config)
+    assert!(
+        usage.get("cost").is_none(),
+        "Mixture-of-n cost should be absent when fuser lacks cost config (poison semantics). Usage: {usage}"
+    );
+}
