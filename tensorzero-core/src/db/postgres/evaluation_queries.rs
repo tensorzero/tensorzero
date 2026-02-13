@@ -233,7 +233,11 @@ impl EvaluationQueries for PostgresConnectionInfo {
                         message: format!("Failed to deserialize human feedback value: {e}"),
                     })
                 })?;
-                let evaluator_inference_id: Uuid = row.get("evaluator_inference_id");
+                // TODO(shuyangli): Change `InferenceEvaluationHumanFeedbackRow.evaluator_inference_id` to `Option<Uuid>`
+                // Postgres stores NULL for missing evaluator_inference_id;
+                // ClickHouse defaults to nil UUID. Normalize to nil here for consistency.
+                let evaluator_inference_id: Option<Uuid> = row.get("evaluator_inference_id");
+                let evaluator_inference_id = evaluator_inference_id.unwrap_or(Uuid::nil());
                 Ok(Some(InferenceEvaluationHumanFeedbackRow {
                     value,
                     evaluator_inference_id,
