@@ -37,6 +37,7 @@ on:
 permissions:
   contents: read
   actions: write
+  id-token: write
 
 jobs:
   ui-tests-e2e-model-inference-cache:
@@ -94,20 +95,19 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          pattern: build-{gateway,ui,mock-provider-api}-container
-          merge-multiple: true
-
       - name: Load container images
         # These containers may not exist if we manually triggered this workflow (or merge-queue.yml),
         # We'll automatically build the container locally if they don't exist, so let this step fail.
-        continue-on-error: true
-        run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          docker load < mock-provider-api-container.tar
+        continue-on-error: ${{ inputs.is_merge_group == false }}
+        uses: ./.github/actions/load-container-images
+        with:
+          distribution-mode: ${{ inputs.is_merge_group && 'registry' || 'artifact' }}
+          artifact-pattern: build-{gateway,ui,mock-provider-api}-container
+          registry-images: |
+            gateway
+            ui
+            mock-provider-api
+          sha: ${{ github.sha }}
 
       # This allows us to use 'no-build' on subsequent steps
       - name: Build needed docker images
