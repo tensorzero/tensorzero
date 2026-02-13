@@ -16,6 +16,7 @@ export function useEntityPreview<T>(
 
   return {
     data: (fetcher.data as T) ?? null,
-    isLoading: fetcher.state !== "idle" || (enabled && !fetcher.data),
+    isLoading:
+      fetcher.state !== "idle" || (enabled && fetcher.data === undefined),
   };
 }
