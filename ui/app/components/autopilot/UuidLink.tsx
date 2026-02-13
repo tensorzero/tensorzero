@@ -47,7 +47,7 @@ export function UuidLink({ uuid }: { uuid: string }) {
   return (
     <Link
       to={url}
-      className="rounded bg-orange-50 px-1 py-0.5 font-mono text-xs text-orange-500 no-underline hover:underline"
+      className="rounded bg-orange-50 px-1 py-0.5 font-mono text-xs text-orange-400 no-underline hover:underline"
     >
       {uuid}
     </Link>
