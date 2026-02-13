@@ -111,8 +111,15 @@ impl StoredInference {
             StoredInference::Json(inference) => {
                 let output = match output_source {
                     InferenceOutputSource::None => None,
-                    InferenceOutputSource::Inference => inference.output,
-                    InferenceOutputSource::Demonstration => inference.output,
+                    InferenceOutputSource::Inference | InferenceOutputSource::Demonstration => {
+                        Some(inference.output.ok_or_else(|| {
+                            Error::new(ErrorDetails::InvalidRequest {
+                                message:
+                                    "Cannot create datapoint from inference with missing output"
+                                        .to_string(),
+                            })
+                        })?)
+                    }
                 };
 
                 let input = inference.input.ok_or_else(|| {
@@ -154,8 +161,15 @@ impl StoredInference {
             StoredInference::Chat(inference) => {
                 let output = match output_source {
                     InferenceOutputSource::None => None,
-                    InferenceOutputSource::Inference => inference.output,
-                    InferenceOutputSource::Demonstration => inference.output,
+                    InferenceOutputSource::Inference | InferenceOutputSource::Demonstration => {
+                        Some(inference.output.ok_or_else(|| {
+                            Error::new(ErrorDetails::InvalidRequest {
+                                message:
+                                    "Cannot create datapoint from inference with missing output"
+                                        .to_string(),
+                            })
+                        })?)
+                    }
                 };
 
                 let input = inference.input.ok_or_else(|| {
@@ -293,10 +307,10 @@ pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<StoredInput>,
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
@@ -315,7 +329,7 @@ pub struct StoredChatInference {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_body: Option<UnfilteredInferenceExtraBody>,
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inference_params: Option<InferenceParams>,
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub processing_time_ms: Option<u64>,
@@ -1103,6 +1117,22 @@ mod tests {
     }
 
     #[test]
+    fn test_chat_inference_to_datapoint_errors_on_missing_output() {
+        let mut chat_inference = create_test_chat_inference();
+        chat_inference.output = None;
+        let dataset_name = "test_dataset";
+        let output_source = InferenceOutputSource::Inference;
+        let config = create_test_config();
+
+        let inference = StoredInference::Chat(chat_inference);
+        let result = inference.into_datapoint_insert(dataset_name, &output_source, &config);
+        assert!(
+            result.is_err(),
+            "Should error when output is missing and output_source is Inference"
+        );
+    }
+
+    #[test]
     fn test_chat_inference_to_datapoint_with_none_output() {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
@@ -1222,6 +1252,22 @@ mod tests {
             }
             StoredDatapoint::Chat(_) => panic!("Expected Json datapoint, got Chat"),
         }
+    }
+
+    #[test]
+    fn test_json_inference_to_datapoint_errors_on_missing_output() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.output = None;
+        let dataset_name = "json_dataset";
+        let output_source = InferenceOutputSource::Inference;
+        let config = create_test_config();
+
+        let inference = StoredInference::Json(json_inference);
+        let result = inference.into_datapoint_insert(dataset_name, &output_source, &config);
+        assert!(
+            result.is_err(),
+            "Should error when output is missing and output_source is Inference"
+        );
     }
 
     #[test]
@@ -1479,6 +1525,61 @@ mod tests {
             }
             CreateDatapointRequest::Chat(_) => panic!("Expected Json datapoint"),
         }
+    }
+
+    #[test]
+    fn test_stored_sample_returns_none_for_missing_input() {
+        let chat_inference = StoredChatInferenceDatabase {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            input: None,
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            tool_params: None,
+            tags: HashMap::new(),
+            extra_body: None,
+            inference_params: None,
+            processing_time_ms: None,
+            ttft_ms: None,
+        };
+        let chat_db = StoredInferenceDatabase::Chat(chat_inference);
+        assert!(
+            chat_db.input().is_none(),
+            "input() should return None when the stored input is missing"
+        );
+        assert!(
+            chat_db.into_input().is_none(),
+            "into_input() should return None when the stored input is missing"
+        );
+
+        let json_inference = StoredJsonInference {
+            function_name: "json_function".to_string(),
+            variant_name: "json_variant".to_string(),
+            input: None,
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            output_schema: None,
+            tags: HashMap::new(),
+            extra_body: None,
+            inference_params: None,
+            processing_time_ms: None,
+            ttft_ms: None,
+        };
+        let json_db = StoredInferenceDatabase::Json(json_inference);
+        assert!(
+            json_db.input().is_none(),
+            "input() should return None when the stored input is missing"
+        );
+        assert!(
+            json_db.into_input().is_none(),
+            "into_input() should return None when the stored input is missing"
+        );
     }
 
     #[test]

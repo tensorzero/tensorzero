@@ -2761,6 +2761,72 @@ FORMAT JSONEachRow";
         );
     }
 
+    #[test]
+    fn test_stored_inference_deserialization_chat_with_none_fields() {
+        // Test that missing optional fields deserialize to None (Python/direct serialized format)
+        let json = r#"
+        {
+            "type": "chat",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+            "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+            "tags": {},
+            "timestamp": "2023-01-01T00:00:00Z"
+        }
+    "#;
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Chat(chat_inference) = inference else {
+            panic!("Expected a chat inference");
+        };
+        assert_eq!(chat_inference.function_name, "test_function");
+        assert!(
+            chat_inference.input.is_none(),
+            "input should be None when absent"
+        );
+        assert!(
+            chat_inference.output.is_none(),
+            "output should be None when absent"
+        );
+        assert!(
+            chat_inference.tool_params.is_none(),
+            "tool_params should be None when absent"
+        );
+    }
+
+    #[test]
+    fn test_stored_inference_deserialization_json_with_none_fields() {
+        // Test that missing optional fields deserialize to None (Python/direct serialized format)
+        let json = r#"
+        {
+            "type": "json",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+            "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+            "tags": {},
+            "timestamp": "2023-01-01T00:00:00Z"
+        }
+    "#;
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Json(json_inference) = inference else {
+            panic!("Expected a json inference");
+        };
+        assert_eq!(json_inference.function_name, "test_function");
+        assert!(
+            json_inference.input.is_none(),
+            "input should be None when absent"
+        );
+        assert!(
+            json_inference.output.is_none(),
+            "output should be None when absent"
+        );
+        assert!(
+            json_inference.output_schema.is_none(),
+            "output_schema should be None when absent"
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_order_by_timestamp() {
         let config = get_e2e_config().await;

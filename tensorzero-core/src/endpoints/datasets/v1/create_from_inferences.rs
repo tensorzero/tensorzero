@@ -200,8 +200,8 @@ mod tests {
             inference_id: id,
             tool_params: Some(ToolCallConfigDatabaseInsert::default()),
             tags: HashMap::new(),
-            extra_body: Default::default(),
-            inference_params: Default::default(),
+            extra_body: Some(Default::default()),
+            inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
         })

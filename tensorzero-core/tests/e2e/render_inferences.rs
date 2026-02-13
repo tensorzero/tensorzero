@@ -36,6 +36,42 @@ pub async fn test_render_samples_empty() {
     assert!(rendered_inferences.is_empty());
 }
 
+/// Test that render_samples skips inferences with None input (e.g. TTLed data).
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_render_samples_skips_none_input() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
+        function_name: "basic_test".to_string(),
+        variant_name: "test".to_string(),
+        input: None,
+        output: Some(vec![]),
+        episode_id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+        timestamp: Utc::now(),
+        dispreferred_outputs: vec![],
+        tags: HashMap::new(),
+        extra_body: Some(Default::default()),
+        inference_params: Some(Default::default()),
+        processing_time_ms: None,
+        ttft_ms: None,
+    })];
+
+    let rendered_inferences = client
+        .experimental_render_samples(
+            stored_inferences,
+            HashMap::from([("basic_test".to_string(), "test".to_string())]),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        rendered_inferences.is_empty(),
+        "Inferences with None input should be skipped"
+    );
+}
+
 /// Test that the render_samples function drops the stored inference when the variants map is empty.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]

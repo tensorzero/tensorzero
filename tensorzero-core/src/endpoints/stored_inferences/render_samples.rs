@@ -40,7 +40,8 @@ pub async fn render_samples<T: StoredSample>(
             // Acquire semaphore permit for this sample's processing
             let _permit = semaphore.acquire().await.ok()?;
 
-            // Resolve the input
+            // Resolve the input.
+            // If the input has TTLed (is None), this sample will be skipped.
             let resolved_input = sample.input()?.clone().reresolve(&*config).await.ok()?;
 
             // Render the sample
