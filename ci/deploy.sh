@@ -1,33 +1,29 @@
 #!/usr/bin/env bash
 # Deploy a local tensorzero clone to a remote machine and run Rust tests.
 #
-# Usage:
-#   ./deploy.sh              # defaults to workspace 0, sync + check
-#   ./deploy.sh 0            # workspace 0: tensorzero/ <-> remote tensorzero/
+# Usage (from repo root, when script is ci/deploy.sh):
+#   ./ci/deploy.sh            # sync + check (default)
+#   ./ci/deploy.sh sync       # sync only
+#   ./ci/deploy.sh e2e        # sync + docker compose + gateway + e2e tests on remote
+#   ./ci/deploy.sh e2e cost   # same but run tests matching "cost"
+#   ./ci/deploy.sh cleanup    # stop docker compose and gateway on remote (no sync)
+#
+# Usage (from parent dir with multiple workspaces):
+#   ./deploy.sh              # workspace 0, sync + check
 #   ./deploy.sh 1            # workspace 1: tensorzero-1/ <-> remote tensorzero-1/
-#   ./deploy.sh 0 sync       # sync only, no checks
-#   ./deploy.sh 0 check      # sync + cargo check + clippy + unit tests (default)
-#   ./deploy.sh 0 e2e        # sync + docker compose + gateway + e2e tests (all on remote)
-#   ./deploy.sh 0 e2e cost   # same but only run tests matching "cost"
-#   ./deploy.sh 1 cleanup    # stop docker compose and gateway on remote (no sync)
+#   ./deploy.sh 0 sync       # sync only
+#   ./deploy.sh 0 check      # sync + cargo check (default)
+#   ./deploy.sh 0 e2e        # sync + e2e on remote
+#   ./deploy.sh 1 cleanup    # cleanup remote for workspace 1
 #
-# From repo root:  ./ci/deploy.sh [check|e2e|sync|cleanup]  (no workspace number)
-# Environment:     TENSORZERO_DEPLOY_REMOTE_HOST, TENSORZERO_DEPLOY_REMOTE_BASE,
-#                  TENSORZERO_DEPLOY_REMOTE_DIR  (override for your remote)
+# Env (optional): TENSORZERO_DEPLOY_REMOTE_HOST, TENSORZERO_DEPLOY_REMOTE_BASE,
+#   TENSORZERO_DEPLOY_REMOTE_DIR (defaults: tensorzero, /home/ubuntu, $REMOTE_BASE/$(basename $REPO) when in-repo).
 #
-# Local layout (next to this script when run from parent):
-#   tensorzero/       <- workspace 0 (default clone)
-#   tensorzero-1/     <- workspace 1 (second clone)
+# Local layout (parent mode): tensorzero/, tensorzero-1/ next to the script.
+# Remote layout: $REMOTE_BASE/tensorzero, $REMOTE_BASE/tensorzero-1 (or REMOTE_DIR when in-repo).
 #
-# Remote layout (/home/ubuntu/):
-#   tensorzero/       <- mirror of workspace 0
-#   tensorzero-1/     <- mirror of workspace 1
-#
-# E2E mode:
-#   Everything runs on the remote: docker compose, gateway, and tests.
-#   When switching workspaces, docker compose is torn down and restarted
-#   on the remote to reset databases (different branches may have
-#   different migrations).
+# E2E mode: docker compose, gateway, and tests run on the remote. When switching
+# workspaces, compose is torn down and restarted on the remote.
 
 set -euo pipefail
 
@@ -41,7 +37,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REMOTE_HOST="${TENSORZERO_DEPLOY_REMOTE_HOST:-tensorzero}"
 REMOTE_BASE="${TENSORZERO_DEPLOY_REMOTE_BASE:-/home/ubuntu}"
 
-# Run from repo (./ci/deploy.sh): use repo root, first arg is mode.
+# When run from repo (./ci/deploy.sh): use repo root, first arg is mode.
 if [ -f "${SCRIPT_DIR}/../Cargo.toml" ] && [ "$(basename "$SCRIPT_DIR")" = "ci" ]; then
   REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
   LOCAL_DIR="$REPO_ROOT"
@@ -81,6 +77,18 @@ echo "  Mode:   ${MODE}"
 echo "  Rsync:  $($RSYNC --version | head -1)"
 echo ""
 
+# ── Cleanup mode: stop compose and gateway on remote (no sync) ───────────
+if [ "$MODE" = "cleanup" ]; then
+  echo "--- cleanup on ${REMOTE_HOST}:${REMOTE_DIR} ---"
+  ssh "${REMOTE_HOST}" bash -l <<CLEANUP_EOF
+    set -euo pipefail
+    cd "${REMOTE_DIR}" 2>/dev/null && docker compose -f ${REMOTE_COMPOSE} down -v 2>/dev/null || true
+    pkill -f "gateway.*config-file.*tensorzero" 2>/dev/null || true
+CLEANUP_EOF
+  echo "=== Cleanup complete ==="
+  exit 0
+fi
+
 # ── Format locally (fast, text-only) ─────────────────────────────────────
 echo "--- cargo fmt (local) ---"
 (cd "$LOCAL_DIR" && cargo fmt)
@@ -111,9 +119,10 @@ RSYNC_INCLUDES=(
 )
 
 if [ "$MODE" = "e2e" ] || [ "$MODE" = "gateway" ]; then
-  # Extra dirs needed for Docker image builds on the remote (gateway Dockerfile expects .git)
+  # Extra dirs needed for Docker image builds and e2e on the remote
   RSYNC_INCLUDES+=(
     --include='.git/***'
+    --include='ui'
     --include='ui/fixtures/***'
     --include='ci/provider-proxy-cache/***'
   )
@@ -127,6 +136,10 @@ fi
   --exclude='**/.venv/' \
   --exclude='*' \
   "${LOCAL_DIR}/" "${REMOTE_HOST}:${REMOTE_DIR}/"
+RSYNC_RV=$?
+if [ $RSYNC_RV -ne 0 ] && [ $RSYNC_RV -ne 23 ]; then
+  exit $RSYNC_RV
+fi
 
 if [ "$MODE" = "sync" ]; then
   echo ""
@@ -178,6 +191,8 @@ TEARDOWN_EOF
     export DOCKER_BUILDKIT=1
     export COMPOSE_DOCKER_CLI_BUILD=1
     export TENSORZERO_GATEWAY_BUILD_CACHE="${REMOTE_DIR}/.docker-gateway-cache"
+    export TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS=1
+    export TENSORZERO_SKIP_LARGE_FIXTURES=1
     mkdir -p "\$TENSORZERO_GATEWAY_BUILD_CACHE"
 
     # Build gateway image only when missing (reuse existing compose setup; serial build avoids cache corruption)
@@ -188,8 +203,27 @@ TEARDOWN_EOF
       echo "--- reusing existing gateway image ---"
     fi
     echo "--- docker compose up (remote) ---"
-    docker compose -f ${REMOTE_COMPOSE} up -d --wait
-    echo "  Docker services ready"
+    docker compose -f ${REMOTE_COMPOSE} up -d
+    deadline=\$((SECONDS + 600))
+    while [ \$SECONDS -lt \$deadline ]; do
+      status=\$(docker compose -f ${REMOTE_COMPOSE} ps --format json 2>/dev/null | tr -d '\n' || true)
+      if echo "\$status" | grep -q '"State":"starting"' || echo "\$status" | grep -q '"Health":"unhealthy"'; then
+        echo "  ... waiting (\$((SECONDS - (deadline - 600)))s)"
+        sleep 15
+        continue
+      fi
+      if echo "\$status" | grep -q 'fixtures'; then
+        echo "  Docker services ready"
+        break
+      fi
+      echo "  ... waiting (\$((SECONDS - (deadline - 600)))s)"
+      sleep 15
+    done
+    if [ \$SECONDS -ge \$deadline ]; then
+      echo "  Timeout waiting for compose; dumping logs for fixtures-postgres and fixtures:"
+      docker compose -f ${REMOTE_COMPOSE} logs --tail=50 fixtures-postgres fixtures 2>/dev/null || true
+      exit 1
+    fi
 
     export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
     export TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests"
@@ -334,6 +368,8 @@ TEARDOWN_EOF
     export DOCKER_BUILDKIT=1
     export COMPOSE_DOCKER_CLI_BUILD=1
     export TENSORZERO_GATEWAY_BUILD_CACHE="${REMOTE_DIR}/.docker-gateway-cache"
+    export TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS=1
+    export TENSORZERO_SKIP_LARGE_FIXTURES=1
     mkdir -p "\$TENSORZERO_GATEWAY_BUILD_CACHE"
 
     # Build gateway image only when missing or when user asked for rebuild (avoids tearing down / full rebuild every time)
@@ -348,8 +384,27 @@ TEARDOWN_EOF
       echo "--- reusing existing gateway image ---"
     fi
     echo "--- docker compose up (remote) ---"
-    docker compose -f ${REMOTE_COMPOSE} up -d --wait
-    echo "  Docker services ready"
+    docker compose -f ${REMOTE_COMPOSE} up -d
+    deadline=\$((SECONDS + 600))
+    while [ \$SECONDS -lt \$deadline ]; do
+      status=\$(docker compose -f ${REMOTE_COMPOSE} ps --format json 2>/dev/null | tr -d '\n' || true)
+      if echo "\$status" | grep -q '"State":"starting"' || echo "\$status" | grep -q '"Health":"unhealthy"'; then
+        echo "  ... waiting (\$((SECONDS - (deadline - 600)))s)"
+        sleep 15
+        continue
+      fi
+      if echo "\$status" | grep -q 'fixtures'; then
+        echo "  Docker services ready"
+        break
+      fi
+      echo "  ... waiting (\$((SECONDS - (deadline - 600)))s)"
+      sleep 15
+    done
+    if [ \$SECONDS -ge \$deadline ]; then
+      echo "  Timeout waiting for compose; dumping logs for fixtures-postgres and fixtures:"
+      docker compose -f ${REMOTE_COMPOSE} logs --tail=50 fixtures-postgres fixtures 2>/dev/null || true
+      exit 1
+    fi
 
     export TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
     export TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests"

@@ -6,7 +6,7 @@ Sync this repo to a remote machine and run checks or e2e tests there (useful for
 
 From repo root:
 
-- `./ci/deploy.sh` or `./ci/deploy.sh check` — sync + cargo check + clippy + unit tests
+- `./ci/deploy.sh` or `./ci/deploy.sh check` — sync + cargo check
 - `./ci/deploy.sh e2e` — sync + docker compose + gateway + full e2e tests (all on remote)
 - `./ci/deploy.sh sync` — sync only
 - `./ci/deploy.sh cleanup` — stop docker compose and gateway on remote
