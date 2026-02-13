@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { Link } from "react-router";
 import { CircleDot, CircleHelp } from "lucide-react";
 import { Dataset, Episodes, Inferences } from "~/components/icons/Icons";
@@ -13,6 +13,7 @@ import type { ResolvedObject } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 import { toResolvedObjectUrl } from "~/utils/urls";
 import { UuidHoverCard } from "./UuidHoverCard";
+import { useInferenceSideSheet } from "./InferenceSideSheetContext";
 
 const ICON_SIZE = 12;
 const ICON_CLASS = "mr-1 inline align-middle -translate-y-px";
@@ -85,9 +86,20 @@ function IconWithTooltip({
 
 export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
+  const { openSheet } = useInferenceSideSheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? toResolvedObjectUrl(uuid, obj) : null;
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (obj?.type === "inference") {
+        e.preventDefault();
+        openSheet(uuid);
+      }
+    },
+    [obj, uuid, openSheet],
+  );
 
   return (
     <code
@@ -100,6 +112,7 @@ export function UuidLink({ uuid }: UuidLinkProps) {
         <UuidHoverCard uuid={uuid} obj={obj}>
           <Link
             to={url}
+            onClick={handleClick}
             className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
           >
             <IconWithTooltip label={getEntityLabel(obj.type)}>
