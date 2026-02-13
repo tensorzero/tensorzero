@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Link } from "react-router";
 import { HoverCard } from "radix-ui";
 import { useResolveUuid } from "~/hooks/useResolveUuid";
@@ -6,6 +6,7 @@ import type { ResolvedObject } from "~/types/tensorzero";
 import { toDatapointUrl, toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
 import { cn } from "~/utils/common";
 import { UuidHoverCardContent } from "./UuidHoverCardContent";
+import { useInferenceSideSheet } from "./InferenceSideSheetContext";
 
 function getUrlForResolvedObject(
   uuid: string,
@@ -35,9 +36,20 @@ function getUrlForResolvedObject(
 export function UuidLink({ uuid }: { uuid: string }) {
   const { data } = useResolveUuid(uuid);
   const [isOpen, setIsOpen] = useState(false);
+  const { openSheet } = useInferenceSideSheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? getUrlForResolvedObject(uuid, obj) : null;
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (obj?.type === "inference") {
+        e.preventDefault();
+        openSheet(uuid);
+      }
+    },
+    [obj, uuid, openSheet],
+  );
 
   if (!url || !obj) {
     return (
@@ -52,6 +64,7 @@ export function UuidLink({ uuid }: { uuid: string }) {
       <HoverCard.Trigger asChild>
         <Link
           to={url}
+          onClick={handleClick}
           className="rounded bg-orange-50 px-1 py-0.5 font-mono text-xs text-orange-500 no-underline hover:underline"
         >
           {uuid}

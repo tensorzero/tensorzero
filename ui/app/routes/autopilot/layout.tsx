@@ -9,6 +9,8 @@ import { AutopilotUnavailableState } from "~/components/ui/error/AutopilotUnavai
 import { LayoutErrorBoundary } from "~/components/ui/error";
 import { isAutopilotUnavailableError } from "~/utils/tensorzero/errors";
 import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
+import { InferenceSideSheetProvider } from "~/components/autopilot/InferenceSideSheetContext";
+import { InferenceSideSheet } from "~/components/autopilot/InferenceSideSheet";
 
 export const handle: RouteHandle = {
   crumb: () => [{ label: "Autopilot", noLink: true }],
@@ -27,7 +29,12 @@ export async function loader() {
 }
 
 export default function AutopilotLayout() {
-  return <Outlet />;
+  return (
+    <InferenceSideSheetProvider>
+      <Outlet />
+      <InferenceSideSheet />
+    </InferenceSideSheetProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
