@@ -7,13 +7,14 @@ use reqwest::multipart::{Form, Part};
 use reqwest_sse_stream::Event;
 use responses::stream_openai_responses;
 use secrecy::{ExposeSecret, SecretString};
-use serde::de::IntoDeserializer;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::borrow::{Cow, ToOwned};
 use std::io::Write;
 use std::pin::Pin;
 use std::time::Duration;
+// TODO: Remove this import after migrating OpenAI streaming chunk types to `tensorzero-types-providers`
+use tensorzero_types_providers::serde_util::empty_string_as_none;
 use tokio::time::Instant;
 use tracing::instrument;
 use url::Url;
@@ -2880,28 +2881,6 @@ struct OpenAIDelta {
     reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
-}
-
-// Custom deserializer function for empty string to None
-// This is required because SGLang (which depends on this code) returns "" in streaming chunks instead of null
-fn empty_string_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    let opt = Option::<String>::deserialize(deserializer)?;
-    if let Some(s) = opt {
-        if s.is_empty() {
-            return Ok(None);
-        }
-        // Convert serde_json::Error to D::Error
-        Ok(Some(
-            T::deserialize(serde_json::Value::String(s).into_deserializer())
-                .map_err(|e| serde::de::Error::custom(e.to_string()))?,
-        ))
-    } else {
-        Ok(None)
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
