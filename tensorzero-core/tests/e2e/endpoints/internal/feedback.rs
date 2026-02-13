@@ -72,7 +72,6 @@ async fn submit_inference_feedback(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_latest_feedback_id_by_metric_with_data() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference
@@ -114,7 +113,6 @@ async fn test_get_latest_feedback_id_by_metric_with_data() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_latest_feedback_id_by_metric_multiple_feedback_same_metric() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference
@@ -149,7 +147,6 @@ async fn test_get_latest_feedback_id_by_metric_multiple_feedback_same_metric() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_latest_feedback_id_by_metric_nonexistent_target() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use a UUID that likely doesn't exist
@@ -177,7 +174,6 @@ async fn test_get_latest_feedback_id_by_metric_nonexistent_target() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_latest_feedback_id_by_metric_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use an invalid UUID
@@ -196,7 +192,6 @@ async fn test_get_latest_feedback_id_by_metric_invalid_uuid() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_bounds_by_target_id_with_feedback() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let inference_id = create_inference(&http_client, "basic_test").await;
@@ -237,7 +232,6 @@ async fn test_get_feedback_bounds_by_target_id_with_feedback() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_bounds_by_target_id_nonexistent_target() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let nonexistent_id = Uuid::now_v7();
 
@@ -262,7 +256,6 @@ async fn test_get_feedback_bounds_by_target_id_nonexistent_target() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_bounds_by_target_id_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/bounds");
@@ -279,7 +272,6 @@ async fn test_get_feedback_bounds_by_target_id_invalid_uuid() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_by_target_id_with_data() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference
@@ -313,7 +305,6 @@ async fn test_get_feedback_by_target_id_with_data() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_by_target_id_with_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference
@@ -345,7 +336,6 @@ async fn test_get_feedback_by_target_id_with_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_by_target_id_nonexistent_target() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use a UUID that likely doesn't exist
@@ -370,7 +360,6 @@ async fn test_get_feedback_by_target_id_nonexistent_target() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_by_target_id_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use an invalid UUID
@@ -387,7 +376,6 @@ async fn test_get_feedback_by_target_id_invalid_uuid() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_feedback_by_target_id_rejects_both_before_and_after() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let target_id = Uuid::now_v7();
@@ -412,7 +400,6 @@ async fn test_get_feedback_by_target_id_rejects_both_before_and_after() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_feedback_by_target_id_with_feedback() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let inference_id = create_inference(&http_client, "basic_test").await;
@@ -438,7 +425,6 @@ async fn test_count_feedback_by_target_id_with_feedback() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_feedback_by_target_id_multiple_feedback() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let inference_id = create_inference(&http_client, "basic_test").await;
@@ -464,7 +450,6 @@ async fn test_count_feedback_by_target_id_multiple_feedback() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_feedback_by_target_id_nonexistent_target() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let nonexistent_id = Uuid::now_v7();
 
@@ -485,7 +470,6 @@ async fn test_count_feedback_by_target_id_nonexistent_target() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_count_feedback_by_target_id_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/feedback/not-a-valid-uuid/count");
@@ -502,7 +486,6 @@ async fn test_count_feedback_by_target_id_invalid_uuid() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_cumulative_feedback_timeseries_with_data() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference to generate feedback data
@@ -535,7 +518,6 @@ async fn test_get_cumulative_feedback_timeseries_with_data() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_cumulative_feedback_timeseries_with_variant_filter() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Query cumulative feedback timeseries with variant_names filter
@@ -555,7 +537,6 @@ async fn test_get_cumulative_feedback_timeseries_with_variant_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_cumulative_feedback_timeseries_different_time_windows() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Test different time windows (excluding cumulative which is not supported)
@@ -578,7 +559,6 @@ async fn test_get_cumulative_feedback_timeseries_different_time_windows() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_cumulative_feedback_timeseries_cumulative_window_returns_error() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Cumulative time window is not supported for feedback timeseries
@@ -596,7 +576,6 @@ async fn test_get_cumulative_feedback_timeseries_cumulative_window_returns_error
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_cumulative_feedback_timeseries_missing_params() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Missing function_name
@@ -646,7 +625,6 @@ async fn test_get_cumulative_feedback_timeseries_missing_params() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_cumulative_feedback_timeseries_invalid_time_window() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint(
@@ -694,7 +672,6 @@ async fn submit_demonstration_feedback(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_demonstration_feedback_with_data() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference
@@ -735,7 +712,6 @@ async fn test_get_demonstration_feedback_with_data() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_demonstration_feedback_with_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Create an inference
@@ -767,7 +743,6 @@ async fn test_get_demonstration_feedback_with_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_demonstration_feedback_nonexistent_target() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use a UUID that likely doesn't exist
@@ -794,7 +769,6 @@ async fn test_get_demonstration_feedback_nonexistent_target() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_demonstration_feedback_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use an invalid UUID
@@ -811,7 +785,6 @@ async fn test_get_demonstration_feedback_invalid_uuid() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_demonstration_feedback_rejects_both_before_and_after() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let inference_id = Uuid::now_v7();
