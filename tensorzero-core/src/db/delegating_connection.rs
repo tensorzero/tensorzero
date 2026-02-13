@@ -47,6 +47,7 @@ use crate::db::{
     EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
     ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
 };
+use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::function::FunctionConfig;
@@ -931,12 +932,15 @@ impl ResolveUuidQueries for DelegatingDatabaseConnection {
 impl EpisodeQueries for DelegatingDatabaseConnection {
     async fn query_episode_table(
         &self,
+        config: &Config,
         limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
+        function_name: Option<String>,
+        filters: Option<InferenceFilter>,
     ) -> Result<Vec<EpisodeByIdRow>, Error> {
         self.get_read_database()
-            .query_episode_table(limit, before, after)
+            .query_episode_table(config, limit, before, after, function_name, filters)
             .await
     }
 

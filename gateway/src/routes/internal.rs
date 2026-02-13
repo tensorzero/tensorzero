@@ -83,7 +83,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         )
         .route(
             "/internal/episodes",
-            get(endpoints::episodes::internal::list_episodes_handler),
+            get(endpoints::episodes::internal::list_episodes_handler)
+                .post(endpoints::episodes::internal::list_episodes_post_handler),
         )
         .route(
             "/internal/episodes/bounds",

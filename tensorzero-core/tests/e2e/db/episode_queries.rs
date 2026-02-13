@@ -2,11 +2,17 @@
 
 #![expect(clippy::print_stdout)]
 
+use tensorzero_core::config::Config;
 use tensorzero_core::db::EpisodeQueries;
 
 async fn test_query_episode_table(conn: impl EpisodeQueries) {
+    let config = Config::default();
+
     // Test basic pagination
-    let episodes = conn.query_episode_table(10, None, None).await.unwrap();
+    let episodes = conn
+        .query_episode_table(&config, 10, None, None, None, None)
+        .await
+        .unwrap();
     println!("First 10 episodes: {episodes:#?}");
 
     assert_eq!(episodes.len(), 10, "Should return 10 episodes");
@@ -21,7 +27,14 @@ async fn test_query_episode_table(conn: impl EpisodeQueries) {
 
     // Test pagination with before (this should return 10 since there are lots of episodes)
     let episodes2 = conn
-        .query_episode_table(10, Some(episodes[episodes.len() - 1].episode_id), None)
+        .query_episode_table(
+            &config,
+            10,
+            Some(episodes[episodes.len() - 1].episode_id),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -32,7 +45,7 @@ async fn test_query_episode_table(conn: impl EpisodeQueries) {
 
     // Test pagination with after (should return 0 for most recent episodes)
     let episodes3 = conn
-        .query_episode_table(10, None, Some(episodes[0].episode_id))
+        .query_episode_table(&config, 10, None, Some(episodes[0].episode_id), None, None)
         .await
         .unwrap();
     assert_eq!(
@@ -42,7 +55,7 @@ async fn test_query_episode_table(conn: impl EpisodeQueries) {
     );
 
     let episodes3 = conn
-        .query_episode_table(10, None, Some(episodes[4].episode_id))
+        .query_episode_table(&config, 10, None, Some(episodes[4].episode_id), None, None)
         .await
         .unwrap();
     assert_eq!(
@@ -54,9 +67,12 @@ async fn test_query_episode_table(conn: impl EpisodeQueries) {
     // Test that before and after together throws error
     let result = conn
         .query_episode_table(
+            &config,
             10,
             Some(episodes[0].episode_id),
             Some(episodes[0].episode_id),
+            None,
+            None,
         )
         .await;
     assert!(
