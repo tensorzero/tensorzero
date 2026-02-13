@@ -300,7 +300,7 @@ impl InferenceQueries for PostgresConnectionInfo {
                 io.tool_choice,
                 io.parallel_tool_calls
             FROM tensorzero.chat_inferences i
-            JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
+            INNER JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             WHERE i.function_name = $1 AND i.id = $2
             LIMIT 1
             ",
@@ -318,11 +318,8 @@ impl InferenceQueries for PostgresConnectionInfo {
                     serde_json::from_value(row.dynamic_provider_tools)?;
                 let allowed_tools: Option<AllowedTools> =
                     row.allowed_tools.map(serde_json::from_value).transpose()?;
-                let tool_choice: Option<ToolChoice> = row
-                    .tool_choice
-                    .as_deref()
-                    .map(serde_json::from_str)
-                    .transpose()?;
+                let tool_choice: Option<ToolChoice> =
+                    row.tool_choice.map(serde_json::from_value).transpose()?;
 
                 let tool_params = ToolCallConfigDatabaseInsert::from_stored_values(
                     dynamic_tools,
@@ -887,20 +884,16 @@ fn build_chat_inferences_query(
     // Build ORDER BY clause first to get any required metric JOINs
     let order_by_result = build_order_by_clause(params, config)?;
 
-    // TODO(#5691): BIG TODO: remove these COALESCE fallbacks and make the corresponding
-    // fields properly optional end-to-end now that IO retention can be shorter than metadata.
     // Build the SELECT clause based on output_source
     let output_select = match params.output_source {
         InferenceOutputSource::None | InferenceOutputSource::Inference => {
-            "COALESCE(io.output, '[]'::jsonb) as output, NULL::jsonb as dispreferred_output"
+            "io.output, NULL::jsonb as dispreferred_output"
         }
         InferenceOutputSource::Demonstration => {
-            "demo_f.value AS output, COALESCE(io.output, '[]'::jsonb) as dispreferred_output"
+            "demo_f.value AS output, io.output as dispreferred_output"
         }
     };
 
-    // TODO(#5691): BIG TODO: all COALESCE usages in this SELECT should be replaced with
-    // nullable columns mapped to optional Rust fields.
     let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(format!(
         r"
         SELECT
@@ -909,16 +902,16 @@ fn build_chat_inferences_query(
             i.variant_name,
             i.episode_id,
             i.created_at as timestamp,
-            COALESCE(io.input, '{{}}'::jsonb) as input,
+            io.input,
             {output_select},
-            COALESCE(io.dynamic_tools, '[]'::jsonb) as dynamic_tools,
-            COALESCE(io.dynamic_provider_tools, '[]'::jsonb) as dynamic_provider_tools,
+            io.dynamic_tools,
+            io.dynamic_provider_tools,
             io.allowed_tools,
-            i.tool_choice,
-            i.parallel_tool_calls,
+            io.tool_choice,
+            io.parallel_tool_calls,
             i.tags,
-            COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-            COALESCE(io.inference_params, '{{}}'::jsonb) as inference_params,
+            io.extra_body,
+            io.inference_params,
             i.processing_time_ms,
             i.ttft_ms
         FROM tensorzero.chat_inferences i
@@ -975,11 +968,10 @@ fn build_chat_inferences_query(
 
     // Apply search query filter
     if let Some(search_query) = params.search_query_experimental {
-        // TODO(#5691): BIG TODO: remove COALESCE for search once nullable IO fields are handled explicitly.
         let search_pattern = format!("%{search_query}%");
-        query_builder.push(" AND (COALESCE(io.input::text, '') ILIKE ");
+        query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
-        query_builder.push(" OR COALESCE(io.output::text, '') ILIKE ");
+        query_builder.push(" OR io.output::text ILIKE ");
         query_builder.push_bind(search_pattern);
         query_builder.push(")");
     }
@@ -1037,20 +1029,16 @@ fn build_json_inferences_query(
     // Build ORDER BY clause first to get any required metric JOINs
     let order_by_result = build_order_by_clause(params, config)?;
 
-    // TODO(#5691): BIG TODO: remove these COALESCE fallbacks and make the corresponding
-    // fields properly optional end-to-end now that IO retention can be shorter than metadata.
     // Build the SELECT clause based on output_source
     let output_select = match params.output_source {
         InferenceOutputSource::None | InferenceOutputSource::Inference => {
-            "COALESCE(io.output, '{}'::jsonb) as output, NULL::jsonb as dispreferred_output"
+            "io.output, NULL::jsonb as dispreferred_output"
         }
         InferenceOutputSource::Demonstration => {
-            "demo_f.value AS output, COALESCE(io.output, '{}'::jsonb) as dispreferred_output"
+            "demo_f.value AS output, io.output as dispreferred_output"
         }
     };
 
-    // TODO(#5691): BIG TODO: all COALESCE usages in this SELECT should be replaced with
-    // nullable columns mapped to optional Rust fields.
     let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(format!(
         r"
         SELECT
@@ -1059,12 +1047,12 @@ fn build_json_inferences_query(
             i.variant_name,
             i.episode_id,
             i.created_at as timestamp,
-            COALESCE(io.input, '{{}}'::jsonb) as input,
+            io.input,
             {output_select},
-            COALESCE(io.output_schema, '{{}}'::jsonb) as output_schema,
+            io.output_schema,
             i.tags,
-            COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-            COALESCE(io.inference_params, '{{}}'::jsonb) as inference_params,
+            io.extra_body,
+            io.inference_params,
             i.processing_time_ms,
             i.ttft_ms
         FROM tensorzero.json_inferences i
@@ -1121,11 +1109,10 @@ fn build_json_inferences_query(
 
     // Apply search query filter
     if let Some(search_query) = params.search_query_experimental {
-        // TODO(#5691): BIG TODO: remove COALESCE for search once nullable IO fields are handled explicitly.
         let search_pattern = format!("%{search_query}%");
-        query_builder.push(" AND (COALESCE(io.input::text, '') ILIKE ");
+        query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
-        query_builder.push(" OR COALESCE(io.output::text, '') ILIKE ");
+        query_builder.push(" OR io.output::text ILIKE ");
         query_builder.push_bind(search_pattern);
         query_builder.push(")");
     }
@@ -1379,17 +1366,15 @@ fn build_inferences_union_query(
     // Inner limit is (limit + offset) to ensure we fetch enough rows before applying outer offset
     let inner_limit = (params.limit + params.offset) as i64;
 
-    // TODO(#5691): BIG TODO: remove these COALESCE fallbacks and make the corresponding
-    // fields properly optional end-to-end now that IO retention can be shorter than metadata.
     // Build the SELECT clause based on output_source
     let (chat_output_select, json_output_select) = match params.output_source {
         InferenceOutputSource::None | InferenceOutputSource::Inference => (
-            "COALESCE(io.output, '[]'::jsonb) as output, NULL::jsonb as dispreferred_output",
-            "COALESCE(io.output, '{}'::jsonb) as output, NULL::jsonb as dispreferred_output",
+            "io.output, NULL::jsonb as dispreferred_output",
+            "io.output, NULL::jsonb as dispreferred_output",
         ),
         InferenceOutputSource::Demonstration => (
-            "demo_f.value AS output, COALESCE(io.output, '[]'::jsonb) as dispreferred_output",
-            "demo_f.value AS output, COALESCE(io.output, '{}'::jsonb) as dispreferred_output",
+            "demo_f.value AS output, io.output as dispreferred_output",
+            "demo_f.value AS output, io.output as dispreferred_output",
         ),
     };
 
@@ -1408,8 +1393,6 @@ fn build_inferences_union_query(
         ""
     };
 
-    // TODO(#5691): BIG TODO: all COALESCE usages in these UNION SELECTs should be replaced
-    // with nullable columns mapped to optional Rust fields.
     // Build the entire query using a single QueryBuilder to properly handle bind parameters
     let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(format!(
         r"
@@ -1421,17 +1404,17 @@ fn build_inferences_union_query(
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                COALESCE(io.input, '{{}}'::jsonb) as input,
+                io.input,
                 {chat_output_select},
-                COALESCE(io.dynamic_tools, '[]'::jsonb) as dynamic_tools,
-                COALESCE(io.dynamic_provider_tools, '[]'::jsonb) as dynamic_provider_tools,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
                 io.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 NULL::jsonb as output_schema,
                 i.tags,
-                COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                COALESCE(io.inference_params, '{{}}'::jsonb) as inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
@@ -1459,17 +1442,17 @@ fn build_inferences_union_query(
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                COALESCE(io.input, '{{}}'::jsonb) as input,
+                io.input,
                 {json_output_select},
                 NULL::jsonb as dynamic_tools,
                 NULL::jsonb as dynamic_provider_tools,
                 NULL::jsonb as allowed_tools,
                 NULL::jsonb as tool_choice,
                 NULL::boolean as parallel_tool_calls,
-                COALESCE(io.output_schema, '{{}}'::jsonb) as output_schema,
+                io.output_schema,
                 i.tags,
-                COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                COALESCE(io.inference_params, '{{}}'::jsonb) as inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.json_inferences i
@@ -1546,11 +1529,10 @@ fn apply_union_filters(
 
     // Apply search query filter (input/output are in IO tables)
     if let Some(search_query) = params.search_query_experimental {
-        // TODO(#5691): BIG TODO: remove COALESCE for search once nullable IO fields are handled explicitly.
         let search_pattern = format!("%{search_query}%");
-        query_builder.push(" AND (COALESCE(io.input::text, '') ILIKE ");
+        query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
-        query_builder.push(" OR COALESCE(io.output::text, '') ILIKE ");
+        query_builder.push(" OR io.output::text ILIKE ");
         query_builder.push_bind(search_pattern);
         query_builder.push(")");
     }
@@ -2058,16 +2040,16 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                COALESCE(io.input, '{}'::jsonb) as input,
-                COALESCE(io.output, '[]'::jsonb) as output, NULL::jsonb as dispreferred_output,
-                COALESCE(io.dynamic_tools, '[]'::jsonb) as dynamic_tools,
-                COALESCE(io.dynamic_provider_tools, '[]'::jsonb) as dynamic_provider_tools,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
                 io.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                COALESCE(io.inference_params, '{}'::jsonb) as inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
@@ -2108,16 +2090,16 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                COALESCE(io.input, '{}'::jsonb) as input,
-                demo_f.value AS output, COALESCE(io.output, '[]'::jsonb) as dispreferred_output,
-                COALESCE(io.dynamic_tools, '[]'::jsonb) as dynamic_tools,
-                COALESCE(io.dynamic_provider_tools, '[]'::jsonb) as dynamic_provider_tools,
+                io.input,
+                demo_f.value AS output, io.output as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
                 io.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                COALESCE(io.inference_params, '{}'::jsonb) as inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
@@ -2166,16 +2148,16 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                COALESCE(io.input, '{}'::jsonb) as input,
-                COALESCE(io.output, '[]'::jsonb) as output, NULL::jsonb as dispreferred_output,
-                COALESCE(io.dynamic_tools, '[]'::jsonb) as dynamic_tools,
-                COALESCE(io.dynamic_provider_tools, '[]'::jsonb) as dynamic_provider_tools,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
                 io.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                COALESCE(io.inference_params, '{}'::jsonb) as inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
@@ -2217,16 +2199,16 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                COALESCE(io.input, '{}'::jsonb) as input,
-                COALESCE(io.output, '[]'::jsonb) as output, NULL::jsonb as dispreferred_output,
-                COALESCE(io.dynamic_tools, '[]'::jsonb) as dynamic_tools,
-                COALESCE(io.dynamic_provider_tools, '[]'::jsonb) as dynamic_provider_tools,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
                 io.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                COALESCE(io.inference_params, '{}'::jsonb) as inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
@@ -2267,22 +2249,22 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                COALESCE(io.input, '{}'::jsonb) as input,
-                COALESCE(io.output, '[]'::jsonb) as output, NULL::jsonb as dispreferred_output,
-                COALESCE(io.dynamic_tools, '[]'::jsonb) as dynamic_tools,
-                COALESCE(io.dynamic_provider_tools, '[]'::jsonb) as dynamic_provider_tools,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
                 io.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                COALESCE(io.inference_params, '{}'::jsonb) as inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
             LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             WHERE 1=1 AND i.function_name = $1
-            AND (COALESCE(io.input::text, '') ILIKE $2 OR COALESCE(io.output::text, '') ILIKE $3)
+            AND (io.input::text ILIKE $2 OR io.output::text ILIKE $3)
             ORDER BY i.id DESC
             LIMIT $4 OFFSET $5
             ",
@@ -2318,12 +2300,12 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                COALESCE(io.input, '{}'::jsonb) as input,
-                COALESCE(io.output, '{}'::jsonb) as output, NULL::jsonb as dispreferred_output,
-                COALESCE(io.output_schema, '{}'::jsonb) as output_schema,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.output_schema,
                 i.tags,
-                COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                COALESCE(io.inference_params, '{}'::jsonb) as inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.json_inferences i
@@ -2366,17 +2348,17 @@ mod tests {
                     i.variant_name,
                     i.episode_id,
                     i.created_at as timestamp,
-                    COALESCE(io.input, '{}'::jsonb) as input,
-                    COALESCE(io.output, '[]'::jsonb) as output, NULL::jsonb as dispreferred_output,
-                    COALESCE(io.dynamic_tools, '[]'::jsonb) as dynamic_tools,
-                    COALESCE(io.dynamic_provider_tools, '[]'::jsonb) as dynamic_provider_tools,
+                    io.input,
+                    io.output, NULL::jsonb as dispreferred_output,
+                    io.dynamic_tools,
+                    io.dynamic_provider_tools,
                     io.allowed_tools,
-                    i.tool_choice,
-                    i.parallel_tool_calls,
+                    io.tool_choice,
+                    io.parallel_tool_calls,
                     NULL::jsonb as output_schema,
                     i.tags,
-                    COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                    COALESCE(io.inference_params, '{}'::jsonb) as inference_params,
+                    io.extra_body,
+                    io.inference_params,
                     i.processing_time_ms,
                     i.ttft_ms
                 FROM tensorzero.chat_inferences i
@@ -2390,17 +2372,17 @@ mod tests {
                     i.variant_name,
                     i.episode_id,
                     i.created_at as timestamp,
-                    COALESCE(io.input, '{}'::jsonb) as input,
-                    COALESCE(io.output, '{}'::jsonb) as output, NULL::jsonb as dispreferred_output,
+                    io.input,
+                    io.output, NULL::jsonb as dispreferred_output,
                     NULL::jsonb as dynamic_tools,
                     NULL::jsonb as dynamic_provider_tools,
                     NULL::jsonb as allowed_tools,
                     NULL::jsonb as tool_choice,
                     NULL::boolean as parallel_tool_calls,
-                    COALESCE(io.output_schema, '{}'::jsonb) as output_schema,
+                    io.output_schema,
                     i.tags,
-                    COALESCE(io.extra_body, '[]'::jsonb) as extra_body,
-                    COALESCE(io.inference_params, '{}'::jsonb) as inference_params,
+                    io.extra_body,
+                    io.inference_params,
                     i.processing_time_ms,
                     i.ttft_ms
                 FROM tensorzero.json_inferences i

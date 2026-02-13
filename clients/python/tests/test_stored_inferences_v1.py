@@ -7,9 +7,11 @@ These tests cover the new v1 endpoints:
 """
 
 import json
+import os
 from dataclasses import asdict
 
 import pytest
+from conftest import CLICKHOUSE_URL, POSTGRES_URL, TEST_CONFIG_FILE
 from tensorzero import (
     AsyncTensorZeroGateway,
     InferenceFilterTag,
@@ -17,7 +19,7 @@ from tensorzero import (
     ListInferencesRequest,
     TensorZeroGateway,
 )
-from tensorzero.generated_types import OrderByTimestamp
+from tensorzero.generated_types import OrderByTimestamp, StoredInferenceChat
 
 
 def _create_test_inference(client: TensorZeroGateway, tags: dict[str, str] | None = None) -> str:
@@ -421,3 +423,45 @@ async def test_async_list_inferences_with_search_query(embedded_async_client: As
     assert len(response.inferences) > 0
     for inference in response.inferences:
         assert test_word in json.dumps(asdict(inference)).lower()
+
+
+# ===== METADATA-ONLY INFERENCE TESTS (Postgres only) =====
+# These test the case where inference data rows have been dropped
+# (e.g. due to data retention expiry) but metadata rows remain.
+
+
+METADATA_ONLY_CHAT_INFERENCE_ID = "019c592a-111d-7190-bcfa-380a6143e5ee"
+
+
+def test_get_metadata_only_inference_from_postgres():
+    """Test that a metadata-only inference (no data rows) can be fetched from Postgres."""
+    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = "1"
+    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = "1"
+    try:
+        with TensorZeroGateway.build_embedded(
+            config_file=TEST_CONFIG_FILE,
+            clickhouse_url=CLICKHOUSE_URL,
+            postgres_url=POSTGRES_URL,
+        ) as client:
+            response = client.get_inferences(
+                ids=[METADATA_ONLY_CHAT_INFERENCE_ID],
+                function_name="write_haiku",
+                output_source="inference",
+            )
+
+            assert response.inferences is not None
+            assert len(response.inferences) == 1, "Should find exactly one metadata-only chat inference"
+
+            inference = response.inferences[0]
+            assert isinstance(inference, StoredInferenceChat)
+            assert inference.inference_id == METADATA_ONLY_CHAT_INFERENCE_ID
+            assert inference.function_name == "write_haiku"
+            assert inference.variant_name == "initial_prompt_gpt4o_mini"
+
+            # Data fields should be None since there are no data table rows
+            assert inference.input is None, "input should be None for metadata-only inference"
+            assert inference.output is None, "output should be None for metadata-only inference"
+            assert inference.inference_params is None, "inference_params should be None for metadata-only inference"
+    finally:
+        os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
+        os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
