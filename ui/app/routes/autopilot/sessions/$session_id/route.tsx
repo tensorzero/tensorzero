@@ -27,8 +27,6 @@ import {
   AnsweredQuestionCard,
   PendingQuestionCard,
   SkippedQuestionCard,
-  type UserQuestionsPayload,
-  type UserQuestionAnswer,
 } from "~/components/autopilot/PendingQuestionCard";
 import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 import {
@@ -49,7 +47,12 @@ import {
   AutopilotSessionProvider,
   useAutopilotSession,
 } from "~/contexts/AutopilotSessionContext";
-import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
+import type {
+  AutopilotStatus,
+  EventPayloadUserQuestions,
+  GatewayEvent,
+  UserQuestionAnswer,
+} from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -841,10 +844,10 @@ function AutopilotSessionEventsPageContent({
   > | null>(null);
   const [questionSkipped, setQuestionSkipped] = useState(false);
 
-  const mockQuestionPayload: UserQuestionsPayload = {
+  const mockQuestionPayload: EventPayloadUserQuestions = {
     questions: [
       {
-        format: "multiple_choice",
+        type: "multiple_choice",
         id: "a1b2c3d4-0001-4000-8000-000000000001",
         question:
           "The `extract_keywords` function currently uses a single-shot prompt with **GPT-4o**. We've identified that domain-specific documents (medical, legal, financial) consistently score below **0.35** accuracy while general content scores **0.72**. Which optimization strategy would you like to pursue to address this domain-specific performance gap?",
@@ -878,7 +881,7 @@ function AutopilotSessionEventsPageContent({
         multi_select: false,
       },
       {
-        format: "multiple_choice",
+        type: "multiple_choice",
         id: "a1b2c3d4-0002-4000-8000-000000000001",
         question:
           "Given the current performance characteristics, which metrics should we prioritize when evaluating the optimization? Select all that are important to your use case.",
@@ -912,7 +915,7 @@ function AutopilotSessionEventsPageContent({
         multi_select: true,
       },
       {
-        format: "free_response",
+        type: "free_response",
         id: "a1b2c3d4-0003-4000-8000-000000000001",
         question:
           "Please describe any additional constraints, requirements, or context that should inform the optimization approach. For example: budget limits, deployment timeline, compliance requirements, specific model preferences, or known edge cases that are particularly important to handle correctly.",

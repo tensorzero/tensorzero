@@ -13,6 +13,11 @@ import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { ToolEventId } from "~/components/autopilot/EventStream";
 import { cn } from "~/utils/common";
+import type {
+  EventPayloadUserQuestion,
+  EventPayloadUserQuestions,
+  UserQuestionAnswer,
+} from "~/types/tensorzero";
 
 // Renders a string with inline markdown (bold, italic, code).
 // Strips all block-level formatting — only inline runs are rendered.
@@ -66,54 +71,9 @@ function InlineMarkdown({ text }: { text: string }) {
   return <>{parts}</>;
 }
 
-/**
- * Types matching the backend wire format from EventPayloadUserQuestions.
- * These mirror the Rust-generated ts-rs bindings (PR #6272). Once that PR lands
- * and bindings are rebuilt, replace these with imports from
- * `~/types/tensorzero` (e.g. EventPayloadUserQuestions, UserQuestionAnswer).
- *
- * The question format discriminant is `format` (not `type`) because the outer
- * EventPayload already uses `type` for its own tag — serde can't nest two
- * `type`-tagged enums.
- */
-export type MultipleChoiceOption = {
-  id: string;
-  label: string;
-  description: string;
-};
-
-export type MultipleChoiceQuestion = {
-  format: "multiple_choice";
-  id: string;
-  header: string;
-  question: string;
-  options: MultipleChoiceOption[];
-  multi_select: boolean;
-};
-
-export type FreeResponseQuestion = {
-  format: "free_response";
-  id: string;
-  header: string;
-  question: string;
-};
-
-export type UserQuestion = MultipleChoiceQuestion | FreeResponseQuestion;
-
-export type UserQuestionsPayload = {
-  questions: UserQuestion[];
-};
-
-// Response types — sent back to the backend when submitting answers.
-// Keyed by question UUID in a Record<string, UserQuestionAnswer>.
-export type UserQuestionAnswer =
-  | { type: "multiple_choice"; selected: string[] }
-  | { type: "free_response"; text: string }
-  | { type: "skipped" };
-
 type PendingQuestionCardProps = {
   eventId: string;
-  payload: UserQuestionsPayload;
+  payload: EventPayloadUserQuestions;
   isLoading: boolean;
   onSubmit: (
     eventId: string,
@@ -134,7 +94,7 @@ function MultipleChoiceStep({
   otherText,
   onOtherTextChange,
 }: {
-  question: MultipleChoiceQuestion;
+  question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
   selectedValues: Set<string>;
   onToggle: (value: string) => void;
   otherText: string;
@@ -240,7 +200,7 @@ function FreeResponseStep({
   text,
   onTextChange,
 }: {
-  question: FreeResponseQuestion;
+  question: Extract<EventPayloadUserQuestion, { type: "free_response" }>;
   text: string;
   onTextChange: (text: string) => void;
 }) {
@@ -424,7 +384,7 @@ export function PendingQuestionCard({
     setSelections((prev) => {
       const next = new Map(prev);
       const question = payload.questions[questionIndex];
-      if (question.format !== "multiple_choice") return prev;
+      if (question.type !== "multiple_choice") return prev;
       const current = next.get(questionIndex) ?? new Set<string>();
 
       if (question.multi_select) {
@@ -460,7 +420,7 @@ export function PendingQuestionCard({
 
   const isStepValid = (idx: number): boolean => {
     const question = payload.questions[idx];
-    switch (question.format) {
+    switch (question.type) {
       case "multiple_choice": {
         const selected = selections.get(idx);
         if (!selected || selected.size === 0) return false;
@@ -479,7 +439,7 @@ export function PendingQuestionCard({
   const handleSubmit = () => {
     const responses: Record<string, UserQuestionAnswer> = {};
     payload.questions.forEach((question, idx) => {
-      switch (question.format) {
+      switch (question.type) {
         case "multiple_choice": {
           const selected = selections.get(idx);
           if (!selected || selected.size === 0) return;
@@ -510,7 +470,7 @@ export function PendingQuestionCard({
 
   const getAnswerText = (idx: number): string => {
     const question = payload.questions[idx];
-    switch (question.format) {
+    switch (question.type) {
       case "multiple_choice": {
         const selected = selections.get(idx);
         if (!selected || selected.size === 0) return "";
@@ -528,8 +488,8 @@ export function PendingQuestionCard({
     }
   };
 
-  const renderStep = (question: UserQuestion, idx: number) => {
-    switch (question.format) {
+  const renderStep = (question: EventPayloadUserQuestion, idx: number) => {
+    switch (question.type) {
       case "multiple_choice":
         return (
           <MultipleChoiceStep
@@ -740,14 +700,14 @@ export function PendingQuestionCard({
 /** Format a UserQuestionAnswer for display. */
 function formatResponse(
   response: UserQuestionAnswer | undefined,
-  question: UserQuestion,
+  question: EventPayloadUserQuestion,
 ): string {
   if (!response) return "—";
   switch (response.type) {
     case "multiple_choice":
       return response.selected
         .map((optId) => {
-          if (question.format !== "multiple_choice") return optId;
+          if (question.type !== "multiple_choice") return optId;
           return question.options.find((o) => o.id === optId)?.label ?? optId;
         })
         .join(", ");
@@ -765,7 +725,7 @@ export function AnsweredQuestionCard({
   timestamp,
   className,
 }: {
-  payload: UserQuestionsPayload;
+  payload: EventPayloadUserQuestions;
   responses: Record<string, UserQuestionAnswer>;
   eventId: string;
   timestamp: string;
@@ -835,7 +795,7 @@ export function SkippedQuestionCard({
   timestamp,
   className,
 }: {
-  payload: UserQuestionsPayload;
+  payload: EventPayloadUserQuestions;
   eventId: string;
   timestamp: string;
   className?: string;
