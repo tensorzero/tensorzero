@@ -2366,7 +2366,7 @@ class ListEpisodesRequest:
 
     limit: int
     """
-    Maximum number of episodes to return
+    Maximum number of episodes to return (max 100)
     """
     after: str | None = None
     """
