@@ -10,7 +10,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.53.2",
-    "buildkite-test-collector": "^1.9.1",
     "dotenv": "^17.2.1",
     "playwright": "^1.53.2"
   }

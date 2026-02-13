@@ -84,7 +84,6 @@
     "@types/react-dom": "^19.2.3",
     "@vitest/browser": "^4.0.8",
     "@vitest/coverage-v8": "^4.0.8",
-    "buildkite-test-collector": "^1.9.1",
     "eslint": "^9.37.0",
     "eslint-plugin-storybook": "^10.2.1",
     "playwright": "^1.56.1",

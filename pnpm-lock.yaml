@@ -131,10 +131,6 @@ importers:
         version: 4.20.3
 
   internal/tensorzero-node:
-    dependencies:
-      buildkite-test-collector:
-        specifier: ^1.9.1
-        version: 1.9.2
     devDependencies:
       '@eslint/js':
         specifier: ^9.37.0
@@ -344,9 +340,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.0.8
         version: 4.0.8(@vitest/browser@4.0.8(vite@7.1.11(@types/node@22.16.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3))(vitest@4.0.8(@types/debug@4.1.12)(@types/node@22.16.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3)))(vitest@4.0.8(@types/debug@4.1.12)(@types/node@22.16.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3))
-      buildkite-test-collector:
-        specifier: ^1.9.1
-        version: 1.9.1
       eslint:
         specifier: ^9.37.0
         version: 9.37.0(jiti@2.6.1)
@@ -3373,14 +3366,6 @@ packages:
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
-
-  buildkite-test-collector@1.9.1:
-    resolution: {integrity: sha512-sWEGHyCuHMrCQ6EryOFf/BxYMyzkRRveye7yJooaK47hVsTvINRAt9uW696UPmUDSTU4JokiUOxU4E3QkRd7nQ==}
-    engines: {npm: '>=7.0.0'}
-
-  buildkite-test-collector@1.9.2:
-    resolution: {integrity: sha512-LacjsmPczb6JlwFLb0tf82epA5jVAyfuzEs2A4yXG3/NseGNFrfQiW+xFLk1afFwGaoSSrPHBQc2k4qN2YcNTA==}
-    engines: {npm: '>=7.0.0'}
 
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
@@ -9062,26 +9047,6 @@ snapshots:
       update-browserslist-db: 1.1.3(browserslist@4.24.5)
 
   buffer-from@1.1.2: {}
-
-  buildkite-test-collector@1.9.1:
-    dependencies:
-      axios: 1.11.0
-      dotenv: 16.6.1
-      request-spy: 0.0.10
-      strip-ansi: 6.0.1
-      uuid: 8.3.2
-    transitivePeerDependencies:
-      - debug
-
-  buildkite-test-collector@1.9.2:
-    dependencies:
-      axios: 1.11.0
-      dotenv: 16.6.1
-      request-spy: 0.0.10
-      strip-ansi: 6.0.1
-      uuid: 8.3.2
-    transitivePeerDependencies:
-      - debug
 
   bundle-name@4.1.0:
     dependencies:

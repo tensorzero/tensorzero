@@ -48,12 +48,7 @@ export default defineConfig(({ mode }) => ({
     env: loadEnv(mode, process.cwd(), ""),
     environment: "node",
     include: ["**/*.test.ts", "**/*.test.tsx"],
-    // Send tests to buildkite too
-    reporters: [
-      "default",
-      "buildkite-test-collector/vitest/reporter",
-      ["junit", { outputFile: "vitest.junit.xml" }],
-    ],
+    reporters: ["default", ["junit", { outputFile: "vitest.junit.xml" }]],
     // Enable column + line capture for Test Engine
     includeTaskLocation: true,
     deps: {

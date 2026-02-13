@@ -53,8 +53,5 @@
     "lint:check": "eslint . --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\" --ignore-pattern \"index.d.ts\"",
     "universal": "napi universalize",
     "version": "napi version"
-  },
-  "dependencies": {
-    "buildkite-test-collector": "^1.9.1"
   }
 }

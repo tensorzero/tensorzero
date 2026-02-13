@@ -8,17 +8,11 @@ if [ -f /load_complete.marker ]; then
 fi
 
 CLICKHOUSE_HOST_VAR="${CLICKHOUSE_HOST}"
-# Determine credentials based on environment
-if command -v buildkite-agent >/dev/null 2>&1; then
-  # Running on Buildkite - use secrets (fail if not available)
-  CLICKHOUSE_USER_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
-  CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
+CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
+CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
+CLICKHOUSE_SECURE_FLAG=""
+if [ "${CLICKHOUSE_SECURE:-0}" = "1" ]; then
   CLICKHOUSE_SECURE_FLAG="--secure"
-else
-  # Not on Buildkite - use environment variables with defaults
-  CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
-  CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
-  CLICKHOUSE_SECURE_FLAG=""
 fi
 
 # Truncate all tables before loading fixtures (dynamically query all tables, excluding views, internal .inner.* tables, migration tracking, and config snapshots)

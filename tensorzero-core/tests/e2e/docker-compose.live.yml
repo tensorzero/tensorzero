@@ -22,7 +22,6 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       TENSORZERO_MINIO_URL: http://minio:9000/
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
-      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       # API Keys
@@ -174,7 +173,6 @@ services:
       TENSORZERO_TEMPO_URL: http://tempo:3200
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
-      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       # API Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -210,8 +208,6 @@ services:
       VLLM_API_KEY: ${VLLM_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
-      # Buildkite analytics
-      BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
       # Flaky tests to skip (nextest filter expression, e.g. "test(hyperbolic)|test(tgi)")
       CARGO_NEXTEST_FLAKY_TESTS: ${CARGO_NEXTEST_FLAKY_TESTS:-}
     volumes:
