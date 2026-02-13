@@ -4,6 +4,10 @@
 
 use tensorzero_core::config::Config;
 use tensorzero_core::db::EpisodeQueries;
+use tensorzero_core::db::clickhouse::query_builder::TagFilter;
+use tensorzero_core::endpoints::stored_inferences::v1::types::{
+    InferenceFilter, TagComparisonOperator,
+};
 
 async fn test_query_episode_table(conn: impl EpisodeQueries) {
     let config = Config::default();
@@ -125,3 +129,137 @@ async fn test_query_episode_table_bounds(conn: impl EpisodeQueries) {
     );
 }
 make_db_test!(test_query_episode_table_bounds);
+
+async fn test_query_episode_table_with_function_name(conn: impl EpisodeQueries) {
+    let config = Config::default();
+
+    let episodes = conn
+        .query_episode_table(
+            &config,
+            10,
+            None,
+            None,
+            Some("extract_entities".to_string()),
+            None,
+        )
+        .await
+        .unwrap();
+    println!("Episodes for extract_entities: {episodes:#?}");
+
+    assert!(
+        !episodes.is_empty(),
+        "Should return at least one episode for function_name `extract_entities`"
+    );
+
+    for episode in &episodes {
+        assert!(episode.count > 0, "Episode count should be greater than 0");
+        assert!(
+            episode.start_time <= episode.end_time,
+            "Start time should be before or equal to end time"
+        );
+    }
+
+    // A nonexistent function should return no episodes
+    let empty_episodes = conn
+        .query_episode_table(
+            &config,
+            10,
+            None,
+            None,
+            Some("nonexistent_function_12345".to_string()),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        empty_episodes.is_empty(),
+        "Should return no episodes for nonexistent function_name"
+    );
+}
+make_db_test!(test_query_episode_table_with_function_name);
+
+async fn test_query_episode_table_with_function_name_and_filter(conn: impl EpisodeQueries) {
+    let config = Config::default();
+
+    let filter = InferenceFilter::Tag(TagFilter {
+        key: "tensorzero::evaluation_name".to_string(),
+        value: "entity_extraction".to_string(),
+        comparison_operator: TagComparisonOperator::Equal,
+    });
+
+    let episodes = conn
+        .query_episode_table(
+            &config,
+            10,
+            None,
+            None,
+            Some("extract_entities".to_string()),
+            Some(filter),
+        )
+        .await
+        .unwrap();
+    println!("Episodes for extract_entities with tag filter: {episodes:#?}");
+
+    assert!(
+        !episodes.is_empty(),
+        "Should return at least one episode matching function_name + tag filter"
+    );
+
+    for episode in &episodes {
+        assert!(episode.count > 0, "Episode count should be greater than 0");
+        assert!(
+            episode.start_time <= episode.end_time,
+            "Start time should be before or equal to end time"
+        );
+    }
+
+    // Verify that counts reflect full episode stats (not just filtered inferences)
+    // by comparing with unfiltered results for the same function
+    let unfiltered_episodes = conn
+        .query_episode_table(
+            &config,
+            10,
+            None,
+            None,
+            Some("extract_entities".to_string()),
+            None,
+        )
+        .await
+        .unwrap();
+
+    // The filtered result should be a subset of the unfiltered result
+    for filtered_ep in &episodes {
+        let matching_unfiltered = unfiltered_episodes
+            .iter()
+            .find(|e| e.episode_id == filtered_ep.episode_id);
+        assert!(
+            matching_unfiltered.is_some(),
+            "Filtered episode {} should also appear in unfiltered results",
+            filtered_ep.episode_id
+        );
+        // Episode stats should match (count, start_time, end_time, last_inference_id)
+        // because filtering only selects which episodes to return, not which inferences to count
+        let unfiltered_ep = matching_unfiltered.unwrap();
+        assert_eq!(
+            filtered_ep.count, unfiltered_ep.count,
+            "Episode {} count should match between filtered and unfiltered queries",
+            filtered_ep.episode_id
+        );
+        assert_eq!(
+            filtered_ep.start_time, unfiltered_ep.start_time,
+            "Episode {} start_time should match between filtered and unfiltered queries",
+            filtered_ep.episode_id
+        );
+        assert_eq!(
+            filtered_ep.end_time, unfiltered_ep.end_time,
+            "Episode {} end_time should match between filtered and unfiltered queries",
+            filtered_ep.episode_id
+        );
+        assert_eq!(
+            filtered_ep.last_inference_id, unfiltered_ep.last_inference_id,
+            "Episode {} last_inference_id should match between filtered and unfiltered queries",
+            filtered_ep.episode_id
+        );
+    }
+}
+make_db_test!(test_query_episode_table_with_function_name_and_filter);
