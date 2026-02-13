@@ -71,7 +71,7 @@ pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
 };
 pub use tensorzero_core::endpoints::episodes::internal::{
-    ListEpisodesParams, ListEpisodesResponse,
+    ListEpisodesParams, ListEpisodesRequest, ListEpisodesResponse,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
@@ -418,11 +418,11 @@ pub trait ClientExt {
     // Episode operations
     // ================================================================
 
-    /// Lists episodes with pagination support.
+    /// Lists episodes with pagination and optional filter support.
     ///
     /// # Arguments
     ///
-    /// * `params` - The parameters for listing episodes (limit, before, after).
+    /// * `request` - The request parameters for listing episodes (limit, before, after, function_name, filters).
     ///
     /// # Returns
     ///
@@ -433,7 +433,7 @@ pub trait ClientExt {
     /// Returns a `TensorZeroError` if the request fails.
     async fn list_episodes(
         &self,
-        params: ListEpisodesParams,
+        request: ListEpisodesRequest,
     ) -> Result<ListEpisodesResponse, TensorZeroError>;
 
     // ================================================================
@@ -1092,11 +1092,18 @@ impl ClientExt for Client {
 
     async fn list_episodes(
         &self,
-        params: ListEpisodesParams,
+        request: ListEpisodesRequest,
     ) -> Result<ListEpisodesResponse, TensorZeroError> {
+        let ListEpisodesRequest {
+            limit,
+            before,
+            after,
+            function_name,
+            filters,
+        } = request;
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
-                let mut url = client.base_url.join("internal/episodes").map_err(|e| {
+                let url = client.base_url.join("internal/episodes").map_err(|e| {
                     TensorZeroError::Other {
                         source: Error::new(ErrorDetails::InvalidBaseUrl {
                             message: format!(
@@ -1106,18 +1113,37 @@ impl ClientExt for Client {
                         .into(),
                     }
                 })?;
-                url.query_pairs_mut()
-                    .append_pair("limit", &params.limit.to_string());
-                if let Some(before) = params.before {
+                if filters.is_some() {
+                    // POST with JSON body when filters are present
+                    let request = ListEpisodesRequest {
+                        limit,
+                        before,
+                        after,
+                        function_name,
+                        filters,
+                    };
+                    let builder = client.http_client.post(url).json(&request);
+                    Ok(client.send_and_parse_http_response(builder).await?.0)
+                } else {
+                    // GET with query params when no filters
+                    let mut url = url;
                     url.query_pairs_mut()
-                        .append_pair("before", &before.to_string());
+                        .append_pair("limit", &limit.to_string());
+                    if let Some(before) = before {
+                        url.query_pairs_mut()
+                            .append_pair("before", &before.to_string());
+                    }
+                    if let Some(after) = after {
+                        url.query_pairs_mut()
+                            .append_pair("after", &after.to_string());
+                    }
+                    if let Some(function_name) = &function_name {
+                        url.query_pairs_mut()
+                            .append_pair("function_name", function_name);
+                    }
+                    let builder = client.http_client.get(url);
+                    Ok(client.send_and_parse_http_response(builder).await?.0)
                 }
-                if let Some(after) = params.after {
-                    url.query_pairs_mut()
-                        .append_pair("after", &after.to_string());
-                }
-                let builder = client.http_client.get(url);
-                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -1126,7 +1152,13 @@ impl ClientExt for Client {
                         gateway.handle.app_state.postgres_connection_info.clone(),
                     );
                     let episodes = tensorzero_core::endpoints::episodes::internal::list_episodes(
-                        &database, params,
+                        &database,
+                        &gateway.handle.app_state.config,
+                        limit,
+                        before,
+                        after,
+                        function_name,
+                        filters,
                     )
                     .await
                     .map_err(err_to_http)?;
