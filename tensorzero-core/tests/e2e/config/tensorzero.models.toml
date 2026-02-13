@@ -724,6 +724,13 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "err_in_stream"
 
+[models.err_in_stream_with_raw_response]
+routing = ["dummy"]
+
+[models.err_in_stream_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "err_in_stream_with_raw_response"
+
 [models.flaky_best_of_n_judge]
 routing = ["dummy"]
 
