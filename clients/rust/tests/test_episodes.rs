@@ -233,12 +233,13 @@ tensorzero::make_gateway_test_functions!(test_list_episodes_with_boolean_filter)
 /// Test listing episodes with a float metric filter (POST path)
 async fn test_list_episodes_with_float_filter(client: Client) {
     // Create an inference and submit float feedback for it
+    // `brevity_score` is an inference-level float metric
     let inference_id = create_test_inference(&client).await;
 
     client
         .feedback(FeedbackParams {
             inference_id: Some(inference_id),
-            metric_name: "user_rating".to_string(),
+            metric_name: "brevity_score".to_string(),
             value: json!(4.5),
             ..Default::default()
         })
@@ -262,7 +263,7 @@ async fn test_list_episodes_with_float_filter(client: Client) {
         .list_episodes(ListEpisodesRequest {
             limit: 100,
             filters: Some(InferenceFilter::FloatMetric(FloatMetricFilter {
-                metric_name: "user_rating".to_string(),
+                metric_name: "brevity_score".to_string(),
                 value: 4.0,
                 comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
             })),
@@ -286,6 +287,7 @@ tensorzero::make_gateway_test_functions!(test_list_episodes_with_float_filter);
 /// Test listing episodes with combined filters (AND, POST path)
 async fn test_list_episodes_combined_filters(client: Client) {
     // Create an inference and submit both boolean and float feedback for it
+    // Both `task_success` (boolean) and `brevity_score` (float) are inference-level metrics
     let inference_id = create_test_inference(&client).await;
 
     client
@@ -301,7 +303,7 @@ async fn test_list_episodes_combined_filters(client: Client) {
     client
         .feedback(FeedbackParams {
             inference_id: Some(inference_id),
-            metric_name: "user_rating".to_string(),
+            metric_name: "brevity_score".to_string(),
             value: json!(5.0),
             ..Default::default()
         })
@@ -332,7 +334,7 @@ async fn test_list_episodes_combined_filters(client: Client) {
                         value: true,
                     }),
                     InferenceFilter::FloatMetric(FloatMetricFilter {
-                        metric_name: "user_rating".to_string(),
+                        metric_name: "brevity_score".to_string(),
                         value: 4.0,
                         comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
                     }),
