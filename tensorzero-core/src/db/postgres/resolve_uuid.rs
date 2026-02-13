@@ -16,6 +16,7 @@ impl ResolveUuidQueries for PostgresConnectionInfo {
         // Run all queries concurrently
         let (
             inference_result,
+            model_inference_result,
             episode_result,
             boolean_result,
             float_result,
@@ -25,6 +26,7 @@ impl ResolveUuidQueries for PostgresConnectionInfo {
             json_datapoint_result,
         ) = tokio::try_join!(
             query_inference(pool, id),
+            query_model_inference(pool, id),
             query_episode(pool, id),
             query_exists(pool, "tensorzero.boolean_metric_feedback", id),
             query_exists(pool, "tensorzero.float_metric_feedback", id),
@@ -42,6 +44,14 @@ impl ResolveUuidQueries for PostgresConnectionInfo {
                 function_type,
                 variant_name,
                 episode_id,
+            });
+        }
+
+        if let Some((inference_id, model_name, model_provider_name)) = model_inference_result {
+            results.push(ResolvedObject::ModelInference {
+                inference_id,
+                model_name,
+                model_provider_name,
             });
         }
 
@@ -133,6 +143,26 @@ async fn query_inference(
     }
 
     Ok(None)
+}
+
+/// Query model_inferences for a matching model inference ID.
+async fn query_model_inference(
+    pool: &sqlx::PgPool,
+    id: &Uuid,
+) -> Result<Option<(Uuid, String, String)>, Error> {
+    let row = sqlx::query_as::<_, (Uuid, String, String)>(
+        "SELECT inference_id, model_name, model_provider_name FROM tensorzero.model_inferences WHERE id = $1 LIMIT 1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to query model_inferences: {e}"),
+        })
+    })?;
+
+    Ok(row)
 }
 
 /// Query for an episode by checking if any inference has this episode_id.

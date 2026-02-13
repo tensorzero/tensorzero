@@ -165,8 +165,8 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(&row.raw_request)
             .push_bind(&row.raw_response)
             .push_bind(&row.system)
-            .push_bind(Json(&row.input_messages))
-            .push_bind(Json(&row.output))
+            .push_bind(row.input_messages.as_ref().map(Json::from))
+            .push_bind(row.output.as_ref().map(Json::from))
             .push_bind(row.input_tokens.map(|v| v as i32))
             .push_bind(row.output_tokens.map(|v| v as i32))
             .push_bind(row.response_time_ms.map(|v| v as i32))
@@ -425,11 +425,12 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
         let id: Uuid = row.try_get("id")?;
         let inference_id: Uuid = row.try_get("inference_id")?;
-        let raw_request: String = row.try_get("raw_request")?;
-        let raw_response: String = row.try_get("raw_response")?;
+        let raw_request: Option<String> = row.try_get("raw_request")?;
+        let raw_response: Option<String> = row.try_get("raw_response")?;
         let system: Option<String> = row.try_get("system")?;
-        let input_messages: Json<Vec<StoredRequestMessage>> = row.try_get("input_messages")?;
-        let output: Json<Vec<ContentBlockOutput>> = row.try_get("output")?;
+        let input_messages: Option<Json<Vec<StoredRequestMessage>>> =
+            row.try_get("input_messages")?;
+        let output: Option<Json<Vec<ContentBlockOutput>>> = row.try_get("output")?;
         let input_tokens: Option<i32> = row.try_get("input_tokens")?;
         let output_tokens: Option<i32> = row.try_get("output_tokens")?;
         let response_time_ms: Option<i32> = row.try_get("response_time_ms")?;
@@ -450,8 +451,8 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
             raw_request,
             raw_response,
             system,
-            input_messages: input_messages.0,
-            output: output.0,
+            input_messages: input_messages.map(|v| v.0),
+            output: output.map(|v| v.0),
             input_tokens: input_tokens.map(|v| v as u32),
             output_tokens: output_tokens.map(|v| v as u32),
             response_time_ms: response_time_ms.map(|v| v as u32),
@@ -723,11 +724,11 @@ mod tests {
         let rows = vec![StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            raw_request: "request".to_string(),
-            raw_response: "response".to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
             system: Some("system".to_string()),
-            input_messages: vec![],
-            output: vec![],
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
             input_tokens: Some(10),
             output_tokens: Some(20),
             response_time_ms: Some(100),
@@ -763,11 +764,11 @@ mod tests {
             StoredModelInference {
                 id: Uuid::now_v7(),
                 inference_id: Uuid::now_v7(),
-                raw_request: "request1".to_string(),
-                raw_response: "response1".to_string(),
+                raw_request: Some("request1".to_string()),
+                raw_response: Some("response1".to_string()),
                 system: None,
-                input_messages: vec![],
-                output: vec![],
+                input_messages: Some(vec![]),
+                output: Some(vec![]),
                 input_tokens: None,
                 output_tokens: None,
                 response_time_ms: None,
@@ -782,11 +783,11 @@ mod tests {
             StoredModelInference {
                 id: Uuid::now_v7(),
                 inference_id: Uuid::now_v7(),
-                raw_request: "request2".to_string(),
-                raw_response: "response2".to_string(),
+                raw_request: Some("request2".to_string()),
+                raw_response: Some("response2".to_string()),
                 system: Some("system2".to_string()),
-                input_messages: vec![],
-                output: vec![],
+                input_messages: Some(vec![]),
+                output: Some(vec![]),
                 input_tokens: Some(100),
                 output_tokens: Some(200),
                 response_time_ms: Some(500),
