@@ -30,7 +30,7 @@ pub struct ListEpisodesParams {
 
 /// Request body for the POST episode table endpoint
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct ListEpisodesRequest {
