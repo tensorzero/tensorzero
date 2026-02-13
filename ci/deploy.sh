@@ -7,6 +7,7 @@
 #   ./ci/deploy.sh e2e        # sync + docker compose + gateway + e2e tests on remote
 #   ./ci/deploy.sh e2e cost   # same but run tests matching "cost"
 #   ./ci/deploy.sh cleanup    # stop docker compose and gateway on remote (no sync)
+#   ./ci/deploy.sh gateway   # sync + docker + gateway on remote, then tunnel; add "rebuild" to force image rebuild
 #
 # Usage (from parent dir with multiple workspaces):
 #   ./deploy.sh              # workspace 0, sync + check
@@ -62,6 +63,11 @@ fi
 
 REMOTE_COMPOSE="tensorzero-core/tests/e2e/docker-compose.yml"
 
+if [ "$MODE" = "--help" ] || [ "$MODE" = "-h" ]; then
+  sed -n '2,/^$/p' "$0" | sed 's/^# *//'
+  exit 0
+fi
+
 if [ "$MODE" != "cleanup" ] && [ ! -d "$LOCAL_DIR" ]; then
   echo "Error: local directory '${LOCAL_DIR}' does not exist."
   echo ""
@@ -76,6 +82,14 @@ echo "  Remote: ${REMOTE_HOST}:${REMOTE_DIR}"
 echo "  Mode:   ${MODE}"
 echo "  Rsync:  $($RSYNC --version | head -1)"
 echo ""
+
+# ── Preflight: SSH connectivity (skip for cleanup; fail fast for other modes) ─
+if [ "$MODE" != "cleanup" ]; then
+  if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "${REMOTE_HOST}" "exit" 2>/dev/null; then
+    echo "Error: cannot reach ${REMOTE_HOST} (ssh). Check host, SSH config, and keys."
+    exit 1
+  fi
+fi
 
 # ── Cleanup mode: stop compose and gateway on remote (no sync) ───────────
 if [ "$MODE" = "cleanup" ]; then
@@ -178,11 +192,13 @@ TEARDOWN_EOF
   echo ""
   echo "=== Running E2E tests on ${REMOTE_HOST}:${REMOTE_DIR} ==="
 
-  # Determine the test command
+  # Determine the test command; when a filter is passed, skip ClickHouse-only tests
   if [ -n "$E2E_FILTER" ]; then
     TEST_CMD="cargo test-e2e-fast ${E2E_FILTER}"
+    SKIP_CLICKHOUSE=1
   else
     TEST_CMD="cargo test-e2e-fast"
+    SKIP_CLICKHOUSE=""
   fi
 
   ssh "${REMOTE_HOST}" bash -l <<REMOTE_EOF
@@ -257,10 +273,12 @@ TEARDOWN_EOF
     done
     echo "  Gateway is healthy (PID \$GATEWAY_PID)"
 
-    # ── Run ClickHouse-specific tests first (lighter) ──────────────────────
-    echo ""
-    echo "--- cargo test-clickhouse-fast ---"
-    cargo test-clickhouse-fast || true
+    # ── Run ClickHouse-specific tests first (lighter; skip when e2e filter is set) ─
+    if [ -z "${SKIP_CLICKHOUSE:-}" ]; then
+      echo ""
+      echo "--- cargo test-clickhouse-fast ---"
+      cargo test-clickhouse-fast || true
+    fi
 
     # ── Run the main E2E tests ─────────────────────────────────────────────
     echo ""
@@ -352,8 +370,10 @@ TEARDOWN_EOF
   echo "=== Starting Docker + gateway on ${REMOTE_HOST}:${REMOTE_DIR} (gateway will stay running) ==="
 
   # Pass rebuild flag: 1 if user said "rebuild" or "build", else 0 (reuse existing image when possible)
+  # In parent mode arg is $3; in-repo mode uses $2 (E2E_FILTER slot)
   REBUILD_GATEWAY=0
   [ "${3:-}" = "rebuild" ] || [ "${3:-}" = "build" ] && REBUILD_GATEWAY=1
+  [ "${E2E_FILTER:-}" = "rebuild" ] || [ "${E2E_FILTER:-}" = "build" ] && REBUILD_GATEWAY=1
 
   ssh "${REMOTE_HOST}" bash -l <<REMOTE_EOF
     set -euo pipefail
@@ -495,7 +515,7 @@ case "$MODE" in
     echo "=== All passed (workspace ${WORKSPACE_NUM}) ==="
     ;;
   *)
-    echo "Error: unknown mode '${MODE}'. Use: sync, check, clippy, test, all, e2e, gateway"
+    echo "Error: unknown mode '${MODE}'. Use: sync, check, clippy, test, all, e2e, gateway, cleanup"
     exit 1
     ;;
 esac

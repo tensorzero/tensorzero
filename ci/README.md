@@ -6,10 +6,14 @@ Sync this repo to a remote machine and run checks or e2e tests there (useful for
 
 From repo root:
 
+- `./ci/deploy.sh --help` — show usage
 - `./ci/deploy.sh` or `./ci/deploy.sh check` — sync + cargo check
 - `./ci/deploy.sh e2e` — sync + docker compose + gateway + full e2e tests (all on remote)
 - `./ci/deploy.sh sync` — sync only
 - `./ci/deploy.sh cleanup` — stop docker compose and gateway on remote
+- `./ci/deploy.sh gateway` — sync + start docker + gateway on remote, then tunnel (for local UI). Use `gateway rebuild` to force rebuild the gateway image.
+
+When run from a parent dir with workspace number (e.g. `./deploy.sh 1 check`), additional modes: `clippy`, `test`, `all`, `gateway` (see `./ci/deploy.sh --help`).
 
 Set your remote via environment:
 
