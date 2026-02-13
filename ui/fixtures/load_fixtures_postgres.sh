@@ -418,7 +418,10 @@ psql -q "$POSTGRES_URL" <<EOF
 SELECT tensorzero.refresh_model_provider_statistics_incremental(
     full_refresh => TRUE
 );
-SELECT tensorzero.refresh_model_latency_histograms_incremental(
+SELECT tensorzero.refresh_model_latency_histogram_minute_incremental(
+    full_refresh => TRUE
+);
+SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(
     full_refresh => TRUE
 );
 EOF
