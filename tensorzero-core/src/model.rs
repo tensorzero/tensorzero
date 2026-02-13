@@ -434,6 +434,7 @@ impl ModelConfig {
             stream.inner_mut(),
             &raw_request,
             model_provider_request.provider_name,
+            provider.api_type(),
         )
         .await?;
         Ok(StreamResponseAndMessages {
@@ -2917,6 +2918,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3302,6 +3304,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3569,6 +3572,7 @@ mod tests {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
