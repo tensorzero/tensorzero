@@ -8,6 +8,7 @@ import {
   AccordionTrigger,
 } from "~/components/ui/accordion";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
+import { HelpTooltip, docsUrl } from "~/components/ui/HelpTooltip";
 import type { SFTFormValues } from "./types";
 import { NumberInputWithButtons } from "~/components/utils/NumberInputWithButtons";
 
@@ -57,7 +58,17 @@ export function AdvancedParametersAccordion({
               name="validationSplitPercent"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Validation Split (%)</FormLabel>
+                  <div className="flex items-center gap-1.5">
+                    <FormLabel>Validation Split (%)</FormLabel>
+                    <HelpTooltip
+                      link={{
+                        href: docsUrl("optimization/supervised-fine-tuning"),
+                      }}
+                    >
+                      Data reserved for detecting overfitting during
+                      fine-tuning.
+                    </HelpTooltip>
+                  </div>
                   <div className="grid grid-cols-2 gap-x-8">
                     <div className="flex flex-col gap-2">
                       <NumberInputWithButtons
@@ -84,7 +95,17 @@ export function AdvancedParametersAccordion({
               name="maxSamples"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Max. Samples</FormLabel>
+                  <div className="flex items-center gap-1.5">
+                    <FormLabel>Max. Samples</FormLabel>
+                    <HelpTooltip
+                      link={{
+                        href: docsUrl("optimization/supervised-fine-tuning"),
+                      }}
+                    >
+                      Limited by the number of curated inferences that meet the
+                      metric threshold.
+                    </HelpTooltip>
+                  </div>
                   <div className="grid grid-cols-2 gap-x-8">
                     <div className="flex flex-col gap-1">
                       <NumberInputWithButtons
