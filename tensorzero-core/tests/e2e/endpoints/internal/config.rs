@@ -12,7 +12,6 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_live_config() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/config");
 
@@ -48,7 +47,6 @@ async fn test_get_live_config() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_config_by_hash() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // First get the live config to obtain the current hash
@@ -85,7 +83,6 @@ async fn test_get_config_by_hash() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_config_by_nonexistent_hash() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use a hash that definitely doesn't exist
@@ -107,7 +104,6 @@ async fn test_get_config_by_nonexistent_hash() {
 
 /// Test writing a config via the Rust client
 async fn test_write_config_impl(client: TensorZeroClient) {
-    skip_for_postgres!();
     let id = Uuid::now_v7();
 
     // Create a minimal config with a unique metric
@@ -174,7 +170,6 @@ tensorzero::make_gateway_test_functions!(test_write_config_impl);
 
 /// Test tag merging when writing the same config twice via the Rust client
 async fn test_write_config_tag_merging_impl(client: TensorZeroClient) {
-    skip_for_postgres!();
     let id = Uuid::now_v7();
 
     // Create a config
