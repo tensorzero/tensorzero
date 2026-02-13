@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, useFetcher } from "react-router";
-import { Sheet, SheetContent } from "~/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "~/components/ui/sheet";
 import { useInferenceSideSheet } from "./InferenceSideSheetContext";
 import type { StoredInference } from "~/types/tensorzero";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
@@ -27,7 +27,8 @@ import { ExternalLink } from "lucide-react";
 
 export function InferenceSideSheet() {
   const { inferenceId, closeSheet } = useInferenceSideSheet();
-  const fetcher = useFetcher<StoredInference>({
+  // The route returns StoredInference | null (null on error/not-found).
+  const fetcher = useFetcher<StoredInference | null>({
     key: inferenceId ? `inference-sheet-${inferenceId}` : "inference-sheet",
   });
 
@@ -40,9 +41,12 @@ export function InferenceSideSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inferenceId]);
 
-  const inference = fetcher.data as StoredInference | undefined;
+  const inference = fetcher.data as StoredInference | null | undefined;
   const isLoading =
-    fetcher.state !== "idle" || (Boolean(inferenceId) && !inference);
+    fetcher.state !== "idle" ||
+    (Boolean(inferenceId) && inference === undefined);
+  const hasError =
+    Boolean(inferenceId) && fetcher.state === "idle" && inference === null;
 
   return (
     <Sheet
@@ -50,6 +54,7 @@ export function InferenceSideSheet() {
       onOpenChange={(open) => !open && closeSheet()}
     >
       <SheetContent className="overflow-y-auto">
+        <SheetTitle className="sr-only">Inference Details</SheetTitle>
         <div className="flex flex-col gap-6 pt-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
@@ -71,6 +76,10 @@ export function InferenceSideSheet() {
 
           {isLoading ? (
             <BasicInfoLayoutSkeleton rows={4} />
+          ) : hasError ? (
+            <p className="text-muted-foreground text-sm">
+              Failed to load inference.
+            </p>
           ) : inference ? (
             <>
               <InferenceBasicInfo inference={inference} />
