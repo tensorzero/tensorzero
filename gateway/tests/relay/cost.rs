@@ -736,3 +736,158 @@ cost = [
         }
     }
 }
+
+/// Test that when both relay and downstream have cost config with different rates,
+/// the downstream's cost wins — the relay doesn't recompute or override.
+#[tokio::test]
+async fn test_relay_cost_downstream_wins_over_relay_non_streaming() {
+    // Downstream has cost config with rates 1.50 / 2.00
+    // Expected: 10 * 1.50 / 1_000_000 + 10 * 2.00 / 1_000_000 = 0.000035
+    let downstream_config = r#"
+[models.cost_model]
+routing = ["dummy_downstream"]
+
+[models.cost_model.providers.dummy_downstream]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+"#;
+
+    // Relay has DIFFERENT (much higher) cost config — should be ignored
+    // If relay were computing cost, we'd get: 10 * 100 / 1M + 10 * 200 / 1M = 0.003
+    let relay_config = r#"
+[models.cost_model]
+routing = ["relay_dummy"]
+
+[models.cost_model.providers.relay_dummy]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 100.00, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 200.00, required = true },
+]
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "cost_model",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(status, 200, "Response status: {status}, body: {body_text}");
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    let cost = body["usage"]["cost"]
+        .as_f64()
+        .expect("cost should be present from downstream");
+
+    // Should match downstream's rates (0.000035), NOT relay's rates (0.003)
+    assert!(
+        (cost - 0.000035).abs() < 1e-10,
+        "Cost should reflect downstream's rates (0.000035), not relay's rates (0.003). Got: {cost}"
+    );
+}
+
+/// Same as above but streaming — downstream's cost should win over relay's.
+#[tokio::test]
+async fn test_relay_cost_downstream_wins_over_relay_streaming() {
+    let downstream_config = r#"
+[models.cost_model]
+routing = ["dummy_downstream"]
+
+[models.cost_model.providers.dummy_downstream]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 1.50, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 2.00, required = true },
+]
+"#;
+
+    let relay_config = r#"
+[models.cost_model]
+routing = ["relay_dummy"]
+
+[models.cost_model.providers.relay_dummy]
+type = "dummy"
+model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 100.00, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 200.00, required = true },
+]
+"#;
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "cost_model",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true
+        }))
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut found_cost = false;
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        if let Some(usage) = chunk.get("usage") {
+            if let Some(cost) = usage.get("cost") {
+                found_cost = true;
+                let cost = cost.as_f64().expect("cost should be a number");
+                assert!(
+                    (cost - 0.000035).abs() < 1e-10,
+                    "Streaming cost should reflect downstream's rates (0.000035), not relay's (0.003). Got: {cost}"
+                );
+            }
+        }
+    }
+
+    assert!(
+        found_cost,
+        "Streaming response should include cost from downstream"
+    );
+}
