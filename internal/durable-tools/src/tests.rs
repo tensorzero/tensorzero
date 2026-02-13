@@ -650,12 +650,21 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::User { message, error_data } => {
-                assert_eq!(message, "Serialization error: expected ident at line 1 column 2");
-                assert_eq!(error_data, serde_json::json!({
-                    "kind": "serialization",
-                    "message": "expected ident at line 1 column 2",
-                }));
+            TaskError::User {
+                message,
+                error_data,
+            } => {
+                assert_eq!(
+                    message,
+                    "Serialization error: expected ident at line 1 column 2"
+                );
+                assert_eq!(
+                    error_data,
+                    serde_json::json!({
+                        "kind": "serialization",
+                        "message": "expected ident at line 1 column 2",
+                    })
+                );
             }
             _ => panic!("Expected User"),
         }

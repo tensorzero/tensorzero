@@ -352,7 +352,6 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 #[serde(tag = "kind")]
 pub enum ToolFailure {
     Control { message: String },
-    Serialization { message: String },
     Tool { error: NonControlToolError },
     Database { message: String },
 }
