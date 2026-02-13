@@ -46,6 +46,7 @@ export function UuidHoverCardContent({
     case "chat_datapoint":
     case "json_datapoint":
       return <DatapointHoverContent obj={obj} url={url} />;
+    case "model_inference":
     case "boolean_feedback":
     case "float_feedback":
     case "comment_feedback":

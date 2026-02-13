@@ -19,6 +19,7 @@ function getUrlForResolvedObject(
     case "chat_datapoint":
     case "json_datapoint":
       return toDatapointUrl(obj.dataset_name, uuid);
+    case "model_inference":
     case "boolean_feedback":
     case "float_feedback":
     case "comment_feedback":
