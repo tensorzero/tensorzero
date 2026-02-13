@@ -252,14 +252,15 @@ You should re-run this command when upgrading TensorZero from an earlier version
 
 </Steps>
 
-## Configure Postgres for TensorZero optimizations (optional)
+## Configure Postgres for dynamic in-context learning (optional)
 
-When Postgres is configured as the primary data store for TensorZero, some TensorZero inference-time optimizations (e.g. [Dynamic In-Context Learning](/optimization/dynamic-in-context-learning-dicl)) require the [`pgvector`](https://github.com/pgvector/pgvector) extension.
-If you plan to enable these optimizations, you must install `pgvector` in your Postgres instance.
+When Postgres is configured as the primary data store for TensorZero, `experimental_dynamic_in_context_learning` variants (see [Dynamic In-Context Learning (DICL)](/optimization/dynamic-in-context-learning-dicl)) require the [`pgvector`](https://github.com/pgvector/pgvector) extension.
+If you plan to use DICL, you must install `pgvector` in your Postgres instance.
 
-Most managed Postgres providers include `pgvector` out of the box. For self-hosted Postgres, follow the [pgvector installation instructions](https://github.com/pgvector/pgvector#installation).
+Most managed Postgres providers include `pgvector` out of the box.
+For self-hosted Postgres, follow the [pgvector installation instructions](https://github.com/pgvector/pgvector#installation).
 
-When applying migrations, pass the `--enable-optimization-postgres-migrations` flag to apply the additional schema:
+When applying Postgres migrations, pass the `--enable-optimization-postgres-migrations` flag to apply the additional schema:
 
 ```bash
 docker compose run --rm gateway --run-postgres-migrations --enable-optimization-postgres-migrations
