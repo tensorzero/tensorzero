@@ -23,10 +23,6 @@ export async function loader({ params }: Route.LoaderArgs) {
     const inference = response.inferences[0];
     return Response.json({
       timestamp: inference.timestamp,
-      processing_time_ms:
-        inference.processing_time_ms != null
-          ? Number(inference.processing_time_ms)
-          : null,
     });
   } catch (error) {
     if (error instanceof Response) {
