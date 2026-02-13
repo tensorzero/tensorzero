@@ -19,6 +19,9 @@ target-rust-analyzer/
 
 .DS_Store
 .credentials/
+.keys/
+*.pem
+*.pem.pub
 
 # Python cache files
 __pycache__/

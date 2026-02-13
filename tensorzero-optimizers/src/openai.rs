@@ -369,6 +369,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                 extra_body: None,
                 timeouts: TimeoutsConfig::default(),
                 discard_unknown_chunks: false,
+                cost: None,
             };
             OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(UninitializedModelConfig {

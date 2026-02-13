@@ -3306,6 +3306,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "json-pointer"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fe841b94e719a482213cee19dd04927cf412f26d8dc84c5a446c081e49c2997"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "jsonschema"
 version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5969,6 +5978,7 @@ dependencies = [
  "log",
  "memchr",
  "percent-encoding",
+ "rust_decimal",
  "rustls",
  "serde",
  "serde_json",
@@ -6054,6 +6064,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.5",
  "rsa",
+ "rust_decimal",
  "serde",
  "sha1",
  "sha2",
@@ -6092,6 +6103,7 @@ dependencies = [
  "md-5",
  "memchr",
  "rand 0.8.5",
+ "rust_decimal",
  "serde",
  "serde_json",
  "sha2",
@@ -6402,6 +6414,7 @@ dependencies = [
  "infer",
  "init-tracing-opentelemetry",
  "itertools 0.14.0",
+ "json-pointer",
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
@@ -6432,6 +6445,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.28",
  "reqwest-sse-stream",
+ "rust_decimal",
  "schemars 1.2.1",
  "secrecy",
  "serde",

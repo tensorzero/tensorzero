@@ -127,6 +127,7 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
             cached,
             finish_reason,
             snapshot_hash,
+            cost,
             created_at
         FROM tensorzero.model_inferences
         WHERE inference_id = ",
@@ -152,7 +153,7 @@ pub(super) fn build_insert_model_inferences_query(
             id, inference_id, raw_request, raw_response, system,
             input_messages, output, input_tokens, output_tokens,
             response_time_ms, model_name, model_provider_name,
-            ttft_ms, cached, finish_reason, snapshot_hash, created_at
+            ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
         ) ",
     );
 
@@ -176,6 +177,7 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(row.cached)
             .push_bind(row.finish_reason)
             .push_bind(snapshot_hash_bytes)
+            .push_bind(row.cost)
             .push_bind(created_at);
     });
 
@@ -440,6 +442,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
         let cached: bool = row.try_get("cached")?;
         let finish_reason: Option<FinishReason> = row.try_get("finish_reason")?;
         let snapshot_hash_bytes: Option<Vec<u8>> = row.try_get("snapshot_hash")?;
+        let cost: Option<rust_decimal::Decimal> = row.try_get("cost")?;
         let created_at: DateTime<Utc> = row.try_get("created_at")?;
 
         // Convert snapshot_hash from bytes
@@ -462,6 +465,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
             cached,
             finish_reason,
             snapshot_hash,
+            cost,
             timestamp: Some(created_at.to_rfc3339()),
         })
     }
@@ -712,11 +716,32 @@ mod tests {
                 cached,
                 finish_reason,
                 snapshot_hash,
+                cost,
                 created_at
             FROM tensorzero.model_inferences
             WHERE inference_id = $1
             ",
         );
+    }
+
+    /// Number of columns in the `model_inferences` INSERT statement.
+    /// Update this constant when adding/removing columns in `build_insert_model_inferences_query`.
+    const MODEL_INFERENCES_INSERT_COLUMNS: usize = 18;
+
+    /// Generate the expected VALUES clause for a multi-row INSERT with `num_rows` rows
+    /// and `cols_per_row` bind parameters per row.
+    ///
+    /// Example: `expected_values_clause(2, 3)` => `"($1, $2, $3), ($4, $5, $6)"`
+    fn expected_values_clause(num_rows: usize, cols_per_row: usize) -> String {
+        (0..num_rows)
+            .map(|row| {
+                let params: Vec<String> = (1..=cols_per_row)
+                    .map(|col| format!("${}", row * cols_per_row + col))
+                    .collect();
+                format!("({})", params.join(", "))
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     #[test]
@@ -738,6 +763,7 @@ mod tests {
             cached: false,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            cost: None,
             timestamp: None,
         }];
 
@@ -745,17 +771,19 @@ mod tests {
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
 
-        assert_query_equals(
-            sql,
+        let expected = format!(
             r"
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, raw_request, raw_response, system,
                 input_messages, output, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
-                ttft_ms, cached, finish_reason, snapshot_hash, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
+            ) VALUES {}
             ",
+            expected_values_clause(1, MODEL_INFERENCES_INSERT_COLUMNS)
         );
+
+        assert_query_equals(sql, &expected);
     }
 
     #[test]
@@ -778,6 +806,7 @@ mod tests {
                 cached: false,
                 finish_reason: None,
                 snapshot_hash: None,
+                cost: None,
                 timestamp: None,
             },
             StoredModelInference {
@@ -797,6 +826,7 @@ mod tests {
                 cached: true,
                 finish_reason: Some(FinishReason::ToolCall),
                 snapshot_hash: None,
+                cost: None,
                 timestamp: None,
             },
         ];
@@ -805,17 +835,18 @@ mod tests {
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
 
-        assert_query_equals(
-            sql,
+        let expected = format!(
             r"
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, raw_request, raw_response, system,
                 input_messages, output, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
-                ttft_ms, cached, finish_reason, snapshot_hash, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17),
-            ($18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+                ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
+            ) VALUES {}
             ",
+            expected_values_clause(2, MODEL_INFERENCES_INSERT_COLUMNS)
         );
+
+        assert_query_equals(sql, &expected);
     }
 }

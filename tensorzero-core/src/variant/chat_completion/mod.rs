@@ -1384,6 +1384,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -1400,6 +1401,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -1420,6 +1422,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -1436,6 +1439,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -1679,6 +1683,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -1727,6 +1732,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match result {
@@ -1811,6 +1817,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match result {
@@ -1908,6 +1915,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match result {
@@ -2012,6 +2020,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match result {
@@ -2144,6 +2153,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match result {
@@ -2269,6 +2279,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match result {
@@ -2374,6 +2385,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2390,6 +2402,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2600,6 +2613,7 @@ mod tests {
                     Some(&Usage {
                         input_tokens: Some(10),
                         output_tokens: Some(16),
+                        cost: None,
                     })
                 );
                 break;

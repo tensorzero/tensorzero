@@ -94,6 +94,7 @@ fn make_model_inference(inference_id: Uuid) -> StoredModelInference {
         finish_reason: Some(FinishReason::Stop),
         snapshot_hash: None,
         timestamp: None,
+        cost: None,
     }
 }
 
