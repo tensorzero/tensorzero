@@ -192,7 +192,6 @@ impl TimeoutsConfig {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
     /// Defaults to `false`
@@ -358,7 +357,6 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
@@ -378,7 +376,6 @@ fn default_max_rows() -> usize {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct BatchWritesConfig {
     pub enabled: bool,
     // An internal flag to allow us to test batch writes in embedded gateway mode.
@@ -408,14 +405,12 @@ impl Default for BatchWritesConfig {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ExportConfig {
     #[serde(default)]
     pub otlp: OtlpConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct OtlpConfig {
     #[serde(default)]
     pub traces: OtlpTracesConfig,
@@ -469,7 +464,6 @@ impl OtlpConfig {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
@@ -482,7 +476,7 @@ pub struct OtlpTracesConfig {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum OtlpTracesFormat {
     /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
     /// https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai
@@ -1670,7 +1664,6 @@ pub struct UninitializedConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct UninitializedRelayConfig {
     /// If set, all models will be forwarded to this gateway URL
     /// (instead of calling the providers defined in our config)
