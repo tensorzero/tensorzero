@@ -41,157 +41,160 @@ describe("uuidv7ToTimestamp", () => {
 // ─── formatCost ──────────────────────────────────────────────────────────────
 
 describe("formatCost", () => {
+  // Note: formatCost does NOT include a "$" prefix — the CostIcon in the
+  // Chip component provides the currency indicator.
+
   // --- Exact zero ---
-  it("formats zero as $0.00", () => {
-    expect(formatCost(0)).toBe("$0.00");
+  it("formats zero as 0.00", () => {
+    expect(formatCost(0)).toBe("0.00");
   });
 
   // --- Large costs (>= $1) — always 2 decimal places ---
   it("formats $1.00 with 2 decimal places", () => {
-    expect(formatCost(1)).toBe("$1.00");
+    expect(formatCost(1)).toBe("1.00");
   });
 
   it("formats $1.50 with 2 decimal places", () => {
-    expect(formatCost(1.5)).toBe("$1.50");
+    expect(formatCost(1.5)).toBe("1.50");
   });
 
   it("formats $123.456 rounded to 2 decimal places", () => {
-    expect(formatCost(123.456)).toBe("$123.46");
+    expect(formatCost(123.456)).toBe("123.46");
   });
 
   it("formats $10.00 with 2 decimal places", () => {
-    expect(formatCost(10)).toBe("$10.00");
+    expect(formatCost(10)).toBe("10.00");
   });
 
   it("formats $999999.99 correctly", () => {
-    expect(formatCost(999999.99)).toBe("$999999.99");
+    expect(formatCost(999999.99)).toBe("999999.99");
   });
 
   // --- Medium costs ($0.01 to $1) — up to 4 decimal places ---
   it("formats $0.50 without trailing zeros", () => {
-    expect(formatCost(0.5)).toBe("$0.5");
+    expect(formatCost(0.5)).toBe("0.5");
   });
 
   it("formats $0.1234 with 4 decimal places", () => {
-    expect(formatCost(0.1234)).toBe("$0.1234");
+    expect(formatCost(0.1234)).toBe("0.1234");
   });
 
   it("formats $0.01 without trailing zeros", () => {
-    expect(formatCost(0.01)).toBe("$0.01");
+    expect(formatCost(0.01)).toBe("0.01");
   });
 
   it("formats $0.0150 without trailing zeros", () => {
-    expect(formatCost(0.015)).toBe("$0.015");
+    expect(formatCost(0.015)).toBe("0.015");
   });
 
   it("formats $0.99 correctly", () => {
-    expect(formatCost(0.99)).toBe("$0.99");
+    expect(formatCost(0.99)).toBe("0.99");
   });
 
   it("formats $0.12345 rounded to 4 decimal places", () => {
-    expect(formatCost(0.12345)).toBe("$0.1235");
+    expect(formatCost(0.12345)).toBe("0.1235");
   });
 
   // --- Small costs ($0.001 to $0.01) — up to 6 decimal places ---
   it("formats $0.003 (typical inference cost)", () => {
-    expect(formatCost(0.003)).toBe("$0.003");
+    expect(formatCost(0.003)).toBe("0.003");
   });
 
   it("formats $0.001500 without trailing zeros", () => {
-    expect(formatCost(0.0015)).toBe("$0.0015");
+    expect(formatCost(0.0015)).toBe("0.0015");
   });
 
   it("formats $0.009999 correctly", () => {
-    expect(formatCost(0.009999)).toBe("$0.009999");
+    expect(formatCost(0.009999)).toBe("0.009999");
   });
 
   // --- Very small costs (< $0.001) — up to 8 decimal places ---
   it("formats $0.00001875 (real-world gpt-4o-mini cost) without rounding", () => {
-    expect(formatCost(0.00001875)).toBe("$0.00001875");
+    expect(formatCost(0.00001875)).toBe("0.00001875");
   });
 
   it("formats $0.000123 correctly", () => {
-    expect(formatCost(0.000123)).toBe("$0.000123");
+    expect(formatCost(0.000123)).toBe("0.000123");
   });
 
   it("formats $0.000001 (1 micro-dollar) correctly", () => {
-    expect(formatCost(0.000001)).toBe("$0.000001");
+    expect(formatCost(0.000001)).toBe("0.000001");
   });
 
   it("formats $0.00000025 correctly with 8 decimal places", () => {
-    expect(formatCost(0.00000025)).toBe("$0.00000025");
+    expect(formatCost(0.00000025)).toBe("0.00000025");
   });
 
   it("formats $0.0000001 correctly", () => {
-    expect(formatCost(0.0000001)).toBe("$0.0000001");
+    expect(formatCost(0.0000001)).toBe("0.0000001");
   });
 
   it("formats $0.00000001 (precision floor) correctly", () => {
-    expect(formatCost(0.00000001)).toBe("$0.00000001");
+    expect(formatCost(0.00000001)).toBe("0.00000001");
   });
 
   // --- Below precision floor (DB stores Decimal(18,9), we display 8 digits) ---
-  it("formats costs below $0.00000001 as <$0.00000001", () => {
-    expect(formatCost(0.000000001)).toBe("<$0.00000001");
+  it("formats costs below $0.00000001 as <0.00000001", () => {
+    expect(formatCost(0.000000001)).toBe("<0.00000001");
   });
 
-  it("formats extremely small positive cost as <$0.00000001", () => {
-    expect(formatCost(1e-10)).toBe("<$0.00000001");
+  it("formats extremely small positive cost as <0.00000001", () => {
+    expect(formatCost(1e-10)).toBe("<0.00000001");
   });
 
   // --- Negative costs (caching discounts can make total negative) ---
   it("formats -$0.003 correctly", () => {
-    expect(formatCost(-0.003)).toBe("-$0.003");
+    expect(formatCost(-0.003)).toBe("-0.003");
   });
 
   it("formats -$1.50 correctly", () => {
-    expect(formatCost(-1.5)).toBe("-$1.50");
+    expect(formatCost(-1.5)).toBe("-1.50");
   });
 
   it("formats -$0.00001875 correctly", () => {
-    expect(formatCost(-0.00001875)).toBe("-$0.00001875");
+    expect(formatCost(-0.00001875)).toBe("-0.00001875");
   });
 
   it("formats very small negative cost correctly", () => {
-    expect(formatCost(-0.000000001)).toBe("-<$0.00000001");
+    expect(formatCost(-0.000000001)).toBe("-<0.00000001");
   });
 
   // --- Pathological values ---
   it("handles NaN gracefully", () => {
-    expect(formatCost(NaN)).toBe("$—");
+    expect(formatCost(NaN)).toBe("—");
   });
 
   it("handles Infinity gracefully", () => {
-    expect(formatCost(Infinity)).toBe("$—");
+    expect(formatCost(Infinity)).toBe("—");
   });
 
   it("handles -Infinity gracefully", () => {
-    expect(formatCost(-Infinity)).toBe("$—");
+    expect(formatCost(-Infinity)).toBe("—");
   });
 
   // --- Boundary values ---
   it("formats exactly $0.001 (boundary between very small and small)", () => {
-    expect(formatCost(0.001)).toBe("$0.001");
+    expect(formatCost(0.001)).toBe("0.001");
   });
 
   it("formats $0.0009999 (just below $0.001 boundary)", () => {
-    expect(formatCost(0.0009999)).toBe("$0.0009999");
+    expect(formatCost(0.0009999)).toBe("0.0009999");
   });
 
   it("formats exactly $0.01 (boundary between small and medium)", () => {
-    expect(formatCost(0.01)).toBe("$0.01");
+    expect(formatCost(0.01)).toBe("0.01");
   });
 
   it("formats $0.0099 (just below $0.01 boundary)", () => {
-    expect(formatCost(0.0099)).toBe("$0.0099");
+    expect(formatCost(0.0099)).toBe("0.0099");
   });
 
   it("formats exactly $1.00 (boundary between medium and large)", () => {
-    expect(formatCost(1.0)).toBe("$1.00");
+    expect(formatCost(1.0)).toBe("1.00");
   });
 
   it("formats $0.9999 (just below $1 boundary)", () => {
-    expect(formatCost(0.9999)).toBe("$0.9999");
+    expect(formatCost(0.9999)).toBe("0.9999");
   });
 });
 

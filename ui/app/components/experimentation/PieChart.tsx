@@ -8,12 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-} from "~/components/ui/chart";
+import { ChartContainer, ChartTooltip } from "~/components/ui/chart";
 
 export type VariantWeight = {
   variant_name: string;
@@ -97,11 +92,29 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
               ))}
             </Pie>
             <ChartTooltip content={<CustomTooltipContent />} />
-            <ChartLegend
-              content={<ChartLegendContent className="font-mono text-xs" />}
-            />
           </PieChart>
         </ChartContainer>
+        {/* Legend rendered outside the chart to support overflow scrolling */}
+        <div className="mt-3 max-h-48 overflow-y-auto">
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-xs">
+            {data.map((entry) => (
+              <div
+                key={entry.variant_name}
+                className="flex items-center gap-1.5"
+              >
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                  style={{
+                    backgroundColor: chartConfig[entry.variant_name]?.color,
+                  }}
+                />
+                <span className="text-muted-foreground">
+                  {entry.variant_name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

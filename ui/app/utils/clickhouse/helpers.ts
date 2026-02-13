@@ -57,32 +57,35 @@ export function getTotalInferenceUsage(
  * Negative costs are possible when caching discounts exceed the base cost.
  * They are displayed with a leading minus sign (e.g. -$0.003).
  *
- * Examples: $0.00001875, $0.003, $1.50, -$0.003, <$0.00000001
+ * The returned string does NOT include a "$" prefix — the CostIcon in the
+ * Chip component already provides the currency indicator.
+ *
+ * Examples: 0.00001875, 0.003, 1.50, -0.003, <0.00000001
  */
 export function formatCost(cost: number): string {
-  if (!Number.isFinite(cost)) return "$—";
-  if (cost === 0) return "$0.00";
+  if (!Number.isFinite(cost)) return "—";
+  if (cost === 0) return "0.00";
 
   // Handle negative costs: format the absolute value, then prepend "-"
   if (cost < 0) {
     return `-${formatCost(-cost)}`;
   }
 
-  if (cost < 0.00000001) return "<$0.00000001";
+  if (cost < 0.00000001) return "<0.00000001";
   if (cost < 0.001) {
     // For very small costs (< 1/10 cent), show up to 8 decimal places
-    return `$${cost.toFixed(8).replace(/\.?0+$/, "")}`;
+    return cost.toFixed(8).replace(/\.?0+$/, "");
   }
   if (cost < 0.01) {
     // For small costs (< 1 cent), show up to 6 decimal places
-    return `$${cost.toFixed(6).replace(/\.?0+$/, "")}`;
+    return cost.toFixed(6).replace(/\.?0+$/, "");
   }
   if (cost < 1) {
     // For costs under $1, show up to 4 decimal places
-    return `$${cost.toFixed(4).replace(/\.?0+$/, "")}`;
+    return cost.toFixed(4).replace(/\.?0+$/, "");
   }
   // For larger costs, show 2 decimal places
-  return `$${cost.toFixed(2)}`;
+  return cost.toFixed(2);
 }
 
 /**
