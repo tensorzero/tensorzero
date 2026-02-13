@@ -20,6 +20,7 @@ use crate::config::snapshot::SnapshotHash;
 use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
+use crate::inference::types::usage::ApiType;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
@@ -343,6 +344,7 @@ pub enum ErrorDetails {
         #[serde(serialize_with = "serialize_status")]
         status_code: Option<StatusCode>,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -354,6 +356,7 @@ pub enum ErrorDetails {
     FatalStreamError {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -362,6 +365,7 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -1241,6 +1245,7 @@ impl std::fmt::Display for ErrorDetails {
                 raw_request,
                 raw_response,
                 status_code,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1274,6 +1279,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1298,6 +1304,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {

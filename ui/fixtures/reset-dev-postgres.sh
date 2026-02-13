@@ -49,7 +49,9 @@ SQLX_OFFLINE=1 cargo run --package gateway --bin gateway -- --run-postgres-migra
 
 echo "==> Refreshing materialized views..."
 PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" <<EOF
-REFRESH MATERIALIZED VIEW tensorzero.model_provider_statistics;
+SELECT tensorzero.refresh_model_provider_statistics_incremental(
+    full_refresh => TRUE
+);
 REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles;
 REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_hour;
 REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_day;

@@ -63,13 +63,10 @@ services:
   ui:
     image: tensorzero/ui
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
     ports:
       - "4000:4000"
     depends_on:
-      clickhouse:
-        condition: service_healthy
       gateway:
         condition: service_healthy
 

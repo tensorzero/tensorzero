@@ -258,11 +258,11 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
         description: payload.message,
       };
     case "visualization":
-      // Visualization events render their own content, no text description needed
-      return {};
+    case "user_questions":
+    case "user_questions_answers":
     case "unknown":
-      return {};
-    default:
+      // Visualization events render their own content, no text description needed
+      // TODO (#6270): add a real component for `user_questions` and `user_responses`
       return {};
   }
 }
@@ -423,6 +423,8 @@ function renderEventTitle(event: GatewayEvent) {
           <span>{getVisualizationTitle(payload.visualization)}</span>
         </span>
       );
+    case "user_questions":
+    case "user_questions_answers":
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">

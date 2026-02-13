@@ -338,6 +338,60 @@ async fn test_resolve_uuid_json_datapoint() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_resolve_uuid_model_inference() {
+    let (inference_id, _) = create_inference().await;
+
+    // Fetch model inferences for the inference
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(&format!("/internal/model_inferences/{inference_id}"));
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_model_inferences request should succeed: status={:?}",
+        resp.status()
+    );
+
+    let response_json: Value = resp.json().await.unwrap();
+    let model_inferences = response_json
+        .get("model_inferences")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(
+        !model_inferences.is_empty(),
+        "Expected at least one model inference"
+    );
+
+    let model_inference_id = model_inferences[0].get("id").unwrap().as_str().unwrap();
+    let model_inference_id = Uuid::parse_str(model_inference_id).unwrap();
+
+    let response = resolve_uuid(&model_inference_id).await;
+
+    assert_eq!(
+        response.id, model_inference_id,
+        "Response ID should match the queried model inference ID"
+    );
+
+    assert_eq!(
+        response.object_types.len(),
+        1,
+        "Expected exactly one object type in resolve_uuid response"
+    );
+    match &response.object_types[0] {
+        ResolvedObject::ModelInference {
+            inference_id: resolved_inference_id,
+            ..
+        } => {
+            assert_eq!(
+                *resolved_inference_id, inference_id,
+                "Model inference should reference the correct parent inference ID"
+            );
+        }
+        other => panic!("Expected ModelInference variant, got {other:?}"),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_resolve_uuid_nonexistent() {
     let nonexistent_id = Uuid::now_v7();
 
