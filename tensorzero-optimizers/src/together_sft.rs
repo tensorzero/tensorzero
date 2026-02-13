@@ -19,7 +19,7 @@ use tensorzero_core::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
-    inference::types::ContentBlock,
+    inference::types::{ContentBlock, usage::ApiType},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     model_table::{ProviderKind, ProviderTypeDefaultCredentials, TogetherKind},
     optimization::{
@@ -262,7 +262,7 @@ impl Optimizer for TogetherSFTConfig {
                 hf_api_token: sft_config.and_then(|c| c.hf_api_token.clone()),
                 hf_output_repo_name: self.hf_output_repo_name.clone(),
             })
-            .send_and_parse_json(PROVIDER_TYPE)
+            .send_and_parse_json(PROVIDER_TYPE, ApiType::Other)
             .await?;
         Ok(TogetherSFTJobHandle {
             job_id: res.id.clone(),
@@ -306,7 +306,7 @@ impl JobHandle for TogetherSFTJobHandle {
                     .convert_parse_error()?,
             )
             .bearer_auth(api_key.expose_secret())
-            .send_and_parse_json(PROVIDER_TYPE)
+            .send_and_parse_json(PROVIDER_TYPE, ApiType::Other)
             .await?;
         match res.status {
             TogetherJobStatus::Pending
@@ -331,6 +331,7 @@ impl JobHandle for TogetherSFTJobHandle {
                     Error::new(ErrorDetails::InferenceServer {
                         message: "Missing model_output_name in Together job response".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Other,
                         raw_request: None,
                         raw_response: None,
                     })
@@ -477,7 +478,7 @@ async fn upload_file(
         .post(api_base.join("files/upload").convert_parse_error()?)
         .bearer_auth(api_key.expose_secret())
         .multipart(form)
-        .send_and_parse_json(PROVIDER_TYPE)
+        .send_and_parse_json(PROVIDER_TYPE, ApiType::Other)
         .await?;
     Ok(res.id)
 }

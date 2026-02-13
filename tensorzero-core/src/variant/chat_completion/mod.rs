@@ -905,7 +905,7 @@ mod tests {
     use crate::inference::types::Template;
     use crate::inference::types::{
         Arguments, ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode,
-        Usage,
+        Usage, usage::ApiType,
     };
     use crate::jsonschema_util::JSONSchema;
     use crate::minijinja_util::tests::{
@@ -1631,6 +1631,7 @@ mod tests {
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 )])
             }
