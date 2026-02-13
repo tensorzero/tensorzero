@@ -103,6 +103,15 @@ pub enum OpenAIAPIType {
     Responses,
 }
 
+impl From<OpenAIAPIType> for ApiType {
+    fn from(api_type: OpenAIAPIType) -> Self {
+        match api_type {
+            OpenAIAPIType::ChatCompletions => ApiType::ChatCompletions,
+            OpenAIAPIType::Responses => ApiType::Responses,
+        }
+    }
+}
+
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -329,6 +338,7 @@ impl WrappedProvider for OpenAIProvider {
                             raw_request: Some(raw_request.clone()),
                             raw_response: Some(raw_response.clone()),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            api_type: self.api_type.into(),
                         })
                     })?;
 
@@ -352,6 +362,7 @@ impl WrappedProvider for OpenAIProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: self.api_type.into(),
                     })
                 })?;
 
@@ -416,12 +427,14 @@ impl InferenceProvider for OpenAIProvider {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
 
+        let api_type: ApiType = self.api_type.into();
         let InjectedResponse {
             response: res,
             raw_request,
             headers,
         } = inject_extra_request_data_and_send_with_headers(
             PROVIDER_TYPE,
+            api_type,
             &request.request.extra_body,
             &request.request.extra_headers,
             model_provider,
@@ -448,6 +461,7 @@ impl InferenceProvider for OpenAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type,
                 })
             })?;
 
@@ -463,6 +477,7 @@ impl InferenceProvider for OpenAIProvider {
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(raw_response.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type,
                             })
                         })?;
                     let latency = Latency::NonStreaming {
@@ -488,6 +503,7 @@ impl InferenceProvider for OpenAIProvider {
                             raw_request: Some(raw_request.clone()),
                             raw_response: Some(raw_response.clone()),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            api_type,
                         })
                     })?;
 
@@ -524,6 +540,7 @@ impl InferenceProvider for OpenAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type,
                 })
             })?;
             Err(handle_openai_error(
@@ -532,6 +549,7 @@ impl InferenceProvider for OpenAIProvider {
                 &raw_response,
                 PROVIDER_TYPE,
                 request_id.as_deref(),
+                api_type,
             ))
         }
     }
@@ -591,6 +609,7 @@ impl InferenceProvider for OpenAIProvider {
                     headers,
                 } = inject_extra_request_data_and_send_eventsource_with_headers(
                     PROVIDER_TYPE,
+                    ApiType::Responses,
                     &request.extra_body,
                     &request.extra_headers,
                     model_provider,
@@ -646,6 +665,7 @@ impl InferenceProvider for OpenAIProvider {
                     headers,
                 } = inject_extra_request_data_and_send_eventsource_with_headers(
                     PROVIDER_TYPE,
+                    ApiType::ChatCompletions,
                     &request.extra_body,
                     &request.extra_headers,
                     model_provider,
@@ -731,6 +751,7 @@ impl InferenceProvider for OpenAIProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: self.api_type.into(),
                     raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                     raw_response: None,
                 })
@@ -744,6 +765,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
         let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
@@ -752,6 +774,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: Some(text.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
         let batch_params = OpenAIBatchParams {
@@ -829,6 +852,7 @@ impl InferenceProvider for OpenAIProvider {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
             })
@@ -842,6 +866,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
         let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
@@ -850,6 +875,7 @@ impl InferenceProvider for OpenAIProvider {
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: Some(text.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
         let status: BatchStatus = response.status.into();
@@ -868,6 +894,7 @@ impl InferenceProvider for OpenAIProvider {
                         ),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: self.api_type.into(),
                     })
                 })?;
                 let response = self
@@ -958,6 +985,7 @@ impl EmbeddingProvider for OpenAIProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::Embeddings,
             &FullExtraBodyConfig::default(), // No overrides supported
             &Default::default(),             // No extra headers for embeddings yet
             model_provider_data,
@@ -976,6 +1004,7 @@ impl EmbeddingProvider for OpenAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Embeddings,
                 })
             })?;
 
@@ -989,6 +1018,7 @@ impl EmbeddingProvider for OpenAIProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?;
             let latency = Latency::NonStreaming {
@@ -1015,10 +1045,12 @@ impl EmbeddingProvider for OpenAIProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?,
                 PROVIDER_TYPE,
                 None,
+                ApiType::Embeddings,
             ))
         }
     }
@@ -1054,7 +1086,7 @@ pub fn stream_openai(
                         }
                         TensorZeroEventError::EventSource(e) => {
                             encountered_error = true;
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, request_id_for_error.as_deref()).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), ApiType::ChatCompletions, *e, request_id_for_error.as_deref()).await);
                         }
                     }
                 }
@@ -1075,6 +1107,7 @@ pub fn stream_openai(
                                     raw_request: Some(raw_request.clone()),
                                     raw_response: Some(message.data.clone()),
                                     provider_type: provider_type.clone(),
+                                    api_type: ApiType::ChatCompletions,
                                 })
                             });
 
@@ -1138,6 +1171,7 @@ impl OpenAIProvider {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: self.api_type.into(),
             })
         })?;
 
@@ -1154,10 +1188,12 @@ impl OpenAIProvider {
                         raw_request: None,
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: self.api_type.into(),
                     })
                 })?,
                 PROVIDER_TYPE,
                 None,
+                self.api_type.into(),
             ));
         }
 
@@ -1169,6 +1205,7 @@ impl OpenAIProvider {
                 raw_response,
                 provider_type: PROVIDER_TYPE.to_string(),
             },
+            self.api_type.into(),
             TryInto::try_into,
         )
         .await
@@ -1258,11 +1295,13 @@ pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
         ErrorDetails::FatalStreamError {
             message,
             provider_type,
+            api_type,
             raw_request,
             raw_response,
         } => Error::new(ErrorDetails::FatalStreamError {
             message: format!("{message} [request_id: {request_id}]"),
             provider_type: provider_type.clone(),
+            api_type: *api_type,
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         }),
@@ -1272,23 +1311,27 @@ pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
             raw_request,
             raw_response,
             provider_type,
+            api_type,
         } => Error::new(ErrorDetails::InferenceClient {
             status_code: *status_code,
             message: format!("{message} [request_id: {request_id}]"),
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
             provider_type: provider_type.clone(),
+            api_type: *api_type,
         }),
         ErrorDetails::InferenceServer {
             message,
             raw_request,
             raw_response,
             provider_type,
+            api_type,
         } => Error::new(ErrorDetails::InferenceServer {
             message: format!("{message} [request_id: {request_id}]"),
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
             provider_type: provider_type.clone(),
+            api_type: *api_type,
         }),
         _ => error,
     }
@@ -1300,6 +1343,7 @@ pub(super) fn handle_openai_error(
     response_body: &str,
     provider_type: &str,
     request_id: Option<&str>,
+    api_type: ApiType,
 ) -> Error {
     let message = match request_id {
         Some(id) => format!("{response_body} [request_id: {id}]"),
@@ -1315,6 +1359,7 @@ pub(super) fn handle_openai_error(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type,
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
@@ -1322,6 +1367,7 @@ pub(super) fn handle_openai_error(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type,
         }
         .into(),
     }
@@ -1387,6 +1433,7 @@ where
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         })
@@ -1398,6 +1445,7 @@ where
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         })
@@ -1408,6 +1456,7 @@ where
             raw_request: None,
             raw_response: Some(text.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
     Ok(response.id)
@@ -1558,6 +1607,8 @@ pub struct OpenAIAssistantRequestMessage<'a> {
     pub content: Option<Vec<OpenAIContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<Cow<'a, str>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1583,9 +1634,12 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::System(_) => false,
             OpenAIRequestMessage::Developer(_) => false,
             OpenAIRequestMessage::User(OpenAIUserRequestMessage { content }) => content.is_empty(),
+            // reasoning_content alone is not enough — most providers require at least
+            // one content element or tool call in assistant messages.
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content,
                 tool_calls,
+                reasoning_content: _,
             }) => content.is_none() && tool_calls.is_none(),
             OpenAIRequestMessage::Tool(_) => false,
         }
@@ -2059,6 +2113,8 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
+    let mut reasoning_content: Option<Cow<'_, str>> = None;
+    let mut thought_blocks: Vec<Cow<'_, Thought>> = Vec::new();
 
     for block in content_block_cows {
         match block {
@@ -2109,10 +2165,44 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
                 assistant_content_blocks.push(prepare_file_message(file, messages_config).await?);
             }
             Cow::Borrowed(ContentBlock::Thought(thought)) => {
-                warn_discarded_thought_block(messages_config.provider_type, thought);
+                // Thought blocks from other providers are already filtered at the model layer.
+                debug_assert!(
+                    thought.provider_type.as_deref().is_none()
+                        || thought.provider_type.as_deref() == Some(messages_config.provider_type)
+                );
+
+                thought_blocks.push(Cow::Borrowed(thought));
+                if let Some(text) = &thought.text {
+                    match &mut reasoning_content {
+                        Some(existing) => {
+                            let combined = format!("{}\n\n{}", existing.as_ref(), text);
+                            reasoning_content = Some(Cow::Owned(combined));
+                        }
+                        None => {
+                            reasoning_content = Some(Cow::Borrowed(text));
+                        }
+                    }
+                }
             }
-            Cow::Owned(ContentBlock::Thought(ref thought)) => {
-                warn_discarded_thought_block(messages_config.provider_type, thought);
+            Cow::Owned(ContentBlock::Thought(thought)) => {
+                // Thought blocks from other providers are already filtered at the model layer.
+                debug_assert!(
+                    thought.provider_type.as_deref().is_none()
+                        || thought.provider_type.as_deref() == Some(messages_config.provider_type)
+                );
+
+                if let Some(text) = &thought.text {
+                    match &mut reasoning_content {
+                        Some(existing) => {
+                            let combined = format!("{}\n\n{}", existing.as_ref(), text);
+                            reasoning_content = Some(Cow::Owned(combined));
+                        }
+                        None => {
+                            reasoning_content = Some(Cow::Owned(text.clone()));
+                        }
+                    }
+                }
+                thought_blocks.push(Cow::Owned(thought));
             }
             Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
@@ -2137,9 +2227,24 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
         _ => Some(assistant_tool_calls),
     };
 
+    // Most providers require at least one content element or tool call in
+    // assistant messages, so reasoning_content alone is not enough.
+    // Drop reasoning_content and warn when there's nothing else to carry it.
+    if content.is_none() && tool_calls.is_none() {
+        for thought in &thought_blocks {
+            warn_discarded_thought_block(messages_config.provider_type, thought);
+        }
+    }
+    let reasoning_content = if content.is_some() || tool_calls.is_some() {
+        reasoning_content
+    } else {
+        None
+    };
+
     let message = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
         content,
         tool_calls,
+        reasoning_content,
     });
 
     Ok(message)
@@ -2677,6 +2782,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -2692,6 +2798,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {
@@ -2825,6 +2932,7 @@ fn openai_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -2878,6 +2986,7 @@ fn openai_to_tensorzero_chunk(
                                 raw_request: None,
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }))?
                             .clone()
                     }
@@ -2973,6 +3082,7 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
                 raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
             })
         })?;
 
@@ -3077,6 +3187,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
                 raw_request: None,
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -3101,6 +3212,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
 
         // Convert message content to ContentBlocks
@@ -3216,6 +3328,7 @@ mod tests {
             "Unauthorized access",
             PROVIDER_TYPE,
             None,
+            ApiType::ChatCompletions,
         );
         let details = unauthorized.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3225,6 +3338,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Unauthorized access");
@@ -3241,6 +3355,7 @@ mod tests {
             "Unauthorized access",
             PROVIDER_TYPE,
             Some("req_abc123"),
+            ApiType::ChatCompletions,
         );
         let details = unauthorized_with_id.get_details();
         if let ErrorDetails::InferenceClient { message, .. } = details {
@@ -3254,6 +3369,7 @@ mod tests {
             "Forbidden access",
             PROVIDER_TYPE,
             None,
+            ApiType::ChatCompletions,
         );
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3263,6 +3379,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Forbidden access");
@@ -3279,6 +3396,7 @@ mod tests {
             "Rate limit exceeded",
             PROVIDER_TYPE,
             None,
+            ApiType::ChatCompletions,
         );
         let details = rate_limit.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -3288,6 +3406,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Rate limit exceeded");
@@ -3304,6 +3423,7 @@ mod tests {
             "Server error",
             PROVIDER_TYPE,
             None,
+            ApiType::ChatCompletions,
         );
         let details = server_error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
@@ -3312,6 +3432,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Server error");
@@ -4166,6 +4287,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         // Test a correct new tool chunk
@@ -4355,6 +4477,7 @@ mod tests {
                     text: "Sure, here is the data.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
@@ -4378,6 +4501,7 @@ mod tests {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
@@ -4404,6 +4528,7 @@ mod tests {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::Developer(
@@ -4449,6 +4574,7 @@ mod tests {
                     text: "Sure, here's one for you.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
@@ -4472,6 +4598,7 @@ mod tests {
                     text: "Here's the summary.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
 
@@ -5625,6 +5752,7 @@ mod tests {
         let error = Error::new(ErrorDetails::FatalStreamError {
             message: "Stream error".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
         });
@@ -5640,6 +5768,7 @@ mod tests {
             status_code: Some(reqwest::StatusCode::BAD_REQUEST),
             message: "Bad request".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
         });
@@ -5654,6 +5783,7 @@ mod tests {
         let error = Error::new(ErrorDetails::InferenceServer {
             message: "Server error".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
         });
@@ -5668,6 +5798,7 @@ mod tests {
         let error = Error::new(ErrorDetails::InferenceServer {
             message: "Server error".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
         });
@@ -5766,5 +5897,360 @@ mod tests {
             Some(50),
             "completion_tokens should be 50"
         );
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_with_reasoning_content() {
+        // Test that Thought blocks with provider_type = "openai" are included as reasoning_content
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Hello, world!".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("I'm thinking about this...".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("openai".to_string()),
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(msg.content.is_some(), "content should be present");
+                assert!(
+                    msg.reasoning_content.is_some(),
+                    "reasoning_content should be present"
+                );
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("I'm thinking about this..."),
+                    "reasoning_content should match thought text"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_with_no_provider_type_thought() {
+        // Test that Thought blocks with provider_type = None are included as reasoning_content
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Response text".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("Generic reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(
+                    msg.reasoning_content.is_some(),
+                    "reasoning_content should be included for None provider_type"
+                );
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("Generic reasoning"),
+                    "reasoning_content should match thought text"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_concatenates_multiple_thoughts() {
+        // Test that multiple Thought blocks are concatenated with "\n\n"
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Response text".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("First thought".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("openai".to_string()),
+                extra_data: None,
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("Second thought".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(msg.content.is_some(), "content should be present");
+                assert!(
+                    msg.reasoning_content.is_some(),
+                    "reasoning_content should be present"
+                );
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("First thought\n\nSecond thought"),
+                    "multiple thoughts should be concatenated with double newline"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_drops_reasoning_content_without_other_content() {
+        // When an assistant message has only thought blocks (no text or tool calls),
+        // reasoning_content should be dropped since most providers require at least
+        // one content element in assistant messages.
+        let content_blocks = vec![ContentBlock::Thought(Thought {
+            text: Some("A thought".to_string()),
+            signature: None,
+            summary: None,
+            provider_type: Some("openai".to_string()),
+            extra_data: None,
+        })];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(msg.content.is_none(), "content should be None");
+                assert!(msg.tool_calls.is_none(), "tool_calls should be None");
+                assert!(
+                    msg.reasoning_content.is_none(),
+                    "reasoning_content should be dropped when there is no other content"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+        assert!(
+            result.no_content(),
+            "message with only thought blocks should be considered empty"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_skips_signature_only_thought() {
+        // Test that a Thought with text = None (signature-only) results in reasoning_content = None
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Hello".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: None,
+                signature: Some("sig123".to_string()),
+                summary: None,
+                provider_type: Some("openai".to_string()),
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("failed to convert assistant message");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(
+                    msg.reasoning_content.is_none(),
+                    "reasoning_content should be None for signature-only thought"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[test]
+    fn test_openai_assistant_message_serialization_reasoning_content() {
+        // Test that serialized JSON includes reasoning_content when present and omits it when None
+        let msg_with_reasoning = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+            content: Some(vec![OpenAIContentBlock::Text {
+                text: "Hello".into(),
+            }]),
+            tool_calls: None,
+            reasoning_content: Some(Cow::Borrowed("I'm thinking...")),
+        });
+
+        let serialized =
+            serde_json::to_string(&msg_with_reasoning).expect("failed to serialize message");
+
+        assert!(
+            serialized.contains("reasoning_content"),
+            "serialized message should contain reasoning_content"
+        );
+        assert!(
+            serialized.contains("I'm thinking..."),
+            "serialized message should contain reasoning text"
+        );
+        assert!(
+            serialized.contains("\"role\":\"assistant\""),
+            "serialized message should have assistant role"
+        );
+
+        let msg_without_reasoning =
+            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+                content: Some(vec![OpenAIContentBlock::Text {
+                    text: "Hello".into(),
+                }]),
+                tool_calls: None,
+                reasoning_content: None,
+            });
+
+        let serialized =
+            serde_json::to_string(&msg_without_reasoning).expect("failed to serialize message");
+
+        assert!(
+            !serialized.contains("reasoning_content"),
+            "serialized message should not contain reasoning_content when None"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_openai_assistant_message_with_non_openai_provider_type_thought() {
+        // Test that Thought blocks with a non-OpenAI provider_type (e.g. "deepseek") are
+        // included as reasoning_content when messages_config.provider_type matches.
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Response from DeepSeek".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("DeepSeek reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("deepseek".to_string()),
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: "deepseek",
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result =
+            tensorzero_to_openai_assistant_message(Cow::Borrowed(&content_blocks), messages_config)
+                .await
+                .expect("should convert assistant message with non-OpenAI provider type");
+
+        match &result {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(msg.content.is_some(), "content should be present");
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("DeepSeek reasoning"),
+                    "reasoning_content should match thought text for non-OpenAI provider"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tensorzero_to_openai_messages_assistant_with_thought() {
+        // Test the full path: RequestMessage with Thought blocks → tensorzero_to_openai_messages
+        // → output includes reasoning_content. This exercises the multi-turn input path.
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![
+                ContentBlock::Text(Text {
+                    text: "Here's the answer.".to_string(),
+                }),
+                ContentBlock::Thought(Thought {
+                    text: Some("Let me reason about this...".to_string()),
+                    signature: None,
+                    summary: None,
+                    provider_type: Some("openai".to_string()),
+                    extra_data: None,
+                }),
+            ],
+        };
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = tensorzero_to_openai_messages(&message, messages_config)
+            .await
+            .expect("failed to convert messages");
+
+        assert_eq!(result.len(), 1, "should produce one assistant message");
+
+        match &result[0] {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(msg.content.is_some(), "content should be present");
+                assert_eq!(
+                    msg.reasoning_content.as_deref(),
+                    Some("Let me reason about this..."),
+                    "reasoning_content should be extracted from Thought block"
+                );
+
+                // Verify the JSON serialization includes reasoning_content
+                let serialized = serde_json::to_string(&result[0]).expect("failed to serialize");
+                assert!(
+                    serialized.contains("\"reasoning_content\""),
+                    "serialized request should include reasoning_content field"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
     }
 }

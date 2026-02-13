@@ -212,6 +212,7 @@ impl InferenceProvider for OpenRouterProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.request.extra_body,
             &request.request.extra_headers,
             model_provider,
@@ -231,6 +232,7 @@ impl InferenceProvider for OpenRouterProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -243,6 +245,7 @@ impl InferenceProvider for OpenRouterProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -271,9 +274,11 @@ impl InferenceProvider for OpenRouterProvider {
                         raw_request: Some(raw_request),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?,
                 PROVIDER_TYPE,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -317,6 +322,7 @@ impl InferenceProvider for OpenRouterProvider {
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -400,6 +406,7 @@ impl EmbeddingProvider for OpenRouterProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::Embeddings,
             &FullExtraBodyConfig::default(), // No overrides supported
             &Default::default(),             // No extra headers for embeddings yet
             model_provider_data,
@@ -418,6 +425,7 @@ impl EmbeddingProvider for OpenRouterProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Embeddings,
                 })
             })?;
 
@@ -431,6 +439,7 @@ impl EmbeddingProvider for OpenRouterProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?;
             let latency = Latency::NonStreaming {
@@ -457,9 +466,11 @@ impl EmbeddingProvider for OpenRouterProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?,
                 PROVIDER_TYPE,
+                ApiType::Embeddings,
             ))
         }
     }
@@ -484,7 +495,7 @@ pub fn stream_openrouter(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, None).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), ApiType::ChatCompletions, *e, None).await);
                         }
                     }
                 }
@@ -502,6 +513,7 @@ pub fn stream_openrouter(
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
+                                api_type: ApiType::ChatCompletions,
                             }));
 
                         let latency = start_time.elapsed();
@@ -571,6 +583,7 @@ pub(super) fn handle_openrouter_error(
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
+    api_type: ApiType,
 ) -> Error {
     match response_code {
         StatusCode::BAD_REQUEST
@@ -582,6 +595,7 @@ pub(super) fn handle_openrouter_error(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type,
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
@@ -589,6 +603,7 @@ pub(super) fn handle_openrouter_error(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type,
         }
         .into(),
     }
@@ -655,6 +670,7 @@ impl<'a> TryFrom<OpenRouterEmbeddingResponseWithMetadata<'a>> for EmbeddingProvi
                 raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
             })
         })?;
 
@@ -1674,6 +1690,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_request: Some(raw_request),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -1689,6 +1706,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         // Process reasoning_details first (thoughts should come before content)
@@ -1982,6 +2000,7 @@ fn openrouter_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -2030,6 +2049,7 @@ fn openrouter_to_tensorzero_chunk(
                                 raw_request: None,
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }))?
                             .clone()
                     }
@@ -2109,6 +2129,7 @@ mod tests {
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         );
         let details = unauthorized.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -2118,6 +2139,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Unauthorized access");
@@ -2133,6 +2155,7 @@ mod tests {
             StatusCode::FORBIDDEN,
             "Forbidden access",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         );
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -2142,6 +2165,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Forbidden access");
@@ -2157,6 +2181,7 @@ mod tests {
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         );
         let details = rate_limit.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -2166,6 +2191,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Rate limit exceeded");
@@ -2181,6 +2207,7 @@ mod tests {
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         );
         let details = server_error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
@@ -2189,6 +2216,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Server error");
@@ -3045,6 +3073,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         // Test a correct new tool chunk

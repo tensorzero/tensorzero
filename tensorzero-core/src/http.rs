@@ -26,6 +26,7 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    inference::types::usage::ApiType,
     model_table::CowNoClone,
 };
 
@@ -597,6 +598,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
     pub async fn send_and_parse_json<T: DeserializeOwned>(
         mut self,
         provider_type: &str,
+        api_type: ApiType,
     ) -> Result<T, Error> {
         self = self.with_otlp_headers();
         let (client, request) = self.builder.build_split();
@@ -605,6 +607,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 status_code: None,
                 message: format!("Error building request: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: provider_type.to_string(),
+                api_type,
                 raw_request: None,
                 raw_response: None,
             })
@@ -626,6 +629,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: provider_type.to_string(),
+                    api_type,
                     raw_request: raw_body.clone(),
                     raw_response: None,
                 })
@@ -646,6 +650,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: provider_type.to_string(),
+                    api_type,
                     raw_request: raw_body.clone(),
                     raw_response: None,
                 })
@@ -656,6 +661,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 status_code: Some(status_code),
                 message: format!("Non-successful status code for url `{url}`",),
                 provider_type: provider_type.to_string(),
+                api_type,
                 raw_request: raw_body.clone(),
                 raw_response: Some(raw_response.clone()),
             }));
@@ -670,6 +676,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 raw_request: raw_body.clone(),
                 raw_response: Some(raw_response.clone()),
                 provider_type: provider_type.to_string(),
+                api_type,
             })
         })?;
         Ok(res)

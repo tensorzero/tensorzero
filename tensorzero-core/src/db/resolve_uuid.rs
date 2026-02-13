@@ -32,6 +32,11 @@ pub enum ResolvedObject {
         dataset_name: String,
         function_name: String,
     },
+    ModelInference {
+        inference_id: Uuid,
+        model_name: String,
+        model_provider_name: String,
+    },
 }
 
 /// Response type for the resolve_uuid endpoint.
