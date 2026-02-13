@@ -11,11 +11,13 @@ use tensorzero_core::{
         select_model_inference_clickhouse, select_model_inferences_clickhouse,
     },
     inference::types::Text,
+    poll_clickhouse_for_result,
 };
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 
 // Variant timeout tests
 
@@ -188,18 +190,15 @@ async fn test_inference_ttft_ms(payload: Value, json: bool) {
         }
     }
 
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-
     let inference = if json {
-        select_json_inference_clickhouse(&clickhouse, inference_id.unwrap())
-            .await
-            .unwrap()
+        poll_clickhouse_for_result!(
+            select_json_inference_clickhouse(&clickhouse, inference_id.unwrap()).await
+        )
     } else {
-        select_chat_inference_clickhouse(&clickhouse, inference_id.unwrap())
-            .await
-            .unwrap()
+        poll_clickhouse_for_result!(
+            select_chat_inference_clickhouse(&clickhouse, inference_id.unwrap()).await
+        )
     };
 
     // The inference level-TTFT should be high, due to the timeout for the first provider
@@ -208,12 +207,14 @@ async fn test_inference_ttft_ms(payload: Value, json: bool) {
         "Unexpected ttft_ms: {inference:?}"
     );
 
-    let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id.unwrap())
-        .await
-        .unwrap();
+    let model_inferences = poll_result_until_some(async || {
+        let rows =
+            select_model_inferences_clickhouse(&clickhouse, inference_id.unwrap()).await?;
+        (rows.len() == 1).then_some(rows)
+    })
+    .await;
 
     // The first provider will time out, so we should only have one inference
-    assert_eq!(model_inferences.len(), 1);
     println!("model_inferences: {model_inferences:?}");
     assert_eq!(model_inferences[0]["model_name"], "first_provider_timeout");
     assert_eq!(model_inferences[0]["model_provider_name"], "second_good");
@@ -410,18 +411,15 @@ async fn best_of_n_other_candidate(payload: Value) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-
-    let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    // Poll until full fan-out (3 rows: 2 candidates + judge)
+    let model_inferences = poll_result_until_some(async || {
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 3).then_some(rows)
+    })
+    .await;
 
     // One of the candidates timed out, leaving us with 2 candidates and the judge
-    assert_eq!(model_inferences.len(), 3);
     assert_eq!(
         model_inferences[0]
             .get("inference_id")
@@ -482,19 +480,16 @@ async fn best_of_n_judge_timeout(payload: Value) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-
-    let model_inferences = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    // Poll until full fan-out (2 rows: both candidates, judge timed out)
+    let model_inferences = poll_result_until_some(async || {
+        let rows = select_model_inferences_clickhouse(&clickhouse, inference_id).await?;
+        (rows.len() == 2).then_some(rows)
+    })
+    .await;
 
     // Both of the candidates should succeed, but the judge should time out,
     // leaving us with 2 successful inferences
-    assert_eq!(model_inferences.len(), 2);
     assert_eq!(
         model_inferences[0]
             .get("inference_id")
@@ -544,14 +539,10 @@ async fn slow_second_chunk_streaming(payload: Value) {
         "slow_second_chunk should take at least 2 seconds, but took {elapsed:?}"
     );
 
-    // Wait 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     let clickhouse = get_clickhouse().await;
-
-    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id.unwrap())
-        .await
-        .unwrap();
+    let model_inference = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id.unwrap()).await
+    );
 
     // The TTFT should be under 400ms (it should really be instant, but we give some buffer in case CI is overloaded)
     // As a result, the 'streaming.ttft_ms' timeout was not hit.
@@ -625,9 +616,15 @@ timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
     );
     // The first two providers should time out, but the third one shouldn't
     // (since the top-level model timeout will trigger first)
-    assert!(logs_contain("Model provider first_timeout timed out"));
-    assert!(logs_contain("Model provider first_timeout timed out"));
-    assert!(!logs_contain("third_timeout"));
+    poll_result_until_some(async || {
+        if logs_contain("Model provider first_timeout timed out") && !logs_contain("third_timeout")
+        {
+            Some(())
+        } else {
+            None
+        }
+    })
+    .await;
 }
 
 #[tokio::test]

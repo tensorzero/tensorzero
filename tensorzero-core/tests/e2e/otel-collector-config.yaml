@@ -14,6 +14,8 @@ receivers:
           key_file: /self-signed-certs/otlp-collector.key
 
 extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
   zpages:
     endpoint: 0.0.0.0:55679
 
@@ -40,7 +42,7 @@ exporters:
     verbosity: detailed
 
 service:
-  extensions: [zpages]
+  extensions: [health_check, zpages]
   pipelines:
     traces:
       receivers: [otlp, otlp/tls]

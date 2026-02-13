@@ -389,6 +389,7 @@ async fn test_gcp_vertex_gemini_tool_choice_auto_with_allowed_tools() {
     use tensorzero_core::db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse,
     };
+    use tensorzero_core::poll_clickhouse_for_result;
 
     let episode_id = Uuid::now_v7();
 
@@ -440,11 +441,12 @@ async fn test_gcp_vertex_gemini_tool_choice_auto_with_allowed_tools() {
     );
 
     // Check ClickHouse ChatInference
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();

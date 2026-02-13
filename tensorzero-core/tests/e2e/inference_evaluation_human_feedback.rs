@@ -4,7 +4,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     select_feedback_clickhouse, select_feedback_tags_clickhouse,
     select_inference_evaluation_human_feedback_clickhouse,
 };
-use tokio::time::{Duration, sleep};
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -82,13 +82,12 @@ async fn test_float_human_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_secs(1)).await;
-
     // Check ClickHouse FloatMetricFeedback
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -178,13 +177,12 @@ async fn test_boolean_human_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_secs(1)).await;
-
     // Check ClickHouse BooleanMetricFeedback
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);

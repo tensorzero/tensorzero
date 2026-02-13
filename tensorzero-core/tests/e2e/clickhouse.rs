@@ -1,18 +1,15 @@
 #![expect(clippy::print_stdout, clippy::print_stderr)]
 
-use std::cell::Cell;
-use std::collections::HashMap;
-use std::future::Future;
-use std::sync::Arc;
-use std::time::Duration;
-
 use async_trait::async_trait;
 use paste::paste;
 use secrecy::ExposeSecret;
 use serde_json::json;
+use std::cell::Cell;
+use std::collections::HashMap;
+use std::future::Future;
+use std::sync::Arc;
 use tensorzero_core::utils::testing::reset_capture_logs;
 use tokio::runtime::Handle;
-use tokio::time::sleep;
 use uuid::Uuid;
 
 use tensorzero_core::config::BatchWritesConfig;
@@ -39,8 +36,10 @@ use tensorzero_core::db::clickhouse::migration_manager::{
 };
 use tensorzero_core::db::clickhouse::test_helpers::{CLICKHOUSE_URL, get_clickhouse};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{Error, ErrorDetails};
+use tensorzero_core::poll_clickhouse_for_result;
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -563,11 +562,9 @@ async fn test_rollback_apply_rollback() {
 
         // This migration drops the entire database during rollback, so we need to re-create it
         if migration.name() == "Migration0000" {
-            sleep(Duration::from_millis(500)).await;
-            clickhouse
-                .create_database_and_migrations_table()
-                .await
-                .unwrap();
+            poll_clickhouse_for_result!(
+                async { clickhouse.create_database_and_migrations_table().await.ok() }.await
+            );
         }
 
         println!("Re-apply migration: {name}");
@@ -817,14 +814,20 @@ async fn test_clickhouse_migration_manager() {
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let response = clickhouse
-        .run_query_synchronous_no_params(
-            "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
-        )
+    let input_token_total: u64 = poll_clickhouse_for_result!(
+        async {
+            clickhouse.flush_pending_writes().await;
+            let response = clickhouse
+                .run_query_synchronous_no_params(
+                    "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
+                )
+                .await
+                .ok()?;
+            let total: u64 = response.response.trim().parse().ok()?;
+            (total == 200000123).then_some(total)
+        }
         .await
-        .unwrap();
-    let input_token_total: u64 = response.response.trim().parse().unwrap();
+    );
     assert_eq!(input_token_total, 200000123);
     let response = clickhouse
         .run_query_synchronous_no_params(

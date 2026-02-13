@@ -76,6 +76,11 @@ services:
     environment:
       - MEMCACHED_MAX_MEMORY=64m # Set the maximum memory usage
       - MEMCACHED_THREADS=4 # Number of threads to use
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "11211"]
+      start_period: 5s
+      start_interval: 1s
+      timeout: 1s
 
   valkey:
     image: valkey/valkey:8
@@ -95,8 +100,14 @@ services:
       - ./tempo.yaml:/etc/tempo.yaml
     ports:
       - "3200:3200" # tempo
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--tries", "1", "http://localhost:3200/ready"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
     depends_on:
-      - memcached
+      memcached:
+        condition: service_healthy
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib
@@ -108,6 +119,12 @@ services:
       - 4317:4317 # OTLP gRPC receiver
       - 4318:4318 # OTLP http receiver
       - 55679:55679 # ZPages
+      - 13133:13133 # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--tries", "1", "http://localhost:13133/"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
 
   postgres:
     build:

@@ -13,6 +13,7 @@ use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
+use tensorzero_core::poll_clickhouse_for_result;
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -189,16 +190,15 @@ async fn test_inference_with_explicit_region() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -236,9 +236,11 @@ async fn test_inference_with_explicit_region() {
     assert!(processing_time_ms > 0);
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_model_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
@@ -403,12 +405,12 @@ async fn test_inference_with_thinking_budget_tokens() {
         .unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     let clickhouse = get_clickhouse().await;
-    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let model_inference = poll_clickhouse_for_result!(select_model_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let raw_request = model_inference
         .get("raw_request")

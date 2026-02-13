@@ -358,10 +358,7 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
 
     let original_embedding = response_json["data"][0]["embedding"].clone();
 
-    // Wait a moment for cache write to complete
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-    // Second request with same cache options - should hit cache
+    // Poll until cache write completes and second request is a cache hit
     let payload_cached = json!({
         "input": input_text,
         "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
@@ -370,14 +367,21 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
             "max_age_s": 60
         }
     });
-    let response_cached = Client::new()
-        .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&payload_cached)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response_cached.status(), StatusCode::OK);
-    let response_cached_json = response_cached.json::<Value>().await.unwrap();
+    let response_cached_json =
+        tensorzero_core::db::test_helpers::poll_result_until_some(async || {
+            let response_cached = Client::new()
+                .post(get_gateway_endpoint("/openai/v1/embeddings"))
+                .json(&payload_cached)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response_cached.status(), StatusCode::OK);
+            let json = response_cached.json::<Value>().await.unwrap();
+            let cached_usage = &json["usage"];
+            // Cache hit has zero tokens
+            (cached_usage["prompt_tokens"].as_u64().unwrap() == 0).then_some(json)
+        })
+        .await;
 
     // Check that cached response has zero tokens (indicating cache hit)
     let cached_usage = response_cached_json["usage"].clone();
@@ -440,8 +444,19 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
         );
     }
 
-    // Wait for cache write to complete
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    // Ensure cache is populated before testing cache=off
+    // Poll with cache=on until we get a cache hit (zero tokens), confirming the write completed
+    tensorzero_core::db::test_helpers::poll_result_until_some(async || {
+        let resp = Client::new()
+            .post(get_gateway_endpoint("/openai/v1/embeddings"))
+            .json(&payload_initial)
+            .send()
+            .await
+            .unwrap();
+        let json = resp.json::<Value>().await.unwrap();
+        (json["usage"]["prompt_tokens"].as_u64().unwrap() == 0).then_some(())
+    })
+    .await;
 
     // Test with cache disabled - should not use cache
     let payload_disabled = json!({

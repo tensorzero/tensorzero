@@ -1,10 +1,80 @@
 #![cfg(any(test, feature = "e2e_tests"))]
 
+use std::ops::AsyncFn;
 use std::time::Duration;
 
 use tonic::async_trait;
 
 use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
+
+/// Polls an async closure until it returns `Some(T)`, with exponential backoff.
+/// Used in e2e tests to wait for ClickHouse eventual consistency after gateway writes.
+///
+/// # Examples
+///
+/// ```ignore
+/// // Polling a select helper (most common pattern):
+/// let result = poll_result_until_some(async || {
+///     select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id).await
+/// }).await;
+///
+/// // Polling a direct query with custom logic:
+/// let result: Value = poll_result_until_some(async || {
+///     clickhouse.flush_pending_writes().await;
+///     let query = format!("SELECT * FROM MyTable WHERE id='{}' FORMAT JSONEachRow", my_id);
+///     let response = clickhouse.run_query_synchronous_no_params(query).await.ok()?;
+///     serde_json::from_str(&response.response).ok()
+/// }).await;
+/// ```
+///
+/// # Panics
+///
+/// Panics if the closure does not return `Some` within 10 seconds.
+pub async fn poll_result_until_some<T>(f: impl AsyncFn() -> Option<T>) -> T {
+    let timeout = Duration::from_secs(10);
+    let start = std::time::Instant::now();
+    let mut delay = Duration::from_millis(100);
+    let max_delay = Duration::from_secs(2);
+    loop {
+        if let Some(result) = f().await {
+            return result;
+        }
+        assert!(
+            start.elapsed() <= timeout,
+            "Timed out polling for expected data after {timeout:?}",
+        );
+        tokio::time::sleep(delay).await;
+        delay = std::cmp::min(delay * 2, max_delay);
+    }
+}
+
+/// Legacy macro form of [`poll_result_until_some`]. Prefer the function form for new code.
+///
+/// Polls until the expression evaluates to `Some(T)`, with exponential backoff.
+/// The expression is re-evaluated on each attempt.
+///
+/// # Panics
+///
+/// Panics if the expression does not return `Some` within 10 seconds.
+#[macro_export]
+macro_rules! poll_clickhouse_for_result {
+    ($query_expr:expr) => {{
+        let __timeout = ::std::time::Duration::from_secs(10);
+        let __start = ::std::time::Instant::now();
+        let mut __delay = ::std::time::Duration::from_millis(100);
+        let __max_delay = ::std::time::Duration::from_secs(2);
+        loop {
+            if let ::std::option::Option::Some(__result) = $query_expr {
+                break __result;
+            }
+            if __start.elapsed() > __timeout {
+                panic!("Timed out polling for expected data after {:?}", __timeout);
+            }
+            ::tokio::time::sleep(__delay).await;
+            __delay = ::std::cmp::min(__delay * 2, __max_delay);
+        }
+    }};
+}
 
 /// Trait for database operations needed in tests.
 /// Provides a database-agnostic way to ensure writes are visible before reads.
@@ -12,9 +82,6 @@ use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnecti
 pub trait TestDatabaseHelpers: Send + Sync {
     /// Ensures all pending writes are visible for subsequent reads.
     async fn flush_pending_writes(&self);
-
-    /// (In ClickHouse only) sleeps for a given duration to ensure writes are visible.
-    async fn sleep_for_writes_to_be_visible(&self);
 }
 
 #[async_trait]
@@ -28,20 +95,12 @@ impl TestDatabaseHelpers for ClickHouseConnectionInfo {
             tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}", e);
         }
     }
-
-    /// For ClickHouse, this sleeps for a given duration to ensure writes are visible.
-    async fn sleep_for_writes_to_be_visible(&self) {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
 }
 
 #[async_trait]
 impl TestDatabaseHelpers for PostgresConnectionInfo {
     /// For Postgres, this is a no-op since writes are immediately visible.
     async fn flush_pending_writes(&self) {}
-
-    /// For Postgres, this is a no-op since writes are immediately visible.
-    async fn sleep_for_writes_to_be_visible(&self) {}
 }
 
 /// Normalize whitespace and newlines in a query for comparison

@@ -6,12 +6,14 @@ use std::{
 };
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
+    db::test_helpers::poll_result_until_some,
     db::{
         clickhouse::test_helpers::{
             select_feedback_clickhouse, select_feedback_tags_clickhouse,
             select_feedback_tags_clickhouse_with_feedback_id,
         },
         postgres::PostgresConnectionInfo,
+        test_helpers::TestDatabaseHelpers,
         valkey::ValkeyConnectionInfo,
     },
     endpoints::feedback::{Params, feedback},
@@ -107,13 +109,12 @@ async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse CommentFeedback
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -206,13 +207,12 @@ async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -273,17 +273,20 @@ async fn test_comment_feedback_validation_disabled() {
     let val = feedback(handle.app_state.clone(), params, None)
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
-    let query = format!(
-        "SELECT * FROM CommentFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let result: Value = serde_json::from_str(&response.response).unwrap();
+    let result: Value = poll_result_until_some(async || {
+        clickhouse.flush_pending_writes().await;
+        let query = format!(
+            "SELECT * FROM CommentFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .ok()?;
+        serde_json::from_str(&response.response).ok()
+    })
+    .await;
     let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
     assert_eq!(val.feedback_id, clickhouse_feedback_id);
 }
@@ -370,13 +373,12 @@ async fn test_demonstration_feedback_with_payload(inference_payload: serde_json:
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse DemonstrationFeedback
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -545,13 +547,12 @@ async fn test_demonstration_feedback_json() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -679,13 +680,12 @@ async fn test_demonstration_feedback_llm_judge() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -780,13 +780,12 @@ async fn test_demonstration_feedback_dynamic_json() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -936,13 +935,12 @@ async fn test_demonstration_feedback_tool() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -1048,13 +1046,12 @@ async fn test_demonstration_feedback_tool() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -1130,13 +1127,12 @@ async fn test_demonstration_feedback_dynamic_tool() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -1242,13 +1238,12 @@ async fn test_demonstration_feedback_dynamic_tool() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -1339,13 +1334,12 @@ async fn test_float_feedback_with_payload(inference_payload: serde_json::Value) 
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse FloatMetricFeedback
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -1505,12 +1499,11 @@ async fn test_float_feedback_with_payload(inference_payload: serde_json::Value) 
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
-    let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -1580,17 +1573,20 @@ async fn test_float_feedback_validation_disabled() {
     let val = feedback(handle.app_state.clone(), params, None)
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
-    let query = format!(
-        "SELECT * FROM FloatMetricFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let result: Value = serde_json::from_str(&response.response).unwrap();
+    let result: Value = poll_result_until_some(async || {
+        clickhouse.flush_pending_writes().await;
+        let query = format!(
+            "SELECT * FROM FloatMetricFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .ok()?;
+        serde_json::from_str(&response.response).ok()
+    })
+    .await;
     let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
     assert_eq!(val.feedback_id, clickhouse_feedback_id);
 }
@@ -1681,13 +1677,12 @@ async fn test_boolean_feedback_with_payload(inference_payload: serde_json::Value
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse BooleanMetricFeedback
     let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -1852,12 +1847,11 @@ async fn test_boolean_feedback_with_payload(inference_payload: serde_json::Value
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
     // Check ClickHouse
-    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
-        .await
-        .unwrap();
+    let result = poll_result_until_some(async || {
+        select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id).await
+    })
+    .await;
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -1922,17 +1916,19 @@ async fn test_boolean_feedback_validation_disabled() {
     let val = feedback(handle.app_state.clone(), params, None)
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
-    let query = format!(
-        "SELECT * FROM BooleanMetricFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let result: Value = serde_json::from_str(&response.response).unwrap();
+    let result: Value = poll_result_until_some(async || {
+        clickhouse.flush_pending_writes().await;
+        let query = format!(
+            "SELECT * FROM BooleanMetricFeedback WHERE target_id='{inference_id}' FORMAT JsonEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .ok()?;
+        serde_json::from_str(&response.response).ok()
+    }).await;
     let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
     assert_eq!(val.feedback_id, clickhouse_feedback_id);
 }
@@ -2035,8 +2031,6 @@ async fn test_feedback_internal_tag_auto_injection() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    sleep(Duration::from_millis(1000)).await;
-
     // Now send feedback with internal=true and a custom tag
     // We should NOT manually set tensorzero::internal - it should be auto-injected
     let payload = Params {
@@ -2061,34 +2055,34 @@ async fn test_feedback_internal_tag_auto_injection() {
     let feedback_id = response_json.get("feedback_id").unwrap().as_str().unwrap();
     let feedback_id = Uuid::parse_str(feedback_id).unwrap();
 
-    sleep(Duration::from_millis(1000)).await;
-
     println!("Feedback sent with ID: {feedback_id}");
 
     // Check ClickHouse to verify both tags are present
     let clickhouse = get_clickhouse().await;
 
     // Verify custom tag is present
-    let _ = select_feedback_tags_clickhouse_with_feedback_id(
-        &clickhouse,
-        &feedback_id.to_string(),
-        "task_success",
-        "custom_tag",
-        "custom_value",
-    )
-    .await
-    .expect("Failed to call select_feedback_tags_clickhouse_with_feedback_id for task_success");
+    let _ = poll_result_until_some(async || {
+        select_feedback_tags_clickhouse_with_feedback_id(
+            &clickhouse,
+            &feedback_id.to_string(),
+            "task_success",
+            "custom_tag",
+            "custom_value",
+        )
+        .await
+    })
+    .await;
 
     // Verify auto-injected tensorzero::internal tag is present
-    let _ = select_feedback_tags_clickhouse_with_feedback_id(
-        &clickhouse,
-        &feedback_id.to_string(),
-        "task_success",
-        "tensorzero::internal",
-        "true",
-    )
-    .await
-    .expect(
-        "Failed to call select_feedback_tags_clickhouse_with_feedback_id for tensorzero::internal",
-    );
+    let _ = poll_result_until_some(async || {
+        select_feedback_tags_clickhouse_with_feedback_id(
+            &clickhouse,
+            &feedback_id.to_string(),
+            "task_success",
+            "tensorzero::internal",
+            "true",
+        )
+        .await
+    })
+    .await;
 }

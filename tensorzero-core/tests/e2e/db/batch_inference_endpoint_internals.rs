@@ -130,7 +130,7 @@ async fn test_get_batch_request_endpoint(
     write_batch_request_row(&database, &batch_request)
         .await
         .unwrap();
-    database.sleep_for_writes_to_be_visible().await;
+    database.flush_pending_writes().await;
 
     // First, let's query by batch ID
     let query = PollPathParams {
@@ -201,7 +201,7 @@ async fn test_get_batch_request_endpoint(
         snapshot_hash: Some(SnapshotHash::new_test()),
     };
     database.write_batch_model_inferences(&[row]).await.unwrap();
-    database.sleep_for_writes_to_be_visible().await;
+    database.flush_pending_writes().await;
 
     // Now, let's query by inference ID
     let query = PollPathParams {
@@ -277,7 +277,7 @@ async fn test_write_poll_batch_inference_endpoint(clickhouse: ClickHouseConnecti
         PollInferenceResponse::Pending,
         "Response should be Pending"
     );
-    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    database.clickhouse.flush_pending_writes().await;
 
     let query = PollPathParams {
         batch_id,
@@ -326,7 +326,7 @@ async fn test_write_poll_batch_inference_endpoint(clickhouse: ClickHouseConnecti
         "Response should be Failed"
     );
 
-    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    database.clickhouse.flush_pending_writes().await;
     let query = PollPathParams {
         batch_id,
         inference_id: None,
@@ -382,7 +382,7 @@ async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionIn
     )
     .await
     .unwrap();
-    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    database.clickhouse.flush_pending_writes().await;
 
     let batch_request_query = format!(
         "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
@@ -406,7 +406,7 @@ async fn test_get_batch_inferences_endpoint(
     let mut expected_batch_rows = write_2_batch_model_inference_rows(&database, batch_id).await;
     let other_batch_id = Uuid::now_v7();
     let other_batch_rows = write_2_batch_model_inference_rows(&database, other_batch_id).await;
-    database.sleep_for_writes_to_be_visible().await;
+    database.flush_pending_writes().await;
 
     let mut batch_inferences = get_batch_inferences(
         &database,
@@ -479,7 +479,7 @@ async fn test_write_read_completed_batch_inference_chat(clickhouse: ClickHouseCo
     config.functions = HashMap::from([(function_name.to_string(), function_config)]);
 
     let batch_model_inference_rows = write_2_batch_model_inference_rows(&database, batch_id).await;
-    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    database.clickhouse.flush_pending_writes().await;
 
     let inference_id1 = batch_model_inference_rows[0].inference_id;
     let output_1 = ProviderBatchInferenceOutput {
@@ -581,7 +581,7 @@ async fn test_write_read_completed_batch_inference_chat(clickhouse: ClickHouseCo
         InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
 
-    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    database.clickhouse.flush_pending_writes().await;
 
     // Writing batch inferences should also write to the Chat and Model inference tables.
     let chat_inference_1 = select_chat_inference_clickhouse(&database.clickhouse, inference_id1)
@@ -757,7 +757,7 @@ async fn test_write_read_completed_batch_inference_json(clickhouse: ClickHouseCo
     config.functions = HashMap::from([(function_name.to_string(), function_config)]);
 
     let batch_model_inference_rows = write_2_batch_model_inference_rows(&database, batch_id).await;
-    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    database.clickhouse.flush_pending_writes().await;
 
     let inference_id1 = batch_model_inference_rows[0].inference_id;
     let output_1 = ProviderBatchInferenceOutput {
@@ -867,7 +867,7 @@ async fn test_write_read_completed_batch_inference_json(clickhouse: ClickHouseCo
         InferenceResponse::Chat(_) => panic!("Unexpected inference response type"),
     }
 
-    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    database.clickhouse.flush_pending_writes().await;
 
     // Writing batch inferences should also write to the Json and Model inference tables.
     let json_inference_1 = select_json_inference_clickhouse(&database.clickhouse, inference_id1)

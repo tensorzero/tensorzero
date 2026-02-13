@@ -216,6 +216,18 @@ async fn start_gateway_impl(
         bound_addr
     };
 
+    // Poll HTTP health endpoint until ready (more robust than relying on log format)
+    let health_url = format!("http://{connect_addr}/health");
+    tensorzero_core::db::test_helpers::poll_result_until_some(async || {
+        reqwest::Client::new()
+            .get(&health_url)
+            .send()
+            .await
+            .ok()
+            .and_then(|r| r.status().is_success().then_some(()))
+    })
+    .await;
+
     ChildData {
         addr: connect_addr,
         output,
@@ -237,7 +249,7 @@ impl ChildData {
     #[allow(dead_code, clippy::allow_attributes)]
     pub async fn call_health_endpoint(&self) -> Response {
         reqwest::Client::new()
-            .get(format!("http://{}/health", self.addr))
+            .get(format!("http://{addr}/health", addr = self.addr))
             .send()
             .await
             .unwrap()

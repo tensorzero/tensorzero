@@ -2,8 +2,9 @@
 /// Tests the DELETE /v1/datasets/{dataset_name}/datapoints endpoint.
 use reqwest::{Client, StatusCode};
 use serde_json::json;
-use std::time::Duration;
 use tensorzero::DeleteDatapointsRequest;
+
+use tensorzero_core::poll_clickhouse_for_result;
 use uuid::Uuid;
 
 use tensorzero_core::db::datasets::{DatasetQueries, GetDatapointsParams};
@@ -62,23 +63,27 @@ async fn test_delete_datapoints_single_chat() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Verify the datapoint exists
-    let datapoints = database
-        .get_datapoints(&GetDatapointsParams {
-            dataset_name: Some(dataset_name.clone()),
-            function_name: None,
-            ids: Some(vec![datapoint_id]),
-            limit: 10,
-            offset: 0,
-            allow_stale: false,
-            filter: None,
-            order_by: None,
-            search_query_experimental: None,
-        })
+    let datapoints = poll_clickhouse_for_result!(
+        async {
+            let dps = database
+                .get_datapoints(&GetDatapointsParams {
+                    dataset_name: Some(dataset_name.clone()),
+                    function_name: None,
+                    ids: Some(vec![datapoint_id]),
+                    limit: 10,
+                    offset: 0,
+                    allow_stale: false,
+                    filter: None,
+                    order_by: None,
+                    search_query_experimental: None,
+                })
+                .await
+                .ok()?;
+            (!dps.is_empty()).then_some(dps)
+        }
         .await
-        .unwrap();
+    );
     assert_eq!(datapoints.len(), 1);
 
     // Delete the datapoint via the endpoint
@@ -97,23 +102,27 @@ async fn test_delete_datapoints_single_chat() {
     let delete_response: DeleteDatapointsResponse = resp.json().await.unwrap();
     assert_eq!(delete_response.num_deleted_datapoints, 1);
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Verify the datapoint is now stale (doesn't show up in normal queries)
-    let datapoints = database
-        .get_datapoints(&GetDatapointsParams {
-            dataset_name: Some(dataset_name.clone()),
-            function_name: None,
-            ids: Some(vec![datapoint_id]),
-            limit: 10,
-            offset: 0,
-            allow_stale: false,
-            filter: None,
-            order_by: None,
-            search_query_experimental: None,
-        })
+    let datapoints = poll_clickhouse_for_result!(
+        async {
+            let dps = database
+                .get_datapoints(&GetDatapointsParams {
+                    dataset_name: Some(dataset_name.clone()),
+                    function_name: None,
+                    ids: Some(vec![datapoint_id]),
+                    limit: 10,
+                    offset: 0,
+                    allow_stale: false,
+                    filter: None,
+                    order_by: None,
+                    search_query_experimental: None,
+                })
+                .await
+                .ok()?;
+            (dps.is_empty()).then_some(dps)
+        }
         .await
-        .unwrap();
+    );
     assert_eq!(datapoints.len(), 0, "Deleted datapoint should not appear");
 
     // Verify we can still fetch it with allow_stale=true
@@ -248,41 +257,50 @@ async fn test_delete_datapoints_multiple_mixed() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Delete all three datapoints
-    let resp = http_client
-        .delete(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints"
-        )))
-        .json(&DeleteDatapointsRequest {
-            ids: Vec::from([chat_id1, chat_id2, json_id]),
-        })
-        .send()
+    // Delete all three datapoints (poll until data is visible)
+    let delete_response: DeleteDatapointsResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .delete(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints"
+                )))
+                .json(&DeleteDatapointsRequest {
+                    ids: Vec::from([chat_id1, chat_id2, json_id]),
+                })
+                .send()
+                .await
+                .ok()?;
+            if resp.status() != StatusCode::OK {
+                return None;
+            }
+            let dr: DeleteDatapointsResponse = resp.json().await.ok()?;
+            (dr.num_deleted_datapoints == 3).then_some(dr)
+        }
         .await
-        .unwrap();
-
-    assert_eq!(resp.status(), StatusCode::OK);
-    let delete_response: DeleteDatapointsResponse = resp.json().await.unwrap();
+    );
     assert_eq!(delete_response.num_deleted_datapoints, 3);
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
     // Verify all are now stale
-    let datapoints = database
-        .get_datapoints(&GetDatapointsParams {
-            dataset_name: Some(dataset_name.clone()),
-            function_name: None,
-            ids: Some(vec![chat_id1, chat_id2, json_id]),
-            limit: 10,
-            offset: 0,
-            allow_stale: false,
-            filter: None,
-            order_by: None,
-            search_query_experimental: None,
-        })
+    let datapoints = poll_clickhouse_for_result!(
+        async {
+            let dps = database
+                .get_datapoints(&GetDatapointsParams {
+                    dataset_name: Some(dataset_name.clone()),
+                    function_name: None,
+                    ids: Some(vec![chat_id1, chat_id2, json_id]),
+                    limit: 10,
+                    offset: 0,
+                    allow_stale: false,
+                    filter: None,
+                    order_by: None,
+                    search_query_experimental: None,
+                })
+                .await
+                .ok()?;
+            (dps.is_empty()).then_some(dps)
+        }
         .await
-        .unwrap();
+    );
     assert_eq!(
         datapoints.len(),
         0,
@@ -352,41 +370,51 @@ async fn test_delete_datapoints_non_existent_id() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Try to delete with a mix of existing and non-existent IDs
+    // Try to delete with a mix of existing and non-existent IDs (poll until data is visible)
     let non_existent_id = Uuid::now_v7();
-    let resp = http_client
-        .delete(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints"
-        )))
-        .json(&DeleteDatapointsRequest {
-            ids: Vec::from([existing_id, non_existent_id]),
-        })
-        .send()
+    let delete_response: DeleteDatapointsResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .delete(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints"
+                )))
+                .json(&DeleteDatapointsRequest {
+                    ids: Vec::from([existing_id, non_existent_id]),
+                })
+                .send()
+                .await
+                .ok()?;
+            if resp.status() != StatusCode::OK {
+                return None;
+            }
+            let dr: DeleteDatapointsResponse = resp.json().await.ok()?;
+            (dr.num_deleted_datapoints == 1).then_some(dr)
+        }
         .await
-        .unwrap();
-
-    // This should return Success - we ignore unknown IDs.
-    assert_eq!(resp.status(), StatusCode::OK);
-    let delete_response: DeleteDatapointsResponse = resp.json().await.unwrap();
+    );
     assert_eq!(delete_response.num_deleted_datapoints, 1);
 
     // Verify the existing datapoint was deleted.
-    let datapoints = database
-        .get_datapoints(&GetDatapointsParams {
-            dataset_name: Some(dataset_name.clone()),
-            function_name: None,
-            ids: Some(vec![existing_id]),
-            limit: 10,
-            offset: 0,
-            allow_stale: false,
-            filter: None,
-            order_by: None,
-            search_query_experimental: None,
-        })
+    let datapoints = poll_clickhouse_for_result!(
+        async {
+            let dps = database
+                .get_datapoints(&GetDatapointsParams {
+                    dataset_name: Some(dataset_name.clone()),
+                    function_name: None,
+                    ids: Some(vec![existing_id]),
+                    limit: 10,
+                    offset: 0,
+                    allow_stale: false,
+                    filter: None,
+                    order_by: None,
+                    search_query_experimental: None,
+                })
+                .await
+                .ok()?;
+            (dps.is_empty()).then_some(dps)
+        }
         .await
-        .unwrap();
+    );
     assert_eq!(datapoints.len(), 0, "Existing datapoint should be deleted.");
 }
 
@@ -479,44 +507,50 @@ async fn test_delete_datapoints_already_stale() {
         .await
         .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Delete it once
-    let resp = http_client
-        .delete(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints"
-        )))
-        .json(&DeleteDatapointsRequest {
-            ids: Vec::from([datapoint_id]),
-        })
-        .send()
+    // Delete it once (poll until data is visible)
+    let delete_response: DeleteDatapointsResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .delete(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints"
+                )))
+                .json(&DeleteDatapointsRequest {
+                    ids: Vec::from([datapoint_id]),
+                })
+                .send()
+                .await
+                .ok()?;
+            if resp.status() != StatusCode::OK {
+                return None;
+            }
+            let dr: DeleteDatapointsResponse = resp.json().await.ok()?;
+            (dr.num_deleted_datapoints == 1).then_some(dr)
+        }
         .await
-        .unwrap();
-
-    assert_eq!(resp.status(), StatusCode::OK);
-    let delete_response: DeleteDatapointsResponse = resp.json().await.unwrap();
+    );
     assert_eq!(delete_response.num_deleted_datapoints, 1);
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Try to delete it again
-    let resp = http_client
-        .delete(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints"
-        )))
-        .json(&DeleteDatapointsRequest {
-            ids: Vec::from([datapoint_id]),
-        })
-        .send()
+    // Try to delete it again (poll until staling is visible)
+    let delete_response: DeleteDatapointsResponse = poll_clickhouse_for_result!(
+        async {
+            let resp = http_client
+                .delete(get_gateway_endpoint(&format!(
+                    "/v1/datasets/{dataset_name}/datapoints"
+                )))
+                .json(&DeleteDatapointsRequest {
+                    ids: Vec::from([datapoint_id]),
+                })
+                .send()
+                .await
+                .ok()?;
+            if resp.status() != StatusCode::OK {
+                return None;
+            }
+            let dr: DeleteDatapointsResponse = resp.json().await.ok()?;
+            (dr.num_deleted_datapoints == 0).then_some(dr)
+        }
         .await
-        .unwrap();
-
-    // Even if we delete nothing, this still returns success.
-    assert_eq!(
-        resp.status(),
-        StatusCode::OK,
-        "Should return success the second time we try to delete the same datapoint."
     );
-    let delete_response: DeleteDatapointsResponse = resp.json().await.unwrap();
+    // Even if we delete nothing, this still returns success.
     assert_eq!(delete_response.num_deleted_datapoints, 0);
 }

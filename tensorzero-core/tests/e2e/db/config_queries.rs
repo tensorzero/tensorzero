@@ -20,9 +20,10 @@ use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::clickhouse::test_helpers::{
     CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
 };
-use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::db::test_helpers::{TestDatabaseHelpers, poll_result_until_some};
 use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::inference::types::Text;
+use tensorzero_core::poll_clickhouse_for_result;
 use uuid::Uuid;
 
 // ===== DUAL-BACKEND TESTS (ClickHouse + Postgres) =====
@@ -48,7 +49,7 @@ optimize = "max"
     let hash = snapshot.hash.clone();
 
     conn.write_config_snapshot(&snapshot).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let retrieved_snapshot = conn.get_config_snapshot(hash).await.unwrap();
 
@@ -112,7 +113,7 @@ optimize = "max"
     let hash = snapshot.hash.clone();
 
     conn.write_config_snapshot(&snapshot).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let retrieved_snapshot = conn.get_config_snapshot(hash).await.unwrap();
 
@@ -163,7 +164,7 @@ async fn test_config_snapshot_includes_built_in_functions(
 
     // Write snapshot to the database and get the config with its hash
     let config = Box::pin(loaded.into_config(&conn)).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Read back the snapshot via ConfigQueries
     let retrieved = conn.get_config_snapshot(config.hash.clone()).await.unwrap();
@@ -210,7 +211,7 @@ optimize = "max"
     let hash = snapshot1.hash.clone();
 
     conn.write_config_snapshot(&snapshot1).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Verify initial tags
     let retrieved1 = conn.get_config_snapshot(hash.clone()).await.unwrap();
@@ -236,7 +237,7 @@ optimize = "max"
     assert_eq!(snapshot2.hash, hash, "Same config should produce same hash");
 
     conn.write_config_snapshot(&snapshot2).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Verify tags were merged
     let retrieved2 = conn.get_config_snapshot(hash).await.unwrap();
@@ -286,16 +287,20 @@ optimize = "max"
     let hash_number = hash.to_string();
 
     clickhouse.write_config_snapshot(&snapshot).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Query the ConfigSnapshot table to verify the data was written
     let query = format!(
         "SELECT config, tensorzero_version, hash, created_at, last_used FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{hash_number}') FORMAT JSONEachRow"
     );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query.clone())
-        .await
-        .unwrap();
+    let response = poll_result_until_some(async || {
+        clickhouse.flush_pending_writes().await;
+        let response = clickhouse
+            .run_query_synchronous_no_params(query.clone())
+            .await
+            .ok()?;
+        (!response.response.is_empty()).then_some(response)
+    })
+    .await;
 
     let snapshot_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
 
@@ -325,12 +330,16 @@ optimize = "max"
         ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
     clickhouse.write_config_snapshot(&snapshot2).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let response2 = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
+    let response2 = poll_result_until_some(async || {
+        clickhouse.flush_pending_writes().await;
+        let response = clickhouse
+            .run_query_synchronous_no_params(query.clone())
+            .await
+            .ok()?;
+        (!response.response.is_empty()).then_some(response)
+    })
+    .await;
 
     let snapshot_row2: serde_json::Value = serde_json::from_str(&response2.response).unwrap();
 
@@ -522,12 +531,11 @@ model = "test_model_{random_id}"
     let inference_id_1 = response1.inference_id();
 
     drop(client);
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let clickhouse = get_clickhouse().await;
-    let inference_row = select_chat_inference_clickhouse(&clickhouse, inference_id_1)
-        .await
-        .unwrap();
+    let inference_row = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id_1).await
+    );
     let snapshot_hash_str = inference_row
         .get("snapshot_hash")
         .unwrap()
@@ -572,11 +580,9 @@ model = "test_model_{random_id}"
     };
     let inference_id_2 = response2.inference_id();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    let inference_row2 = select_chat_inference_clickhouse(&clickhouse, inference_id_2)
-        .await
-        .unwrap();
+    let inference_row2 = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id_2).await
+    );
     let stored_hash2 = inference_row2
         .get("snapshot_hash")
         .unwrap()
@@ -656,12 +662,11 @@ model = "test_model_{random_id}"
     let inference_id_1 = response1.inference_id();
 
     drop(client);
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let clickhouse = get_clickhouse().await;
-    let inference_row = select_chat_inference_clickhouse(&clickhouse, inference_id_1)
-        .await
-        .unwrap();
+    let inference_row = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id_1).await
+    );
     let snapshot_hash_str = inference_row
         .get("snapshot_hash")
         .unwrap()
@@ -706,11 +711,9 @@ model = "test_model_{random_id}"
     };
     let inference_id_2 = response2.inference_id();
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    let inference_row2 = select_chat_inference_clickhouse(&clickhouse, inference_id_2)
-        .await
-        .unwrap();
+    let inference_row2 = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id_2).await
+    );
     let stored_hash2 = inference_row2
         .get("snapshot_hash")
         .unwrap()
@@ -779,12 +782,11 @@ model = "test_model_{random_id}"
     let inference_id = response.inference_id();
 
     drop(client);
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let clickhouse = get_clickhouse().await;
-    let inference_row = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let inference_row = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
     let snapshot_hash_str = inference_row
         .get("snapshot_hash")
         .unwrap()

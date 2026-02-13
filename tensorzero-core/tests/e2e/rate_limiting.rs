@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::Duration;
 
 use futures::StreamExt;
+use tensorzero_core::db::test_helpers::poll_result_until_some;
 use tensorzero::{
     ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent, Role,
     TensorZeroError,
@@ -1141,12 +1141,15 @@ async fn test_rate_limiting_cancelled_stream_return_tokens_postgres() {
     // Drop the stream - we should still compute the final usage and return the tickets,
     // even though the client is no longer interested in the stream
     drop(stream);
-    tokio::time::sleep(Duration::from_secs(5)).await;
 
-    assert!(
-        logs_contain("return_multiple_resource_tickets"),
-        "Did not find sqlx call to return_multiple_resource_tickets"
-    );
+    poll_result_until_some(async || {
+        if logs_contain("return_multiple_resource_tickets") {
+            Some(())
+        } else {
+            None
+        }
+    })
+    .await;
 }
 
 make_rate_limit_tests!(test_rate_limiting_priority_override_with_each);

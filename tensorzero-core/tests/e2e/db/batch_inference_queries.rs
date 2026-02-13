@@ -79,7 +79,7 @@ async fn test_get_batch_request_by_batch_id(
 
     let row = create_batch_request_row(batch_id, function_name, variant_name);
     conn.write_batch_request(&row).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let result = conn.get_batch_request(batch_id, None).await.unwrap();
 
@@ -129,7 +129,7 @@ async fn test_get_batch_request_by_batch_id_and_inference_id(
     conn.write_batch_model_inferences(&[inference_row])
         .await
         .unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let result = conn
         .get_batch_request(batch_id, Some(inference_id))
@@ -175,7 +175,7 @@ async fn test_get_batch_request_wrong_inference_id(
 
     let row = create_batch_request_row(batch_id, function_name, variant_name);
     conn.write_batch_request(&row).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Query with a non-existent inference_id should return None
     let result = conn
@@ -219,7 +219,7 @@ async fn test_get_batch_model_inferences(conn: impl BatchInferenceQueries + Test
     conn.write_batch_model_inferences(&[inference_row_1, inference_row_2])
         .await
         .unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     let result = conn
         .get_batch_model_inferences(batch_id, &[inference_id_1, inference_id_2])
@@ -272,7 +272,7 @@ async fn test_get_batch_model_inferences_partial(
     conn.write_batch_model_inferences(&[inference_row_1, inference_row_2])
         .await
         .unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Query with one valid and one invalid inference_id
     let result = conn
@@ -328,7 +328,7 @@ async fn test_get_batch_model_inferences_wrong_batch(
     conn.write_batch_model_inferences(&[inference_row])
         .await
         .unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
+    conn.flush_pending_writes().await;
 
     // Query with wrong batch_id should return empty
     let result = conn

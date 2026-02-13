@@ -8,6 +8,7 @@ use crate::common::get_gateway_endpoint;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
+use tensorzero_core::poll_clickhouse_for_result;
 
 /// Test that OpenAI Responses API accepts and uses a custom tool with text format
 #[tokio::test(flavor = "multi_thread")]
@@ -79,14 +80,11 @@ async fn test_responses_api_custom_tool_text_format() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id).await
+    );
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -206,15 +204,11 @@ async fn test_openai_custom_tool_text_format() {
     assert!(!tool_call_id.is_empty());
     assert_eq!(name, "code_generator");
 
-    // Wait for ClickHouse to write the data
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Verify the tool was stored in ClickHouse ModelInference
     let clickhouse = get_clickhouse().await;
-    let model_inference =
-        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
-            .await
-            .unwrap();
+    let model_inference = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap()).await
+    );
 
     let raw_request = model_inference
         .get("raw_request")
@@ -235,10 +229,9 @@ async fn test_openai_custom_tool_text_format() {
     );
 
     // Query ChatInference table to verify dynamic_tools
-    let chat_inference =
-        select_chat_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
-            .await
-            .unwrap();
+    let chat_inference = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id.parse().unwrap()).await
+    );
 
     // Check that dynamic_tools contains the custom tool
     let dynamic_tools = chat_inference
@@ -368,15 +361,11 @@ NUMBER: /\d+(\.\d+)?/
     assert!(!tool_call_id.is_empty());
     assert_eq!(name, "calculator");
 
-    // Wait for ClickHouse to write the data
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Verify the tool was stored in ClickHouse ModelInference
     let clickhouse = get_clickhouse().await;
-    let model_inference =
-        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
-            .await
-            .unwrap();
+    let model_inference = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap()).await
+    );
 
     let raw_request = model_inference
         .get("raw_request")
@@ -399,10 +388,9 @@ NUMBER: /\d+(\.\d+)?/
     );
 
     // Query ChatInference table to verify dynamic_tools
-    let chat_inference =
-        select_chat_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
-            .await
-            .unwrap();
+    let chat_inference = poll_clickhouse_for_result!(
+        select_chat_inference_clickhouse(&clickhouse, inference_id.parse().unwrap()).await
+    );
 
     // Check that dynamic_tools contains the custom tool
     let dynamic_tools = chat_inference
@@ -525,15 +513,11 @@ async fn test_openai_custom_tool_grammar_regex() {
     assert!(!tool_call_id.is_empty());
     assert_eq!(name, "phone_formatter");
 
-    // Wait for ClickHouse to write the data
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Verify the tool was stored in ClickHouse ModelInference
     let clickhouse = get_clickhouse().await;
-    let model_inference =
-        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
-            .await
-            .unwrap();
+    let model_inference = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap()).await
+    );
 
     let raw_request = model_inference
         .get("raw_request")
@@ -670,15 +654,11 @@ async fn test_openai_mixed_function_and_custom_tools() {
         }
     }
 
-    // Wait for ClickHouse to write the data
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Verify both tool types were stored in ClickHouse ModelInference
     let clickhouse = get_clickhouse().await;
-    let model_inference =
-        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
-            .await
-            .unwrap();
+    let model_inference = poll_clickhouse_for_result!(
+        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap()).await
+    );
 
     let raw_request = model_inference
         .get("raw_request")
@@ -853,14 +833,13 @@ NUMBER: /\d+(\.\d+)?/
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -993,14 +972,13 @@ async fn test_responses_api_custom_tool_grammar_regex() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -1120,14 +1098,13 @@ async fn test_responses_api_mixed_function_and_custom_tools() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = poll_clickhouse_for_result!(select_chat_inference_clickhouse(
+        &clickhouse,
+        inference_id
+    )
+    .await);
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();

@@ -4,8 +4,8 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::time::Duration;
 use tensorzero::GetDatapointsRequest;
+use tensorzero_core::poll_clickhouse_for_result;
 use uuid::Uuid;
 
 use tensorzero_core::db::datasets::DatasetQueries;
@@ -76,25 +76,25 @@ mod get_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Get the datapoint via the endpoint
-        let resp = http_client
-            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-            .json(&GetDatapointsRequest {
-                ids: Vec::from([datapoint_id]),
-            })
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+                    .json(&GetDatapointsRequest {
+                        ids: Vec::from([datapoint_id]),
+                    })
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (!resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(
-            resp.status().is_success(),
-            "Request failed: {:?}",
-            resp.status()
         );
-
-        let resp_json: Value = resp.json().await.unwrap();
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
 
@@ -161,27 +161,27 @@ mod get_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Get the datapoint via the endpoint
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/get_datapoints"
-            )))
-            .json(&GetDatapointsRequest {
-                ids: Vec::from([datapoint_id]),
-            })
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/get_datapoints"
+                    )))
+                    .json(&GetDatapointsRequest {
+                        ids: Vec::from([datapoint_id]),
+                    })
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (!resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(
-            resp.status().is_success(),
-            "Request failed: {:?}",
-            resp.status()
         );
-
-        let resp_json: Value = resp.json().await.unwrap();
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
 
@@ -251,23 +251,27 @@ mod get_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Get the datapoint via the endpoint
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/get_datapoints"
-            )))
-            .json(&GetDatapointsRequest {
-                ids: Vec::from([datapoint_id]),
-            })
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/get_datapoints"
+                    )))
+                    .json(&GetDatapointsRequest {
+                        ids: Vec::from([datapoint_id]),
+                    })
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (!resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
 
@@ -387,23 +391,27 @@ mod get_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Get all three datapoints
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/get_datapoints"
-            )))
-            .json(&GetDatapointsRequest {
-                ids: Vec::from([chat_id1, chat_id2, json_id]),
-            })
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/get_datapoints"
+                    )))
+                    .json(&GetDatapointsRequest {
+                        ids: Vec::from([chat_id1, chat_id2, json_id]),
+                    })
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (resp_json["datapoints"].as_array()?.len() == 3).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 3);
 
@@ -467,26 +475,30 @@ mod get_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Query with both existing and non-existent IDs
         let non_existent_id1 = Uuid::now_v7();
         let non_existent_id2 = Uuid::now_v7();
 
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/get_datapoints"
-            )))
-            .json(&GetDatapointsRequest {
-                ids: Vec::from([existing_id, non_existent_id1, non_existent_id2]),
-            })
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/get_datapoints"
+                    )))
+                    .json(&GetDatapointsRequest {
+                        ids: Vec::from([existing_id, non_existent_id1, non_existent_id2]),
+                    })
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (!resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
 
         // Should only return the existing datapoint
@@ -538,31 +550,39 @@ mod get_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Mark it as stale
         database
             .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // get_datapoints should return stale datapoints (unlike list_datapoints)
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/get_datapoints"
-            )))
-            .json(&GetDatapointsRequest {
-                ids: Vec::from([datapoint_id]),
-            })
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/get_datapoints"
+                    )))
+                    .json(&GetDatapointsRequest {
+                        ids: Vec::from([datapoint_id]),
+                    })
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                let datapoints = resp_json["datapoints"].as_array()?;
+                // Wait until the datapoint shows up with a staled_at field
+                if datapoints.len() == 1 && datapoints[0]["staled_at"].is_string() {
+                    Some(resp_json)
+                } else {
+                    None
+                }
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
         assert_eq!(datapoints[0]["id"], datapoint_id.to_string());
@@ -613,8 +633,6 @@ mod get_datapoints_tests {
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
-
-        tokio::time::sleep(Duration::from_millis(500)).await;
 
         let resp = http_client
             .post(get_gateway_endpoint(&format!(
@@ -676,8 +694,6 @@ mod get_datapoints_tests {
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
-
-        tokio::time::sleep(Duration::from_millis(500)).await;
 
         let resp = http_client
             .post(get_gateway_endpoint(&format!(
@@ -741,20 +757,26 @@ mod list_datapoints_tests {
         }
 
         database.insert_datapoints(&inserts).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Test default pagination (limit: 20, offset: 0)
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints",
-            )))
-            .json(&json!({}))
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints",
+                    )))
+                    .json(&json!({}))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (resp_json["datapoints"].as_array()?.len() == 5).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 5);
 
@@ -889,20 +911,25 @@ mod list_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // List without function filter - should get both
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints"
-            )))
-            .json(&json!({}))
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints"
+                    )))
+                    .json(&json!({}))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (resp_json["datapoints"].as_array()?.len() == 2).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 2);
 
@@ -1009,27 +1036,32 @@ mod list_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Filter by env = production
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints"
-            )))
-            .json(&json!({
-                "filter": {
-                    "type": "tag",
-                    "key": "env",
-                    "comparison_operator": "=",
-                    "value": "production"
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints"
+                    )))
+                    .json(&json!({
+                        "filter": {
+                            "type": "tag",
+                            "key": "env",
+                            "comparison_operator": "=",
+                            "value": "production"
+                        }
+                    }))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
                 }
-            }))
-            .send()
+                let resp_json: Value = resp.json().await.ok()?;
+                (!resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
         assert_eq!(datapoints[0]["id"], datapoint1_id.to_string());
@@ -1098,7 +1130,37 @@ mod list_datapoints_tests {
         });
 
         database.insert_datapoints(&[datapoint]).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Filter with time after (should return the datapoint)
+        // Use a time well in the past
+        let time_after = chrono::Utc::now() - chrono::Duration::hours(24);
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints"
+                    )))
+                    .json(&json!({
+                        "filter": {
+                            "type": "time",
+                            "comparison_operator": ">",
+                            "time": time_after.to_rfc3339()
+                        }
+                    }))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (!resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
+            .await
+        );
+        let datapoints = resp_json["datapoints"].as_array().unwrap();
+        assert_eq!(datapoints.len(), 1);
+        assert_eq!(datapoints[0]["id"], datapoint_id.to_string());
 
         // Filter with time before (should not return the datapoint)
         // Use a time in the past
@@ -1122,30 +1184,6 @@ mod list_datapoints_tests {
         let resp_json: Value = resp.json().await.unwrap();
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 0);
-
-        // Filter with time after (should return the datapoint)
-        // Use a time well in the past
-        let time_after = chrono::Utc::now() - chrono::Duration::hours(24);
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints"
-            )))
-            .json(&json!({
-                "filter": {
-                    "type": "time",
-                    "comparison_operator": ">",
-                    "time": time_after.to_rfc3339()
-                }
-            }))
-            .send()
-            .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
-        let datapoints = resp_json["datapoints"].as_array().unwrap();
-        assert_eq!(datapoints.len(), 1);
-        assert_eq!(datapoints[0]["id"], datapoint_id.to_string());
     }
 
     #[tokio::test]
@@ -1268,38 +1306,43 @@ mod list_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // AND filter: env = production AND region = us-east
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints"
-            )))
-            .json(&json!({
-                "filter": {
-                    "type": "and",
-                    "children": [
-                        {
-                            "type": "tag",
-                            "key": "env",
-                            "comparison_operator": "=",
-                            "value": "production"
-                        },
-                        {
-                            "type": "tag",
-                            "key": "region",
-                            "comparison_operator": "=",
-                            "value": "us-east"
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints"
+                    )))
+                    .json(&json!({
+                        "filter": {
+                            "type": "and",
+                            "children": [
+                                {
+                                    "type": "tag",
+                                    "key": "env",
+                                    "comparison_operator": "=",
+                                    "value": "production"
+                                },
+                                {
+                                    "type": "tag",
+                                    "key": "region",
+                                    "comparison_operator": "=",
+                                    "value": "us-east"
+                                }
+                            ]
                         }
-                    ]
+                    }))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
                 }
-            }))
-            .send()
+                let resp_json: Value = resp.json().await.ok()?;
+                (!resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
         assert_eq!(datapoints[0]["id"], datapoint1_id.to_string());
@@ -1400,20 +1443,26 @@ mod list_datapoints_tests {
         });
 
         database.insert_datapoints(&[datapoint]).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Verify it's returned before staling
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints"
-            )))
-            .json(&json!({}))
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints"
+                    )))
+                    .json(&json!({}))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (!resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
         assert_eq!(datapoints[0]["id"], datapoint_id.to_string());
@@ -1424,20 +1473,25 @@ mod list_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // Verify list_datapoints no longer returns it
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints"
-            )))
-            .json(&json!({}))
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints"
+                    )))
+                    .json(&json!({}))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (resp_json["datapoints"].as_array()?.is_empty()).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 0);
     }
@@ -1517,20 +1571,25 @@ mod list_datapoints_tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
         // List all datapoints
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints"
-            )))
-            .json(&json!({}))
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints"
+                    )))
+                    .json(&json!({}))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (resp_json["datapoints"].as_array()?.len() == 2).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 2);
 
@@ -1591,22 +1650,28 @@ mod list_datapoints_tests {
         }
 
         database.insert_datapoints(&inserts).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Request with limit larger than available datapoints
-        let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/{dataset_name}/list_datapoints"
-            )))
-            .json(&json!({
-                "limit": 100
-            }))
-            .send()
+        let resp_json: Value = poll_clickhouse_for_result!(
+            async {
+                let resp = http_client
+                    .post(get_gateway_endpoint(&format!(
+                        "/v1/datasets/{dataset_name}/list_datapoints"
+                    )))
+                    .json(&json!({
+                        "limit": 100
+                    }))
+                    .send()
+                    .await
+                    .ok()?;
+                if !resp.status().is_success() {
+                    return None;
+                }
+                let resp_json: Value = resp.json().await.ok()?;
+                (resp_json["datapoints"].as_array()?.len() == 3).then_some(resp_json)
+            }
             .await
-            .unwrap();
-
-        assert!(resp.status().is_success());
-        let resp_json: Value = resp.json().await.unwrap();
+        );
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         // Should return all 3 datapoints, not 100
         assert_eq!(datapoints.len(), 3);
