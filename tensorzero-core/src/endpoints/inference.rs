@@ -215,6 +215,7 @@ pub async fn inference_handler(
             .extra_overhead_labels
             .push(Label::new("function_name", "tensorzero::default"));
     }
+    let include_raw_response = params.include_raw_response;
     let inference_output = Box::pin(inference(
         config,
         &http_client,
@@ -244,7 +245,7 @@ pub async fn inference_handler(
                 }
             }
         }
-        Err(e) => e.into_response(),
+        Err(e) => e.into_response_with_raw_entries(false, include_raw_response),
     };
     response.extensions_mut().insert(metric_data);
     response
@@ -999,7 +1000,7 @@ fn create_previous_raw_response_chunk(
                     .map(|entry| entry.api_type)
                     .unwrap_or(ApiType::ChatCompletions);
                 vec![RawResponseEntry {
-                    model_inference_id: r.id,
+                    model_inference_id: Some(r.id),
                     provider_type: r.model_provider_name.to_string(),
                     api_type,
                     data: r.raw_response.clone(),
@@ -1535,7 +1536,7 @@ impl InferenceResponse {
                             .map(|entry| entry.api_type)
                             .unwrap_or(ApiType::ChatCompletions);
                         vec![RawResponseEntry {
-                            model_inference_id: r.id,
+                            model_inference_id: Some(r.id),
                             provider_type: r.model_provider_name.to_string(),
                             api_type,
                             data: r.raw_response.clone(),

@@ -922,10 +922,7 @@ impl ModelProvider {
     /// The API type used by this provider (e.g., ChatCompletions, Responses)
     pub fn api_type(&self) -> ApiType {
         match &self.config {
-            ProviderConfig::OpenAI(provider) => match provider.api_type() {
-                OpenAIAPIType::ChatCompletions => ApiType::ChatCompletions,
-                OpenAIAPIType::Responses => ApiType::Responses,
-            },
+            ProviderConfig::OpenAI(provider) => provider.api_type().into(),
             // All other providers use ChatCompletions API
             _ => ApiType::ChatCompletions,
         }

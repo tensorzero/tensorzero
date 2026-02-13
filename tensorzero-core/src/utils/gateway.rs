@@ -737,8 +737,8 @@ pub struct ShutdownHandle {
 /// This is used in by `patch_openai_client` in the Python client to allow pointing the OpenAI client
 /// at a local gateway (via `base_url`).
 ///
-/// Returns the address the gateway is listening on, and a future resolves (after the gateway starts up)
-/// to a `ShutdownHandle` which shuts down the gateway when dropped.
+/// Returns the address the gateway is listening on and a `ShutdownHandle` which shuts down
+/// the gateway when dropped.
 pub async fn start_openai_compatible_gateway(
     config_file: Option<String>,
     clickhouse_url: Option<String>,
