@@ -2,6 +2,7 @@ name: UI E2E Tests
 permissions:
   actions: write
   contents: read
+  id-token: write
 
 on:
   workflow_call:
@@ -44,17 +45,16 @@ jobs:
         with:
           node-version: "24.13.0"
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          pattern: build-{gateway,ui,mock-provider-api}-container
-          merge-multiple: true
-
       - name: Load container images
-        run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          docker load < mock-provider-api-container.tar
+        uses: ./.github/actions/load-container-images
+        with:
+          distribution-mode: ${{ inputs.is_merge_group && 'registry' || 'artifact' }}
+          artifact-pattern: build-{gateway,ui,mock-provider-api}-container
+          registry-images: |
+            gateway
+            ui
+            mock-provider-api
+          sha: ${{ github.sha }}
 
       # This allows us to use 'no-build' on subsequent steps
       - name: Build needed docker images
@@ -129,17 +129,16 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          pattern: build-{gateway,ui,mock-provider-api}-container
-          merge-multiple: true
-
       - name: Load container images
-        run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          docker load < mock-provider-api-container.tar
+        uses: ./.github/actions/load-container-images
+        with:
+          distribution-mode: ${{ inputs.is_merge_group && 'registry' || 'artifact' }}
+          artifact-pattern: build-{gateway,ui,mock-provider-api}-container
+          registry-images: |
+            gateway
+            ui
+            mock-provider-api
+          sha: ${{ github.sha }}
 
       # This allows us to use 'no-build' on subsequent steps
       - name: Build needed docker images
@@ -258,16 +257,15 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          pattern: build-{gateway,ui}-container
-          merge-multiple: true
-
       - name: Load container images
-        run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
+        uses: ./.github/actions/load-container-images
+        with:
+          distribution-mode: ${{ inputs.is_merge_group && 'registry' || 'artifact' }}
+          artifact-pattern: build-{gateway,ui}-container
+          registry-images: |
+            gateway
+            ui
+          sha: ${{ github.sha }}
 
       - name: Set common fixture environment variables
         working-directory: ui
@@ -358,17 +356,16 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          pattern: build-{gateway,ui,mock-provider-api}-container
-          merge-multiple: true
-
       - name: Load container images
-        run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          docker load < mock-provider-api-container.tar
+        uses: ./.github/actions/load-container-images
+        with:
+          distribution-mode: ${{ inputs.is_merge_group && 'registry' || 'artifact' }}
+          artifact-pattern: build-{gateway,ui,mock-provider-api}-container
+          registry-images: |
+            gateway
+            ui
+            mock-provider-api
+          sha: ${{ github.sha }}
 
       - name: Set common fixture environment variables
         working-directory: ui

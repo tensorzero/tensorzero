@@ -2,11 +2,17 @@ name: Build Live Tests Container
 
 on:
   workflow_call:
+    inputs:
+      distribution_mode:
+        description: "How to distribute built images: `artifact` or `registry`"
+        required: false
+        type: string
+        default: artifact
     secrets:
       DOCKERHUB_USERNAME:
-        required: true
+        required: false
       DOCKERHUB_LIMITED_TOKEN:
-        required: true
+        required: false
 
 jobs:
   build-live-tests-container:
@@ -22,33 +28,33 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
-        with:
-          username: tensorzero
-          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the GitHub OIDC token is not available)
 
       - name: Install Namespace CLI
+        if: inputs.distribution_mode == 'registry'
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
+        if: inputs.distribution_mode == 'registry'
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
         with:
           wait-for-builder: true
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Build `live-tests` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/e2e/Dockerfile.live . -t tensorzero/live-tests:sha-${{ github.sha }}
+          TAGS="-t tensorzero/live-tests:sha-${{ github.sha }}"
+          if [ "${{ inputs.distribution_mode }}" = "registry" ]; then
+            TAGS="$TAGS -t nscr.io/igvf4asmf8kri/live-tests:sha-${{ github.sha }}"
+          fi
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/e2e/Dockerfile.live . ${TAGS}
 
       - name: Save `live-tests` container
+        if: inputs.distribution_mode == 'artifact'
         run: docker save tensorzero/live-tests:sha-${{ github.sha }} > live-tests-container.tar
 
       - name: Upload `live-tests` container as an artifact
+        if: inputs.distribution_mode == 'artifact'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: build-live-tests-container
@@ -56,3 +62,11 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           overwrite: false
+
+      - name: Login to Namespace registry
+        if: inputs.distribution_mode == 'registry'
+        run: nsc docker login
+
+      - name: Push `live-tests` container to Namespace registry
+        if: inputs.distribution_mode == 'registry'
+        run: docker push nscr.io/igvf4asmf8kri/live-tests:sha-${{ github.sha }}
