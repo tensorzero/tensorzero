@@ -258,7 +258,7 @@ fn build_filtered_episodes_cte(
     } else {
         // This branch should never be reached since the caller checks has_filters
         Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "build_filtered_episodes_cte called without function_name or filters"
+            message: "`build_filtered_episodes_cte` called without `function_name` or `filters`"
                 .to_string(),
         }))
     }
