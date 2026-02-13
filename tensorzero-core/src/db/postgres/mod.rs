@@ -18,6 +18,7 @@ pub mod config_queries;
 pub mod dataset_queries;
 pub mod deployment_queries;
 pub mod dicl_queries;
+pub mod evaluation_queries;
 pub mod experimentation;
 pub mod feedback;
 mod howdy_queries;
