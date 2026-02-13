@@ -2461,19 +2461,19 @@ FORMAT JSONEachRow";
         assert_eq!(chat_inference.variant_name, "test_variant");
         assert_eq!(
             chat_inference.input,
-            StoredInput {
+            Some(StoredInput {
                 system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
-            }
+            })
         );
         assert_eq!(
             chat_inference.output,
-            vec!["Hello! How can I help you today?".to_string().into()]
+            Some(vec!["Hello! How can I help you today?".to_string().into()])
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert::new_for_test(
+            Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![],
                 vec![],
                 AllowedTools {
@@ -2482,7 +2482,7 @@ FORMAT JSONEachRow";
                 },
                 ToolChoice::None,
                 Some(false),
-            )
+            ))
         );
 
         // Test the Python version (singly serialized)
@@ -2508,18 +2508,18 @@ FORMAT JSONEachRow";
         assert_eq!(chat_inference.variant_name, "test_variant");
         assert_eq!(
             chat_inference.input,
-            StoredInput {
+            Some(StoredInput {
                 system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
-            }
+            })
         );
         assert_eq!(
             chat_inference.output,
-            vec!["Hello! How can I help you today?".to_string().into()]
+            Some(vec!["Hello! How can I help you today?".to_string().into()])
         );
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert::new_for_test(
+            Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![],
                 vec![],
                 AllowedTools {
@@ -2528,7 +2528,7 @@ FORMAT JSONEachRow";
                 },
                 ToolChoice::None,
                 Some(false),
-            )
+            ))
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
     }
@@ -2558,7 +2558,7 @@ FORMAT JSONEachRow";
         };
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert::default()
+            Some(ToolCallConfigDatabaseInsert::default())
         );
         assert_eq!(
             chat_inference.dispreferred_outputs,
@@ -2622,17 +2622,17 @@ FORMAT JSONEachRow";
         assert_eq!(json_inference.variant_name, "test_variant");
         assert_eq!(
             json_inference.input,
-            StoredInput {
+            Some(StoredInput {
                 system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
-            }
+            })
         );
         assert_eq!(
             json_inference.output,
-            JsonInferenceOutput {
+            Some(JsonInferenceOutput {
                 raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
                 parsed: Some(json!({"answer":"Goodbye"})),
-            }
+            })
         );
         assert_eq!(
             json_inference.episode_id,
@@ -2644,7 +2644,7 @@ FORMAT JSONEachRow";
         );
         assert_eq!(
             json_inference.output_schema,
-            json!({"type": "object", "properties": {"output": {"type": "string"}}})
+            Some(json!({"type": "object", "properties": {"output": {"type": "string"}}}))
         );
         assert!(json_inference.dispreferred_outputs.is_empty());
 
@@ -2671,17 +2671,17 @@ FORMAT JSONEachRow";
         assert_eq!(json_inference.variant_name, "test_variant");
         assert_eq!(
             json_inference.input,
-            StoredInput {
+            Some(StoredInput {
                 system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
-            }
+            })
         );
         assert_eq!(
             json_inference.output,
-            JsonInferenceOutput {
+            Some(JsonInferenceOutput {
                 raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
                 parsed: Some(json!({"answer":"Goodbye"})),
-            }
+            })
         );
         assert_eq!(
             json_inference.episode_id,
@@ -2693,7 +2693,7 @@ FORMAT JSONEachRow";
         );
         assert_eq!(
             json_inference.output_schema,
-            json!({"type": "object", "properties": {"output": {"type": "string"}}})
+            Some(json!({"type": "object", "properties": {"output": {"type": "string"}}}))
         );
         assert!(json_inference.dispreferred_outputs.is_empty());
     }
@@ -2758,6 +2758,72 @@ FORMAT JSONEachRow";
                 raw: Some("{\"answer\":\"Goodbye\"}".to_string()),
                 parsed: Some(json!({"answer":"Goodbye"})),
             }]
+        );
+    }
+
+    #[test]
+    fn test_stored_inference_deserialization_chat_with_none_fields() {
+        // Test that missing optional fields deserialize to None (Python/direct serialized format)
+        let json = r#"
+        {
+            "type": "chat",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+            "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+            "tags": {},
+            "timestamp": "2023-01-01T00:00:00Z"
+        }
+    "#;
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Chat(chat_inference) = inference else {
+            panic!("Expected a chat inference");
+        };
+        assert_eq!(chat_inference.function_name, "test_function");
+        assert!(
+            chat_inference.input.is_none(),
+            "input should be None when absent"
+        );
+        assert!(
+            chat_inference.output.is_none(),
+            "output should be None when absent"
+        );
+        assert!(
+            chat_inference.tool_params.is_none(),
+            "tool_params should be None when absent"
+        );
+    }
+
+    #[test]
+    fn test_stored_inference_deserialization_json_with_none_fields() {
+        // Test that missing optional fields deserialize to None (Python/direct serialized format)
+        let json = r#"
+        {
+            "type": "json",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "123e4567-e89b-12d3-a456-426614174000",
+            "inference_id": "123e4567-e89b-12d3-a456-426614174000",
+            "tags": {},
+            "timestamp": "2023-01-01T00:00:00Z"
+        }
+    "#;
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Json(json_inference) = inference else {
+            panic!("Expected a json inference");
+        };
+        assert_eq!(json_inference.function_name, "test_function");
+        assert!(
+            json_inference.input.is_none(),
+            "input should be None when absent"
+        );
+        assert!(
+            json_inference.output.is_none(),
+            "output should be None when absent"
+        );
+        assert!(
+            json_inference.output_schema.is_none(),
+            "output_schema should be None when absent"
         );
     }
 
