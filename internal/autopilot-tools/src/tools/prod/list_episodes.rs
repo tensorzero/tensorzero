@@ -181,6 +181,7 @@ impl ToolMetadata for ListEpisodesTool {
                     ]
                 }
             },
+            "required": ["limit"],
             "additionalProperties": false
         });
 
