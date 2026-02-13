@@ -1,8 +1,17 @@
 import { Link } from "react-router";
 import type { ResolvedObject } from "~/types/tensorzero";
-import { useInferencePreview } from "~/hooks/useInferencePreview";
-import { useEpisodePreview } from "~/hooks/useEpisodePreview";
+import { useEntityPreview } from "~/hooks/useEntityPreview";
 import { formatDate, getRelativeTimeString } from "~/utils/date";
+import { cn } from "~/utils/common";
+
+interface InferencePreview {
+  timestamp: string;
+  processing_time_ms: number | null;
+}
+
+interface EpisodePreview {
+  inference_count: number;
+}
 
 interface UuidHoverCardContentProps {
   uuid: string;
@@ -55,13 +64,14 @@ function InferenceHoverContent({
   url: string;
   isOpen: boolean;
 }) {
-  const { data, isLoading } = useInferencePreview(uuid, isOpen);
+  const { data, isLoading } = useEntityPreview<InferencePreview>(
+    `/api/tensorzero/inference_preview/${encodeURIComponent(uuid)}`,
+    isOpen,
+  );
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-        Inference · {obj.function_type}
-      </div>
+      <TypeBadge>{`Inference · ${obj.function_type}`}</TypeBadge>
       <div className="flex flex-col gap-1">
         <InfoRow label="Function" value={obj.function_name} mono />
         <InfoRow label="Variant" value={obj.variant_name} mono />
@@ -94,13 +104,14 @@ function EpisodeHoverContent({
   url: string;
   isOpen: boolean;
 }) {
-  const { data, isLoading } = useEpisodePreview(uuid, isOpen);
+  const { data, isLoading } = useEntityPreview<EpisodePreview>(
+    `/api/tensorzero/episode_preview/${encodeURIComponent(uuid)}`,
+    isOpen,
+  );
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-        Episode
-      </div>
+      <TypeBadge>Episode</TypeBadge>
       <div className="flex flex-col gap-1">
         <LazyInfoRow
           label="Inferences"
@@ -128,14 +139,20 @@ function DatapointHoverContent({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-        {typeLabel}
-      </div>
+      <TypeBadge>{typeLabel}</TypeBadge>
       <div className="flex flex-col gap-1">
         <InfoRow label="Dataset" value={obj.dataset_name} mono />
         <InfoRow label="Function" value={obj.function_name} mono />
       </div>
       <ViewDetailsLink url={url} />
+    </div>
+  );
+}
+
+function TypeBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+      {children}
     </div>
   );
 }
@@ -152,7 +169,7 @@ function InfoRow({
   return (
     <div className="flex items-baseline justify-between gap-3">
       <span className="text-muted-foreground text-xs">{label}</span>
-      <span className={`text-foreground text-xs ${mono ? "font-mono" : ""}`}>
+      <span className={cn("text-foreground text-xs", mono && "font-mono")}>
         {value}
       </span>
     </div>

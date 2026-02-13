@@ -22,15 +22,10 @@ export async function loader({ params }: Route.LoaderArgs) {
 
     const inference = response.inferences[0];
     return Response.json({
-      inference_id: inference.inference_id,
-      function_name: inference.function_name,
-      variant_name: inference.variant_name,
-      episode_id: inference.episode_id,
       timestamp: inference.timestamp,
       processing_time_ms: inference.processing_time_ms
         ? Number(inference.processing_time_ms)
         : null,
-      type: inference.type,
     });
   } catch (error) {
     if (error instanceof Response) {
