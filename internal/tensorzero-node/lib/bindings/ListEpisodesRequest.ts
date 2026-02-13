@@ -6,7 +6,7 @@ import type { InferenceFilter } from "./InferenceFilter";
  */
 export type ListEpisodesRequest = {
   /**
-   * Maximum number of episodes to return
+   * Maximum number of episodes to return (max 100)
    */
   limit: number;
   /**

@@ -34,7 +34,8 @@ pub struct ListEpisodesParams {
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct ListEpisodesRequest {
-    /// Maximum number of episodes to return
+    /// Maximum number of episodes to return (max 100)
+    #[schemars(extend("maximum" = 100, "minimum" = 1))]
     pub limit: u32,
     /// Return episodes before this episode_id (for pagination)
     #[serde(skip_serializing_if = "Option::is_none")]
