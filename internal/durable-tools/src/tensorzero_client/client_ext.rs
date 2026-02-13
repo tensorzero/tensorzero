@@ -14,7 +14,7 @@ use tensorzero::{
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
     FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
     GetInferencesRequest, GetInferencesResponse, InferenceOutput, InferenceResponse,
-    ListDatapointsRequest, ListDatasetsRequest, ListDatasetsResponse, ListEpisodesParams,
+    ListDatapointsRequest, ListDatasetsRequest, ListDatasetsResponse, ListEpisodesRequest,
     ListEpisodesResponse, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
     UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
@@ -512,9 +512,9 @@ impl TensorZeroClient for Client {
 
     async fn list_episodes(
         &self,
-        params: ListEpisodesParams,
+        request: ListEpisodesRequest,
     ) -> Result<ListEpisodesResponse, TensorZeroClientError> {
-        ClientExt::list_episodes(self, params)
+        ClientExt::list_episodes(self, request)
             .await
             .map_err(TensorZeroClientError::TensorZero)
     }

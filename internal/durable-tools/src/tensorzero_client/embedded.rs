@@ -11,7 +11,7 @@ use tensorzero::{
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
     InferenceOutput, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
-    ListDatasetsResponse, ListEpisodesParams, ListEpisodesResponse, ListInferencesRequest,
+    ListDatasetsResponse, ListEpisodesRequest, ListEpisodesResponse, ListInferencesRequest,
     TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
     WriteConfigResponse,
 };
@@ -418,18 +418,25 @@ impl TensorZeroClient for EmbeddedClient {
 
     async fn list_episodes(
         &self,
-        params: ListEpisodesParams,
+        request: ListEpisodesRequest,
     ) -> Result<ListEpisodesResponse, TensorZeroClientError> {
         let database = DelegatingDatabaseConnection::new(
             self.app_state.clickhouse_connection_info.clone(),
             self.app_state.postgres_connection_info.clone(),
         );
-        let episodes =
-            tensorzero_core::endpoints::episodes::internal::list_episodes(&database, params)
-                .await
-                .map_err(|e| {
-                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-                })?;
+        let episodes = tensorzero_core::endpoints::episodes::internal::list_episodes(
+            &database,
+            &self.app_state.config,
+            request.limit,
+            request.before,
+            request.after,
+            request.function_name,
+            request.filters,
+        )
+        .await
+        .map_err(|e| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+        })?;
         Ok(ListEpisodesResponse { episodes })
     }
 

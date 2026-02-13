@@ -9,6 +9,7 @@ use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use sqlx::PgPool;
 use sqlx::types::chrono::Utc;
+use tensorzero::{BooleanMetricFilter, InferenceFilter};
 use tensorzero_core::db::EpisodeByIdRow;
 use uuid::Uuid;
 
@@ -35,6 +36,8 @@ async fn test_list_episodes_tool_basic(pool: PgPool) {
         limit: 10,
         before: None,
         after: None,
+        function_name: None,
+        filters: None,
     };
 
     let side_info = AutopilotSideInfo {
@@ -85,6 +88,8 @@ async fn test_list_episodes_tool_with_before_pagination(pool: PgPool) {
         limit: 20,
         before: Some(cursor_id),
         after: None,
+        function_name: None,
+        filters: None,
     };
 
     let side_info = AutopilotSideInfo {
@@ -97,7 +102,7 @@ async fn test_list_episodes_tool_with_before_pagination(pool: PgPool) {
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
         .expect_list_episodes()
-        .withf(move |params| params.limit == 20 && params.before == Some(cursor_id))
+        .withf(move |req| req.limit == 20 && req.before == Some(cursor_id))
         .return_once(move |_| Ok(mock_response));
 
     let tool = ListEpisodesTool;
@@ -126,6 +131,8 @@ async fn test_list_episodes_tool_with_after_pagination(pool: PgPool) {
         limit: 15,
         before: None,
         after: Some(cursor_id),
+        function_name: None,
+        filters: None,
     };
 
     let side_info = AutopilotSideInfo {
@@ -138,7 +145,7 @@ async fn test_list_episodes_tool_with_after_pagination(pool: PgPool) {
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
         .expect_list_episodes()
-        .withf(move |params| params.limit == 15 && params.after == Some(cursor_id))
+        .withf(move |req| req.limit == 15 && req.after == Some(cursor_id))
         .return_once(move |_| Ok(mock_response));
 
     let tool = ListEpisodesTool;
@@ -164,6 +171,8 @@ async fn test_list_episodes_tool_error(pool: PgPool) {
         limit: 10,
         before: None,
         after: None,
+        function_name: None,
+        filters: None,
     };
 
     let side_info = AutopilotSideInfo {
@@ -192,4 +201,177 @@ async fn test_list_episodes_tool_error(pool: PgPool) {
         .await;
 
     assert!(result.is_err(), "Should return error when client fails");
+}
+
+// ===== Filter Tests =====
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_episodes_tool_with_function_name(pool: PgPool) {
+    let now = Utc::now();
+    let mock_response = create_mock_list_episodes_response(vec![EpisodeByIdRow {
+        episode_id: Uuid::now_v7(),
+        count: 3,
+        start_time: now,
+        end_time: now,
+        last_inference_id: Uuid::now_v7(),
+    }]);
+
+    let llm_params = ListEpisodesToolParams {
+        limit: 20,
+        before: None,
+        after: None,
+        function_name: Some("my_function".to_string()),
+        filters: None,
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_episodes()
+        .withf(|req| req.function_name == Some("my_function".to_string()))
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListEpisodesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListEpisodesTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_episodes_tool_with_boolean_filter(pool: PgPool) {
+    let now = Utc::now();
+    let mock_response = create_mock_list_episodes_response(vec![EpisodeByIdRow {
+        episode_id: Uuid::now_v7(),
+        count: 3,
+        start_time: now,
+        end_time: now,
+        last_inference_id: Uuid::now_v7(),
+    }]);
+
+    let llm_params = ListEpisodesToolParams {
+        limit: 20,
+        before: None,
+        after: None,
+        function_name: Some("my_function".to_string()),
+        filters: Some(InferenceFilter::BooleanMetric(BooleanMetricFilter {
+            metric_name: "exact_match".to_string(),
+            value: false,
+        })),
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_episodes()
+        .withf(|req| req.function_name == Some("my_function".to_string()) && req.filters.is_some())
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListEpisodesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListEpisodesTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_list_episodes_tool_with_combined_filters(pool: PgPool) {
+    let mock_response = create_mock_list_episodes_response(vec![]);
+
+    let llm_params = ListEpisodesToolParams {
+        limit: 20,
+        before: None,
+        after: None,
+        function_name: Some("my_function".to_string()),
+        filters: Some(InferenceFilter::And {
+            children: vec![InferenceFilter::BooleanMetric(BooleanMetricFilter {
+                metric_name: "exact_match".to_string(),
+                value: false,
+            })],
+        }),
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test_hash".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_list_episodes()
+        .withf(|req| req.filters.is_some())
+        .return_once(move |_| Ok(mock_response));
+
+    let tool = ListEpisodesTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("ListEpisodesTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+}
+
+#[test]
+fn test_list_episodes_tool_schema_includes_filters() {
+    use durable_tools::ToolMetadata;
+    let tool = ListEpisodesTool;
+    let schema = tool
+        .parameters_schema()
+        .expect("Schema generation should succeed");
+    let schema_json = serde_json::to_value(schema).expect("Schema should serialize");
+
+    // Verify the schema includes function_name and filters
+    let properties = schema_json
+        .get("properties")
+        .expect("Schema should have properties");
+    assert!(
+        properties.get("function_name").is_some(),
+        "Schema should include function_name"
+    );
+    assert!(
+        properties.get("filters").is_some(),
+        "Schema should include filters"
+    );
 }

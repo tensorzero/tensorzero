@@ -13,7 +13,7 @@ use tensorzero::{
     CreateDatapointsResponse, DatasetMetadata, DeleteDatapointsResponse, FeedbackParams,
     FeedbackResponse, GetConfigResponse, GetDatapointsResponse, GetInferencesRequest,
     GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
-    ListDatasetsResponse, ListEpisodesParams, ListEpisodesResponse, ListInferencesRequest, Role,
+    ListDatasetsResponse, ListEpisodesRequest, ListEpisodesResponse, ListInferencesRequest, Role,
     StoredChatInference, StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
     WriteConfigRequest, WriteConfigResponse,
 };
@@ -140,7 +140,7 @@ mock! {
 
         async fn list_episodes(
             &self,
-            params: ListEpisodesParams,
+            request: ListEpisodesRequest,
         ) -> Result<ListEpisodesResponse, TensorZeroClientError>;
 
         async fn launch_optimization_workflow(
