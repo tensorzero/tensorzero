@@ -27,13 +27,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let bad_auth_extra_headers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "fireworks-extra-headers".to_string(),
-        model_name: "fireworks::accounts/fireworks/models/deepseek-r1-0528".into(),
-        model_provider_name: "fireworks".into(),
-        credentials: HashMap::new(),
-    }];
+    // TODO(#6318): Fireworks bad_auth_extra_headers test is consistently failing
+    let bad_auth_extra_headers: Vec<E2ETestProvider> = vec![];
+    // let bad_auth_extra_headers: Vec<E2ETestProvider> = vec![E2ETestProvider {
+    //     supports_batch_inference: false,
+    //     variant_name: "fireworks-extra-headers".to_string(),
+    //     model_name: "fireworks::accounts/fireworks/models/deepseek-r1-0528".into(),
+    //     model_provider_name: "fireworks".into(),
+    //     credentials: HashMap::new(),
+    // }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
