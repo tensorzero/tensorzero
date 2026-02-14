@@ -41,6 +41,7 @@ async fn test_raw_response_error_mid_stream_inference() {
         .unwrap();
 
     let mut good_chunks = 0;
+    let mut error_chunks = 0;
     loop {
         match event_stream.next().await {
             Some(Ok(e)) => match e {
@@ -51,6 +52,7 @@ async fn test_raw_response_error_mid_stream_inference() {
                     }
                     let obj: Value = serde_json::from_str(&message.data).unwrap();
                     if let Some(error) = obj.get("error") {
+                        error_chunks += 1;
                         let error_str = error.as_str().expect(
                             "T0 native error field should be a string in mid-stream error event",
                         );
@@ -87,6 +89,10 @@ async fn test_raw_response_error_mid_stream_inference() {
             }
         }
     }
+    assert!(
+        error_chunks > 0,
+        "Should have received at least one error chunk in the stream"
+    );
     assert_eq!(
         good_chunks, 17,
         "Stream should continue after error and produce 17 total chunks"
@@ -121,6 +127,7 @@ async fn test_raw_response_error_mid_stream_inference_not_requested() {
         .unwrap();
 
     let mut good_chunks = 0;
+    let mut error_chunks = 0;
     loop {
         match event_stream.next().await {
             Some(Ok(e)) => match e {
@@ -131,6 +138,7 @@ async fn test_raw_response_error_mid_stream_inference_not_requested() {
                     }
                     let obj: Value = serde_json::from_str(&message.data).unwrap();
                     if let Some(error) = obj.get("error") {
+                        error_chunks += 1;
                         let error_str = error.as_str().expect(
                             "T0 native error field should be a string in mid-stream error event",
                         );
@@ -160,6 +168,10 @@ async fn test_raw_response_error_mid_stream_inference_not_requested() {
             }
         }
     }
+    assert!(
+        error_chunks > 0,
+        "Should have received at least one error chunk in the stream"
+    );
     assert_eq!(
         good_chunks, 17,
         "Stream should continue after error and produce 17 total chunks"
