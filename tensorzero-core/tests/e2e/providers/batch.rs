@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashSet;
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 use tensorzero_core::tool::Tool;
 use tensorzero_core::{
@@ -444,6 +445,7 @@ pub async fn check_clickhouse_batch_request_status(
     provider: &E2ETestProvider,
     expected_status: &str,
 ) {
+    clickhouse.flush_pending_writes().await;
     // Check if ClickHouse is ok - BatchRequest Table
     let result = select_latest_batch_request_clickhouse(clickhouse, batch_id)
         .await
