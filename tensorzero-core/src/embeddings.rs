@@ -527,11 +527,13 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             usage: response.usage,
             latency: response.latency,
             model_provider_name: response.embedding_provider_name.clone(),
+            model_provider_type: "".into(),
             model_name: response.embedding_model_name,
             cached: false,
             finish_reason: None,
             raw_usage: response.raw_usage,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         })
     }
 }

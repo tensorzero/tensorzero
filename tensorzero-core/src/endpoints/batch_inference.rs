@@ -968,10 +968,12 @@ pub async fn write_completed_batch_inference<'a>(
             latency: Latency::Batch,
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
+            model_provider_type: "".into(),
             cached: false,
             finish_reason,
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             relay_raw_response: None, // batch inference does not support include_raw_response (#5710)
+            failed_raw_response: vec![],
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {

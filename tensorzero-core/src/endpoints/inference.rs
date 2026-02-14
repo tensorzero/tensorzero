@@ -165,6 +165,8 @@ struct InferenceMetadata {
     pub inference_params: InferenceParams,
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    /// The provider type string (e.g. "openai", "anthropic", "dummy").
+    pub model_provider_type: Arc<str>,
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
@@ -182,6 +184,8 @@ struct InferenceMetadata {
     pub include_raw_response: bool,
     pub include_raw_usage: bool,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts during model-level fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -594,6 +598,20 @@ pub async fn inference(
 
         match result {
             Ok(output) => {
+                // Collect raw response entries from failed variant attempts
+                let mut failed_raw_entries: Vec<RawResponseEntry> = Vec::new();
+                if params.include_raw_response {
+                    for error in variant_errors.values() {
+                        if let Some(entries) = error.extract_raw_response_entries() {
+                            failed_raw_entries.extend(entries);
+                        }
+                    }
+                }
+                let output = if failed_raw_entries.is_empty() {
+                    output
+                } else {
+                    inject_failed_variant_raw_response(output, failed_raw_entries, &function)
+                };
                 return Ok(InferenceOutputData {
                     output,
                     exactly_one_variant: if already_sampled {
@@ -621,6 +639,94 @@ pub async fn inference(
         errors: variant_errors,
     }
     .into())
+}
+
+/// Injects raw response entries from failed variant attempts into a successful inference output.
+/// For non-streaming, prepends the entries to the `raw_response` array.
+/// For streaming, wraps the stream to inject a synthetic chunk after reading the first real chunk
+/// (to copy its metadata: inference_id, episode_id, variant_name).
+fn inject_failed_variant_raw_response(
+    output: InferenceOutput,
+    failed_raw_entries: Vec<RawResponseEntry>,
+    function: &FunctionConfig,
+) -> InferenceOutput {
+    match output {
+        InferenceOutput::NonStreaming(mut response) => {
+            match &mut response {
+                InferenceResponse::Chat(r) => {
+                    let entries = r.raw_response.get_or_insert_with(Vec::new);
+                    // Prepend failed entries before the success entries
+                    let mut combined = failed_raw_entries;
+                    combined.append(entries);
+                    *entries = combined;
+                }
+                InferenceResponse::Json(r) => {
+                    let entries = r.raw_response.get_or_insert_with(Vec::new);
+                    let mut combined = failed_raw_entries;
+                    combined.append(entries);
+                    *entries = combined;
+                }
+            }
+            InferenceOutput::NonStreaming(response)
+        }
+        InferenceOutput::Streaming(mut stream) => {
+            let is_chat = matches!(function, FunctionConfig::Chat(_));
+            let wrapped = async_stream::stream! {
+                // Read the first chunk to get its metadata (inference_id, episode_id, variant_name)
+                if let Some(first_result) = stream.next().await {
+                    match &first_result {
+                        Ok(first_chunk) => {
+                            // Build a synthetic chunk with the failed entries using the first chunk's metadata
+                            let raw_response = Some(failed_raw_entries);
+                            let failed_chunk = match first_chunk {
+                                InferenceResponseChunk::Chat(c) => {
+                                    InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
+                                        inference_id: c.inference_id,
+                                        episode_id: c.episode_id,
+                                        variant_name: c.variant_name.clone(),
+                                        content: vec![],
+                                        usage: None,
+                                        raw_usage: None,
+                                        raw_response,
+                                        finish_reason: None,
+                                        original_chunk: None,
+                                        raw_chunk: None,
+                                    })
+                                }
+                                InferenceResponseChunk::Json(j) => {
+                                    InferenceResponseChunk::Json(JsonInferenceResponseChunk {
+                                        inference_id: j.inference_id,
+                                        episode_id: j.episode_id,
+                                        variant_name: j.variant_name.clone(),
+                                        raw: String::new(),
+                                        usage: None,
+                                        raw_usage: None,
+                                        raw_response,
+                                        finish_reason: None,
+                                        original_chunk: None,
+                                        raw_chunk: None,
+                                    })
+                                }
+                            };
+                            // Emit the failed entries chunk first, then the original first chunk
+                            yield Ok(failed_chunk);
+                            yield first_result;
+                        }
+                        Err(_) => {
+                            // If the first chunk is an error, just pass it through
+                            yield first_result;
+                        }
+                    }
+                }
+                // Forward remaining chunks
+                while let Some(chunk) = stream.next().await {
+                    yield chunk;
+                }
+            };
+            let _ = is_chat; // suppress unused warning
+            InferenceOutput::Streaming(Box::pin(wrapped))
+        }
+    }
 }
 
 struct InferVariantArgs<'a> {
@@ -733,6 +839,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             inference_params: model_used_info.inference_params.clone(),
             model_name: model_used_info.model_name,
             model_provider_name: model_used_info.model_provider_name,
+            model_provider_type: model_used_info.model_provider_type,
             raw_request: model_used_info.raw_request,
             raw_response: model_used_info.raw_response,
             system: model_used_info.system,
@@ -752,6 +859,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
             model_inference_id: model_used_info.model_inference_id,
+            failed_raw_response: model_used_info.failed_raw_response,
         };
 
         let stream = create_stream(
@@ -1005,7 +1113,7 @@ fn create_previous_raw_response_chunk(
                     .unwrap_or(ApiType::ChatCompletions);
                 vec![RawResponseEntry {
                     model_inference_id: Some(r.id),
-                    provider_type: r.model_provider_name.to_string(),
+                    provider_type: r.model_provider_type.to_string(),
                     api_type,
                     data: r.raw_response.clone(),
                 }]
@@ -1018,6 +1126,34 @@ fn create_previous_raw_response_chunk(
     }
 
     let raw_response = Some(entries);
+    let chunk = match function {
+        FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            raw_response,
+            ..Default::default()
+        }),
+        FunctionConfig::Json(_) => InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw_response,
+            ..Default::default()
+        }),
+    };
+    Some(chunk)
+}
+
+/// Creates an artificial chunk containing `raw_response` entries from failed provider attempts (model-level fallback).
+/// Returns `None` if `include_raw_response` is false or there are no failed entries.
+fn create_failed_raw_response_chunk(
+    metadata: &InferenceMetadata,
+    function: &FunctionConfig,
+) -> Option<InferenceResultChunk> {
+    if !metadata.include_raw_response {
+        return None;
+    }
+
+    if metadata.failed_raw_response.is_empty() {
+        return None;
+    }
+
+    let raw_response = Some(metadata.failed_raw_response.clone());
     let chunk = match function {
         FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
             raw_response,
@@ -1054,6 +1190,12 @@ fn create_stream(
 
         // If previous model inferences (e.g. best-of-N candidates) had `raw_usage`, emit them immediately in an artificial chunk.
         if let Some(chunk) = create_previous_raw_usage_chunk(&metadata, &function) {
+            buffer.push(chunk.clone());
+            yield Ok(prepare_response_chunk(&metadata, chunk));
+        }
+
+        // If failed provider attempts (model-level fallback) had `raw_response`, emit them immediately in an artificial chunk.
+        if let Some(chunk) = create_failed_raw_response_chunk(&metadata, &function) {
             buffer.push(chunk.clone());
             yield Ok(prepare_response_chunk(&metadata, chunk));
         }
@@ -1153,6 +1295,7 @@ fn create_stream(
                 inference_params,
                 model_name,
                 model_provider_name,
+                model_provider_type,
                 raw_request,
                 raw_response,
                 system,
@@ -1170,6 +1313,7 @@ fn create_stream(
                 include_raw_response: _,
                 include_raw_usage: _,
                 model_inference_id,
+                failed_raw_response: _,
             } = metadata;
 
             let config = config.clone();
@@ -1185,6 +1329,7 @@ fn create_stream(
                     function,
                     model_name,
                     model_provider_name,
+                    model_provider_type,
                     raw_request,
                     raw_response,
                     inference_params,
@@ -1529,31 +1674,38 @@ impl InferenceResponse {
         // Build raw_response if requested
         // Returns Some(entries) if requested (even if empty when all cached), None if not requested
         let raw_response = if include_raw_response {
-            let entries: Vec<RawResponseEntry> = inference_result
-                .model_inference_results()
-                .iter()
-                .filter(|r| !r.cached) // Exclude TensorZero cache hits
-                .flat_map(|r| {
-                    // If there are passed-through relay_raw_response (from relay), use them
-                    if let Some(passed_through) = &r.relay_raw_response {
-                        passed_through.clone()
-                    } else {
-                        // Otherwise, generate entries from the model inference result
-                        let api_type = r
-                            .raw_usage
-                            .as_ref()
-                            .and_then(|entries| entries.first())
-                            .map(|entry| entry.api_type)
-                            .unwrap_or(ApiType::ChatCompletions);
-                        vec![RawResponseEntry {
-                            model_inference_id: Some(r.id),
-                            provider_type: r.model_provider_name.to_string(),
-                            api_type,
-                            data: r.raw_response.clone(),
-                        }]
-                    }
-                })
-                .collect();
+            let mut entries: Vec<RawResponseEntry> = Vec::new();
+            // Include raw response entries from failed provider attempts (model-level fallback)
+            for r in inference_result.model_inference_results() {
+                entries.extend(r.failed_raw_response.clone());
+            }
+            // Include raw response entries from successful provider responses
+            entries.extend(
+                inference_result
+                    .model_inference_results()
+                    .iter()
+                    .filter(|r| !r.cached) // Exclude TensorZero cache hits
+                    .flat_map(|r| {
+                        // If there are passed-through relay_raw_response (from relay), use them
+                        if let Some(passed_through) = &r.relay_raw_response {
+                            passed_through.clone()
+                        } else {
+                            // Otherwise, generate entries from the model inference result
+                            let api_type = r
+                                .raw_usage
+                                .as_ref()
+                                .and_then(|entries| entries.first())
+                                .map(|entry| entry.api_type)
+                                .unwrap_or(ApiType::ChatCompletions);
+                            vec![RawResponseEntry {
+                                model_inference_id: Some(r.id),
+                                provider_type: r.model_provider_type.to_string(),
+                                api_type,
+                                data: r.raw_response.clone(),
+                            }]
+                        }
+                    }),
+            );
             Some(entries)
         } else {
             None
@@ -2141,6 +2293,7 @@ mod tests {
             start_time: Instant::now(),
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
+            model_provider_type: "".into(),
             raw_request: raw_request.clone(),
             raw_response: None,
             system: None,
@@ -2158,6 +2311,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
+            failed_raw_response: vec![],
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2208,6 +2362,7 @@ mod tests {
             start_time: Instant::now(),
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
+            model_provider_type: "".into(),
             raw_request: raw_request.clone(),
             raw_response: None,
             system: None,
@@ -2225,6 +2380,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
+            failed_raw_response: vec![],
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2602,6 +2758,7 @@ mod tests {
             start_time: Instant::now(),
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
+            model_provider_type: "".into(),
             raw_request: "raw request".to_string(),
             raw_response: None,
             system: None,
@@ -2619,6 +2776,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: true,
             model_inference_id: Uuid::now_v7(),
+            failed_raw_response: vec![],
         }
     }
 
@@ -2899,11 +3057,13 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             model_provider_name: "openai".into(),
+            model_provider_type: "".into(),
             model_name: "gpt-4".into(),
             cached: false, // NOT cached, so raw_usage should be emitted
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(raw_usage_entries.clone()),
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let mut metadata = create_test_metadata();
@@ -2997,11 +3157,13 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             model_provider_name: "cached".into(),
+            model_provider_type: "".into(),
             model_name: "cached-model".into(),
             cached: true, // CACHED - should be filtered out
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(cached_raw_usage),
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let mut metadata = create_test_metadata();
@@ -3077,11 +3239,13 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             model_provider_name: "openai".into(),
+            model_provider_type: "".into(),
             model_name: "gpt-4".into(),
             cached: false,
             finish_reason: Some(FinishReason::Stop),
             raw_usage: Some(raw_usage_entries),
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let mut metadata = create_test_metadata();

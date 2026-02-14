@@ -752,3 +752,47 @@ type = "chat_completion"
 model = "openai::gpt-4o-mini"
 system_template = "../../../../ui/fixtures/config/functions/compact_context/baseline/system_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
+
+# Variant fallback: error variant (candidate, always sampled first) -> good variant (fallback)
+[functions.raw_response_variant_fallback]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.raw_response_variant_fallback.experimentation]
+type = "uniform"
+candidate_variants = ["error_variant"]
+fallback_variants = ["good_variant"]
+
+[functions.raw_response_variant_fallback.variants.error_variant]
+type = "chat_completion"
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.raw_response_variant_fallback.variants.good_variant]
+type = "chat_completion"
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+# Variant fallback: both error (candidate + fallback, both will be tried and both fail)
+[functions.raw_response_variant_both_fail]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.raw_response_variant_both_fail.experimentation]
+type = "uniform"
+candidate_variants = ["error_variant_1"]
+fallback_variants = ["error_variant_2"]
+
+[functions.raw_response_variant_both_fail.variants.error_variant_1]
+type = "chat_completion"
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.raw_response_variant_both_fail.variants.error_variant_2]
+type = "chat_completion"
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
