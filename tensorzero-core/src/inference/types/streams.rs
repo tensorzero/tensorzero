@@ -255,8 +255,6 @@ pub struct CollectChunksArgs {
     pub function: Arc<FunctionConfig>,
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
-    /// The provider type string (e.g. "openai", "anthropic", "dummy").
-    pub model_provider_type: Arc<str>,
     pub raw_request: String,
     /// We may sometimes construct a fake stream from a non-streaming response
     /// (e.g. in `mixture_of_n` if we have a successful non-streaming candidate, but
@@ -292,7 +290,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         function,
         model_name,
         model_provider_name,
-        model_provider_type,
         raw_request,
         raw_response,
         inference_params,
@@ -738,12 +735,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         finish_reason,
         id: model_inference_id,
     });
-    let model_inference_response = ModelInferenceResponse::new(
-        model_response,
-        model_provider_name,
-        model_provider_type,
-        cached,
-    );
+    let model_inference_response =
+        ModelInferenceResponse::new(model_response, model_provider_name, cached);
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
@@ -994,7 +987,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1064,7 +1057,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1187,7 +1180,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1285,7 +1278,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1389,7 +1382,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1528,7 +1521,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1663,7 +1656,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1856,7 +1849,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1999,7 +1992,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2092,7 +2085,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2176,7 +2169,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2264,7 +2257,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2335,7 +2328,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2460,7 +2453,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
-            model_provider_type: "".into(),
+
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),

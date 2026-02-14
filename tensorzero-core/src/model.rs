@@ -166,8 +166,6 @@ pub struct StreamResponse {
     pub stream: Instrumented<PeekableProviderInferenceResponseStream>,
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
-    /// The provider type string (e.g. "openai", "anthropic", "dummy").
-    pub model_provider_type: Arc<str>,
     pub cached: bool,
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts during fallback.
@@ -215,8 +213,6 @@ impl StreamResponse {
                 )),
             raw_request: cache_lookup.raw_request,
             model_provider_name,
-            // Cached entries are filtered out when building RawResponseEntry, so this is unused
-            model_provider_type: Arc::from(""),
             cached: true,
             model_inference_id,
             failed_raw_response: vec![],
@@ -379,7 +375,6 @@ impl ModelConfig {
         Ok(ModelInferenceResponse::new(
             response,
             model_provider_request.provider_name.into(),
-            provider.provider_type().into(),
             false,
         ))
     }
@@ -451,7 +446,6 @@ impl ModelConfig {
                 stream,
                 raw_request,
                 model_provider_name: model_provider_request.provider_name.into(),
-                model_provider_type: provider.provider_type().into(),
                 cached: false,
                 model_inference_id: model_provider_request.model_inference_id,
                 failed_raw_response: vec![],
@@ -486,7 +480,6 @@ impl ModelConfig {
                 return Ok(ModelInferenceResponse::new(
                     response,
                     "tensorzero::relay".into(),
-                    "relay".into(),
                     false,
                 ));
             }
@@ -621,7 +614,6 @@ impl ModelConfig {
                         stream: stream.instrument(Span::current()),
                         raw_request,
                         model_provider_name: "tensorzero::relay".into(),
-                        model_provider_type: "relay".into(),
                         cached: false,
                         model_inference_id: Uuid::now_v7(),
                         failed_raw_response: vec![],
@@ -3260,7 +3252,6 @@ mod tests {
                     mut stream,
                     raw_request,
                     model_provider_name,
-                    model_provider_type: _,
                     cached: _,
                     model_inference_id: _,
                     failed_raw_response: _,
@@ -3440,7 +3431,6 @@ mod tests {
                     mut stream,
                     raw_request,
                     model_provider_name,
-                    model_provider_type: _,
                     cached: _,
                     model_inference_id: _,
                     failed_raw_response: _,

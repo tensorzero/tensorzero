@@ -968,7 +968,6 @@ pub async fn write_completed_batch_inference<'a>(
             latency: Latency::Batch,
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
-            model_provider_type: "".into(),
             cached: false,
             finish_reason,
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
@@ -1025,6 +1024,7 @@ pub async fn write_completed_batch_inference<'a>(
             .await?;
         let inference_response = InferenceResponse::new(
             inference_result.clone(),
+            &config.models,
             episode_id,
             variant_name.to_string(),
             false, // batch inference does not support include_raw_usage (#5452)
