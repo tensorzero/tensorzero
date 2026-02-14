@@ -151,6 +151,7 @@ impl TensorzeroRelay {
             tensorzero_credentials: params.credentials,
             tensorzero_cache_options: None,
             tensorzero_include_raw_response: params.include_raw_response,
+            tensorzero_extra_headers: params.extra_headers,
         };
 
         let api_key = self

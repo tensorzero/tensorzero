@@ -21,6 +21,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, ProviderInferenceResponseArgs, Thought,
@@ -395,6 +396,7 @@ impl EmbeddingProvider for AzureProvider {
         client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
+        extra_headers: &FullExtraHeadersConfig,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self
             .credentials
@@ -422,7 +424,7 @@ impl EmbeddingProvider for AzureProvider {
             PROVIDER_TYPE,
             ApiType::Embeddings,
             &FullExtraBodyConfig::default(), // No overrides supported
-            &Default::default(),             // No extra headers for embeddings yet
+            extra_headers,
             model_provider_data,
             &self.deployment_id,
             request_body_value,

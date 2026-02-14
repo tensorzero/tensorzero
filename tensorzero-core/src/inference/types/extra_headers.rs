@@ -61,6 +61,24 @@ impl UnfilteredInferenceExtraHeaders {
                 .collect(),
         }
     }
+
+    /// Filter the 'InferenceExtraHeader' options for embeddings.
+    /// Embeddings don't have variants, so all `Variant` and `VariantDelete` entries are removed.
+    pub fn filter_for_embeddings(self) -> FilteredInferenceExtraHeaders {
+        FilteredInferenceExtraHeaders {
+            data: self
+                .extra_headers
+                .into_iter()
+                .filter(|config| {
+                    !matches!(
+                        config,
+                        DynamicExtraHeader::Variant { .. }
+                            | DynamicExtraHeader::VariantDelete { .. }
+                    )
+                })
+                .collect(),
+        }
+    }
 }
 
 /// The result of filtering `InferenceExtraHeader` by variant name.
@@ -506,6 +524,64 @@ mod tests {
         assert!(
             result.is_err(),
             "Expected error when unknown fields are present"
+        );
+    }
+
+    #[test]
+    fn test_filter_for_embeddings_removes_variant_entries() {
+        let unfiltered = UnfilteredInferenceExtraHeaders {
+            extra_headers: vec![
+                DynamicExtraHeader::Variant {
+                    variant_name: "variant1".to_string(),
+                    name: "X-V1".to_string(),
+                    value: "v1".to_string(),
+                },
+                DynamicExtraHeader::VariantDelete {
+                    variant_name: "variant2".to_string(),
+                    name: "X-V2".to_string(),
+                    delete: (),
+                },
+                DynamicExtraHeader::Always {
+                    name: "X-All".to_string(),
+                    value: "all".to_string(),
+                },
+                DynamicExtraHeader::ModelProvider {
+                    model_name: "gpt-4o".to_string(),
+                    provider_name: Some("openai".to_string()),
+                    name: "X-MP".to_string(),
+                    value: "mp".to_string(),
+                },
+            ],
+        };
+
+        let filtered = unfiltered.filter_for_embeddings();
+        // Should include: Always + ModelProvider (Variant and VariantDelete removed)
+        assert_eq!(
+            filtered.data.len(),
+            2,
+            "Expected 2 entries after filtering for embeddings"
+        );
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraHeader::Always { .. })),
+            "Expected Always entry to be preserved"
+        );
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraHeader::ModelProvider { .. })),
+            "Expected ModelProvider entry to be preserved"
+        );
+        // Verify no Variant or VariantDelete entries remain
+        assert!(
+            !filtered.data.iter().any(|item| matches!(
+                item,
+                DynamicExtraHeader::Variant { .. } | DynamicExtraHeader::VariantDelete { .. }
+            )),
+            "Expected no Variant or VariantDelete entries"
         );
     }
 }
