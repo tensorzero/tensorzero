@@ -20,6 +20,7 @@ mod list_datasets;
 mod list_inferences;
 mod run_evaluation;
 mod update_datapoints;
+mod upload_dataset;
 mod write_config;
 
 pub use auto_reject_tool_call::AutoRejectToolCallTool;
@@ -46,6 +47,9 @@ pub use list_datasets::{ListDatasetsTool, ListDatasetsToolParams};
 pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
 pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
+pub use upload_dataset::{
+    UploadDatasetTool, UploadDatasetToolOutput, UploadDatasetToolParams, upload_dataset_parquet,
+};
 pub use write_config::{
     EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
     UpsertVariantPayload, WriteConfigTool, WriteConfigToolParams,
