@@ -690,6 +690,61 @@ async def test_async_render_samples_unspecified_function(
     assert "Unknown function: non_existent_function" in str(excinfo.value)
 
 
+def test_sync_render_samples_skips_none_input(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test that render_samples skips inferences with None input (e.g. TTLed data)."""
+    rendered_samples = embedded_sync_client.experimental_render_samples(
+        stored_samples=[
+            StoredInferenceChat(
+                function_name="basic_test",
+                variant_name="default",
+                input=None,
+                output=None,
+                episode_id=str(uuid7()),
+                inference_id=str(uuid7()),
+                dispreferred_outputs=[],
+                tags={},
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+        ],
+        variants={"basic_test": "test"},
+    )
+    assert len(rendered_samples) == 0, "Inferences with None input should be skipped"
+
+
+def test_sync_render_samples_with_none_output(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test that render_samples renders successfully when input is present but output is None."""
+    rendered_samples = embedded_sync_client.experimental_render_samples(
+        stored_samples=[
+            StoredInferenceChat(
+                function_name="basic_test",
+                variant_name="default",
+                input=StoredInput(
+                    system={"assistant_name": "foo"},
+                    messages=[
+                        StoredInputMessage(
+                            role="user",
+                            content=[StoredInputMessageContentText(type="text", text="bar")],
+                        )
+                    ],
+                ),
+                output=None,
+                episode_id=str(uuid7()),
+                inference_id=str(uuid7()),
+                dispreferred_outputs=[],
+                tags={},
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+        ],
+        variants={"basic_test": "test"},
+    )
+    assert len(rendered_samples) == 1, "Inference with valid input and None output should render"
+    assert rendered_samples[0].output is None, "Output should be None"
+
+
 @pytest.mark.asyncio
 async def test_async_render_samples_no_variant(
     embedded_async_client: AsyncTensorZeroGateway,

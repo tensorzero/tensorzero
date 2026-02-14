@@ -4,6 +4,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
 import { InputElement } from "~/components/input_output/InputElement";
+import { EmptyMessage } from "~/components/input_output/ContentBlockElement";
 import type { Input } from "~/types/tensorzero";
 
 interface InputSectionProps {
@@ -25,7 +26,15 @@ export function InputSection({ promise, locationKey }: InputSectionProps) {
             <SectionAsyncErrorState defaultMessage="Failed to load input" />
           }
         >
-          {(input) => input && <InputElement input={input} />}
+          {(input) =>
+            input ? (
+              <InputElement input={input} />
+            ) : (
+              <div className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4">
+                <EmptyMessage message="No input" />
+              </div>
+            )
+          }
         </Await>
       </Suspense>
     </SectionLayout>
