@@ -54,6 +54,7 @@ pub struct StartBatchModelInferenceResponse {
     pub raw_request: String,  // The raw text of the batch request body
     pub raw_response: String, // The raw text of the response from the batch request
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub status: BatchStatus,
     pub errors: Vec<Value>,
 }
@@ -62,6 +63,7 @@ impl StartBatchModelInferenceResponse {
     pub fn new(
         provider_batch_response: StartBatchProviderInferenceResponse,
         model_provider_name: Arc<str>,
+        provider_type: Arc<str>,
     ) -> Self {
         Self {
             batch_id: provider_batch_response.batch_id,
@@ -70,6 +72,7 @@ impl StartBatchModelInferenceResponse {
             raw_request: provider_batch_response.raw_request,
             raw_response: provider_batch_response.raw_response,
             model_provider_name,
+            provider_type,
             status: provider_batch_response.status,
             errors: provider_batch_response.errors,
         }

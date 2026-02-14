@@ -139,6 +139,11 @@ async fn test_model_fallback_fail_success_streaming() {
             for entry in raw_response_array {
                 assert_error_raw_response_entry(entry);
                 assert_eq!(
+                    entry.get("provider_type").unwrap().as_str().unwrap(),
+                    "dummy",
+                    "Failed provider_type should be the actual provider type"
+                );
+                assert_eq!(
                     entry.get("data").unwrap().as_str().unwrap(),
                     "dummy error raw response",
                     "Failed provider data should be 'dummy error raw response'"
@@ -209,6 +214,11 @@ async fn test_model_fallback_both_fail_non_streaming() {
     for entry in raw_response_array {
         assert_error_raw_response_entry(entry);
         assert_eq!(
+            entry.get("provider_type").unwrap().as_str().unwrap(),
+            "dummy",
+            "Failed provider_type should be the actual provider type"
+        );
+        assert_eq!(
             entry.get("data").unwrap().as_str().unwrap(),
             "dummy error raw response",
             "Failed provider data should be 'dummy error raw response'"
@@ -260,6 +270,11 @@ async fn test_model_fallback_both_fail_streaming() {
 
     for entry in raw_response_array {
         assert_error_raw_response_entry(entry);
+        assert_eq!(
+            entry.get("provider_type").unwrap().as_str().unwrap(),
+            "dummy",
+            "Failed provider_type should be the actual provider type"
+        );
         assert_eq!(
             entry.get("data").unwrap().as_str().unwrap(),
             "dummy error raw response",
@@ -317,6 +332,11 @@ async fn test_variant_fallback_fail_success_non_streaming() {
     let error_entry = &raw_response_array[0];
     assert_error_raw_response_entry(error_entry);
     assert_eq!(
+        error_entry.get("provider_type").unwrap().as_str().unwrap(),
+        "dummy",
+        "Failed provider_type should be the actual provider type"
+    );
+    assert_eq!(
         error_entry.get("data").unwrap().as_str().unwrap(),
         "dummy error raw response",
         "Failed variant data should be 'dummy error raw response'"
@@ -325,6 +345,15 @@ async fn test_variant_fallback_fail_success_non_streaming() {
     // Last entry: successful variant (success entry — has model_inference_id)
     let success_entry = raw_response_array.last().unwrap();
     assert_raw_response_entry(success_entry);
+    assert_eq!(
+        success_entry
+            .get("provider_type")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "dummy",
+        "Successful provider_type should be the actual provider type"
+    );
 }
 
 /// Variant fallback: error variant -> good variant, streaming.
@@ -375,6 +404,11 @@ async fn test_variant_fallback_fail_success_streaming() {
                 // Error entries from failed variant should not have model_inference_id
                 if entry.get("model_inference_id").is_none() {
                     assert_error_raw_response_entry(entry);
+                    assert_eq!(
+                        entry.get("provider_type").unwrap().as_str().unwrap(),
+                        "dummy",
+                        "Failed provider_type should be the actual provider type"
+                    );
                     assert_eq!(
                         entry.get("data").unwrap().as_str().unwrap(),
                         "dummy error raw response",
@@ -445,6 +479,11 @@ async fn test_variant_fallback_both_fail_non_streaming() {
     for entry in raw_response_array {
         assert_error_raw_response_entry(entry);
         assert_eq!(
+            entry.get("provider_type").unwrap().as_str().unwrap(),
+            "dummy",
+            "Failed provider_type should be the actual provider type"
+        );
+        assert_eq!(
             entry.get("data").unwrap().as_str().unwrap(),
             "dummy error raw response",
             "Failed variant data should be 'dummy error raw response'"
@@ -495,6 +534,11 @@ async fn test_variant_fallback_both_fail_streaming() {
 
     for entry in raw_response_array {
         assert_error_raw_response_entry(entry);
+        assert_eq!(
+            entry.get("provider_type").unwrap().as_str().unwrap(),
+            "dummy",
+            "Failed provider_type should be the actual provider type"
+        );
         assert_eq!(
             entry.get("data").unwrap().as_str().unwrap(),
             "dummy error raw response",

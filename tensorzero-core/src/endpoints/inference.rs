@@ -165,6 +165,7 @@ struct InferenceMetadata {
     pub inference_params: InferenceParams,
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
@@ -837,6 +838,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             inference_params: model_used_info.inference_params.clone(),
             model_name: model_used_info.model_name,
             model_provider_name: model_used_info.model_provider_name,
+            provider_type: model_used_info.provider_type,
             raw_request: model_used_info.raw_request,
             raw_response: model_used_info.raw_response,
             system: model_used_info.system,
@@ -941,7 +943,6 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 
         let response = InferenceResponse::new(
             result,
-            &config.models,
             episode_id,
             variant_name.clone(),
             include_raw_usage,
@@ -1082,63 +1083,41 @@ fn create_previous_raw_usage_chunk(
     Some(chunk)
 }
 
-/// Resolves the actual provider type (e.g. "openai", "anthropic", "dummy") from the model config.
-/// Falls back to `model_provider_name` if the model or provider is not found in the config
-/// (e.g. relay, or config changed since inference started).
-fn resolve_provider_type(
-    models: &ModelTable,
-    model_name: &str,
-    model_provider_name: &str,
-) -> String {
-    models
-        .table
-        .get(model_name)
-        .and_then(|m| m.providers.get(model_provider_name))
-        .map(|p| p.provider_type().to_string())
-        .unwrap_or_else(|| model_provider_name.to_string())
-}
-
 /// Creates an artificial chunk containing `raw_response` entries from previous model inferences (e.g. best-of-N candidates).
 /// Returns `None` if `include_raw_response` is false or there are no non-cached entries.
 fn create_previous_raw_response_chunk(
     metadata: &InferenceMetadata,
-    models: &ModelTable,
     function: &FunctionConfig,
 ) -> Option<InferenceResultChunk> {
     if !metadata.include_raw_response {
         return None;
     }
 
-    // Collect raw response entries, preferring passed-through entries from relay
-    let entries: Vec<RawResponseEntry> = metadata
-        .previous_model_inference_results
-        .iter()
-        .filter(|r| !r.cached)
-        .flat_map(|r| {
-            // If there are passed-through relay_raw_response (from relay), use them
+    // Collect raw response entries, including failed provider attempts and successful responses
+    let mut entries: Vec<RawResponseEntry> = Vec::new();
+    for r in &metadata.previous_model_inference_results {
+        // Include failed provider attempts (model-level fallback) for this previous inference
+        entries.extend(r.failed_raw_response.clone());
+        // Include successful provider response
+        if !r.cached {
             if let Some(passed_through) = &r.relay_raw_response {
-                passed_through.clone()
+                entries.extend(passed_through.clone());
             } else {
-                // Otherwise, generate entries from the model inference result
                 let api_type = r
                     .raw_usage
                     .as_ref()
                     .and_then(|entries| entries.first())
                     .map(|entry| entry.api_type)
                     .unwrap_or(ApiType::ChatCompletions);
-                vec![RawResponseEntry {
+                entries.push(RawResponseEntry {
                     model_inference_id: Some(r.id),
-                    provider_type: resolve_provider_type(
-                        models,
-                        &r.model_name,
-                        &r.model_provider_name,
-                    ),
+                    provider_type: r.provider_type.to_string(),
                     api_type,
                     data: r.raw_response.clone(),
-                }]
+                });
             }
-        })
-        .collect();
+        }
+    }
 
     if entries.is_empty() {
         return None;
@@ -1220,7 +1199,7 @@ fn create_stream(
         }
 
         // If previous model inferences (e.g. best-of-N candidates) had `raw_response`, emit them immediately in an artificial chunk.
-        if let Some(chunk) = create_previous_raw_response_chunk(&metadata, &config.models, &function) {
+        if let Some(chunk) = create_previous_raw_response_chunk(&metadata, &function) {
             buffer.push(chunk.clone());
             yield Ok(prepare_response_chunk(&metadata, chunk));
         }
@@ -1314,6 +1293,7 @@ fn create_stream(
                 inference_params,
                 model_name,
                 model_provider_name,
+                provider_type,
                 raw_request,
                 raw_response,
                 system,
@@ -1347,6 +1327,7 @@ fn create_stream(
                     function,
                     model_name,
                     model_provider_name,
+                    provider_type,
                     raw_request,
                     raw_response,
                     inference_params,
@@ -1666,7 +1647,6 @@ pub struct JsonInferenceResponse {
 impl InferenceResponse {
     pub fn new(
         inference_result: InferenceResult,
-        models: &ModelTable,
         episode_id: Uuid,
         variant_name: String,
         include_raw_usage: bool,
@@ -1717,11 +1697,7 @@ impl InferenceResponse {
                                 .unwrap_or(ApiType::ChatCompletions);
                             vec![RawResponseEntry {
                                 model_inference_id: Some(r.id),
-                                provider_type: resolve_provider_type(
-                                    models,
-                                    &r.model_name,
-                                    &r.model_provider_name,
-                                ),
+                                provider_type: r.provider_type.to_string(),
                                 api_type,
                                 data: r.raw_response.clone(),
                             }]
@@ -2315,7 +2291,7 @@ mod tests {
             start_time: Instant::now(),
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
-
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             system: None,
@@ -2384,7 +2360,7 @@ mod tests {
             start_time: Instant::now(),
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
-
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             system: None,
@@ -2780,7 +2756,7 @@ mod tests {
             start_time: Instant::now(),
             model_name: "test_model".into(),
             model_provider_name: "test_provider".into(),
-
+            provider_type: Arc::from("dummy"),
             raw_request: "raw request".to_string(),
             raw_response: None,
             system: None,
@@ -3079,7 +3055,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             model_provider_name: "openai".into(),
-
+            provider_type: Arc::from("dummy"),
             model_name: "gpt-4".into(),
             cached: false, // NOT cached, so raw_usage should be emitted
             finish_reason: Some(FinishReason::Stop),
@@ -3179,7 +3155,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             model_provider_name: "cached".into(),
-
+            provider_type: Arc::from("dummy"),
             model_name: "cached-model".into(),
             cached: true, // CACHED - should be filtered out
             finish_reason: Some(FinishReason::Stop),
@@ -3261,7 +3237,7 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             model_provider_name: "openai".into(),
-
+            provider_type: Arc::from("dummy"),
             model_name: "gpt-4".into(),
             cached: false,
             finish_reason: Some(FinishReason::Stop),

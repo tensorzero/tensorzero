@@ -197,6 +197,7 @@ impl BatchInferenceConfig {
 pub struct ModelUsedInfo {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
@@ -815,6 +816,7 @@ async fn infer_model_request_stream<'request>(
                 stream,
                 raw_request,
                 model_provider_name,
+                provider_type,
                 cached,
                 model_inference_id,
                 failed_raw_response,
@@ -831,6 +833,7 @@ async fn infer_model_request_stream<'request>(
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
+        provider_type,
         raw_request,
         raw_response: None,
         inference_params,

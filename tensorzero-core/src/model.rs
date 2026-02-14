@@ -166,6 +166,7 @@ pub struct StreamResponse {
     pub stream: Instrumented<PeekableProviderInferenceResponseStream>,
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub cached: bool,
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts during fallback.
@@ -176,6 +177,7 @@ impl StreamResponse {
     pub fn from_cache(
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
+        provider_type: Arc<str>,
         model_inference_id: Uuid,
     ) -> Self {
         let chunks = cache_lookup.output.chunks;
@@ -213,6 +215,7 @@ impl StreamResponse {
                 )),
             raw_request: cache_lookup.raw_request,
             model_provider_name,
+            provider_type,
             cached: true,
             model_inference_id,
             failed_raw_response: vec![],
@@ -349,12 +352,14 @@ impl ModelConfig {
         provider: &'request ModelProvider,
         clients: &InferenceClients,
     ) -> Result<ModelInferenceResponse, Error> {
+        let provider_type: Arc<str> = Arc::from(provider.provider_type());
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup(
                 &clients.cache_manager,
                 model_provider_request,
                 clients.cache_options.max_age_s,
+                provider_type.clone(),
             )
             .await
             .ok()
@@ -375,6 +380,7 @@ impl ModelConfig {
         Ok(ModelInferenceResponse::new(
             response,
             model_provider_request.provider_name.into(),
+            provider_type,
             false,
         ))
     }
@@ -392,12 +398,14 @@ impl ModelConfig {
         provider: &'request ModelProvider,
         clients: &InferenceClients,
     ) -> Result<StreamResponseAndMessages, Error> {
+        let provider_type: Arc<str> = Arc::from(provider.provider_type());
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup_streaming(
                 &clients.cache_manager,
                 model_provider_request,
                 clients.cache_options.max_age_s,
+                provider_type.clone(),
             )
             .await
             .ok()
@@ -446,6 +454,7 @@ impl ModelConfig {
                 stream,
                 raw_request,
                 model_provider_name: model_provider_request.provider_name.into(),
+                provider_type,
                 cached: false,
                 model_inference_id: model_provider_request.model_inference_id,
                 failed_raw_response: vec![],
@@ -479,6 +488,7 @@ impl ModelConfig {
                     })?;
                 return Ok(ModelInferenceResponse::new(
                     response,
+                    "tensorzero::relay".into(),
                     "tensorzero::relay".into(),
                     false,
                 ));
@@ -614,6 +624,7 @@ impl ModelConfig {
                         stream: stream.instrument(Span::current()),
                         raw_request,
                         model_provider_name: "tensorzero::relay".into(),
+                        provider_type: "tensorzero::relay".into(),
                         cached: false,
                         model_inference_id: Uuid::now_v7(),
                         failed_raw_response: vec![],
@@ -719,6 +730,7 @@ impl ModelConfig {
                     return Ok(StartBatchModelInferenceResponse::new(
                         response,
                         provider_name.clone(),
+                        Arc::from(provider.provider_type()),
                     ));
                 }
                 Err(error) => {
@@ -3252,6 +3264,7 @@ mod tests {
                     mut stream,
                     raw_request,
                     model_provider_name,
+                    provider_type: _,
                     cached: _,
                     model_inference_id: _,
                     failed_raw_response: _,
@@ -3431,6 +3444,7 @@ mod tests {
                     mut stream,
                     raw_request,
                     model_provider_name,
+                    provider_type: _,
                     cached: _,
                     model_inference_id: _,
                     failed_raw_response: _,

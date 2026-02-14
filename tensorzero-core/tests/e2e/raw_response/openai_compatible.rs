@@ -109,6 +109,10 @@ async fn test_openai_compatible_raw_response_non_streaming() {
         api_type, "chat_completions",
         "OpenAI chat completions should have api_type 'chat_completions'"
     );
+
+    // Provider type should be "openai"
+    let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
+    assert_eq!(provider_type, "openai", "Provider type should be 'openai'");
 }
 
 /// Test that tensorzero_raw_response is NOT returned when tensorzero::include_raw_response is false

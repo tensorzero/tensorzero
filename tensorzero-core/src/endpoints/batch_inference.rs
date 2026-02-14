@@ -968,6 +968,13 @@ pub async fn write_completed_batch_inference<'a>(
             latency: Latency::Batch,
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
+            provider_type: config
+                .models
+                .table
+                .get(batch_request.model_name.as_ref())
+                .and_then(|m| m.providers.get(batch_request.model_provider_name.as_ref()))
+                .map(|p| Arc::from(p.provider_type()))
+                .unwrap_or_else(|| batch_request.model_provider_name.clone().into()),
             cached: false,
             finish_reason,
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
@@ -1024,7 +1031,6 @@ pub async fn write_completed_batch_inference<'a>(
             .await?;
         let inference_response = InferenceResponse::new(
             inference_result.clone(),
-            &config.models,
             episode_id,
             variant_name.to_string(),
             false, // batch inference does not support include_raw_usage (#5452)
