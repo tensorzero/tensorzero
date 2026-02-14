@@ -45,6 +45,7 @@ impl ToolMetadata for EchoTool {
 
 #[async_trait]
 impl TaskTool for EchoTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,

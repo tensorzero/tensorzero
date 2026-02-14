@@ -115,7 +115,7 @@ async fn test_launch_optimization_workflow_tool_immediate_completion(
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client);
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
@@ -194,7 +194,7 @@ async fn test_launch_optimization_workflow_tool_multiple_polls(pool: PgPool) -> 
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client);
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
@@ -262,7 +262,7 @@ async fn test_launch_optimization_workflow_tool_failed(pool: PgPool) -> sqlx::Re
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client);
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
@@ -325,7 +325,7 @@ async fn test_launch_optimization_workflow_tool_launch_error(pool: PgPool) -> sq
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client);
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)

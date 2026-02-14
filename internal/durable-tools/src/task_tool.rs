@@ -139,6 +139,7 @@ use crate::tool_metadata::ToolMetadata;
 /// ```
 #[async_trait]
 pub trait TaskTool: ToolMetadata {
+    type ExtraState: Clone + Send + Sync + 'static;
     /// Execute the tool logic.
     ///
     /// This is called by the durable worker when the tool is invoked.
@@ -154,7 +155,7 @@ pub trait TaskTool: ToolMetadata {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext<'_, Self::ExtraState>,
     ) -> ToolExecResult<<Self as ToolMetadata>::Output>;
 }
 
@@ -174,7 +175,7 @@ impl<T: TaskTool> TaskToolAdapter<T> {
 }
 
 #[async_trait]
-impl<T: TaskTool> Task<ToolAppState> for TaskToolAdapter<T> {
+impl<T: TaskTool> Task<ToolAppState<T::ExtraState>> for TaskToolAdapter<T> {
     fn name(&self) -> Cow<'static, str> {
         self.0.name()
     }
@@ -185,8 +186,8 @@ impl<T: TaskTool> Task<ToolAppState> for TaskToolAdapter<T> {
     async fn run(
         &self,
         wrapped: Self::Params,
-        mut task_ctx: TaskContext<ToolAppState>,
-        app_ctx: ToolAppState,
+        mut task_ctx: TaskContext<ToolAppState<T::ExtraState>>,
+        app_ctx: ToolAppState<T::ExtraState>,
     ) -> TaskResult<Self::Output> {
         let mut tool_ctx = ToolContext::new(&mut task_ctx, &app_ctx, wrapped.episode_id);
         self.0

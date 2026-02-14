@@ -57,6 +57,7 @@ impl ToolMetadata for SlowTool {
 
 #[async_trait]
 impl TaskTool for SlowTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,

@@ -83,8 +83,9 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
 #[async_trait]
 impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
-    T: TaskTool<SideInfo = AutopilotSideInfo>,
+    T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
 {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,
@@ -220,6 +221,7 @@ struct SimpleToolStepParams<L, S> {
 
 #[async_trait]
 impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolWrapper<T> {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,
@@ -539,6 +541,7 @@ mod tests {
 
     #[async_trait]
     impl TaskTool for TestTaskTool {
+        type ExtraState = ();
         async fn execute(
             &self,
             llm_params: Self::LlmParams,

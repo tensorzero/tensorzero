@@ -67,14 +67,14 @@ use durable_tools_spawn::TaskToolParams;
 /// // Start a worker
 /// let worker = executor.start_worker(WorkerOptions::default()).await?;
 /// ```
-pub struct ToolExecutor {
+pub struct ToolExecutor<S: Clone + Send + Sync + 'static = ()> {
     /// The durable client for task management.
-    durable: DurableClient,
+    durable: DurableClient<S>,
     /// The tool registry (wrapped in `RwLock` for thread-safe registration).
     registry: Arc<RwLock<ToolRegistry>>,
 }
 
-impl ToolExecutor {
+impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
     /// Create a new executor with default settings.
     ///
     /// # Arguments
@@ -82,6 +82,7 @@ impl ToolExecutor {
     /// * `database_url` - Database connection URL (as a `SecretString` for security)
     /// * `queue_name` - Name of the durable queue for tool tasks
     /// * `t0_client` - The TensorZero client for inference and autopilot calls
+    /// * `extra_state` - Extra state to pass to the executor, which will be made available to all tools.
     ///
     /// # Errors
     ///
@@ -90,8 +91,9 @@ impl ToolExecutor {
         database_url: SecretString,
         queue_name: &str,
         t0_client: Arc<dyn TensorZeroClient>,
+        extra_state: S,
     ) -> anyhow::Result<Self> {
-        Self::builder()
+        Self::builder(extra_state)
             .database_url(database_url)
             .queue_name(queue_name)
             .t0_client(t0_client)
@@ -100,8 +102,8 @@ impl ToolExecutor {
     }
 
     /// Create a builder for custom configuration.
-    pub fn builder() -> ToolExecutorBuilder {
-        ToolExecutorBuilder::new()
+    pub fn builder(extra_state: S) -> ToolExecutorBuilder<S> {
+        ToolExecutorBuilder::new(extra_state)
     }
 
     /// Register a `TaskTool` instance.
@@ -113,7 +115,7 @@ impl ToolExecutor {
     ///
     /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
     /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    pub async fn register_task_tool_instance<T: TaskTool>(
+    pub async fn register_task_tool_instance<T: TaskTool<ExtraState = S>>(
         &self,
         tool: T,
     ) -> Result<&Self, ToolError> {
@@ -265,7 +267,7 @@ impl ToolExecutor {
     }
 
     /// Get a reference to the underlying durable client.
-    pub fn durable(&self) -> &DurableClient {
+    pub fn durable(&self) -> &DurableClient<S> {
         &self.durable
     }
 
@@ -281,23 +283,25 @@ impl ToolExecutor {
 }
 
 /// Builder for creating a [`ToolExecutor`] with custom configuration.
-pub struct ToolExecutorBuilder {
+pub struct ToolExecutorBuilder<S = ()> {
     database_url: Option<SecretString>,
     pool: Option<PgPool>,
     queue_name: String,
     default_max_attempts: u32,
     t0_client: Option<Arc<dyn TensorZeroClient>>,
+    extra_state: S,
 }
 
-impl ToolExecutorBuilder {
+impl<S> ToolExecutorBuilder<S> {
     /// Create a new builder with default settings.
-    pub fn new() -> Self {
+    pub fn new(extra_state: S) -> Self {
         Self {
             database_url: None,
             pool: None,
             queue_name: "tools".to_string(),
             default_max_attempts: 5,
             t0_client: None,
+            extra_state,
         }
     }
 
@@ -342,7 +346,10 @@ impl ToolExecutorBuilder {
     ///
     /// Returns an error if the database connection fails or if the TensorZero
     /// client was not provided.
-    pub async fn build(self) -> anyhow::Result<ToolExecutor> {
+    pub async fn build(self) -> anyhow::Result<ToolExecutor<S>>
+    where
+        S: Clone + Send + Sync + 'static,
+    {
         // TensorZero client is required
         let t0_client = self
             .t0_client
@@ -362,7 +369,8 @@ impl ToolExecutorBuilder {
         };
 
         // Create the app context with the pool and TensorZero client
-        let app_ctx = ToolAppState::new(pool.clone(), registry.clone(), t0_client);
+        let app_ctx =
+            ToolAppState::new(pool.clone(), registry.clone(), t0_client, self.extra_state);
 
         // Build the durable client with the app context
         let durable = DurableBuilder::new()
@@ -376,8 +384,8 @@ impl ToolExecutorBuilder {
     }
 }
 
-impl Default for ToolExecutorBuilder {
+impl<S: Default> Default for ToolExecutorBuilder<S> {
     fn default() -> Self {
-        Self::new()
+        Self::new(S::default())
     }
 }

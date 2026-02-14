@@ -79,7 +79,7 @@ impl AutopilotWorker {
     ///
     /// Returns an error if the executor cannot be created.
     pub async fn new(config: AutopilotWorkerConfig) -> Result<Self> {
-        let executor = ToolExecutor::builder()
+        let executor = ToolExecutor::builder(())
             .pool(config.pool)
             .queue_name(&config.queue_name)
             .t0_client(config.t0_client)
@@ -164,7 +164,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
 
     async fn visit_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
     where
-        T: TaskTool<SideInfo = AutopilotSideInfo>,
+        T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
     {
         self.executor
             .register_task_tool_instance(ClientTaskToolWrapper::new(tool))
