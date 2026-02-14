@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { useResolveUuid } from "~/hooks/useResolveUuid";
 import type { ResolvedObject } from "~/types/tensorzero";
+import { cn } from "~/utils/common";
 import { toDatapointUrl, toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
 
 function getUrlForResolvedObject(
@@ -36,20 +37,23 @@ export function UuidLink({ uuid }: { uuid: string }) {
       ? getUrlForResolvedObject(uuid, data.object_types[0])
       : null;
 
-  if (!url) {
-    return (
-      <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium">
-        {uuid}
-      </code>
-    );
-  }
-
   return (
-    <Link
-      to={url}
-      className="rounded bg-orange-50 px-1 py-0.5 font-mono text-xs text-orange-500 no-underline hover:underline"
+    <code
+      className={cn(
+        "relative rounded px-1.5 py-0.5 font-mono text-xs font-medium transition-colors duration-300",
+        url ? "bg-orange-50 text-orange-500" : "bg-muted",
+      )}
     >
-      {uuid}
-    </Link>
+      {url ? (
+        <Link
+          to={url}
+          className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
+        >
+          {uuid}
+        </Link>
+      ) : (
+        uuid
+      )}
+    </code>
   );
 }
