@@ -12,6 +12,11 @@ import {
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
+import { UuidLink } from "~/components/autopilot/UuidLink";
+import {
+  remarkUuidLinks,
+  UUID_LINK_ELEMENT,
+} from "~/components/autopilot/remarkUuidLinks";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -503,6 +508,9 @@ class EventErrorBoundary extends Component<
   }
 }
 
+const uuidRemarkPlugins = [remarkUuidLinks];
+const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
+
 function EventItem({
   event,
   isPending = false,
@@ -572,7 +580,12 @@ function EventItem({
         <>
           {event.payload.type === "message" &&
           event.payload.role === "assistant" ? (
-            <Markdown>{summary.description}</Markdown>
+            <Markdown
+              remarkPlugins={uuidRemarkPlugins}
+              components={uuidComponents}
+            >
+              {summary.description}
+            </Markdown>
           ) : event.payload.type === "tool_call" ? (
             <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (
