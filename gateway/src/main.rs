@@ -775,3 +775,4 @@ mod tests {
         assert!(logs_contain("│ └ config/prod/settings.toml"));
     }
 }
+
