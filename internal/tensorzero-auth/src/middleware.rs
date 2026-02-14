@@ -7,6 +7,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use chrono::Utc;
 use moka::sync::Cache;
 use serde_json::{Value, json};
 use tracing::{Instrument, field::Empty};
@@ -139,7 +140,17 @@ pub async fn tensorzero_auth_middleware(
             let cache_key = parsed_key.cache_key();
             if let Some(cached_result) = cache.get(&cache_key) {
                 return match cached_result {
-                    AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
+                    AuthResult::Success(key_info) => {
+                        if let Some(expires_at) = key_info.expires_at
+                            && expires_at <= Utc::now()
+                        {
+                            return Err(TensorZeroAuthError::Middleware {
+                                message: format!("API key expired at: {expires_at}"),
+                                key_info: Some(Box::new(key_info)),
+                            });
+                        }
+                        Ok((parsed_key, key_info))
+                    }
                     AuthResult::Disabled(disabled_at, key_info) => {
                         Err(TensorZeroAuthError::Middleware {
                             message: format!("API key was disabled at: {disabled_at}"),

@@ -379,6 +379,37 @@ async fn test_tensorzero_missing_auth() {
             ),
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        let expired_key = tensorzero_auth::postgres::create_key(
+            "my_org",
+            "my_workspace",
+            None,
+            Some(Utc::now() - Duration::from_secs(2)),
+            &pool,
+        )
+        .await
+        .unwrap();
+
+        let expired_key_response = client
+            .request(
+                Method::from_str(method).unwrap(),
+                format!("http://{}/{}", child_data.addr, path),
+            )
+            .header(
+                http::header::AUTHORIZATION,
+                format!("Bearer {}", expired_key.expose_secret()),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        let status = expired_key_response.status();
+        let text = expired_key_response.text().await.unwrap();
+        assert!(
+            text.contains("API key expired at:"),
+            "Expected expired key error message, got: {text}"
+        );
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 }
 

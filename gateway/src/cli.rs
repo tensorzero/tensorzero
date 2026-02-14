@@ -68,7 +68,6 @@ pub struct EarlyExitCommands {
 }
 
 #[derive(Args, Debug)]
-#[group(multiple = false)]
 pub struct EarlyExitCommandArguments {
     /// Specify the expiration date-time for the created API key. Requires --create-api-key to also
     /// be set.

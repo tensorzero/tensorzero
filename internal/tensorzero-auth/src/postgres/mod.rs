@@ -97,7 +97,7 @@ pub struct KeyInfo {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub disabled_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub expires_at: Option<DateTime<Utc>>,
 }
 
