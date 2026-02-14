@@ -23,6 +23,12 @@ use crate::statistics_util::{wald_confint, wilson_confint};
 
 use super::PostgresConnectionInfo;
 
+#[derive(sqlx::FromRow)]
+struct WorkflowEvaluationRunByEpisodeRow {
+    variant_pins: serde_json::Value,
+    tags: serde_json::Value,
+}
+
 // =====================================================================
 // WorkflowEvaluationQueries trait implementation
 // =====================================================================
@@ -298,15 +304,15 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         let pool = self.get_pool_result()?;
         let mut qb = build_get_workflow_evaluation_run_by_episode_id_query(episode_id);
 
-        let row: Option<(serde_json::Value, serde_json::Value)> =
+        let row: Option<WorkflowEvaluationRunByEpisodeRow> =
             qb.build_query_as().fetch_optional(pool).await?;
 
         match row {
-            Some((variant_pins_json, tags_json)) => {
+            Some(row) => {
                 let variant_pins: HashMap<String, String> =
-                    serde_json::from_value(variant_pins_json).unwrap_or_default();
+                    serde_json::from_value(row.variant_pins).unwrap_or_default();
                 let tags: HashMap<String, String> =
-                    serde_json::from_value(tags_json).unwrap_or_default();
+                    serde_json::from_value(row.tags).unwrap_or_default();
                 Ok(Some(WorkflowEvaluationRunInfo { variant_pins, tags }))
             }
             None => Ok(None),
