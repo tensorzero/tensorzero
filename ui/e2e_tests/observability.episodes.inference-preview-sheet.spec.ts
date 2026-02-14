@@ -23,8 +23,12 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
     const sheet = page.locator('[role="dialog"]');
     await sheet.waitFor({ state: "visible" });
 
-    // Verify the sheet header shows "Inference" with a link
-    await expect(sheet.getByText("Inference")).toBeVisible();
+    // Verify the sheet header shows the inference ID link.
+    // Avoid broad text match (`Inference`) since multiple headings contain it.
+    const inferenceHeaderLink = sheet.locator(
+      "h2 a[href^='/observability/inferences/']",
+    );
+    await expect(inferenceHeaderLink).toBeVisible();
 
     // Wait for the inference data to load (BasicInfo should show the function name)
     await expect(
