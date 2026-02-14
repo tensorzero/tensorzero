@@ -88,7 +88,8 @@
               "optimization/index",
               "optimization/dynamic-in-context-learning-dicl",
               "optimization/gepa",
-              "optimization/supervised-fine-tuning-sft"
+              "optimization/supervised-fine-tuning-sft",
+              "optimization/reinforcement-fine-tuning-rft"
             ]
           },
           {
