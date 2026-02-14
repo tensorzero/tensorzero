@@ -72,13 +72,11 @@ async fn handle_create_api_key(
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);
 
-    tracing::debug!(
-        "Created API key with expiration: {}",
-        match expiration {
-            None => "no-expiration".to_string(),
-            Some(datetime) => datetime.to_string(),
-        },
-    );
+    if let Some(expiration) = expiration {
+        tracing::debug!("Created API key with expiration: {expiration}");
+    } else {
+        tracing::debug!("Created API key with no expiration");
+    }
 
     Ok(())
 }
