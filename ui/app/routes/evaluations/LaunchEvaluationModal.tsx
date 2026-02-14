@@ -1,6 +1,5 @@
 import { useLayoutEffect, useState, useEffect } from "react";
 import { useFetcher, Link } from "react-router";
-import { CircleHelp } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
@@ -12,12 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
+import { HelpTooltip } from "~/components/ui/HelpTooltip";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
@@ -273,22 +267,11 @@ function EvaluationForm({
           <label htmlFor="concurrency_limit" className="text-sm font-medium">
             Concurrency
           </label>
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <span className="inline-flex cursor-help">
-                  <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p className="text-xs">
-                  The number of datapoints to evaluate in parallel. Increasing
-                  this value can speed up the evaluation run, but may trigger
-                  rate limiting from model providers.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <HelpTooltip>
+            The number of datapoints to evaluate in parallel. Increasing this
+            value can speed up the evaluation run, but may trigger rate limiting
+            from model providers.
+          </HelpTooltip>
         </div>
         <input
           type="number"
@@ -307,18 +290,9 @@ function EvaluationForm({
           <label htmlFor="max_datapoints" className="text-sm font-medium">
             Max Datapoints
           </label>
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <span className="inline-flex cursor-help">
-                  <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                Maximum number of datapoints to evaluate (optional)
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <HelpTooltip>
+            Leave empty to evaluate all datapoints in the dataset.
+          </HelpTooltip>
         </div>
         <Input
           type="text"
