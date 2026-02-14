@@ -203,6 +203,27 @@ impl Error {
         response
     }
 
+    /// Builds a JSON value for a mid-stream streaming error SSE event.
+    ///
+    /// Uses `raw_chunk` / `tensorzero_raw_chunk` (matching success chunk format)
+    /// instead of the structured `raw_response` array used in terminal errors.
+    pub fn build_streaming_error_event(
+        &self,
+        openai_format: bool,
+        include_raw_response: bool,
+    ) -> Value {
+        let mut body = self.build_response_body(openai_format, None);
+        if include_raw_response && let Some(raw_chunk) = self.0.extract_raw_chunk() {
+            let key = if openai_format {
+                "tensorzero_raw_chunk"
+            } else {
+                "raw_chunk"
+            };
+            body[key] = Value::String(raw_chunk);
+        }
+        body
+    }
+
     /// Builds the JSON response body for this error.
     ///
     /// When `openai_format` is true, returns `{"error": {"message": "..."}}` (OpenAI-compatible).
@@ -1072,6 +1093,28 @@ impl ErrorDetails {
                 });
             }
             _ => {}
+        }
+    }
+
+    /// Extracts the raw response string from a mid-stream error.
+    ///
+    /// Unlike `collect_raw_response_entries` which produces structured `RawResponseEntry` values,
+    /// this returns just the raw response string for use as `raw_chunk` in streaming error events.
+    fn extract_raw_chunk(&self) -> Option<String> {
+        match self {
+            ErrorDetails::InferenceClient {
+                raw_response: Some(data),
+                ..
+            }
+            | ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                ..
+            }
+            | ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                ..
+            } => Some(data.clone()),
+            _ => None,
         }
     }
 }
