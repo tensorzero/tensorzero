@@ -9,7 +9,7 @@ description: Learn how to deploy Valkey for high-performance rate limiting in Te
 
 </Note>
 
-TensorZero can use a Redis-compatible data store like [Valkey](https://valkey.io/) as a high-performance backend for its [rate limiting functionality](/operations/enforce-custom-rate-limits).
+TensorZero can use a Redis-compatible data store like [Valkey](https://valkey.io/) as a high-performance backend for [rate limiting](/operations/enforce-custom-rate-limits) and [inference caching](/gateway/guides/inference-caching).
 
 <Tip>
 
@@ -82,6 +82,20 @@ If both `TENSORZERO_VALKEY_URL` and `TENSORZERO_POSTGRES_URL` are set, the gatew
 </Warning>
 
 ## Best Practices
+
+### Memory Management
+
+When using Valkey for inference caching, cache entries accumulate in memory.
+TensorZero sets a TTL (default: 24 hours) on all cache entries so they expire automatically, but you should also configure a `maxmemory` limit and an eviction policy on the Valkey server to handle memory pressure gracefully.
+
+We recommend using the `volatile-lru` eviction policy, which evicts the least-recently-used keys among those with a TTL set.
+This ensures that cache entries are evicted when your Valkey cluster is under memory pressure, while rate limiting keys (which do not have a TTL) are preserved.
+
+```
+# In your Valkey/Redis configuration (valkey.conf or redis.conf):
+maxmemory 256mb
+maxmemory-policy volatile-lru
+```
 
 ### Durability
 
