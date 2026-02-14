@@ -19,7 +19,6 @@ env:
   SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  RUST_MSRV: 1.88.0
 
 jobs:
   check-version-consistency:
@@ -34,6 +33,9 @@ jobs:
 
       - name: Check version consistency
         run: ./ci/check-version-consistency.sh
+
+      - name: Check Rust version consistency in Dockerfiles
+        run: ./ci/check-rust-version-consistency.sh
 
   # This checks for specific markers in the codebase that require multiple files to be edited together.
   check-if-edited-then-edit:
@@ -255,10 +257,10 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -330,15 +332,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -397,15 +399,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -465,15 +467,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -500,15 +502,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -538,15 +540,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -723,10 +725,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -939,10 +941,10 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1022,10 +1024,10 @@ jobs:
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1140,10 +1142,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
