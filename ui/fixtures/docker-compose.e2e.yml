@@ -24,13 +24,14 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
       target: gateway
       args:
         PROFILE: dev
+        CARGO_BUILD_FLAGS: --features e2e_tests
     volumes:
       - ./config:/app/config:ro
       # Mount GCP JWT key file (optional - only needed for GCP providers)

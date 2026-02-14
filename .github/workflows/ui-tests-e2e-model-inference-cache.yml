@@ -21,6 +21,8 @@ on:
         required: false
       TOGETHER_API_KEY:
         required: false
+      DOCKERHUB_LIMITED_TOKEN:
+        required: false
     inputs:
       regen_cache:
         required: true
@@ -94,10 +96,16 @@ jobs:
             sleep $((10 * attempt))
           done
 
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-{gateway,ui,mock-provider-api}-container
+          pattern: build-{ui,mock-provider-api}-container
           merge-multiple: true
 
       - name: Load container images
@@ -105,7 +113,6 @@ jobs:
         # We'll automatically build the container locally if they don't exist, so let this step fail.
         continue-on-error: true
         run: |
-          docker load < gateway-container.tar
           docker load < ui-container.tar
           docker load < mock-provider-api-container.tar
 
@@ -143,11 +150,20 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: uv run ./ui/fixtures/download-small-fixtures.py
 
+      - name: Download provider-proxy cache
+        if: inputs.regen_cache == true
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=regen-fixtures-provider-proxy-cache ./ci/download-provider-proxy-cache.sh
+
       - name: Regenerate model inference cache
         working-directory: ui
         if: inputs.regen_cache == true
         env:
           TENSORZERO_CI: 1
+          TENSORZERO_USE_PROVIDER_PROXY: 1
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
@@ -191,8 +207,16 @@ jobs:
           echo "Cache file validation passed: same number of rows"
           # Take down and destroy the containers, so that our subsequent test run starts with a fresh ClickHouse
           # server, and inserts our regenerated fixtures from scratch
-          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
-          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
+          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml -f ./fixtures/docker-compose.provider-proxy.yml down
+          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml -f ./fixtures/docker-compose.provider-proxy.yml rm -f
+
+      - name: Upload provider-proxy cache
+        if: inputs.regen_cache == true
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=regen-fixtures-provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
 
       - name: Upload new model inference cache
         if: always() && inputs.regen_cache == true
