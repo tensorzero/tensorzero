@@ -2,10 +2,7 @@
 # │                                  GENERAL                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-# To keep things minimal in this example, we don't set up observability with ClickHouse.
-
 [gateway]
-observability.enabled = false
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
