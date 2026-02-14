@@ -30,12 +30,7 @@ export default defineConfig({
       : 0,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.TENSORZERO_CI
-    ? [
-        ["list"],
-        ["github"],
-        ["buildkite-test-collector/playwright/reporter"],
-        ["junit", { outputFile: "playwright.junit.xml" }],
-      ]
+    ? [["list"], ["github"], ["junit", { outputFile: "playwright.junit.xml" }]]
     : [["dot"], ["junit", { outputFile: "playwright.junit.xml" }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
