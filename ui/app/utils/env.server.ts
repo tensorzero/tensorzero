@@ -18,6 +18,7 @@ interface Env {
   TENSORZERO_UI_READ_ONLY: boolean;
   TENSORZERO_GATEWAY_URL: string;
   TENSORZERO_API_KEY?: string;
+  TENSORZERO_UI_CONFIG_FILE?: string;
 }
 
 let _env: Env | undefined;
@@ -72,6 +73,7 @@ export function getEnv(): Env {
     TENSORZERO_UI_READ_ONLY: process.env.TENSORZERO_UI_READ_ONLY === "1",
     TENSORZERO_GATEWAY_URL,
     TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY,
+    TENSORZERO_UI_CONFIG_FILE: process.env.TENSORZERO_UI_CONFIG_FILE,
   };
 
   return _env;

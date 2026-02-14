@@ -23,6 +23,7 @@ import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
+import { ApplySessionConfigChangesButton } from "~/components/autopilot/ApplySessionConfigChangesButton";
 import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 import {
   AutopilotStatusBanner,
@@ -32,6 +33,7 @@ import { ChatInput } from "~/components/autopilot/ChatInput";
 import { FadeDirection, FadeGradient } from "~/components/ui/FadeGradient";
 import { fetchOlderAutopilotEvents } from "~/utils/autopilot/fetch-older-events";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
+import { getEnv } from "~/utils/env.server";
 import { useAutopilotEventStream } from "~/hooks/useAutopilotEventStream";
 import { useElementHeight } from "~/hooks/useElementHeight";
 import { useInfiniteScrollUp } from "~/hooks/use-infinite-scroll-up";
@@ -88,6 +90,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Session ID is required", { status: 400 });
   }
 
+  const env = getEnv();
+  const configApplyEnabled = Boolean(env.TENSORZERO_UI_CONFIG_FILE);
+
   // Special case: "new" session - return synchronously (no data to fetch)
   if (sessionId === "new") {
     const url = new URL(request.url);
@@ -101,6 +106,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
+      configApplyEnabled,
       initialMessage,
     };
   }
@@ -137,6 +143,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     sessionId,
     eventsData: eventsDataPromise,
     isNewSession: false,
+    configApplyEnabled,
     initialMessage: undefined,
   };
 }
@@ -188,6 +195,7 @@ function EventStreamContent({
   onPendingToolCallsChange,
   onErrorChange,
   onHasReachedStartChange,
+  configApplyEnabled,
   pendingToolCallIds,
 }: {
   sessionId: string;
@@ -201,6 +209,7 @@ function EventStreamContent({
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
   onHasReachedStartChange: (hasReachedStart: boolean) => void;
+  configApplyEnabled: boolean;
   pendingToolCallIds: Set<string>;
 }) {
   const {
@@ -364,6 +373,8 @@ function EventStreamContent({
       pendingToolCallIds={pendingToolCallIds}
       optimisticMessages={visibleOptimisticMessages}
       status={isNewSession ? undefined : status}
+      configApplyEnabled={configApplyEnabled}
+      sessionId={sessionId}
     />
   );
 }
@@ -371,7 +382,13 @@ function EventStreamContent({
 function AutopilotSessionEventsPageContent({
   loaderData,
 }: Route.ComponentProps) {
-  const { sessionId, eventsData, isNewSession, initialMessage } = loaderData;
+  const {
+    sessionId,
+    eventsData,
+    isNewSession,
+    configApplyEnabled,
+    initialMessage,
+  } = loaderData;
   const { yoloMode, setYoloMode } = useAutopilotSession();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -763,10 +780,18 @@ function AutopilotSessionEventsPageContent({
                       ]
                 }
               />
-              <YoloModeToggle
-                checked={yoloMode}
-                onCheckedChange={setYoloMode}
-              />
+              <div className="flex items-center gap-2">
+                {configApplyEnabled && !isNewSession && (
+                  <ApplySessionConfigChangesButton
+                    sessionId={sessionId}
+                    disabled={isEventsLoading || hasLoadError}
+                  />
+                )}
+                <YoloModeToggle
+                  checked={yoloMode}
+                  onCheckedChange={setYoloMode}
+                />
+              </div>
             </div>
             {sseError.error && sseError.isRetrying && (
               <AutopilotStatusBanner
@@ -815,6 +840,7 @@ function AutopilotSessionEventsPageContent({
                   onPendingToolCallsChange={handlePendingToolCallsChange}
                   onErrorChange={handleErrorChange}
                   onHasReachedStartChange={handleHasReachedStartChange}
+                  configApplyEnabled={configApplyEnabled}
                   pendingToolCallIds={pendingToolCallIds}
                 />
               )}
