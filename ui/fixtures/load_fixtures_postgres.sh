@@ -413,16 +413,17 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (episode_id) DO NOTHING;
 "
 
-echo "Backfilling model provider statistics and refreshing materialized views..."
+echo "Backfilling model provider statistics and latency histograms..."
 psql -q "$POSTGRES_URL" <<EOF
 SELECT tensorzero.refresh_model_provider_statistics_incremental(
     full_refresh => TRUE
 );
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_hour;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_day;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_week;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_month;
+SELECT tensorzero.refresh_model_latency_histogram_minute_incremental(
+    full_refresh => TRUE
+);
+SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(
+    full_refresh => TRUE
+);
 EOF
 
 

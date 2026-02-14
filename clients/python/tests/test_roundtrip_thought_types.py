@@ -198,6 +198,7 @@ async def test_async_thought_content_roundtrip_complete_flow(
     follow_up_inference = follow_up_stored.inferences[0]
 
     # Verify input contains our thought
+    assert follow_up_inference.input is not None, "Follow-up inference input must not be None"
     input_messages = follow_up_inference.input.messages
     assert input_messages is not None, "Input messages must not be None"
     assert len(input_messages) >= 3, "Should have user, assistant, and follow-up user messages"
@@ -419,6 +420,7 @@ def test_sync_thought_content_roundtrip_complete_flow(sync_client: TensorZeroGat
     follow_up_inference = follow_up_stored.inferences[0]
 
     # Verify StoredInputMessageContentThought
+    assert follow_up_inference.input is not None, "Follow-up inference input must not be None"
     input_messages_sync = follow_up_inference.input.messages
     assert input_messages_sync is not None, "Input messages must not be None"
 

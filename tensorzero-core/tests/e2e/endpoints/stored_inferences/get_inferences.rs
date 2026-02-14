@@ -1352,7 +1352,11 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
     };
 
     // Assert the extra_body is correctly returned
-    let extra_body = inference.extra_body.as_slice();
+    let extra_body = inference
+        .extra_body
+        .as_ref()
+        .expect("extra_body should be present")
+        .as_slice();
     assert_eq!(extra_body.len(), 2);
 
     // Check the first extra_body entry (Always variant with pointer and value)
@@ -1374,7 +1378,11 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
     }
 
     // Assert the inference_params are correctly returned
-    let chat_completion_params = &inference.inference_params.chat_completion;
+    let chat_completion_params = &inference
+        .inference_params
+        .as_ref()
+        .expect("inference_params should be present")
+        .chat_completion;
     assert_eq!(chat_completion_params.temperature, Some(0.7));
     assert_eq!(chat_completion_params.max_tokens, Some(100));
     assert_eq!(chat_completion_params.seed, Some(42));
@@ -1446,7 +1454,11 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     };
 
     // Assert the extra_body is correctly returned
-    let extra_body = inference.extra_body.as_slice();
+    let extra_body = inference
+        .extra_body
+        .as_ref()
+        .expect("extra_body should be present")
+        .as_slice();
     assert_eq!(extra_body.len(), 2);
 
     // Check the first extra_body entry (Always variant with pointer and value)
@@ -1468,7 +1480,11 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     }
 
     // Assert the inference_params are correctly returned
-    let chat_completion_params = &inference.inference_params.chat_completion;
+    let chat_completion_params = &inference
+        .inference_params
+        .as_ref()
+        .expect("inference_params should be present")
+        .chat_completion;
     assert_eq!(chat_completion_params.temperature, Some(0.5));
     assert_eq!(chat_completion_params.max_tokens, Some(200));
     assert_eq!(chat_completion_params.top_p, Some(0.9));

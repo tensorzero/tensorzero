@@ -512,8 +512,9 @@ mod tests {
         experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{
-            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text, Unknown,
+            ContentBlockChatOutput, FunctionType, ModelInput, ResolvedContentBlock,
+            ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, System, Text, Unknown,
         },
         optimization::gepa::GEPAConfig,
         stored_inference::{RenderedSample, StoredOutput},
@@ -537,6 +538,7 @@ mod tests {
     fn create_valid_rendered_sample() -> RenderedSample {
         RenderedSample {
             function_name: "test_function".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("Test system".to_string()),
                 messages: vec![ResolvedRequestMessage {

@@ -25,7 +25,7 @@ use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use crate::cache::{CacheOptions, CacheParamsOptions};
+use crate::cache::{CacheManager, CacheOptions, CacheParamsOptions};
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{
     Config, ErrorContext, Namespace, OtlpConfig, SchemaData, UninitializedVariantInfo,
@@ -194,6 +194,7 @@ pub async fn inference_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         ..
@@ -221,6 +222,7 @@ pub async fn inference_handler(
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         params,
@@ -303,6 +305,7 @@ pub async fn inference(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    cache_manager: CacheManager,
     deferred_tasks: TaskTracker,
     rate_limiting_manager: Arc<RateLimitingManager>,
     mut params: Params,
@@ -467,6 +470,7 @@ pub async fn inference(
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
+        cache_manager,
         tags: tags.clone(),
         rate_limiting_manager,
         otlp_config: config.gateway.export.otlp.clone(),
@@ -1891,6 +1895,7 @@ pub struct InferenceClients {
     pub postgres_connection_info: PostgresConnectionInfo,
     pub credentials: Arc<InferenceCredentials>,
     pub cache_options: CacheOptions,
+    pub cache_manager: CacheManager,
     pub tags: Arc<HashMap<String, String>>,
     pub rate_limiting_manager: Arc<RateLimitingManager>,
     pub otlp_config: OtlpConfig,
