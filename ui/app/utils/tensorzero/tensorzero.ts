@@ -1720,6 +1720,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       maxDatapoints,
       precisionTargets,
       onEvent,
+      signal,
     } = params;
 
     const requestBody: RunEvaluationRequest = {
@@ -1743,6 +1744,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
         Accept: "text/event-stream",
       },
       body: JSON.stringify(requestBody),
+      signal,
     });
 
     if (!response.ok) {
@@ -1910,4 +1912,6 @@ export interface RunEvaluationStreamingParams {
   precisionTargets?: Record<string, number>;
   /** Callback for SSE events */
   onEvent: (event: EvaluationRunEvent) => void;
+  /** Optional signal to abort the request */
+  signal?: AbortSignal;
 }
