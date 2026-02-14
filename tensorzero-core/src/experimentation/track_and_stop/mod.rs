@@ -57,7 +57,7 @@ use tokio_util::sync::CancellationToken;
 use estimate_optimal_probabilities::{
     EstimateOptimalProbabilitiesArgs, estimate_optimal_probabilities,
 };
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;

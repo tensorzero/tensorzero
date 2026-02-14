@@ -76,7 +76,7 @@ minijinja = { version = "2.15.1", features = [
 url = { version = "2.5.8", features = ["serde"] }
 google-cloud-auth = "1.4.0"
 object_store = { version = "0.13.1", features = ["serde", "aws", "gcp"] }
-rand = "0.9.1"
+rand = "0.10.0"
 ts-rs = { version = "12.0.1", features = [
     "serde-compat",
     "serde-json-impl",

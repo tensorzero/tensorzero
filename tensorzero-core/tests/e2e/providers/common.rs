@@ -25,7 +25,7 @@ use futures::StreamExt;
 use image::{ImageFormat, ImageReader};
 use object_store::path::Path;
 
-use rand::Rng;
+use rand::RngExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
