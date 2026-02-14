@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{GetInferencesResponse, ListInferencesRequest};
@@ -30,11 +32,11 @@ impl ToolMetadata for ListInferencesTool {
     type Output = GetInferencesResponse;
     type LlmParams = ListInferencesToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("list_inferences")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "List inferences with optional filtering and pagination. \
              Can filter by function name, variant name, episode ID, tags, metrics, \
@@ -42,7 +44,11 @@ impl ToolMetadata for ListInferencesTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // Filter children are recursive arbitrary objects
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "List inferences with filtering and pagination.",
@@ -62,9 +68,13 @@ impl ToolMetadata for ListInferencesTool {
                 },
                 "output_source": {
                     "type": "string",
-                    "enum": ["none", "inference", "demonstration"],
+                    "enum": ["inference", "demonstration"],
                     "default": "inference",
-                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available, 'none' returns no output."
+                    // Note: "none" is intentionally omitted. The list_inferences endpoint
+                    // rejects output_source: "none" since these endpoints are for retrieving
+                    // complete inference records. Other endpoints (like dataset creation)
+                    // still support "none" when only metadata is needed.
+                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available."
                 },
                 "limit": {
                     "type": "integer",
@@ -86,7 +96,7 @@ impl ToolMetadata for ListInferencesTool {
                 },
                 "filters": {
                     "description": "Optional filter to apply when querying inferences. Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).",
-                    "oneOf": [
+                    "anyOf": [
                         {
                             "type": "object",
                             "description": "Filter by float metric value.",
@@ -100,7 +110,8 @@ impl ToolMetadata for ListInferencesTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "metric_name", "value", "comparison_operator"]
+                            "required": ["type", "metric_name", "value", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -110,7 +121,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "metric_name": { "type": "string", "description": "Name of the metric to filter by." },
                                 "value": { "type": "boolean", "description": "Value to compare against." }
                             },
-                            "required": ["type", "metric_name", "value"]
+                            "required": ["type", "metric_name", "value"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -119,7 +131,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "type": { "const": "demonstration_feedback" },
                                 "has_demonstration": { "type": "boolean", "description": "Whether the inference has a demonstration." }
                             },
-                            "required": ["type", "has_demonstration"]
+                            "required": ["type", "has_demonstration"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -134,7 +147,8 @@ impl ToolMetadata for ListInferencesTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "key", "value", "comparison_operator"]
+                            "required": ["type", "key", "value", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -148,7 +162,8 @@ impl ToolMetadata for ListInferencesTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "time", "comparison_operator"]
+                            "required": ["type", "time", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -157,7 +172,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "type": { "const": "and" },
                                 "children": { "type": "array", "description": "Array of filters to AND together.", "items": { "type": "object" } }
                             },
-                            "required": ["type", "children"]
+                            "required": ["type", "children"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -166,7 +182,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "type": { "const": "or" },
                                 "children": { "type": "array", "description": "Array of filters to OR together.", "items": { "type": "object" } }
                             },
-                            "required": ["type", "children"]
+                            "required": ["type", "children"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -175,7 +192,8 @@ impl ToolMetadata for ListInferencesTool {
                                 "type": { "const": "not" },
                                 "child": { "type": "object", "description": "Filter to negate." }
                             },
-                            "required": ["type", "child"]
+                            "required": ["type", "child"],
+                            "additionalProperties": false
                         }
                     ]
                 },
@@ -201,17 +219,24 @@ impl ToolMetadata for ListInferencesTool {
                                 "description": "The ordering direction."
                             }
                         },
-                        "required": ["by", "direction"]
+                        "required": ["by", "direction"],
+                        "additionalProperties": false
                     }
                 },
                 "search_query_experimental": {
                     "type": "string",
                     "description": "EXPERIMENTAL: Text query for case-insensitive substring search over input and output. Requires exact substring match. May be slow without other filters."
                 }
-            }
+            },
+            "additionalProperties": false
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -226,6 +251,6 @@ impl SimpleTool for ListInferencesTool {
         ctx.client()
             .list_inferences(llm_params.request)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("list_inferences", e).into())
     }
 }

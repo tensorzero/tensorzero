@@ -5,6 +5,6 @@ export type BooleanMetricFeedbackRow = {
   target_id: string;
   metric_name: string;
   value: boolean;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   timestamp: string;
 };

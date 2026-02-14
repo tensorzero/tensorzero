@@ -20,8 +20,9 @@ use crate::{
 ///
 /// Contains only UI-safe fields from the gateway config, excluding sensitive
 /// information like provider credentials, API keys, and internal settings.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UiConfig {
     pub functions: HashMap<String, Arc<FunctionConfig>>,
     pub metrics: HashMap<String, MetricConfig>,
@@ -59,6 +60,7 @@ impl UiConfig {
 /// Handler for GET /internal/ui_config
 ///
 /// Returns a UI-safe subset of the Config.
+#[expect(clippy::unused_async)]
 pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
     Json(UiConfig::from_config(&app_state.config))
 }
@@ -97,6 +99,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Inference,
+            description: None,
         };
 
         // Build config with the function and metric
@@ -163,6 +166,7 @@ mod tests {
             r#type: MetricConfigType::Float,
             optimize: MetricConfigOptimize::Min,
             level: MetricConfigLevel::Episode,
+            description: None,
         };
 
         let mut config = Config::default();

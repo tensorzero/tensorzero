@@ -28,8 +28,10 @@ use crate::config::{
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
-use crate::providers::aws_sagemaker::AWSSagemakerProvider;
+use crate::providers::aws_bedrock::build_aws_bedrock_provider_config;
+use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_config};
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -44,7 +46,6 @@ use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
-    current_timestamp,
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
@@ -78,8 +79,9 @@ use crate::providers::{
     xai::XAIProvider,
 };
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
@@ -87,8 +89,9 @@ pub struct ModelConfig {
     pub skip_relay: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
@@ -105,20 +108,19 @@ impl UninitializedModelConfig {
         model_name: &str,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
         relay_mode: bool,
+        is_config_snapshot: bool,
     ) -> Result<ModelConfig, Error> {
         let skip_relay = self.skip_relay.unwrap_or(false);
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
         let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
-            let http_client = http_client.clone();
             async move {
                 let load_future = provider.config.load(
                     provider_types,
                     provider_type_default_credentials,
-                    http_client,
+                    is_config_snapshot,
                 );
 
                 // In relay mode, don't run credential validation for providers,
@@ -184,15 +186,13 @@ impl StreamResponse {
                         raw_response: c.raw_response,
                         // We intentionally don't cache and re-use these values from the original
                         // request:
-                        // The new result was 'created' now
-                        created: current_timestamp(),
                         // Use the real usage (so that the `ModelInference` row we write is accurate)
                         // The usage returned to over HTTP is adjusted in `InferenceResponseChunk::new`
                         usage: c.usage,
                         // raw_usage is not cached
                         raw_usage: None,
                         // We didn't make any network calls to the model provider, so the latency is 0
-                        latency: Duration::from_secs(0),
+                        provider_latency: Duration::from_secs(0),
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
@@ -271,6 +271,7 @@ impl ModelConfig {
                     signature: _,
                     summary: _,
                     provider_type,
+                    extra_data: _,
                 }) => provider_type
                     .as_ref()
                     .is_some_and(|t| t != &provider.config.thought_block_provider_type()),
@@ -307,6 +308,7 @@ impl ModelConfig {
                                 signature: _,
                                 summary: _,
                                 provider_type,
+                                extra_data: _,
                             }) => {
                                 // When a thought is scoped to a particular provider type, we discard
                                 // if it doesn't match our target provider.
@@ -346,7 +348,7 @@ impl ModelConfig {
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup(
-                &clients.clickhouse_connection_info,
+                &clients.cache_manager,
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
@@ -389,7 +391,7 @@ impl ModelConfig {
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup_streaming(
-                &clients.clickhouse_connection_info,
+                &clients.cache_manager,
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
@@ -424,8 +426,7 @@ impl ModelConfig {
             clients,
             stream,
             write_to_cache,
-        )
-        .await?
+        )?
         .instrument(span);
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
@@ -433,6 +434,7 @@ impl ModelConfig {
             stream.inner_mut(),
             &raw_request,
             model_provider_request.provider_name,
+            provider.api_type(),
         )
         .await?;
         Ok(StreamResponseAndMessages {
@@ -516,7 +518,7 @@ impl ModelConfig {
                         // (in case we ever add a blocking cache write option)
                         if !response.cached && clients.cache_options.enabled.write() {
                             let _ = start_cache_write(
-                                &clients.clickhouse_connection_info,
+                                &clients.cache_manager,
                                 cache_key,
                                 CacheData {
                                     output: NonStreamingCacheData {
@@ -717,7 +719,7 @@ impl ModelConfig {
 /// us to wrap the underlying stream.
 ///
 /// Note - this function is *not* called in relay mode
-async fn wrap_provider_stream(
+fn wrap_provider_stream(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
     ticket_borrow: TicketBorrows,
@@ -730,32 +732,29 @@ async fn wrap_provider_stream(
     let span = stream.span().clone();
     let mut stream = stream.into_inner();
     let cache_key = model_request.get_cache_key()?;
-    let clickhouse_info = clients.clickhouse_connection_info.clone();
+    let cache_manager = clients.cache_manager.clone();
     let tool_config = model_request
         .request
         .tool_config
         .clone()
         .map(std::borrow::Cow::into_owned);
     let otlp_config = clients.otlp_config.clone();
-    let postgres_connection_info = clients.postgres_connection_info.clone();
     let deferred_tasks = clients.deferred_tasks.clone();
     let span_clone = span.clone();
+
+    // Collect usage objects for later use (e.g. rate limiting)
+    let mut usages: Vec<Usage> = vec![];
+
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
-        // `total_usage` is `None` until we receive a chunk with usage information
-        let mut total_usage: Option<Usage> = None;
+
+        // IMPORTANT: We should NOT modify chunks here, as they'll be re-processed downstream (e.g. `create_stream`).
         while let Some(chunk) = stream.next().await {
-            if let Ok(chunk) = chunk.as_ref()
-                && let Some(chunk_usage) = chunk.usage.as_ref() {
-                // `total_usage` will be `None` if this is the first chunk with usage information....
-                if total_usage.is_none() {
-                    // ... so initialize it to zero ...
-                    total_usage = Some(Usage::zero());
-                }
-                // ...and then add the chunk usage to it (handling `None` fields)
-                    if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
-                }
+            if let Ok(chunk) = chunk.as_ref() && let Some(chunk_usage) = chunk.usage.as_ref() {
+                usages.push(*chunk_usage);
+            }
+
             // We can skip cloning the chunk if we know we're not going to write to the cache
             if write_to_cache && !errored {
                 match chunk.as_ref() {
@@ -765,26 +764,30 @@ async fn wrap_provider_stream(
                     Err(e) => {
                         tracing::warn!("Skipping cache write for stream response due to error in stream: {e}");
                         errored = true;
-                        // If we see a `FatalStreamError`, then yield it and stop processing the stream,
-                        // to avoid holding open a stream that might never produce more chunks.
-                        // We'll still compute rate-limiting usage using all of the chunks that we've seen so far.
-                        if let ErrorDetails::FatalStreamError { .. } = e.get_details() {
-                            yield chunk;
-                            break;
-                        }
                     }
                 }
             }
+
+            // If we see a `FatalStreamError`, yield it and stop processing the stream,
+            // to avoid holding open a stream that might never produce more chunks.
+            // We'll still compute rate-limiting usage using all of the chunks that we've seen so far.
+            if let Err(e) = chunk.as_ref()
+                && let ErrorDetails::FatalStreamError { .. } = e.get_details()
+            {
+                errored = true;
+                yield chunk;
+                break;
+            }
+
             yield chunk;
         }
 
-        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
-        let total_usage = total_usage.unwrap_or_default();
+        let aggregated_usage = aggregate_usage_from_single_streaming_model_inference(usages);
 
-        otlp_config.apply_usage_to_model_provider_span(&span_clone, &total_usage);
+        otlp_config.apply_usage_to_model_provider_span(&span_clone, &aggregated_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let usage = match (total_usage.total_tokens(), errored) {
+            let usage = match (aggregated_usage.total_tokens(), errored) {
                 (Some(tokens), false) => {
                     RateLimitResourceUsage::Exact {
                         model_inferences: 1,
@@ -794,27 +797,23 @@ async fn wrap_provider_stream(
                 _ => {
                     RateLimitResourceUsage::UnderEstimate {
                         model_inferences: 1,
-                        tokens: total_usage.total_tokens().unwrap_or(0) as u64,
+                        tokens: aggregated_usage.total_tokens().unwrap_or(0) as u64,
                     }
                 }
             };
 
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, usage)
-                .await
-            {
+            if let Err(e) = ticket_borrow.return_tickets(usage).await {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
         }.instrument(span_clone.clone()));
 
-
         if write_to_cache && !errored {
             let _ = start_cache_write_streaming(
-                &clickhouse_info,
+                &cache_manager,
                 cache_key,
                 buffer,
                 &raw_request,
-                &total_usage,
+                &aggregated_usage,
                 tool_config
             );
         }
@@ -839,14 +838,15 @@ async fn wrap_provider_stream(
     )
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
@@ -859,14 +859,15 @@ pub struct UninitializedModelProvider {
     pub discard_unknown_chunks: bool,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
@@ -921,10 +922,7 @@ impl ModelProvider {
     /// The API type used by this provider (e.g., ChatCompletions, Responses)
     pub fn api_type(&self) -> ApiType {
         match &self.config {
-            ProviderConfig::OpenAI(provider) => match provider.api_type() {
-                OpenAIAPIType::ChatCompletions => ApiType::ChatCompletions,
-                OpenAIAPIType::Responses => ApiType::Responses,
-            },
+            ProviderConfig::OpenAI(provider) => provider.api_type().into(),
             // All other providers use ChatCompletions API
             _ => ApiType::ChatCompletions,
         }
@@ -980,8 +978,8 @@ pub struct ModelProviderRequestInfo {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
@@ -1065,12 +1063,53 @@ impl ProviderConfig {
             ProviderConfig::Dummy(_) => Cow::Borrowed(crate::providers::dummy::PROVIDER_TYPE),
         }
     }
+
+    /// Returns whether this provider supports provider tools (e.g., web_search, bash).
+    /// This is an exhaustive match to ensure compile-time safety when adding new providers.
+    pub fn supports_provider_tools(&self) -> bool {
+        match self {
+            // Providers that support provider tools
+            ProviderConfig::Anthropic(_) => true,
+            ProviderConfig::GCPVertexAnthropic(_) => true,
+            ProviderConfig::OpenAI(provider) => provider.supports_provider_tools(),
+            // Providers that do NOT support provider tools
+            //
+            // NB: AWS Bedrock supports them, but it's tricky because there are different fields for different models.
+            //
+            // Claude: uses `additionalModelRequestFields`
+            //
+            // ```
+            // aws bedrock-runtime converse --model-id us.anthropic.claude-sonnet-4-5-20250929-v1:0 --messages '[{"role": "user", "content": [{"text": "Can you ping google.com using curl?"}]}]' --inference-config '{"maxTokens": 512}' --additional-model-request-fields '{"tools": [{"type": "bash_20250124", "name": "bash"}]}' --region us-east-1
+            // ```
+            //
+            // Nova: uses `toolConfig` instead (https://docs.aws.amazon.com/nova/latest/nova2-userguide/web-grounding.html)
+            ProviderConfig::AWSBedrock(_) => false,
+            ProviderConfig::AWSSagemaker(_) => false,
+            ProviderConfig::Azure(_) => false,
+            ProviderConfig::DeepSeek(_) => false,
+            ProviderConfig::Fireworks(_) => false,
+            ProviderConfig::GCPVertexGemini(_) => false,
+            ProviderConfig::GoogleAIStudioGemini(_) => false,
+            ProviderConfig::Groq(_) => false,
+            ProviderConfig::Hyperbolic(_) => false,
+            ProviderConfig::Mistral(_) => false,
+            ProviderConfig::OpenRouter(_) => false,
+            ProviderConfig::SGLang(_) => false,
+            ProviderConfig::TGI(_) => false,
+            ProviderConfig::Together(_) => false,
+            ProviderConfig::VLLM(_) => false,
+            ProviderConfig::XAI(_) => false,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(_) => false,
+        }
+    }
 }
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
@@ -1078,8 +1117,8 @@ pub enum HostedProviderKind {
     TGI,
 }
 
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
@@ -1088,35 +1127,61 @@ pub enum HostedProviderKind {
 pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_base: Option<Url>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
-        beta_structured_outputs: bool,
+        beta_structured_outputs: Option<bool>,
+        #[serde(default)]
+        provider_tools: Vec<Value>,
     },
     #[strum(serialize = "aws_bedrock")]
     #[serde(rename = "aws_bedrock")]
     AWSBedrock {
         model_id: String,
-        region: Option<String>,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        region: Option<CredentialLocationOrHardcoded>,
+        /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        endpoint_url: Option<CredentialLocationOrHardcoded>,
+        /// API key for bearer token authentication (alternative to IAM credentials).
+        /// If set, uses `Authorization: Bearer <token>` instead of SigV4 signing.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        api_key: Option<CredentialLocation>,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        access_key_id: Option<CredentialLocation>,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        secret_access_key: Option<CredentialLocation>,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        session_token: Option<CredentialLocation>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
     AWSSagemaker {
         endpoint_name: String,
         model_name: String,
-        region: Option<String>,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        region: Option<CredentialLocationOrHardcoded>,
+        /// Deprecated: Use `region = "sdk"` instead to enable auto-detection.
         #[serde(default)]
         allow_auto_detect_region: bool,
         hosted_provider: HostedProviderKind,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        endpoint_url: Option<CredentialLocationOrHardcoded>,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        access_key_id: Option<CredentialLocation>,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        secret_access_key: Option<CredentialLocation>,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        session_token: Option<CredentialLocation>,
     },
     Azure {
         deployment_id: String,
         endpoint: EndpointLocation,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "gcp_vertex_anthropic")]
@@ -1125,8 +1190,10 @@ pub enum UninitializedProviderConfig {
         model_id: String,
         location: String,
         project_id: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         credential_location: Option<CredentialLocationWithFallback>,
+        #[serde(default)]
+        provider_tools: Vec<Value>,
     },
     #[strum(serialize = "gcp_vertex_gemini")]
     #[serde(rename = "gcp_vertex_gemini")]
@@ -1135,46 +1202,46 @@ pub enum UninitializedProviderConfig {
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         credential_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "groq")]
     #[serde(rename = "groq")]
     Groq {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     Hyperbolic {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "fireworks")]
     #[serde(rename = "fireworks")]
     Fireworks {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
     Mistral {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     OpenAI {
         model_name: String,
         api_base: Option<Url>,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
         api_type: OpenAIAPIType,
@@ -1185,12 +1252,12 @@ pub enum UninitializedProviderConfig {
     },
     OpenRouter {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     Together {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default = "crate::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
@@ -1198,34 +1265,34 @@ pub enum UninitializedProviderConfig {
     VLLM {
         model_name: String,
         api_base: Url,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     XAI {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     TGI {
         api_base: Url,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     SGLang {
         model_name: String,
         api_base: Url,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     DeepSeek {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy {
         model_name: String,
-        #[cfg_attr(test, ts(type = "string | null"))]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
 }
@@ -1235,7 +1302,7 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
-        http_client: TensorzeroHttpClient,
+        is_config_snapshot: bool,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
@@ -1243,30 +1310,54 @@ impl UninitializedProviderConfig {
                 api_base,
                 api_key_location,
                 beta_structured_outputs,
-            } => ProviderConfig::Anthropic(AnthropicProvider::new(
-                model_name,
-                api_base,
-                AnthropicKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                beta_structured_outputs,
-            )),
+                provider_tools,
+            } => {
+                // Only log a deprecation warning if this is a fresh config (not a snapshot)
+                // since snapshot configs cannot be updated
+                if !is_config_snapshot && beta_structured_outputs.is_some() {
+                    crate::utils::deprecation_warning(
+                        "The 'beta_structured_outputs' field is no longer necessary for `anthropic` providers",
+                    );
+                }
+                ProviderConfig::Anthropic(AnthropicProvider::new(
+                    model_name,
+                    api_base,
+                    AnthropicKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                    provider_tools,
+                ))
+            }
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
                 region,
                 allow_auto_detect_region,
+                endpoint_url,
+                api_key,
+                access_key_id,
+                secret_access_key,
+                session_token,
             } => {
-                let region = region.map(aws_types::region::Region::new);
-                if region.is_none() && !allow_auto_detect_region {
-                    return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
-                }
-
-                ProviderConfig::AWSBedrock(
-                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                let (region, endpoint_url, auth) = build_aws_bedrock_provider_config(
+                    region,
+                    allow_auto_detect_region,
+                    endpoint_url,
+                    api_key,
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
                 )
+                .await?;
+
+                ProviderConfig::AWSBedrock(AWSBedrockProvider::new(
+                    model_id,
+                    region,
+                    endpoint_url,
+                    auth,
+                ))
             }
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -1274,18 +1365,25 @@ impl UninitializedProviderConfig {
                 allow_auto_detect_region,
                 model_name,
                 hosted_provider,
+                endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
             } => {
-                let region = region.map(aws_types::region::Region::new);
-                if region.is_none() && !allow_auto_detect_region {
-                    return Err(Error::new(ErrorDetails::Config { message: "AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
-                }
+                let aws_config = build_aws_sagemaker_config(
+                    region,
+                    allow_auto_detect_region,
+                    endpoint_url,
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                )?;
 
                 let self_hosted: Box<dyn WrappedProvider + Send + Sync + 'static> =
                     match hosted_provider {
                         HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
                             model_name,
                             None,
-
                             OpenAIKind
                                 .get_defaulted_credential(
                                     Some(&CredentialLocationWithFallback::Single(CredentialLocation::None)),
@@ -1311,16 +1409,23 @@ impl UninitializedProviderConfig {
                     };
 
                 ProviderConfig::AWSSagemaker(
-                    AWSSagemakerProvider::new(endpoint_name, self_hosted, region).await?,
+                    AWSSagemakerProvider::new(
+                        endpoint_name,
+                        self_hosted,
+                        aws_config.region,
+                        aws_config.endpoint_url,
+                        aws_config.credentials,
+                    )
+                    .await?,
                 )
             }
             UninitializedProviderConfig::Azure {
                 deployment_id,
-                endpoint,
+                endpoint: azure_endpoint,
                 api_key_location,
             } => ProviderConfig::Azure(AzureProvider::new(
                 deployment_id,
-                endpoint,
+                azure_endpoint,
                 AzureKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
@@ -1347,6 +1452,7 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
+                provider_tools,
             } => ProviderConfig::GCPVertexAnthropic(
                 GCPVertexAnthropicProvider::new(
                     model_id,
@@ -1354,6 +1460,7 @@ impl UninitializedProviderConfig {
                     project_id,
                     api_key_location,
                     provider_type_default_credentials,
+                    provider_tools,
                 )
                 .await?,
             ),
@@ -1639,6 +1746,38 @@ impl ModelProvider {
         }
     }
 
+    /// Validates that provider_tools are not used with providers that don't support them.
+    /// Returns an error if dynamic provider_tools are scoped to this provider but it doesn't support them.
+    fn validate_provider_tools_support(
+        &self,
+        request: &ModelProviderRequest<'_>,
+    ) -> Result<(), Error> {
+        // Skip validation if the provider supports provider_tools
+        if self.config.supports_provider_tools() {
+            return Ok(());
+        }
+
+        // Check if there are any dynamic provider_tools scoped to this provider
+        if let Some(tool_config) = &request.request.tool_config {
+            let scoped_provider_tools =
+                tool_config.get_scoped_provider_tools(request.model_name, request.provider_name);
+            if !scoped_provider_tools.is_empty() {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Provider `{}` does not support `provider_tools`, but {} provider tool(s) were configured for model `{}` / provider `{}`. \
+                        Provider tools are only supported by: Anthropic, GCP Vertex Anthropic, and OpenAI (Responses API only).",
+                        self.config.thought_block_provider_type(),
+                        scoped_provider_tools.len(),
+                        request.model_name,
+                        request.provider_name,
+                    ),
+                }));
+            }
+        }
+
+        Ok(())
+    }
+
     #[tracing::instrument(skip_all, fields(provider_name = &*self.name, otel.name = "model_provider_inference", stream = false))]
     async fn infer(
         &self,
@@ -1647,13 +1786,13 @@ impl ModelProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
+
+        // Validate that provider_tools are not used with unsupported providers
+        self.validate_provider_tools_support(&request)?;
+
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request.request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request.request)
             .await?;
         let res = match &self.config {
             ProviderConfig::Anthropic(provider) => {
@@ -1761,14 +1900,10 @@ impl ModelProvider {
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
-            let postgres_connection_info = clients.postgres_connection_info.clone();
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
                 async move {
-                    if let Err(e) = ticket_borrow
-                        .return_tickets(&postgres_connection_info, actual_resource_usage)
-                        .await
-                    {
+                    if let Err(e) = ticket_borrow.return_tickets(actual_resource_usage).await {
                         tracing::error!("Failed to return rate limit tickets: {}", e);
                     }
                 }
@@ -1785,13 +1920,13 @@ impl ModelProvider {
         clients: &InferenceClients,
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
+
+        // Validate that provider_tools are not used with unsupported providers
+        self.validate_provider_tools_support(&request)?;
+
         let ticket_borrow = clients
-            .rate_limiting_config
-            .consume_tickets(
-                &clients.postgres_connection_info,
-                &clients.scope_info,
-                request.request,
-            )
+            .rate_limiting_manager
+            .consume_tickets(&clients.scope_info, request.request)
             .await?;
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
@@ -2131,7 +2266,9 @@ impl ModelProvider {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -2147,16 +2284,17 @@ pub enum CredentialLocation {
 }
 
 /// Credential location with optional fallback support
-#[derive(Debug, PartialEq, Clone, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
-    Single(#[ts(type = "string")] CredentialLocation),
+    Single(#[cfg_attr(feature = "ts-bindings", ts(type = "string"))] CredentialLocation),
     /// Credential location with fallback
     WithFallback {
-        #[ts(type = "string")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
         default: CredentialLocation,
-        #[ts(type = "string")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
         fallback: CredentialLocation,
     },
 }
@@ -2179,8 +2317,72 @@ impl CredentialLocationWithFallback {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
+/// Credential location that also allows hardcoded string values.
+/// Used for non-sensitive fields like AWS region and endpoint_url.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum CredentialLocationOrHardcoded {
+    /// Hardcoded value (e.g., region = "us-east-1")
+    Hardcoded(String),
+    /// Standard credential location (env::, dynamic::, sdk, etc.)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    Location(CredentialLocation),
+}
+
+impl<'de> Deserialize<'de> for CredentialLocationOrHardcoded {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        // Try to parse as CredentialLocation first
+        if let Some(inner) = s.strip_prefix("env::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Env(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("path_from_env::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::PathFromEnv(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("dynamic::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Dynamic(inner.to_string()),
+            ))
+        } else if let Some(inner) = s.strip_prefix("path::") {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Path(inner.to_string()),
+            ))
+        } else if s == "sdk" {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::Sdk,
+            ))
+        } else if s == "none" {
+            Ok(CredentialLocationOrHardcoded::Location(
+                CredentialLocation::None,
+            ))
+        } else {
+            // Treat as hardcoded value
+            Ok(CredentialLocationOrHardcoded::Hardcoded(s))
+        }
+    }
+}
+
+impl Serialize for CredentialLocationOrHardcoded {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            CredentialLocationOrHardcoded::Hardcoded(inner) => serializer.serialize_str(inner),
+            CredentialLocationOrHardcoded::Location(loc) => loc.serialize(serializer),
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EndpointLocation {
     /// Environment variable containing the actual endpoint URL
     Env(String),
@@ -2241,7 +2443,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
             Ok(CredentialLocation::None)
         } else {
             Err(serde::de::Error::custom(format!(
-                "Invalid ApiKeyLocation format: {s}"
+                "Invalid credential location format: `{s}`. \
+                 Use `env::VAR_NAME`, `path::FILE_PATH`, `dynamic::KEY_NAME`, or `sdk`."
             )))
         }
     }
@@ -2384,8 +2587,8 @@ impl ShorthandModelConfig for ModelConfig {
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                // We don't support beta structured output for shorthand models
-                false,
+                // No provider tools for shorthand models
+                vec![],
             )),
             "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(
                 model_name,
@@ -2562,8 +2765,9 @@ impl ShorthandModelConfig for ModelConfig {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::sync::Arc;
 
-    use crate::cache::CacheEnabledMode;
+    use crate::cache::{CacheEnabledMode, CacheManager};
     use crate::config::with_skip_credential_validation;
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::ToolCallConfig;
@@ -2579,7 +2783,7 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
             DummyCredentials,
         },
-        rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig},
+        rate_limiting::{RateLimitingConfig, RateLimitingManager, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
@@ -2626,8 +2830,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2636,6 +2841,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
 
         // Try inferring the good model only
@@ -2710,6 +2916,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -2746,8 +2953,9 @@ mod tests {
             tokens_per_second = 10
             always = true
         ";
-        let uninitialized_config: UninitializedRateLimitingConfig =
+        let toml_config: crate::config::rate_limiting::TomlUninitializedRateLimitingConfig =
             toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
         let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let clients = InferenceClients {
@@ -2759,8 +2967,12 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(tags.clone()),
-            rate_limiting_config: Arc::new(rate_limit_config.clone()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(rate_limit_config),
+                Arc::new(postgres_mock.clone()),
+            )),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2769,6 +2981,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2849,8 +3062,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -2859,6 +3073,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2987,6 +3202,29 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+            include_raw_response: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -2998,30 +3236,7 @@ mod tests {
                 },
             messages: _input,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3074,30 +3289,7 @@ mod tests {
             skip_relay: false,
         };
         let response = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await;
         assert!(response.is_err());
         let error = match response {
@@ -3114,6 +3306,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3187,6 +3380,29 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let clients = InferenceClients {
+            http_client: TensorzeroHttpClient::new_testing().unwrap(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::Off,
+            },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
+            tags: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
+            otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
+            },
+            relay: None,
+            include_raw_usage: false,
+            include_raw_response: false,
+        };
         let StreamResponseAndMessages {
             response:
                 StreamResponse {
@@ -3198,30 +3414,7 @@ mod tests {
                 },
             messages: _,
         } = model_config
-            .infer_stream(
-                &request,
-                &InferenceClients {
-                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
-                        max_age_s: None,
-                        enabled: CacheEnabledMode::Off,
-                    },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
-                    deferred_tasks: tokio_util::task::TaskTracker::new(),
-                    scope_info: ScopeInfo {
-                        tags: Arc::new(HashMap::new()),
-                        api_key_public_id: None,
-                    },
-                    relay: None,
-                    include_raw_usage: false,
-                },
-                "my_model",
-            )
+            .infer_stream(&request, &clients, "my_model")
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -3294,8 +3487,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3304,6 +3498,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3357,8 +3552,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3367,6 +3563,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3381,6 +3578,7 @@ mod tests {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3423,8 +3621,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3433,6 +3632,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3485,8 +3685,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -3495,6 +3696,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3518,7 +3720,7 @@ mod tests {
             .await
             .unwrap()
             .expect("Missing dummy model");
-        assert_eq!(model_config.routing, vec!["dummy".into()]);
+        assert_eq!(model_config.routing, vec![Arc::<str>::from("dummy")]);
         let provider_config = &model_config.providers.get("dummy").unwrap().config;
         match provider_config {
             ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),
@@ -3541,7 +3743,7 @@ mod tests {
                 "claude".to_string(),
                 None,
                 AnthropicCredentials::None,
-                false,
+                vec![],
             ))
         })
         .await;
@@ -3786,5 +3988,94 @@ mod tests {
             Some(CredentialLocation::Env(key)) => assert_eq!(key, "secondary"),
             _ => panic!("Expected Some(Env)"),
         }
+    }
+
+    #[test]
+    fn test_credential_location_rejects_hardcoded_values() {
+        // CredentialLocation should reject hardcoded values (security requirement)
+        // Only CredentialLocationOrHardcoded should accept them
+        let json = r#""us-east-1""#;
+        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "CredentialLocation should reject hardcoded values like 'us-east-1'"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Invalid credential location format"),
+            "Error message should mention invalid format, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_hardcoded() {
+        // CredentialLocationOrHardcoded should accept hardcoded values
+        let json = r#""us-east-1""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationOrHardcoded::Hardcoded(value) => {
+                assert_eq!(value, "us-east-1");
+            }
+            CredentialLocationOrHardcoded::Location(_) => panic!("Expected Hardcoded"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_env() {
+        // CredentialLocationOrHardcoded should also accept env:: prefixed values
+        let json = r#""env::AWS_REGION""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        #[expect(clippy::wildcard_enum_match_arm)]
+        match result {
+            CredentialLocationOrHardcoded::Location(CredentialLocation::Env(key)) => {
+                assert_eq!(key, "AWS_REGION");
+            }
+            _ => panic!("Expected Location(Env)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_or_hardcoded_accepts_dynamic() {
+        // CredentialLocationOrHardcoded should accept dynamic:: prefixed values
+        let json = r#""dynamic::region_key""#;
+        let result: CredentialLocationOrHardcoded = serde_json::from_str(json).unwrap();
+        #[expect(clippy::wildcard_enum_match_arm)]
+        match result {
+            CredentialLocationOrHardcoded::Location(CredentialLocation::Dynamic(key)) => {
+                assert_eq!(key, "region_key");
+            }
+            _ => panic!("Expected Location(Dynamic)"),
+        }
+    }
+
+    /// Test that `supports_provider_tools()` returns correct values for all providers.
+    /// This test exists to ensure we don't forget to update the method when adding new providers.
+    /// The exhaustive match in `supports_provider_tools()` provides compile-time safety,
+    /// and this test verifies the expected runtime behavior.
+    #[test]
+    fn test_supports_provider_tools_coverage() {
+        use crate::providers::dummy::DummyProvider;
+
+        // Providers that SHOULD support provider_tools
+        let anthropic = ProviderConfig::Anthropic(AnthropicProvider::new(
+            "claude".to_string(),
+            None,
+            AnthropicCredentials::None,
+            vec![],
+        ));
+        assert!(
+            anthropic.supports_provider_tools(),
+            "Anthropic should support provider_tools"
+        );
+
+        // Providers that should NOT support provider_tools
+        let dummy = ProviderConfig::Dummy(DummyProvider::new("test".to_string(), None).unwrap());
+        assert!(
+            !dummy.supports_provider_tools(),
+            "Dummy provider should not support provider_tools"
+        );
+
+        // Note: OpenAI support depends on api_type, tested separately in openai module
     }
 }

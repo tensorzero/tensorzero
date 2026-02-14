@@ -10,14 +10,15 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
-use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use crate::db::clickhouse::batching::BatchWriterHandle;
+use crate::db::HealthCheckable;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
-use crate::db::{ConfigQueries, HealthCheckable};
 use crate::error::DelayedError;
 use crate::error::{Error, ErrorDetails};
+
+// Export this so evaluations crate can wait for it.
+pub use crate::db::clickhouse::batching::BatchWriterHandle;
 
 pub use clickhouse_client::ClickHouseClient;
 pub use table_name::TableName;
@@ -25,17 +26,23 @@ pub use table_name::TableName;
 #[cfg(any(test, feature = "pyo3"))]
 use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
 
+mod batch_inference;
 mod batching;
+mod cache_queries;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
+pub mod config_queries;
 pub mod dataset_queries;
+mod deployment_queries;
+pub mod dicl_queries;
+mod episode_queries;
 pub mod evaluation_queries;
 pub mod feedback;
-pub mod inference_count;
+mod howdy_queries;
 pub mod inference_queries;
 pub mod migration_manager;
 pub mod model_inferences;
 pub mod query_builder;
-mod select_queries;
+mod resolve_uuid;
 mod table_name;
 pub mod workflow_evaluation_queries;
 
@@ -187,6 +194,15 @@ impl ClickHouseConnectionInfo {
         self.inner.write_batched_internal(rows_json?, table).await
     }
 
+    /// Like `write_batched`, but takes pre-serialized JSON strings instead of serializable rows.
+    pub async fn write_batched_raw(
+        &self,
+        rows: Vec<String>,
+        table: TableName,
+    ) -> Result<(), Error> {
+        self.inner.write_batched_internal(rows, table).await
+    }
+
     /// Write rows to ClickHouse without, without using our batched write implementation.
     /// The provided rows will have been sent to ClickHouse when this function completes.
     pub async fn write_non_batched<T: Serialize + Send + Sync>(
@@ -328,47 +344,6 @@ impl Display for ClickHouseConnectionInfo {
 impl HealthCheckable for ClickHouseConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         self.inner.health().await
-    }
-}
-
-#[async_trait]
-impl ConfigQueries for ClickHouseConnectionInfo {
-    async fn get_config_snapshot(
-        &self,
-        snapshot_hash: SnapshotHash,
-    ) -> Result<ConfigSnapshot, Error> {
-        #[derive(Deserialize)]
-        struct ConfigSnapshotRow {
-            config: String,
-            extra_templates: HashMap<String, String>,
-            #[serde(default)]
-            tags: HashMap<String, String>,
-        }
-
-        let hash_str = snapshot_hash.to_string();
-        let query = format!(
-            "SELECT config, extra_templates, tags \
-             FROM ConfigSnapshot FINAL \
-             WHERE hash = toUInt256('{hash_str}') \
-             LIMIT 1 \
-             FORMAT JSONEachRow"
-        );
-
-        let response = self.run_query_synchronous_no_params(query).await?;
-
-        if response.response.is_empty() {
-            return Err(Error::new(ErrorDetails::ConfigSnapshotNotFound {
-                snapshot_hash: hash_str,
-            }));
-        }
-
-        let row: ConfigSnapshotRow = serde_json::from_str(&response.response).map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseDeserialization {
-                message: e.to_string(),
-            })
-        })?;
-
-        ConfigSnapshot::from_stored(&row.config, row.extra_templates, row.tags, &snapshot_hash)
     }
 }
 

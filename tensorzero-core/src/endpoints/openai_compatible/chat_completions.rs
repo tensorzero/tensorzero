@@ -14,13 +14,12 @@ use axum::{Extension, debug_handler};
 
 use crate::endpoints::inference::{InferenceOutput, Params, inference};
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{AppState, AppStateData};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
-use super::types::chat_completions::{
-    OpenAICompatibleParams, OpenAICompatibleResponse, OpenAICompatibleStreamOptions,
-};
+use super::types::chat_completions::{OpenAICompatibleParams, OpenAICompatibleResponse};
 use super::types::streaming::prepare_serialized_openai_compatible_events;
+use super::{OpenAICompatibleError, OpenAIStructuredJson};
 
 /// A handler for the OpenAI-compatible inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -30,19 +29,21 @@ pub async fn chat_completions_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
+        rate_limiting_manager,
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
-    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
-) -> Result<Response<Body>, Error> {
+    OpenAIStructuredJson(openai_compatible_params): OpenAIStructuredJson<OpenAICompatibleParams>,
+) -> Result<Response<Body>, OpenAICompatibleError> {
     // Validate `n` parameter
     if let Some(n) = openai_compatible_params.n
         && n != 1
     {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "TensorZero does not support `n` other than 1. Please omit this parameter or set it to 1.".to_string(),
-            }));
+            }).into());
     }
 
     if !openai_compatible_params.unknown_fields.is_empty() {
@@ -60,7 +61,7 @@ pub async fn chat_completions_handler(
                 message: format!(
                     "`tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [{unknown_field_names}]"
                 ),
-            }));
+            }).into());
         }
         tracing::warn!(
             "Ignoring unknown fields in OpenAI-compatible request: {:?}",
@@ -70,26 +71,35 @@ pub async fn chat_completions_handler(
                 .collect::<Vec<_>>()
         );
     }
-    let mut stream_options = openai_compatible_params.stream_options;
     let include_raw_usage = openai_compatible_params.tensorzero_include_raw_usage;
+    let include_original_response = openai_compatible_params.tensorzero_include_original_response;
+    let include_raw_response = openai_compatible_params.tensorzero_include_raw_response;
 
-    // Handle include_raw_usage for streaming:
-    // - If include_usage is explicitly false, error (can't have raw_usage without usage)
-    // - If include_usage is not set, automatically enable it
-    if openai_compatible_params.stream.unwrap_or(false) && include_raw_usage {
-        if let Some(opts) = &stream_options {
-            if !opts.include_usage {
-                return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: "`tensorzero::include_raw_usage` requires `stream_options.include_usage` to be true (or omitted) for streaming requests".to_string(),
-                }));
-            }
-        } else {
-            // No stream_options provided, create one with include_usage: true
-            stream_options = Some(OpenAICompatibleStreamOptions {
-                include_usage: true,
-            });
-        }
+    if include_original_response {
+        tracing::warn!(
+            "The `tensorzero::include_original_response` parameter is deprecated. Use `tensorzero::include_raw_response` instead."
+        );
     }
+
+    // Check if user explicitly set include_usage to false
+    let explicit_include_usage = openai_compatible_params
+        .stream_options
+        .as_ref()
+        .map(|opts| opts.include_usage);
+
+    // Error if include_raw_usage=true but include_usage is explicitly false
+    if openai_compatible_params.stream.unwrap_or(false)
+        && include_raw_usage
+        && explicit_include_usage == Some(false)
+    {
+        return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "`tensorzero::include_raw_usage` requires `stream_options.include_usage` to be true (or omitted) for streaming requests".to_string(),
+        }).into());
+    }
+
+    // OpenAI default: no usage when stream_options is omitted
+    // But: include_raw_usage=true implies include_usage=true
+    let include_usage = explicit_include_usage.unwrap_or(false) || include_raw_usage;
 
     let params = Params::try_from_openai(openai_compatible_params)?;
 
@@ -110,30 +120,44 @@ pub async fn chat_completions_handler(
         .into()),
     }?;
 
-    let response = Box::pin(inference(
+    let inference_result = Box::pin(inference(
         config,
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
+        rate_limiting_manager,
         params,
         api_key_ext,
     ))
-    .await?
-    .output;
+    .await;
 
-    match response {
+    let output = match inference_result {
+        Ok(data) => data.output,
+        Err(e) => {
+            return Ok(e.into_response_with_raw_entries(true, include_raw_response));
+        }
+    };
+
+    match output {
         InferenceOutput::NonStreaming(response) => {
-            let openai_compatible_response =
-                OpenAICompatibleResponse::from((response, response_model_prefix));
+            let openai_compatible_response = OpenAICompatibleResponse::from((
+                response,
+                response_model_prefix,
+                include_original_response,
+                include_raw_response,
+            ));
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {
             let openai_compatible_stream = prepare_serialized_openai_compatible_events(
                 stream,
                 response_model_prefix,
-                stream_options,
+                include_usage,
                 include_raw_usage,
+                include_original_response,
+                include_raw_response,
             );
             Ok(Sse::new(openai_compatible_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())

@@ -3,47 +3,69 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "~/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-} from "~/components/ui/command";
-import clsx from "clsx";
 import { useCallback, useMemo } from "react";
-import type { IconProps } from "~/components/icons/Icons";
 import { ComboboxInput } from "./ComboboxInput";
+import { ComboboxContent } from "./ComboboxContent";
+import { ComboboxHint } from "./ComboboxHint";
+import { ComboboxMenuItems } from "./ComboboxMenuItems";
 import { useCombobox } from "./use-combobox";
 
-type IconComponent = React.FC<IconProps>;
+export type ComboboxItem = string | { value: string; label: string };
+
+export type NormalizedComboboxItem = { value: string; label: string };
+
+export function normalizeItem(item: ComboboxItem): NormalizedComboboxItem {
+  if (typeof item === "string") {
+    return { value: item, label: item };
+  }
+  return item;
+}
 
 type ComboboxProps = {
   selected: string | null;
-  onSelect: (value: string) => void;
-  items: string[];
-  icon: IconComponent;
+  onSelect: (value: string, isNew: boolean) => void;
+  items: ComboboxItem[];
+  getPrefix?: (value: string | null, isSelected: boolean) => React.ReactNode;
+  getSuffix?: (value: string | null) => React.ReactNode;
+  getItemDataAttributes?: (value: string) => Record<string, string>;
   placeholder: string;
   emptyMessage: string;
   disabled?: boolean;
-  monospace?: boolean;
   name?: string;
+  ariaLabel?: string;
+  allowCreation?: boolean;
+  createHint?: string;
+  createHeading?: string;
+  loading?: boolean;
+  loadingMessage?: string;
+  error?: boolean;
+  errorMessage?: string;
 };
 
 export function Combobox({
   selected,
   onSelect,
   items,
-  icon: Icon,
+  getPrefix,
+  getSuffix,
+  getItemDataAttributes,
   placeholder,
   emptyMessage,
   disabled = false,
-  monospace = false,
   name,
+  ariaLabel,
+  allowCreation = false,
+  createHint,
+  createHeading = "Create new",
+  loading = false,
+  loadingMessage = "Loading...",
+  error = false,
+  errorMessage = "An error occurred.",
 }: ComboboxProps) {
   const {
     open,
     searchValue,
+    isEditing,
     commandRef,
     getInputValue,
     closeDropdown,
@@ -53,19 +75,50 @@ export function Combobox({
     handleClick,
   } = useCombobox();
 
+  // Normalize items to { value, label } format
+  const normalizedItems = useMemo(() => items.map(normalizeItem), [items]);
+
+  // Find the label for the currently selected value
+  // Fall back to selected value itself for created items not in list
+  const selectedLabel = useMemo(() => {
+    if (!selected) return null;
+    const item = normalizedItems.find((item) => item.value === selected);
+    return item?.label ?? selected;
+  }, [selected, normalizedItems]);
+
   const filteredItems = useMemo(() => {
     const query = searchValue.toLowerCase();
-    if (!query) return items;
-    return items.filter((item) => item.toLowerCase().includes(query));
-  }, [items, searchValue]);
+    if (!query) return normalizedItems;
+    return normalizedItems.filter((item) =>
+      item.label.toLowerCase().includes(query),
+    );
+  }, [normalizedItems, searchValue]);
 
-  const handleSelect = useCallback(
-    (item: string) => {
-      onSelect(item);
+  const handleSelectItem = useCallback(
+    (value: string, isNew: boolean) => {
+      onSelect(value, isNew);
       closeDropdown();
     },
     [onSelect, closeDropdown],
   );
+
+  const showCreateOption =
+    allowCreation &&
+    Boolean(searchValue.trim()) &&
+    !normalizedItems.some(
+      (item) => item.label.toLowerCase() === searchValue.trim().toLowerCase(),
+    );
+
+  const inputPrefix = useMemo(() => {
+    const value = selected && !searchValue ? selected : null;
+    const isSelected = Boolean(selected && !searchValue);
+    return getPrefix?.(value, isSelected);
+  }, [selected, searchValue, getPrefix]);
+
+  const inputSuffix = useMemo(() => {
+    const value = selected && !searchValue ? selected : null;
+    return getSuffix?.(value);
+  }, [selected, searchValue, getSuffix]);
 
   return (
     <div className="w-full">
@@ -73,16 +126,18 @@ export function Combobox({
       <Popover open={open}>
         <PopoverAnchor asChild>
           <ComboboxInput
-            value={getInputValue(selected)}
+            value={getInputValue(selectedLabel)}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onClick={handleClick}
             onBlur={handleBlur}
             placeholder={placeholder}
             disabled={disabled}
-            monospace={monospace}
             open={open}
-            icon={Icon}
+            isEditing={isEditing}
+            prefix={inputPrefix}
+            suffix={inputSuffix}
+            ariaLabel={ariaLabel}
           />
         </PopoverAnchor>
         <PopoverContent
@@ -92,32 +147,37 @@ export function Combobox({
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <Command ref={commandRef} shouldFilter={false}>
-            <CommandList>
-              <CommandEmpty className="text-fg-tertiary flex items-center justify-center py-6 text-sm">
-                {emptyMessage}
-              </CommandEmpty>
-              {filteredItems.length > 0 && (
-                <CommandGroup>
-                  {filteredItems.map((item) => (
-                    <CommandItem
-                      key={item}
-                      value={item}
-                      onSelect={() => handleSelect(item)}
-                      className="flex items-center gap-2"
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span
-                        className={clsx("truncate", monospace && "font-mono")}
-                      >
-                        {item}
-                      </span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              )}
-            </CommandList>
-          </Command>
+          <ComboboxContent
+            ref={commandRef}
+            emptyMessage={emptyMessage}
+            showEmpty={!showCreateOption && !loading && !error}
+          >
+            {loading ? (
+              <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
+                {loadingMessage}
+              </div>
+            ) : error ? (
+              <div className="text-fg-muted flex items-center justify-center py-4 text-sm">
+                {errorMessage}
+              </div>
+            ) : (
+              <ComboboxMenuItems
+                items={filteredItems}
+                selectedValue={selected}
+                searchValue={searchValue}
+                onSelectItem={handleSelectItem}
+                showCreateOption={showCreateOption}
+                createHeading={createHeading}
+                existingHeading="Existing"
+                getPrefix={getPrefix}
+                getSuffix={getSuffix}
+                getItemDataAttributes={getItemDataAttributes}
+              />
+            )}
+          </ComboboxContent>
+          {createHint && !showCreateOption && !loading && !error && (
+            <ComboboxHint>{createHint}</ComboboxHint>
+          )}
         </PopoverContent>
       </Popover>
     </div>

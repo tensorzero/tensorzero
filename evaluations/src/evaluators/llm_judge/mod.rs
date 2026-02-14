@@ -7,6 +7,7 @@ use tensorzero_core::client::{
     ClientInferenceParams, DynamicToolParams, File, InferenceOutput, InferenceParams,
     InferenceResponse, Input, InputMessage, InputMessageContent, Role,
 };
+use tensorzero_core::db::evaluation_queries::EvaluationQueries;
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
     LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType, get_evaluator_metric_name,
@@ -19,7 +20,8 @@ use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::Clients;
-use crate::helpers::{check_inference_evaluation_human_feedback, get_cache_options};
+use crate::helpers::get_cache_options;
+use crate::merge_tags;
 
 #[derive(Debug)]
 pub struct LLMJudgeEvaluationResult {
@@ -51,6 +53,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub evaluation_run_id: Uuid,
     pub input: &'a Input,
     pub inference_cache: CacheEnabledMode,
+    pub external_tags: &'a HashMap<String, String>,
 }
 
 #[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluator_name = %params.evaluator_name))]
@@ -67,15 +70,18 @@ pub async fn run_llm_judge_evaluator(
         evaluation_run_id,
         input,
         inference_cache,
+        external_tags,
     } = params;
     debug!("Checking for existing human feedback");
-    if let Some(human_feedback) = check_inference_evaluation_human_feedback(
-        &clients.clickhouse_client,
-        &get_evaluator_metric_name(evaluation_name, evaluator_name),
-        datapoint.id(),
-        inference_response,
-    )
-    .await?
+    let serialized_output = inference_response.get_serialized_output()?;
+    if let Some(human_feedback) = clients
+        .clickhouse_client
+        .get_inference_evaluation_human_feedback(
+            &get_evaluator_metric_name(evaluation_name, evaluator_name),
+            &datapoint.id(),
+            &serialized_output,
+        )
+        .await?
     {
         info!("Found existing human feedback, using that instead of LLM judge");
         return Ok(Some(LLMJudgeEvaluationResult {
@@ -98,28 +104,33 @@ pub async fn run_llm_judge_evaluator(
         };
 
     debug!("Making LLM judge inference request");
+    let internal_tags = HashMap::from([
+        (
+            "tensorzero::evaluation_run_id".to_string(),
+            evaluation_run_id.to_string(),
+        ),
+        (
+            "tensorzero::evaluation_name".to_string(),
+            evaluation_name.to_string(),
+        ),
+    ]);
+    let tags = merge_tags(external_tags, internal_tags)?;
+
     let params = ClientInferenceParams {
         function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
         episode_id: None,
+        namespace: None,
         input: judge_input,
         stream: Some(false),
         include_original_response: false,
+        include_raw_response: false,
         include_raw_usage: false,
         params: InferenceParams::default(),
         variant_name: None,
         dryrun: Some(false),
         internal: true,
-        tags: HashMap::from([
-            (
-                "tensorzero::evaluation_run_id".to_string(),
-                evaluation_run_id.to_string(),
-            ),
-            (
-                "tensorzero::evaluation_name".to_string(),
-                evaluation_name.to_string(),
-            ),
-        ]),
+        tags,
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,
         credentials: HashMap::new(),
@@ -132,7 +143,7 @@ pub async fn run_llm_judge_evaluator(
         otlp_traces_extra_resources: HashMap::new(),
         api_key: None,
     };
-    let result = clients.tensorzero_client.inference(params).await?;
+    let result = clients.inference_executor.inference(params).await?;
     let response = match result {
         InferenceOutput::NonStreaming(response) => response,
         InferenceOutput::Streaming(..) => {
@@ -581,6 +592,7 @@ mod tests {
                 usage: Usage::default(),
                 raw_usage: None,
                 original_response: None,
+                raw_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
@@ -651,6 +663,7 @@ mod tests {
                 usage: Usage::default(),
                 raw_usage: None,
                 original_response: None,
+                raw_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
@@ -798,6 +811,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: None,
+                extra_data: None,
             }),
         ];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
@@ -1047,6 +1061,7 @@ mod tests {
                 usage: Usage::default(),
                 raw_usage: None,
                 original_response: None,
+                raw_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
@@ -1159,6 +1174,7 @@ mod tests {
                 usage: Usage::default(),
                 raw_usage: None,
                 original_response: None,
+                raw_response: None,
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),

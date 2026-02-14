@@ -48,7 +48,7 @@ test("should be able to bulk add selected inferences to a new dataset from evalu
   await page.waitForTimeout(500);
 
   // Find the CommandInput by its placeholder text
-  const commandInput = page.getByPlaceholder("Create or find a dataset");
+  const commandInput = page.getByPlaceholder("Create or find dataset");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
 
@@ -107,7 +107,11 @@ test("should be able to bulk add selected inferences to a new dataset from evalu
   });
 
   // Verify the datapoint detail page loaded correctly
-  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Datapoints", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Input" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Output" })).toBeVisible();
 
@@ -152,7 +156,7 @@ test("should be able to bulk add selected inferences to a dataset from multi-eva
   await page.waitForTimeout(500);
 
   // Find the CommandInput and fill in the dataset name
-  const commandInput = page.getByPlaceholder("Create or find a dataset");
+  const commandInput = page.getByPlaceholder("Create or find dataset");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
 
@@ -191,7 +195,11 @@ test("should be able to bulk add selected inferences to a dataset from multi-eva
   await page.waitForLoadState("networkidle");
 
   // Verify we're on the datapoint detail page
-  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Datapoints", { exact: true }),
+  ).toBeVisible();
 
   // Verify the output contains "Brown" in the person array
   await expect(page.getByText('"Brown"')).toBeVisible();
@@ -213,7 +221,11 @@ test("should be able to bulk add selected inferences to a dataset from multi-eva
   await page.waitForLoadState("networkidle");
 
   // Verify we're on the inference page
-  await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Inferences", { exact: true }),
+  ).toBeVisible();
 
   // Verify the variant name is llama_8b_initial_prompt (the variant we selected from the third row)
   await expect(page.getByText("llama_8b_initial_prompt")).toBeVisible();

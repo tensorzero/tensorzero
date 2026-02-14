@@ -4,7 +4,7 @@ use std::{io::Write, path::PathBuf};
 
 use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ContentBlockChunk, InferenceOutput,
-    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role,
+    InferenceResponseChunk, Input, InputMessage, InputMessageContent, PostgresConfig, Role,
 };
 use tensorzero_core::inference::types::Template;
 use tokio_stream::StreamExt;
@@ -49,7 +49,10 @@ async fn main() {
         (None, Some(config_file)) => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(config_file),
             clickhouse_url: std::env::var("TENSORZERO_CLICKHOUSE_URL").ok(),
-            postgres_url: std::env::var("TENSORZERO_POSTGRES_URL").ok(),
+            postgres_config: std::env::var("TENSORZERO_POSTGRES_URL")
+                .ok()
+                .map(PostgresConfig::Url),
+            valkey_url: std::env::var("TENSORZERO_VALKEY_URL").ok(),
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: false,

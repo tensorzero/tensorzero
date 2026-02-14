@@ -9,7 +9,7 @@ Before running the example, set the `OPENAI_API_KEY` environment variable to you
 ### Python
 
 1. Launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database: `docker compose up`
-2. Install the dependencies: `pip install -r requirements.txt`
+2. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 3. Run the example: `python before.py` and `python after.py`
 
 ### Node (JavaScript/TypeScript)

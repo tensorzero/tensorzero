@@ -130,15 +130,16 @@ impl Display for ProviderType {
     }
 }
 
-#[derive(Serialize, Debug, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Serialize, Debug)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 // TODO: investigate why derive(TS) doesn't work if we add bounds to BaseModelTable itself
 // #[serde(bound(deserialize = "T: ShorthandModelConfig + Deserialize<'de>"))]
 // #[serde(try_from = "HashMap<Arc<str>, T>")]
 pub struct BaseModelTable<T> {
     pub table: HashMap<Arc<str>, T>,
     #[serde(skip)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub default_credentials: Arc<ProviderTypeDefaultCredentials>,
     global_outbound_http_timeout: chrono::Duration,
 }
@@ -462,7 +463,7 @@ impl ProviderTypeDefaultCredentials {
                     .try_into()
             }),
             azure: LazyCredential::new(move || {
-                load_credential_with_fallback(&azure_location, ProviderType::Azure)?.try_into()
+                load_azure_credential_with_legacy_fallback(&azure_location)?.try_into()
             }),
             deepseek: LazyCredential::new(move || {
                 load_credential_with_fallback(&deepseek_location, ProviderType::Deepseek)?
@@ -692,6 +693,32 @@ fn load_credential_with_fallback(
     } else {
         Ok(default_credential)
     }
+}
+
+/// Load Azure credential with legacy `AZURE_OPENAI_API_KEY` fallback support.
+/// Only applies fallback when using the default location (`AZURE_API_KEY`).
+fn load_azure_credential_with_legacy_fallback(
+    location: &CredentialLocationWithFallback,
+) -> Result<Credential, Error> {
+    // Check if using the default location (AZURE_API_KEY)
+    let is_default_location = matches!(
+        location.default_location(),
+        CredentialLocation::Env(key) if key == "AZURE_API_KEY"
+    );
+
+    // For the default location, check legacy key BEFORE attempting primary load
+    // to avoid logging an error when fallback will succeed
+    if is_default_location
+        && env::var("AZURE_API_KEY").is_err()
+        && let Ok(value) = env::var("AZURE_OPENAI_API_KEY")
+    {
+        crate::utils::deprecation_warning(
+            "The environment variable `AZURE_OPENAI_API_KEY` is deprecated and will be removed in a future release. Please set `AZURE_API_KEY` instead. The legacy value will be removed in 2026.4+ (#5530).",
+        );
+        return Ok(Credential::Static(SecretString::from(value)));
+    }
+
+    load_credential_with_fallback(location, ProviderType::Azure)
 }
 
 pub struct AnthropicKind;

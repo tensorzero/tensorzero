@@ -23,7 +23,7 @@ use crate::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceResponseWithMetadata, RequestMessage, Role,
     System, batch::StartBatchModelInferenceWithMetadata,
 };
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
 use crate::tool::create_json_mode_tool_call_config_with_allowed_tools;
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
@@ -42,8 +42,9 @@ use crate::{
 use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct BestOfNSamplingConfig {
     weight: Option<f64>,
     candidates: Vec<String>,
@@ -81,8 +82,9 @@ impl BestOfNSamplingConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
@@ -94,15 +96,17 @@ pub struct UninitializedBestOfNSamplingConfig {
     pub evaluator: UninitializedBestOfNEvaluatorConfig,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct BestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]
@@ -142,9 +146,9 @@ impl UninitializedBestOfNSamplingConfig {
 const IMPLICIT_TOOL_NAME: &str = "respond";
 
 lazy_static! {
-    static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
+    static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchema = {
         #[expect(clippy::expect_used)]
-        StaticJSONSchema::from_value(json!({
+        JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "thinking": { "type": "string" },
@@ -835,11 +839,12 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::Arc;
     use uuid::Uuid;
 
     use crate::rate_limiting::ScopeInfo;
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheEnabledMode, CacheManager, CacheOptions},
         config::{UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
@@ -854,18 +859,19 @@ mod tests {
         model::{ModelConfig, ModelProvider, ProviderConfig},
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
+        rate_limiting::RateLimitingManager,
     };
 
     use super::*;
 
-    #[test]
-    fn test_static_schema() {
+    #[tokio::test]
+    async fn test_static_schema() {
         // Also covers the fact that the lazy schema works
         let instance = json!({
             "thinking": "I am thinking",
             "answer_choice": 0
         });
-        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance);
+        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance).await;
         assert!(result.is_ok());
     }
 
@@ -873,7 +879,7 @@ mod tests {
     async fn test_prepare_system_message() {
         let templates = get_test_template_config().await;
 
-        let system_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let system_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "assistant_name": {
@@ -1061,7 +1067,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1082,6 +1087,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1099,7 +1105,6 @@ mod tests {
 
         let model_inference_response2 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1120,6 +1125,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1156,7 +1162,6 @@ mod tests {
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1177,6 +1182,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1193,7 +1199,6 @@ mod tests {
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec![
                 "{\"response\": \"Malformed JSON response\""
                     .to_string()
@@ -1218,6 +1223,7 @@ mod tests {
             finish_reason: Some(FinishReason::ToolCall),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1270,7 +1276,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 0".to_string().into()],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
@@ -1291,6 +1296,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1308,7 +1314,6 @@ mod tests {
 
         let model_inference_response1 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1329,6 +1334,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1384,8 +1390,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1394,6 +1401,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1735,7 +1743,7 @@ mod tests {
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
         );
-        assert_eq!(exported.evaluator.inner.model, "gpt-4".into());
+        assert_eq!(exported.evaluator.inner.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.evaluator.inner.temperature, Some(0.3));
     }
 
@@ -1763,7 +1771,10 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.evaluator.inner.model, "judge-model".into());
+        assert_eq!(
+            exported.evaluator.inner.model,
+            Arc::<str>::from("judge-model")
+        );
         assert_eq!(exported.evaluator.inner.temperature, Some(0.1));
         assert_eq!(exported.evaluator.inner.max_tokens, Some(50));
         assert_eq!(exported.evaluator.inner.seed, Some(99));

@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{UpdateDatapointRequest, UpdateDatapointsResponse};
@@ -31,11 +33,11 @@ impl ToolMetadata for UpdateDatapointsTool {
     type Output = UpdateDatapointsResponse;
     type LlmParams = UpdateDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("update_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Update existing datapoints in a dataset. \
              Can modify input, output, tags, and metadata. \
@@ -43,7 +45,11 @@ impl ToolMetadata for UpdateDatapointsTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // Datapoints have arbitrary input/output_schema objects
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Update existing datapoints in a dataset.",
@@ -57,7 +63,13 @@ impl ToolMetadata for UpdateDatapointsTool {
                     "description": "The datapoints to update.",
                     "items": {
                         "type": "object",
+                        "description": "A datapoint update. Use 'chat' type for chat datapoints, or 'json' type for JSON datapoints.",
                         "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["chat", "json"],
+                                "description": "The datapoint type. Must match the type of the existing datapoint."
+                            },
                             "id": {
                                 "type": "string",
                                 "format": "uuid",
@@ -68,7 +80,11 @@ impl ToolMetadata for UpdateDatapointsTool {
                                 "description": "New input data (optional)."
                             },
                             "output": {
-                                "description": "New output data (optional)."
+                                "description": "New output data (optional). For chat: array of content blocks. For json: object with 'raw' string field."
+                            },
+                            "output_schema": {
+                                "type": "object",
+                                "description": "Output schema for validation (optional, only for 'json' type datapoints)."
                             },
                             "tags": {
                                 "type": "object",
@@ -76,14 +92,21 @@ impl ToolMetadata for UpdateDatapointsTool {
                                 "description": "New tags (optional)."
                             }
                         },
-                        "required": ["id"]
+                        "required": ["type", "id"],
+                        "additionalProperties": false
                     }
                 }
             },
-            "required": ["dataset_name", "datapoints"]
+            "required": ["dataset_name", "datapoints"],
+            "additionalProperties": false
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -98,6 +121,6 @@ impl SimpleTool for UpdateDatapointsTool {
         ctx.client()
             .update_datapoints(llm_params.dataset_name, llm_params.datapoints)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("update_datapoints", e).into())
     }
 }

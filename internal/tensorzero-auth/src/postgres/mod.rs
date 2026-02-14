@@ -75,25 +75,26 @@ pub enum AuthResult {
     /// The API key exists and is not disabled.
     Success(KeyInfo),
     /// The API key exists, but was disabled at the specified time.
-    Disabled(DateTime<Utc>),
+    Disabled(DateTime<Utc>, KeyInfo),
     /// The API key exists, but expired at the specified time.
-    Expired(DateTime<Utc>),
+    Expired(DateTime<Utc>, KeyInfo),
     /// The API key does not exist.
     MissingKey,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct KeyInfo {
     pub public_id: String,
     pub organization: String,
     pub workspace: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub disabled_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, ts(optional))]
@@ -114,10 +115,10 @@ pub async fn check_key(
     match key {
         Some(key) => {
             if let Some(disabled_at) = key.disabled_at {
-                Ok(AuthResult::Disabled(disabled_at))
+                Ok(AuthResult::Disabled(disabled_at, key))
             } else if let Some(expires_at) = key.expires_at {
                 if expires_at <= Utc::now() {
-                    Ok(AuthResult::Expired(expires_at))
+                    Ok(AuthResult::Expired(expires_at, key))
                 } else {
                     Ok(AuthResult::Success(key))
                 }

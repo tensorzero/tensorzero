@@ -7,12 +7,12 @@ import type {
   UninitializedOptimizerInfo,
 } from "~/types/tensorzero";
 import { getConfig } from "~/utils/config/index.server";
-import { getNativeTensorZeroClient } from "../tensorzero/native_client.server";
+import { getTensorZeroClient } from "../tensorzero.server";
 
 export async function poll_sft_job(
   jobHandle: OptimizationJobHandle,
 ): Promise<OptimizationJobInfo> {
-  const client = await getNativeTensorZeroClient();
+  const client = getTensorZeroClient();
   const status = await client.experimentalPollOptimization(jobHandle);
   if (status.status === "pending" && status.estimated_finish) {
     status.estimated_finish = new Date(status.estimated_finish);
@@ -34,7 +34,7 @@ export async function launch_sft_job(
         : data.threshold;
     filters = await createFilters(data.metric, threshold);
   }
-  const client = await getNativeTensorZeroClient();
+  const client = getTensorZeroClient();
   let optimizerConfig: UninitializedOptimizerInfo;
   switch (data.model.provider) {
     case "openai": {

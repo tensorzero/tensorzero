@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{FeedbackQueries, FeedbackRow};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -17,8 +18,9 @@ pub struct GetFeedbackByTargetIdParams {
     pub limit: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetFeedbackByTargetIdResponse {
     pub feedback: Vec<FeedbackRow>,
 }
@@ -37,8 +39,12 @@ pub async fn get_feedback_by_target_id_handler(
     Path(target_id): Path<Uuid>,
     Query(params): Query<GetFeedbackByTargetIdParams>,
 ) -> Result<Json<GetFeedbackByTargetIdResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_feedback_by_target_id(
-        &app_state.clickhouse_connection_info,
+        &database,
         target_id,
         params.before,
         params.after,
@@ -50,13 +56,13 @@ pub async fn get_feedback_by_target_id_handler(
 
 /// Core business logic for getting feedback by target ID
 pub async fn get_feedback_by_target_id(
-    clickhouse: &impl FeedbackQueries,
+    database: &(dyn FeedbackQueries + Sync),
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
     limit: Option<u32>,
 ) -> Result<GetFeedbackByTargetIdResponse, Error> {
-    let feedback = clickhouse
+    let feedback = database
         .query_feedback_by_target_id(target_id, before, after, limit)
         .await?;
 
@@ -75,12 +81,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_feedback_by_target_id_calls_clickhouse() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
         let target_id = Uuid::now_v7();
         let feedback_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_query_feedback_by_target_id()
             .withf(move |id, before, after, limit| {
                 *id == target_id && before.is_none() && after.is_none() && *limit == Some(10)
@@ -98,7 +104,7 @@ mod tests {
                 Box::pin(async move { Ok(rows) })
             });
 
-        let result = get_feedback_by_target_id(&mock_clickhouse, target_id, None, None, Some(10))
+        let result = get_feedback_by_target_id(&mock_db, target_id, None, None, Some(10))
             .await
             .unwrap();
 
@@ -114,12 +120,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_feedback_by_target_id_with_before_pagination() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
         let target_id = Uuid::now_v7();
         let before_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_query_feedback_by_target_id()
             .withf(move |id, before, after, limit| {
                 *id == target_id
@@ -131,7 +137,7 @@ mod tests {
             .returning(move |_, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result =
-            get_feedback_by_target_id(&mock_clickhouse, target_id, Some(before_id), None, Some(50))
+            get_feedback_by_target_id(&mock_db, target_id, Some(before_id), None, Some(50))
                 .await
                 .unwrap();
 
@@ -140,12 +146,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_feedback_by_target_id_with_after_pagination() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
         let target_id = Uuid::now_v7();
         let after_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_query_feedback_by_target_id()
             .withf(move |id, before, after, limit| {
                 *id == target_id
@@ -156,21 +162,20 @@ mod tests {
             .times(1)
             .returning(move |_, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
-        let result =
-            get_feedback_by_target_id(&mock_clickhouse, target_id, None, Some(after_id), Some(25))
-                .await
-                .unwrap();
+        let result = get_feedback_by_target_id(&mock_db, target_id, None, Some(after_id), Some(25))
+            .await
+            .unwrap();
 
         assert!(result.feedback.is_empty());
     }
 
     #[tokio::test]
     async fn test_get_feedback_by_target_id_returns_multiple_types() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
         let target_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_query_feedback_by_target_id()
             .times(1)
             .returning(move |_, _, _, _| {
@@ -210,7 +215,7 @@ mod tests {
                 Box::pin(async move { Ok(rows) })
             });
 
-        let result = get_feedback_by_target_id(&mock_clickhouse, target_id, None, None, None)
+        let result = get_feedback_by_target_id(&mock_db, target_id, None, None, None)
             .await
             .unwrap();
 
@@ -242,16 +247,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_feedback_by_target_id_empty_result() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
         let target_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_db
             .expect_query_feedback_by_target_id()
             .times(1)
             .returning(move |_, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
-        let result = get_feedback_by_target_id(&mock_clickhouse, target_id, None, None, None)
+        let result = get_feedback_by_target_id(&mock_db, target_id, None, None, None)
             .await
             .unwrap();
 

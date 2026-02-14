@@ -4,7 +4,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
@@ -32,18 +34,22 @@ impl ToolMetadata for CreateDatapointsTool {
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("create_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Create datapoints in a dataset. Datapoints can be Chat or Json type. \
              Autopilot tags are automatically added for tracking.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // Datapoints have arbitrary input/output objects
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Create datapoints in a dataset.",
@@ -57,11 +63,11 @@ impl ToolMetadata for CreateDatapointsTool {
                     "description": "The datapoints to create. Each can be Chat or Json type.",
                     "items": {
                         "type": "object",
-                        "description": "A datapoint. Use 'Chat' type with 'input' containing messages, or 'Json' type with 'input'/'output' as JSON objects.",
+                        "description": "A datapoint. Use 'chat' type with 'input' containing messages, or 'json' type with structured input/output.",
                         "properties": {
                             "type": {
                                 "type": "string",
-                                "enum": ["Chat", "Json"],
+                                "enum": ["chat", "json"],
                                 "description": "The datapoint type."
                             },
                             "function_name": {
@@ -73,7 +79,11 @@ impl ToolMetadata for CreateDatapointsTool {
                                 "description": "The input data. For Chat: {system?, messages}. For Json: any JSON object."
                             },
                             "output": {
-                                "description": "Expected output. For Chat: string or content blocks. For Json: any JSON."
+                                "description": "Expected output. For 'chat': array of content blocks like [{\"type\": \"text\", \"text\": \"...\"}]. For 'json': object with 'raw' field containing JSON string, e.g. {\"raw\": \"{\\\"key\\\": \\\"value\\\"}\"}"
+                            },
+                            "output_schema": {
+                                "type": "object",
+                                "description": "JSON Schema for validating the output. Only used for 'json' type datapoints."
                             },
                             "tags": {
                                 "type": "object",
@@ -81,14 +91,21 @@ impl ToolMetadata for CreateDatapointsTool {
                                 "description": "Optional tags for the datapoint."
                             }
                         },
-                        "required": ["type", "function_name", "input"]
+                        "required": ["type", "function_name", "input"],
+                        "additionalProperties": false
                     }
                 }
             },
-            "required": ["dataset_name", "datapoints"]
+            "required": ["dataset_name", "datapoints"],
+            "additionalProperties": false
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -142,6 +159,6 @@ impl SimpleTool for CreateDatapointsTool {
         ctx.client()
             .create_datapoints(llm_params.dataset_name, datapoints)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("create_datapoints", e).into())
     }
 }

@@ -10,10 +10,8 @@
 
 import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
-import { getAutopilotClient } from "../tensorzero.server";
 import { DEFAULT_FUNCTION } from "../constants";
 import { logger } from "../logger";
-import { isAutopilotUnavailableError } from "../tensorzero/errors";
 
 // Poll interval in milliseconds (5 seconds)
 const CONFIG_HASH_POLL_INTERVAL_MS = 5_000;
@@ -37,7 +35,9 @@ let autopilotAvailableCache: { value: boolean; timestamp: number } | undefined =
   undefined;
 
 /**
- * Checks if autopilot is available by making a minimal request.
+ * Checks if autopilot is available by querying the gateway's autopilot status endpoint.
+ * This endpoint checks if TENSORZERO_AUTOPILOT_API_KEY is configured on the gateway
+ * without making any database queries or pinging the autopilot server.
  * The result is cached with a TTL.
  */
 export async function checkAutopilotAvailable(): Promise<boolean> {
@@ -50,20 +50,15 @@ export async function checkAutopilotAvailable(): Promise<boolean> {
   }
 
   try {
-    const client = getAutopilotClient();
-    await client.listAutopilotSessions({ limit: 1 });
-    autopilotAvailableCache = { value: true, timestamp: Date.now() };
+    const client = getTensorZeroClient();
+    const status = await client.getAutopilotStatus();
+    autopilotAvailableCache = { value: status.enabled, timestamp: Date.now() };
+    return status.enabled;
   } catch (error) {
-    if (isAutopilotUnavailableError(error)) {
-      autopilotAvailableCache = { value: false, timestamp: Date.now() };
-    } else {
-      // For other errors (network, etc.), assume unavailable but don't cache
-      logger.warn("Failed to check autopilot availability:", error);
-      return false;
-    }
+    // For network errors, assume unavailable but don't cache
+    logger.warn("Failed to check autopilot status:", error);
+    return false;
   }
-
-  return autopilotAvailableCache.value;
 }
 
 /**
@@ -125,7 +120,7 @@ const defaultFunctionConfig: FunctionConfig = {
   parallel_tool_calls: null,
   description:
     "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
-  experimentation: { type: "uniform" },
+  experimentation: { base: { type: "uniform" }, namespaces: {} },
 };
 
 /**

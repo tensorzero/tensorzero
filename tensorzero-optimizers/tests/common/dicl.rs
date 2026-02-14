@@ -20,8 +20,8 @@ use tensorzero_core::{
     },
     http::TensorzeroHttpClient,
     inference::types::{
-        Arguments, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
-        ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
+        Arguments, ContentBlockChatOutput, ContentBlockChunk, FunctionType, JsonInferenceOutput,
+        ModelInput, ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
         StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, Usage,
     },
     model_table::ProviderTypeDefaultCredentials,
@@ -83,7 +83,7 @@ pub async fn test_dicl_optimization_chat() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
@@ -195,7 +195,8 @@ pub async fn test_dicl_optimization_chat() {
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_url: None,
+        postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -367,7 +368,7 @@ pub async fn test_dicl_optimization_json() {
             variant_name: variant_name.clone(),
             function_name: function_name.clone(),
             k,
-            model: model.clone(),
+            model: Some(model.clone()),
             ..Default::default()
         }),
     };
@@ -479,8 +480,9 @@ pub async fn test_dicl_optimization_json() {
 
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
-        postgres_url: None,
+        postgres_config: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -640,6 +642,7 @@ fn create_inference_params(
         function_name: Some(function_name.to_string()),
         model_name: None,
         episode_id: Some(episode_id),
+        namespace: None,
         input,
         stream: Some(stream),
         params: Default::default(),
@@ -652,6 +655,7 @@ fn create_inference_params(
         credentials: Default::default(),
         cache_options: Default::default(),
         include_original_response: true,
+        include_raw_response: false,
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
@@ -1197,6 +1201,11 @@ fn create_pinocchio_example(
 
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: if is_json_function {
+            FunctionType::Json
+        } else {
+            FunctionType::Chat
+        },
         input: ModelInput {
             system: system.as_ref().map(std::string::ToString::to_string),
             messages: vec![ResolvedRequestMessage {

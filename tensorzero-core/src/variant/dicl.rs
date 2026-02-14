@@ -31,6 +31,7 @@ use crate::model::ModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::utils::retries::RetryConfig;
 use crate::{
+    db::DICLQueries,
     embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -52,8 +53,9 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DiclConfig {
     weight: Option<f64>,
     embedding_model: Arc<str>,
@@ -70,9 +72,9 @@ pub struct DiclConfig {
     #[serde(flatten)]
     pub(crate) inference_params_v2: ChatCompletionInferenceParamsV2,
     json_mode: Option<JsonMode>,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     extra_body: Option<ExtraBodyConfig>,
-    #[cfg_attr(test, ts(skip))]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     extra_headers: Option<ExtraHeadersConfig>,
     retries: RetryConfig,
     max_distance: Option<f32>,
@@ -192,8 +194,9 @@ impl DiclConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
     #[serde(default)]
@@ -209,23 +212,23 @@ pub struct UninitializedDiclConfig {
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
     pub json_mode: Option<JsonMode>,
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
     pub max_distance: Option<f32>,
@@ -599,49 +602,28 @@ impl DiclConfig {
             .into());
         };
 
-        // Format the embedding as a string for ClickHouse
-        let formatted_embedding = format!(
-            "[{}]",
-            embedding_vector
-                .as_float()
-                .ok_or_else(|| Error::new(ErrorDetails::InternalError {
-                    message: format!("Failed to convert DICL embedding to float array. {IMPOSSIBLE_ERROR_MESSAGE}")
-                }))?
-                .iter()
-                .map(|&x| x.to_string())
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-        let query = format!(
-            r"SELECT input, output, cosineDistance(embedding, {}) as cosine_distance
-                   FROM DynamicInContextLearningExample
-                   WHERE function_name='{}' AND variant_name='{}'
-                   ORDER BY cosine_distance ASC
-                   LIMIT {}
-                   FORMAT JSONEachRow",
-            formatted_embedding,
-            function_name,
-            variant_name,
-            self.k()
-        );
+        let embedding_floats = embedding_vector.as_float().ok_or_else(|| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!(
+                    "Failed to convert DICL embedding to float array. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            })
+        })?;
 
-        // Run the query on the ClickHouse database to find nearest neighbors
-        let result = clients
+        // Run the similarity search query via the DICLQueries trait
+        let dicl_results = clients
             .clickhouse_connection_info
-            .run_query_synchronous_no_params(query)
+            .get_similar_dicl_examples(function_name, variant_name, embedding_floats, self.k())
             .await?;
 
-        // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
-        let raw_examples: Vec<RawExample> = result
-            .response
-            .lines()
-            .map(serde_json::from_str::<RawExample>)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to parse raw examples: {e}"),
-                })
-            })?;
+        let raw_examples: Vec<RawExample> = dicl_results
+            .into_iter()
+            .map(|ex| RawExample {
+                input: ex.input,
+                output: ex.output,
+                cosine_distance: ex.cosine_distance,
+            })
+            .collect();
 
         let initial_count = raw_examples.len();
 
@@ -984,7 +966,7 @@ mod tests {
     use super::*;
     use crate::config::SchemaData;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceIds};
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::inference::types::StoredInputMessage;
     use crate::inference::types::System;
     use crate::inference::types::file::ObjectStoragePointer;
@@ -1501,7 +1483,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: Default::default(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
 
         // Call prepare_request with EMPTY examples
@@ -1631,7 +1613,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: Default::default(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
 
         // Call prepare_request with examples

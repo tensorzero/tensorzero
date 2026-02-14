@@ -11,7 +11,7 @@ use tensorzero::{
     ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
-    cache::CacheOptions,
+    cache::{CacheManager, CacheOptions},
     config::{Config, ConfigFileGlob, provider_types::ProviderTypesConfig},
     db::{
         clickhouse::{ClickHouseConnectionInfo, test_helpers::CLICKHOUSE_URL},
@@ -83,7 +83,8 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
             config_file: Some(config_path.clone()),
             clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-            postgres_url: None,
+            postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -157,7 +158,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     "test-fine-tuned-model",
                     &ProviderTypesConfig::default(),
                     &ProviderTypeDefaultCredentials::default(),
-                    TensorzeroHttpClient::new_testing().unwrap(),
+                    false,
                     false,
                 )
                 .await
@@ -181,14 +182,23 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 function_type: FunctionType::Chat,
                 ..Default::default()
             };
+            let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
+                Arc::new(Default::default());
+            let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
             let clients = InferenceClients {
                 http_client: client.clone(),
-                clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                clickhouse_connection_info: clickhouse_connection_info.clone(),
                 postgres_connection_info: PostgresConnectionInfo::Disabled,
                 credentials: Arc::new(HashMap::new()),
                 cache_options: CacheOptions::default(),
+                cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info)),
                 tags: Arc::new(Default::default()),
-                rate_limiting_config: Arc::new(Default::default()),
+                rate_limiting_manager: Arc::new(
+                    tensorzero_core::rate_limiting::RateLimitingManager::new(
+                        rate_limiting_config,
+                        Arc::new(PostgresConnectionInfo::Disabled),
+                    ),
+                ),
                 otlp_config: Default::default(),
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
@@ -197,6 +207,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 },
                 relay: None,
                 include_raw_usage: false,
+                include_raw_response: false,
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_provider_api() {
@@ -285,6 +296,7 @@ fn generate_text_example() -> RenderedSample {
     })];
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![ResolvedRequestMessage {
@@ -337,6 +349,7 @@ fn generate_tool_call_example() -> RenderedSample {
     )];
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![
@@ -478,6 +491,7 @@ fn generate_image_example() -> RenderedSample {
     })];
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: Some(system_prompt.clone()),
             messages: vec![ResolvedRequestMessage {

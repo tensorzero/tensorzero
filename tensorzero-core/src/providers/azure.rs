@@ -22,7 +22,9 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{ApiType, ContentBlockOutput, ProviderInferenceResponseArgs};
+use crate::inference::types::{
+    ApiType, ContentBlockOutput, ProviderInferenceResponseArgs, Thought,
+};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -42,7 +44,8 @@ use super::chat_completions::{
 };
 use super::openai::{
     OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
-    SystemOrDeveloper, handle_openai_error, prepare_openai_messages, stream_openai,
+    StreamOptions, SystemOrDeveloper, handle_openai_error,
+    openai_response_tool_call_to_tensorzero_tool_call, prepare_openai_messages, stream_openai,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -50,8 +53,9 @@ const PROVIDER_NAME: &str = "Azure";
 pub const PROVIDER_TYPE: &str = "azure";
 const AZURE_INFERENCE_API_VERSION: &str = "2025-04-01-preview";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AzureProvider {
     deployment_id: String,
     #[serde(skip)]
@@ -233,6 +237,7 @@ impl InferenceProvider for AzureProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -253,6 +258,7 @@ impl InferenceProvider for AzureProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -262,6 +268,7 @@ impl InferenceProvider for AzureProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -285,6 +292,7 @@ impl InferenceProvider for AzureProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -295,6 +303,7 @@ impl InferenceProvider for AzureProvider {
                 &response,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -333,6 +342,7 @@ impl InferenceProvider for AzureProvider {
             .header("api-key", api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -410,6 +420,7 @@ impl EmbeddingProvider for AzureProvider {
 
         let (response, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::Embeddings,
             &FullExtraBodyConfig::default(), // No overrides supported
             &Default::default(),             // No extra headers for embeddings yet
             model_provider_data,
@@ -428,6 +439,7 @@ impl EmbeddingProvider for AzureProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Embeddings,
                 })
             })?;
             let response: AzureEmbeddingResponse =
@@ -440,6 +452,7 @@ impl EmbeddingProvider for AzureProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?;
             let latency = Latency::NonStreaming {
@@ -460,6 +473,7 @@ impl EmbeddingProvider for AzureProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Embeddings,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -470,6 +484,7 @@ impl EmbeddingProvider for AzureProvider {
                 &response_text,
                 PROVIDER_TYPE,
                 None,
+                ApiType::Embeddings,
             ))
         }
     }
@@ -482,6 +497,7 @@ fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error>
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing URL: {e:?}"),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: None,
             })
@@ -504,6 +520,7 @@ fn get_azure_embedding_url(endpoint: &Url, deployment_id: &str) -> Result<Url, E
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing URL: {e:?}"),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
                 raw_request: None,
                 raw_response: None,
             })
@@ -543,6 +560,7 @@ fn into_embedding_provider_response(
             raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
             raw_response: None,
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Embeddings,
         })
     })?;
     let embeddings = response
@@ -639,6 +657,8 @@ struct AzureRequest<'a> {
     seed: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<ChatCompletionTool<'a>>>,
@@ -714,6 +734,13 @@ impl<'a> AzureRequest<'a> {
         )
         .await?;
         let (tools, tool_choice, _) = prepare_chat_completion_tools(request, true)?;
+        let stream_options = if request.stream {
+            Some(StreamOptions {
+                include_usage: true,
+            })
+        } else {
+            None
+        };
         let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,
@@ -723,6 +750,7 @@ impl<'a> AzureRequest<'a> {
             frequency_penalty: request.frequency_penalty,
             max_completion_tokens: request.max_tokens,
             stream: request.stream,
+            stream_options,
             response_format,
             seed: request.seed,
             tools,
@@ -802,6 +830,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
             }
@@ -830,14 +859,26 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
 
@@ -849,8 +890,9 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request,
                 raw_response,
                 raw_usage,
+                relay_raw_response: None,
                 usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,
             },
@@ -1098,10 +1140,10 @@ mod tests {
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
-            },
+            }),
         };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1148,7 +1190,7 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
             }
@@ -1246,6 +1288,7 @@ mod tests {
             max_completion_tokens: None,
             seed: None,
             stream: false,
+            stream_options: None,
             response_format: None,
             tools: None,
             // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)

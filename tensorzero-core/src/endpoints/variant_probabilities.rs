@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::error::{Error, ErrorDetails};
+use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the variant sampling probabilities endpoint
@@ -16,7 +17,9 @@ pub struct GetVariantSamplingProbabilitiesParams {
 }
 
 /// Response containing variant sampling probabilities
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetVariantSamplingProbabilitiesResponse {
     /// Map of variant names to their sampling probabilities (0.0 to 1.0)
     /// Probabilities sum to 1.0
@@ -63,6 +66,13 @@ pub async fn get_variant_sampling_probabilities(
     params: GetVariantSamplingProbabilitiesParams,
 ) -> Result<GetVariantSamplingProbabilitiesResponse, Error> {
     let function_name = &params.function_name;
+
+    // Default function has no variants, so return an empty response
+    if function_name == DEFAULT_FUNCTION_NAME {
+        return Ok(GetVariantSamplingProbabilitiesResponse {
+            probabilities: HashMap::new(),
+        });
+    }
 
     // Get the function config
     let function = config.get_function(function_name)?;
@@ -119,7 +129,7 @@ mod tests {
 
             [functions.test_function.variants.variant_b]
             type = "chat_completion"
-            model = "anthropic::claude-3-5-sonnet-20241022"
+            model = "anthropic::claude-sonnet-4-5"
         "#;
 
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -159,6 +169,23 @@ mod tests {
         // Check that probabilities sum to 1.0
         let sum: f64 = response.probabilities.values().sum();
         assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[tokio::test]
+    async fn test_get_variant_sampling_probabilities_default_function_returns_empty() {
+        let config = Arc::new(Config::default());
+        let gateway_handle = get_unit_test_gateway_handle(config);
+
+        let params = GetVariantSamplingProbabilitiesParams {
+            function_name: "tensorzero::default".to_string(),
+        };
+
+        let result =
+            get_variant_sampling_probabilities(gateway_handle.app_state.clone(), params).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.probabilities.len(), 0);
     }
 
     #[tokio::test]

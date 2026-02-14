@@ -12,12 +12,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_derive::export_schema;
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::datasets::{DatasetQueries, GetDatapointParams};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -35,7 +37,7 @@ use crate::inference::types::{
     ContentBlockChatOutput, FetchContext, Input, InputExt, JsonInferenceOutput,
     TaggedInferenceDatabaseInsert,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::tool::{LegacyToolCallConfigDatabaseInsert, Tool};
 use crate::{
     config::{Config, snapshot::SnapshotHash},
@@ -220,7 +222,7 @@ async fn insert_from_existing(
     match inference_data {
         TaggedInferenceDatabaseInsert::Json(inference) => {
             let output = match output {
-                OutputKind::Inherit => Some(inference.output),
+                OutputKind::Inherit => inference.output,
                 OutputKind::Demonstration => {
                     let demonstration = query_demonstration(clickhouse, *inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
@@ -240,9 +242,20 @@ async fn insert_from_existing(
                 name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
-                input: inference.input,
+                input: inference.input.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: "Cannot create datapoint: JSON inference `input` is missing"
+                            .to_string(),
+                    })
+                })?,
                 output,
-                output_schema: inference.output_schema,
+                output_schema: inference.output_schema.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message:
+                            "Cannot create datapoint: JSON inference `output_schema` is missing"
+                                .to_string(),
+                    })
+                })?,
                 tags: Some(inference.tags),
                 auxiliary: String::new(),
                 is_custom: false,
@@ -265,7 +278,7 @@ async fn insert_from_existing(
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
             let output = match output {
-                OutputKind::Inherit => Some(inference.output),
+                OutputKind::Inherit => inference.output,
                 OutputKind::Demonstration => {
                     let demonstration = query_demonstration(clickhouse, *inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
@@ -285,7 +298,12 @@ async fn insert_from_existing(
                 name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
-                input: inference.input,
+                input: inference.input.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: "Cannot create datapoint: chat inference `input` is missing"
+                            .to_string(),
+                    })
+                })?,
                 output,
                 tool_params: inference.tool_params,
                 tags: Some(inference.tags),
@@ -395,7 +413,7 @@ pub async fn update_datapoint_handler(
                 .into_lazy_resolved_input(&fetch_context)?
                 .resolve()
                 .await?;
-            function_config.validate_input(&chat.input)?;
+            function_config.validate_input(&chat.input).await?;
             // If there are no tool params in the UpdateChatInferenceDatapointRequest, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
 
@@ -478,8 +496,11 @@ pub async fn update_datapoint_handler(
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
             };
-            let rows_written = app_state
-                .clickhouse_connection_info
+            let database = DelegatingDatabaseConnection::new(
+                app_state.clickhouse_connection_info.clone(),
+                app_state.postgres_connection_info.clone(),
+            );
+            let rows_written = database
                 .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
                 .await?;
             if rows_written == 0 {
@@ -501,7 +522,7 @@ pub async fn update_datapoint_handler(
                 .into_lazy_resolved_input(&fetch_context)?
                 .resolve()
                 .await?;
-            function_config.validate_input(&json.input)?;
+            function_config.validate_input(&json.input).await?;
 
             // Validate the user-provided output_schema
             let schema_str = serde_json::to_string(&json.output_schema).map_err(|e| {
@@ -509,7 +530,7 @@ pub async fn update_datapoint_handler(
                     message: format!("Failed to serialize output_schema: {e}"),
                 })
             })?;
-            let parsed_schema = DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
+            let parsed_schema = JSONSchema::parse_from_str(&schema_str).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Invalid output_schema: {e}"),
                 })
@@ -568,8 +589,11 @@ pub async fn update_datapoint_handler(
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
             };
-            let rows_written = app_state
-                .clickhouse_connection_info
+            let database = DelegatingDatabaseConnection::new(
+                app_state.clickhouse_connection_info.clone(),
+                app_state.postgres_connection_info.clone(),
+            );
+            let rows_written = database
                 .insert_datapoints(&[StoredDatapoint::Json(datapoint)])
                 .await?;
             if rows_written == 0 {
@@ -620,12 +644,16 @@ pub async fn create_datapoints_handler(
         "The `/datasets/{}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.",
         path_params.dataset_name, path_params.dataset_name
     ));
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
         &app_state.config,
         &app_state.http_client,
-        &app_state.clickhouse_connection_info,
+        &database,
     )
     .await?;
     Ok(Json(datapoint_ids))
@@ -646,12 +674,16 @@ pub async fn bulk_insert_datapoints_handler(
         "The `/datasets/{}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.",
         path_params.dataset_name, path_params.dataset_name
     ));
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
         &app_state.config,
         &app_state.http_client,
-        &app_state.clickhouse_connection_info,
+        &database,
     )
     .await?;
     Ok(Json(datapoint_ids))
@@ -662,7 +694,7 @@ pub async fn insert_datapoint(
     params: InsertDatapointParams,
     config: &Config,
     http_client: &TensorzeroHttpClient,
-    clickhouse: &ClickHouseConnectionInfo,
+    database: &(dyn DatasetQueries + Sync),
 ) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
 
@@ -761,12 +793,11 @@ pub async fn insert_datapoint(
                             ),
                         })
                     })?;
-                    let parsed_schema =
-                        DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
-                            Error::new(ErrorDetails::InvalidRequest {
-                                message: format!("Invalid output_schema for datapoint {i}: {e}"),
-                            })
-                        })?;
+                    let parsed_schema = JSONSchema::parse_from_str(&schema_str).map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Invalid output_schema for datapoint {i}: {e}"),
+                        })
+                    })?;
                     // Ensure the schema is valid by forcing compilation
                     parsed_schema.ensure_valid().await?;
                     user_schema.clone()
@@ -840,7 +871,7 @@ pub async fn insert_datapoint(
     };
 
     let response =
-        create_datapoints(config, http_client, clickhouse, &dataset_name, v1_request).await?;
+        create_datapoints(config, http_client, database, &dataset_name, v1_request).await?;
 
     Ok(response.ids)
 }
@@ -1115,8 +1146,11 @@ pub async fn get_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<GetDatapointPathParams>,
 ) -> Result<Json<Datapoint>, Error> {
-    let datapoint = app_state
-        .clickhouse_connection_info
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: path_params.dataset_name,
             datapoint_id: path_params.datapoint_id,
@@ -1157,9 +1191,10 @@ pub struct ExistingInferenceInfo {
     pub episode_id: Uuid,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum DatapointKind {
     Chat,
     Json,
@@ -1181,10 +1216,12 @@ pub struct InsertDatapointResponse {
 
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub enum Datapoint {
     #[schemars(title = "DatapointChat")]
@@ -1555,9 +1592,10 @@ pub struct LegacyInsertJsonDatapointRequest {
 
 /// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
@@ -1576,7 +1614,7 @@ pub struct ChatInferenceDatapoint {
     pub tool_params: DynamicToolParams,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(type = "Record<string, string>"))]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, string>"))]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)]
     pub auxiliary: String,
@@ -1602,10 +1640,11 @@ impl std::fmt::Display for ChatInferenceDatapoint {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1616,7 +1655,7 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub output: Option<JsonInferenceOutput>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: serde_json::Value,
@@ -1624,7 +1663,8 @@ pub struct JsonInferenceDatapoint {
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, string>"))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
@@ -1633,16 +1673,16 @@ pub struct JsonInferenceDatapoint {
     pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub staled_at: Option<String>,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub name: Option<String>,
 }
 
@@ -1789,18 +1829,19 @@ pub(crate) fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StaleDatasetResponse {
     pub num_staled_datapoints: u64,
 }
 
 /// Helper function for staling a dataset. Used by the Rust client.
 pub async fn stale_dataset(
-    clickhouse: &impl DatasetQueries,
+    database: &(dyn DatasetQueries + Sync),
     dataset_name: &str,
 ) -> Result<StaleDatasetResponse, Error> {
-    let num_staled_datapoints = clickhouse.delete_datapoints(dataset_name, None).await?;
+    let num_staled_datapoints = database.delete_datapoints(dataset_name, None).await?;
     Ok(StaleDatasetResponse {
         num_staled_datapoints,
     })
@@ -1813,11 +1854,11 @@ pub async fn stale_dataset_handler(
     // These are the same as the path params for `list_datapoints_handler`
     Path(path_params): Path<ListDatapointsPathParams>,
 ) -> Result<Json<StaleDatasetResponse>, Error> {
-    let response = stale_dataset(
-        &app_state.clickhouse_connection_info,
-        &path_params.dataset_name,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = stale_dataset(&database, &path_params.dataset_name).await?;
     Ok(Json(response))
 }
 

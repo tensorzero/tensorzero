@@ -9,7 +9,6 @@ import type {
   StaticToolConfig,
 } from "~/types/tensorzero";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
-import { getExtraInferenceOptions } from "~/utils/feature_flags";
 import { data } from "react-router";
 import { TensorZeroServerError } from "~/utils/tensorzero/errors";
 import type { QueryKey } from "@tanstack/react-query";
@@ -25,6 +24,9 @@ export async function fetchClientInference(
   // The API endpoint takes form data so we need to stringify it and send as data
   const formData = new FormData();
   formData.append("data", JSON.stringify(request));
+  // TODO(shuyangli): Change this to use inference through the gateway. The Node inference route
+  // currently contains custom handling for injecting extra inference options that we need to
+  // replicate in the client.
   const response = await fetch("/api/tensorzero/inference", {
     method: "POST",
     body: formData,
@@ -154,10 +156,10 @@ export function preparePlaygroundInferenceRequest(
     variant: variantInferenceInfo.variant,
     editedVariantInfo: variantInferenceInfo.editedVariantInfo,
   });
-  const extraOptions = getExtraInferenceOptions();
+  // Note: Extra inference options (like cache settings) are applied server-side
+  // in the /api/tensorzero/inference route, not here on the client.
   return {
     ...request,
-    ...extraOptions,
     dryrun: variant.type === "edited",
   };
 }

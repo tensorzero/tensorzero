@@ -16,7 +16,7 @@ For example:
 ```toml {3}
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
+model = "google_ai_studio_gemini::gemini-2.5-flash-lite"
 ```
 
 Additionally, you can set `model_name` in the inference request to use a specific Google AI Studio (Gemini API) model, without having to configure a function and variant in TensorZero.
@@ -25,7 +25,7 @@ Additionally, you can set `model_name` in the inference request to use a specifi
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "google_ai_studio_gemini::gemini-1.5-flash-8b",
+    "model_name": "google_ai_studio_gemini::gemini-2.5-flash-lite",
     "input": {
       "messages": [
         {
@@ -62,19 +62,19 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.gemini_2_0_flash_lite]
+[models.gemini_2_5_flash_lite]
 routing = ["google_ai_studio_gemini"]
 
-[models.gemini_2_0_flash_lite.providers.google_ai_studio_gemini]
+[models.gemini_2_5_flash_lite.providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-2.0-flash-lite"
+model_name = "gemini-2.5-flash-lite"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gemini_2_0_flash_lite"
+model = "gemini_2_5_flash_lite"
 ```
 
 See the [list of models available on Google AI Studio (Gemini API)](https://ai.google.dev/gemini-api/docs/models/gemini).
@@ -129,3 +129,10 @@ curl -X POST http://localhost:3000/inference \
     }
   }'
 ```
+
+## Thinking Parameters
+
+Gemini supports two thinking parameters:
+
+- `reasoning_effort` maps to `thinkingConfig.thinkingLevel`
+- `thinking_budget_tokens` maps to `thinkingConfig.thinkingBudget` (legacy)

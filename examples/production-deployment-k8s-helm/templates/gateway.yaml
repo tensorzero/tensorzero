@@ -22,6 +22,10 @@ spec:
       {{- if .Values.gateway.serviceAccountName }}
       serviceAccountName: {{ .Values.gateway.serviceAccountName }}
       {{- end }}
+      {{- if .Values.gateway.securityContext }}
+      securityContext:
+        {{- toYaml .Values.gateway.securityContext | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag | default .Chart.AppVersion }}"

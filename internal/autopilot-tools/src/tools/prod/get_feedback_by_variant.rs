@@ -8,7 +8,9 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -41,11 +43,11 @@ impl ToolMetadata for GetFeedbackByVariantTool {
     type Output = Vec<FeedbackByVariant>;
     type LlmParams = GetFeedbackByVariantToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_feedback_by_variant")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Get feedback statistics (mean, variance, count) by variant for a function and metric. \
              Returns statistics for each variant that has feedback data. \
@@ -53,7 +55,7 @@ impl ToolMetadata for GetFeedbackByVariantTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Get feedback statistics by variant for a function and metric.",
@@ -72,10 +74,16 @@ impl ToolMetadata for GetFeedbackByVariantTool {
                     "description": "Optional filter for specific variants. If not provided, all variants are included."
                 }
             },
-            "required": ["metric_name", "function_name"]
+            "required": ["metric_name", "function_name"],
+            "additionalProperties": false
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -94,6 +102,6 @@ impl SimpleTool for GetFeedbackByVariantTool {
                 llm_params.variant_names,
             )
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("get_feedback_by_variant", e).into())
     }
 }

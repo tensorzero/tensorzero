@@ -111,6 +111,7 @@ async fn submit_episode_feedback(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_inference_count_chat_function() {
+    // create_inference doesn't write to Postgres yet
     let client = Client::new();
 
     // First get the current count
@@ -144,6 +145,8 @@ async fn test_get_inference_count_chat_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_inference_count_json_function() {
+    // create_inference doesn't write to Postgres yet
+
     let client = Client::new();
 
     // First get the current count
@@ -574,7 +577,7 @@ pub async fn test_get_inference_count_basic() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_inference_count_with_variant_filter() {
-    let res = get_inference_count_fixture("basic_test", "variant_name=test")
+    let res = get_inference_count_fixture("write_haiku", "variant_name=initial_prompt_gpt4o_mini")
         .await
         .unwrap();
 
@@ -587,14 +590,14 @@ pub async fn test_get_inference_count_with_variant_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_inference_count_group_by_variant() {
-    let res = get_inference_count_fixture("basic_test", "group_by=variant")
+    let res = get_inference_count_fixture("write_haiku", "group_by=variant")
         .await
         .unwrap();
 
     let total_count = res.inference_count;
     assert!(
         total_count >= 1,
-        "Expected at least 1 inference for basic_test, got {total_count}"
+        "Expected at least 1 inference for write_haiku, got {total_count}"
     );
 
     let count_by_variant = res

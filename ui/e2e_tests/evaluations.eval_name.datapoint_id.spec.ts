@@ -7,7 +7,12 @@ test("should show the evaluation result datapoint detail page", async ({
     "/evaluations/entity_extraction/01939a16-b258-71e1-a467-183001c1952c?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24%2C0196368e-53a8-7e82-a88d-db7086926d81",
   );
 
-  await expect(page.getByText("Datapoint", { exact: true })).toHaveCount(2);
+  // Verify breadcrumb shows "Results" for evaluation datapoint page
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Results", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toHaveCount(2);
   await expect(page.getByText("gpt4o_initial_prompt")).toHaveCount(2);
 
@@ -28,9 +33,7 @@ test("should be able to add float feedback from the evaluation datapoint result 
   await page.getByRole("button", { name: "Edit" }).first().click();
 
   // Wait for the modal to appear
-  await page.locator('div[role="dialog"]').waitFor({
-    state: "visible",
-  });
+  await page.getByRole("dialog").waitFor({ state: "visible" });
   // sleep for 500ms
   await page.waitForTimeout(500);
 
@@ -68,9 +71,7 @@ test("should be able to add bool feedback from the evaluation datapoint result p
   await page.getByRole("button", { name: "Edit" }).first().click();
 
   // Wait for the modal to appear
-  await page.locator('div[role="dialog"]').waitFor({
-    state: "visible",
-  });
+  await page.getByRole("dialog").waitFor({ state: "visible" });
 
   // Click on the "True" button
   await page.getByRole("radio", { name: /True/i }).click();
@@ -114,7 +115,7 @@ test("should be able to add a datapoint from the evaluation page", async ({
   await page.waitForTimeout(500);
 
   // Find the CommandInput by its placeholder text
-  const commandInput = page.getByPlaceholder("Create or find a dataset");
+  const commandInput = page.getByPlaceholder("Create or find dataset");
   await commandInput.waitFor({ state: "visible" });
   await commandInput.fill(datasetName);
 
@@ -155,8 +156,12 @@ test("should be able to add a datapoint from the evaluation page", async ({
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
-  // Verify we can see the datapoint content
-  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+  // Verify we can see the datapoint page loaded (breadcrumb shows "Datapoints")
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Datapoints", { exact: true }),
+  ).toBeVisible();
 
   // Clean up: delete the dataset by going to the list datasets page
   await page.goto("/datasets");
@@ -175,8 +180,8 @@ test("should be able to add a datapoint from the evaluation page", async ({
     .filter({ has: page.locator("svg") });
   await deleteButton.click();
 
-  // Wait for the shadcn dialog to appear and click the Delete button
-  const dialog = page.locator('div[role="dialog"]');
+  // Wait for the dialog to appear and click the Delete button
+  const dialog = page.getByRole("alertdialog");
   await dialog.waitFor({ state: "visible" });
 
   // Click the destructive "Delete" button in the dialog

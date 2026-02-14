@@ -140,6 +140,7 @@ from .types import (
     NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,
     OrFilter,  # pyright: ignore[reportDeprecated]
+    RawResponseEntry,
     RawText,
     RawUsageEntry,
     System,
@@ -300,6 +301,7 @@ __all__ = [
     "ProviderExtraBodyDelete",  # DEPRECATED
     "ProviderExtraHeader",  # DEPRECATED
     "ProviderExtraHeaderDelete",  # DEPRECATED
+    "RawResponseEntry",
     "RawText",
     "RawUsageEntry",
     "RenderedSample",
@@ -426,6 +428,7 @@ def patch_openai_client(
         config_file=config_file,
         clickhouse_url=clickhouse_url,
         postgres_url=None,
+        valkey_url=None,
         async_setup=async_setup,
     )
     if async_setup:

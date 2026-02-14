@@ -11,7 +11,6 @@ use std::time::Duration;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
-use crate::db::clickhouse::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseClient;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::ClickHouseResponse;
@@ -22,6 +21,7 @@ use crate::db::clickhouse::HealthCheckable;
 use crate::db::clickhouse::Rows;
 use crate::db::clickhouse::TableName;
 use crate::db::clickhouse::batching::BatchSender;
+use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::migrations::check_table_exists;
 use crate::error::DelayedError;
@@ -457,10 +457,8 @@ impl ClickHouseClient for ProductionClickHouseClient {
             })
         })?;
         let on_cluster_name = self.get_on_cluster_name();
-        let query = format!(
-            "CREATE DATABASE IF NOT EXISTS {}{on_cluster_name}",
-            self.database
-        );
+        let query =
+            format!("CREATE DATABASE IF NOT EXISTS {{db_name:Identifier}}{on_cluster_name}",);
         // In order to create the database, we need to remove the database query parameter from the URL
         // Otherwise, ClickHouse will throw an error
         let mut base_url = database_url.clone();
@@ -472,6 +470,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .clear()
             .extend_pairs(query_pairs)
             .finish();
+        base_url
+            .query_pairs_mut()
+            .append_pair("param_db_name", &self.database);
 
         let response = self
             .client
@@ -625,9 +626,7 @@ async fn write_production<T: Serialize + Send + Sync>(
     let rows_json = rows.as_json();
 
     if let Some(batch_sender) = batch {
-        batch_sender
-            .add_to_batch(table, rows_json?.into_owned())
-            .await?;
+        batch_sender.add_to_batch(table, rows_json?.into_owned())?;
         return Ok(());
     }
 

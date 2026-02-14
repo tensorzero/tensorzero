@@ -18,7 +18,7 @@ Let's start with a brief tutorial on the concepts behind custom rate limits in T
 You can define custom rate limiting _rules_ in your TensorZero configuration using `[[rate_limiting.rules]]`.
 Your configuration can have multiple rules.
 
-Rate limit state is stored in Postgres, so restarting the gateway preserves existing limits and multiple gateway instances automatically share the same limits.
+Rate limit state is stored in a backend database (Valkey or Postgres), so restarting the gateway preserves existing limits and multiple gateway instances automatically share the same limits.
 
 <Warning>
 
@@ -213,11 +213,42 @@ You can find a [complete runnable example](https://github.com/tensorzero/tensorz
 
 <Steps>
 
-<Step title="Set up Postgres">
+<Step title="Set up a rate limiting backend">
 
-You must set up Postgres to use TensorZero's rate limiting features.
+Rate limiting requires either Valkey (Redis) or Postgres as a backend.
+
+<Tip>
+
+We recommend Valkey over Postgres if you're handling 100+ QPS or have extreme latency requirements.
+TensorZero's rate limiting implementation can achieve sub-millisecond P99 latency at 10k+ QPS using Valkey.
+
+</Tip>
+
+<Tabs>
+
+<Tab title="Valkey">
+
+Deploy Valkey and set the `TENSORZERO_VALKEY_URL` environment variable.
+
+See the [Deploy Valkey](/deployment/valkey-redis) guide for instructions.
+
+</Tab>
+
+<Tab title="Postgres">
+
+[Deploy Postgres](/deployment/postgres) and set the `TENSORZERO_POSTGRES_URL` environment variable.
 
 See the [Deploy Postgres](/deployment/postgres) guide for instructions.
+
+</Tab>
+
+</Tabs>
+
+<Warning>
+
+If both `TENSORZERO_VALKEY_URL` and `TENSORZERO_POSTGRES_URL` are set, the gateway uses Valkey for rate limiting.
+
+</Warning>
 
 </Step>
 

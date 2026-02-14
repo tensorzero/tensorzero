@@ -12,6 +12,9 @@
   "contextual": {
     "options": ["copy", "view", "chatgpt", "claude"]
   },
+  "banner": {
+    "content": "**[TensorZero Autopilot](https://www.tensorzero.com)** is an automated AI engineer that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests. **[Join the waitlist →](https://www.tensorzero.com/autopilot-waitlist)**"
+  },
   "navigation": {
     "tabs": [
       {
@@ -82,12 +85,10 @@
           {
             "group": "Optimization",
             "pages": [
-              "recipes/index",
-              {
-                "group": "Guides",
-                "expanded": true,
-                "pages": ["optimization/gepa"]
-              }
+              "optimization/index",
+              "optimization/dynamic-in-context-learning-dicl",
+              "optimization/gepa",
+              "optimization/supervised-fine-tuning-sft"
             ]
           },
           {
@@ -127,6 +128,8 @@
               "deployment/tensorzero-ui",
               "deployment/clickhouse",
               "deployment/postgres",
+              "deployment/valkey-redis",
+              "deployment/tensorzero-autopilot",
               "deployment/optimize-latency-and-throughput"
             ]
           },
@@ -415,6 +418,14 @@
     {
       "source": "/gateway/tutorial/",
       "destination": "/quickstart"
+    },
+    {
+      "source": "/recipes",
+      "destination": "/optimization"
+    },
+    {
+      "source": "/recipes/",
+      "destination": "/optimization"
     }
   ]
 }

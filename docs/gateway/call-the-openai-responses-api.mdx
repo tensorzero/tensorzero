@@ -334,7 +334,7 @@ ChatInferenceResponse(
     ],
     usage=Usage(input_tokens=29904, output_tokens=1921),
     finish_reason=None,
-    original_response=None
+    raw_response=None
 )
 ```
 
@@ -937,8 +937,8 @@ routing = ["azure"]
 
 [models.azure-gpt-5-mini-responses.providers.azure]
 type = "openai"  # CAREFUL: not `azure`!
-api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
-api_key_location = "env::AZURE_OPENAI_API_KEY"
+api_base = "https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
+api_key_location = "env::AZURE_API_KEY"
 model_name = "gpt-5-mini"
 api_type = "responses"
 ```

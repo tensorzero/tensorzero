@@ -20,6 +20,7 @@ use crate::config::snapshot::SnapshotHash;
 use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
+use crate::inference::types::usage::{ApiType, RawResponseEntry};
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
@@ -168,6 +169,101 @@ impl Error {
     pub fn is_retryable(&self) -> bool {
         self.0.is_retryable()
     }
+
+    /// Extracts raw response entries from inference errors in the error tree.
+    ///
+    /// Walks `AllVariantsFailed` → `ModelProvidersExhausted` → individual provider errors
+    /// and collects `RawResponseEntry` values from errors that have `raw_response` data.
+    ///
+    /// Returns `None` if no entries were collected.
+    pub fn extract_raw_response_entries(&self) -> Option<Vec<RawResponseEntry>> {
+        let mut entries = Vec::new();
+        self.0.collect_raw_response_entries(&mut entries);
+        if entries.is_empty() {
+            None
+        } else {
+            Some(entries)
+        }
+    }
+
+    /// Builds an HTTP error response, optionally including raw response entries from failed providers.
+    pub fn into_response_with_raw_entries(
+        self,
+        openai_format: bool,
+        include_raw_response: bool,
+    ) -> Response {
+        let raw_response_entries = if include_raw_response {
+            self.extract_raw_response_entries()
+        } else {
+            None
+        };
+        let body = self.build_response_body(openai_format, raw_response_entries);
+        let mut response = (self.status_code(), Json(body)).into_response();
+        response.extensions_mut().insert(self);
+        response
+    }
+
+    /// Builds a JSON value for a mid-stream streaming error SSE event.
+    ///
+    /// Uses `raw_chunk` / `tensorzero_raw_chunk` (matching success chunk format)
+    /// instead of the structured `raw_response` array used in terminal errors.
+    pub fn build_streaming_error_event(
+        &self,
+        openai_format: bool,
+        include_raw_response: bool,
+    ) -> Value {
+        let mut body = self.build_response_body(openai_format, None);
+        if include_raw_response && let Some(raw_chunk) = self.0.extract_raw_chunk() {
+            let key = if openai_format {
+                "tensorzero_raw_chunk"
+            } else {
+                "raw_chunk"
+            };
+            body[key] = Value::String(raw_chunk);
+        }
+        body
+    }
+
+    /// Builds the JSON response body for this error.
+    ///
+    /// When `openai_format` is true, returns `{"error": {"message": "..."}}` (OpenAI-compatible).
+    /// When `openai_format` is false, returns `{"error": "..."}` (TensorZero default).
+    ///
+    /// If `unstable_error_json` is enabled, includes structured error details as `error_json` and `tensorzero_error_json`.
+    ///
+    /// If `raw_response_entries` is `Some`, includes the raw response entries in the body.
+    pub fn build_response_body(
+        &self,
+        openai_format: bool,
+        raw_response_entries: Option<Vec<RawResponseEntry>>,
+    ) -> Value {
+        let message = self.to_string();
+        let mut body = if openai_format {
+            json!({"error": {"message": message}})
+        } else {
+            json!({"error": message})
+        };
+        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
+            let error_json =
+                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
+            if openai_format {
+                body["error"]["error_json"] = error_json.clone(); // DEPRECATED (#5821 / 2026.4+)
+                body["error"]["tensorzero_error_json"] = error_json;
+            } else {
+                body["error_json"] = error_json;
+            }
+        }
+        if let Some(entries) = raw_response_entries {
+            let entries_json =
+                serde_json::to_value(entries).unwrap_or_else(|e| json!(e.to_string()));
+            if openai_format {
+                body["tensorzero_raw_response"] = entries_json;
+            } else {
+                body["raw_response"] = entries_json;
+            }
+        }
+        body
+    }
 }
 
 // Expect for derive Serialize
@@ -290,7 +386,13 @@ pub enum ErrorDetails {
     DynamicEndpointNotFound {
         key_name: String,
     },
+    DynamicRegionNotFound {
+        key_name: String,
+    },
     DynamicJsonSchema {
+        message: String,
+    },
+    EvaluationRun {
         message: String,
     },
     DynamicTemplateLoad {
@@ -311,6 +413,7 @@ pub enum ErrorDetails {
         #[serde(serialize_with = "serialize_status")]
         status_code: Option<StatusCode>,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -322,6 +425,7 @@ pub enum ErrorDetails {
     FatalStreamError {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -330,6 +434,7 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -487,6 +592,10 @@ pub enum ErrorDetails {
         message: String,
     },
     NoFallbackVariantsRemaining,
+    /// Feature not yet implemented. Used for stubbed functionality during incremental migration.
+    NotImplemented {
+        message: String,
+    },
     Observability {
         message: String,
     },
@@ -512,11 +621,16 @@ pub enum ErrorDetails {
         message: String,
     },
     PostgresQuery {
-        function_name: Option<String>,
         message: String,
     },
     PostgresResult {
         result_type: &'static str,
+        message: String,
+    },
+    ValkeyConnection {
+        message: String,
+    },
+    ValkeyQuery {
         message: String,
     },
     ProviderNotFound {
@@ -646,6 +760,8 @@ impl ErrorDetails {
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicRegionNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::EvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -702,6 +818,7 @@ impl ErrorDetails {
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
+            ErrorDetails::NotImplemented { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::WARN,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
@@ -712,6 +829,8 @@ impl ErrorDetails {
             ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
             ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::ValkeyConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::ValkeyQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::RateLimitExceeded { .. } => tracing::Level::WARN,
             ErrorDetails::RateLimitMissingMaxTokens => tracing::Level::WARN,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
@@ -777,7 +896,7 @@ impl ErrorDetails {
             ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
@@ -791,8 +910,10 @@ impl ErrorDetails {
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::EvaluationRun { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::DynamicRegionNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
@@ -854,6 +975,7 @@ impl ErrorDetails {
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
+            ErrorDetails::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -862,10 +984,12 @@ impl ErrorDetails {
             ErrorDetails::PostgresConnectionInitialization { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
-            ErrorDetails::PostgresConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
             ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorDetails::ValkeyQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
             ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -927,6 +1051,70 @@ impl ErrorDetails {
                 .iter()
                 .any(|(_, error)| error.is_retryable()),
             _ => true,
+        }
+    }
+
+    /// Recursively collects `RawResponseEntry` values from inference errors in the error tree.
+    fn collect_raw_response_entries(&self, entries: &mut Vec<RawResponseEntry>) {
+        match self {
+            ErrorDetails::AllVariantsFailed { errors } => {
+                for error in errors.values() {
+                    error.0.collect_raw_response_entries(entries);
+                }
+            }
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => {
+                for error in provider_errors.values() {
+                    error.0.collect_raw_response_entries(entries);
+                }
+            }
+            ErrorDetails::InferenceClient {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            }
+            | ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            }
+            | ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            } => {
+                entries.push(RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: provider_type.clone(),
+                    api_type: *api_type,
+                    data: data.clone(),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    /// Extracts the raw response string from a mid-stream error.
+    ///
+    /// Unlike `collect_raw_response_entries` which produces structured `RawResponseEntry` values,
+    /// this returns just the raw response string for use as `raw_chunk` in streaming error events.
+    fn extract_raw_chunk(&self) -> Option<String> {
+        match self {
+            ErrorDetails::InferenceClient {
+                raw_response: Some(data),
+                ..
+            }
+            | ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                ..
+            }
+            | ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                ..
+            } => Some(data.clone()),
+            _ => None,
         }
     }
 }
@@ -1132,8 +1320,14 @@ impl std::fmt::Display for ErrorDetails {
                     "Error in compiling client-provided JSON schema: {message}"
                 )
             }
+            ErrorDetails::EvaluationRun { message } => {
+                write!(f, "Evaluation run error: {message}")
+            }
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
                 write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
+            }
+            ErrorDetails::DynamicRegionNotFound { key_name } => {
+                write!(f, "Dynamic region '{key_name}' not found in credentials")
             }
             ErrorDetails::DynamicTemplateLoad { internal } => match internal {
                 AnalysisError::ParseError(err) => {
@@ -1184,6 +1378,7 @@ impl std::fmt::Display for ErrorDetails {
                 raw_request,
                 raw_response,
                 status_code,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1217,6 +1412,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1241,6 +1437,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1448,6 +1645,9 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::NoFallbackVariantsRemaining => {
                 write!(f, "No fallback variants remaining.")
             }
+            ErrorDetails::NotImplemented { message } => {
+                write!(f, "Not implemented: {message}")
+            }
             ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {message}")
             }
@@ -1496,16 +1696,15 @@ impl std::fmt::Display for ErrorDetails {
                     "Unexpected Postgres result of type {result_type}: {message}"
                 )
             }
-            ErrorDetails::PostgresQuery {
-                function_name,
-                message,
-            } => match function_name {
-                Some(function_name) => write!(
-                    f,
-                    "Postgres query failed in function {function_name} with message: {message}"
-                ),
-                None => write!(f, "Postgres query failed: {message}"),
-            },
+            ErrorDetails::PostgresQuery { message } => {
+                write!(f, "Postgres query failed: {message}")
+            }
+            ErrorDetails::ValkeyConnection { message } => {
+                write!(f, "Error connecting to Valkey: {message}")
+            }
+            ErrorDetails::ValkeyQuery { message } => {
+                write!(f, "Valkey query failed: {message}")
+            }
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {provider_name}")
             }
@@ -1648,14 +1847,7 @@ impl std::fmt::Display for ErrorDetails {
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        let message = self.to_string();
-        let mut body = json!({
-            "error": message,
-        });
-        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
-            body["error_json"] =
-                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
-        }
+        let body = self.build_response_body(false, None);
         let mut response = (self.status_code(), Json(body)).into_response();
         // Attach the error to the response, so that we can set a nice message in our
         // `apply_otel_http_trace_layer` middleware
@@ -1676,7 +1868,14 @@ impl From<sqlx::Error> for Error {
     fn from(err: sqlx::Error) -> Self {
         Self::new(ErrorDetails::PostgresQuery {
             message: err.to_string(),
-            function_name: None,
+        })
+    }
+}
+
+impl From<redis::RedisError> for Error {
+    fn from(err: redis::RedisError) -> Self {
+        Self::new(ErrorDetails::ValkeyQuery {
+            message: err.to_string(),
         })
     }
 }
@@ -1717,6 +1916,10 @@ impl From<autopilot_client::AutopilotError> for Error {
                 message: format!("Spawn error: {e}"),
                 status_code: None,
             }),
+            autopilot_client::AutopilotError::Database(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Database error: {e}"),
+                status_code: None,
+            }),
             autopilot_client::AutopilotError::MissingConfig(field) => {
                 Self::new(ErrorDetails::Autopilot {
                     message: format!("Missing config: {field}"),
@@ -1726,6 +1929,23 @@ impl From<autopilot_client::AutopilotError> for Error {
             autopilot_client::AutopilotError::ToolCallNotFound(id) => {
                 Self::new(ErrorDetails::Autopilot {
                     message: format!("Tool call not found: {id}"),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::PartialSpawnFailure { errors, .. } => {
+                let failed_ids: Vec<_> = errors.iter().map(|(id, _)| id.to_string()).collect();
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!(
+                        "Failed to spawn {} approved tool call(s): {}",
+                        errors.len(),
+                        failed_ids.join(", ")
+                    ),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::Internal(message) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Internal error: {message}"),
                     status_code: None,
                 })
             }
@@ -1744,5 +1964,225 @@ impl From<tensorzero_types::TypeError> for Error {
                 Self::new(ErrorDetails::Base64 { message })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_from_inference_client() {
+        let error = Error::new(ErrorDetails::InferenceClient {
+            message: "bad request".to_string(),
+            status_code: Some(StatusCode::BAD_REQUEST),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: Some(r#"{"error":{"message":"invalid"}}"#.to_string()),
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_some(),
+            "should extract entries from InferenceClient with raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 1, "should have exactly one entry");
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].api_type, ApiType::ChatCompletions);
+        assert_eq!(entries[0].data, r#"{"error":{"message":"invalid"}}"#);
+        assert!(
+            entries[0].model_inference_id.is_none(),
+            "model_inference_id should be None for error entries"
+        );
+    }
+
+    #[test]
+    fn test_extract_from_model_providers_exhausted() {
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert(
+            "provider_a".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "error a".to_string(),
+                status_code: None,
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("response_a".to_string()),
+            }),
+        );
+        provider_errors.insert(
+            "provider_b".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "error b".to_string(),
+                status_code: None,
+                provider_type: "anthropic".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: None, // No raw_response
+            }),
+        );
+        let error = Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_some(),
+            "should extract entries even if only some providers have raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(
+            entries.len(),
+            1,
+            "should have one entry (only provider_a has raw_response)"
+        );
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].data, "response_a");
+    }
+
+    #[test]
+    fn test_extract_from_all_variants_failed() {
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert(
+            "provider_1".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "err".to_string(),
+                status_code: None,
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("raw_1".to_string()),
+            }),
+        );
+        provider_errors.insert(
+            "provider_2".to_string(),
+            Error::new(ErrorDetails::InferenceServer {
+                message: "server err".to_string(),
+                provider_type: "anthropic".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("raw_2".to_string()),
+            }),
+        );
+        let mut variant_errors = IndexMap::new();
+        variant_errors.insert(
+            "variant_a".to_string(),
+            Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors }),
+        );
+        let error = Error::new(ErrorDetails::AllVariantsFailed {
+            errors: variant_errors,
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_some(),
+            "should extract entries from nested AllVariantsFailed -> ModelProvidersExhausted"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 2, "should have two entries");
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].data, "raw_1");
+        assert_eq!(entries[1].provider_type, "anthropic");
+        assert_eq!(entries[1].data, "raw_2");
+    }
+
+    #[test]
+    fn test_extract_from_non_inference_error() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "bad config".to_string(),
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(entries.is_none(), "non-inference errors should return None");
+    }
+
+    #[test]
+    fn test_extract_all_none_raw_responses() {
+        let error = Error::new(ErrorDetails::InferenceClient {
+            message: "err".to_string(),
+            status_code: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: None,
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_none(),
+            "InferenceClient with raw_response: None should return None"
+        );
+    }
+
+    #[test]
+    fn test_build_response_body_with_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let entries = vec![RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: r#"{"error":"bad"}"#.to_string(),
+        }];
+        let body = error.build_response_body(false, Some(entries));
+        assert!(
+            body.get("raw_response").is_some(),
+            "TZ native body should have `raw_response` field"
+        );
+        let raw_response = body["raw_response"].as_array().unwrap();
+        assert_eq!(raw_response.len(), 1, "should have one raw_response entry");
+        assert_eq!(raw_response[0]["provider_type"], "openai");
+        assert!(
+            raw_response[0]["model_inference_id"].is_null(),
+            "model_inference_id should be null when None"
+        );
+    }
+
+    #[test]
+    fn test_build_response_body_openai_with_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let entries = vec![RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "anthropic".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: "raw data".to_string(),
+        }];
+        let body = error.build_response_body(true, Some(entries));
+        assert!(
+            body.get("tensorzero_raw_response").is_some(),
+            "OAI body should have `tensorzero_raw_response` field"
+        );
+        let raw_response = body["tensorzero_raw_response"].as_array().unwrap();
+        assert_eq!(raw_response.len(), 1, "should have one entry");
+        assert_eq!(raw_response[0]["provider_type"], "anthropic");
+    }
+
+    #[test]
+    fn test_build_response_body_without_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let body = error.build_response_body(false, None);
+        assert!(
+            body.get("raw_response").is_none(),
+            "should not have `raw_response` field when entries is None"
+        );
+    }
+
+    #[test]
+    fn test_extract_from_fatal_stream_error() {
+        let error = Error::new(ErrorDetails::FatalStreamError {
+            message: "stream died".to_string(),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: Some("stream_error_data".to_string()),
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_some(),
+            "should extract entries from FatalStreamError with raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 1, "should have exactly one entry");
+        assert_eq!(entries[0].data, "stream_error_data");
     }
 }

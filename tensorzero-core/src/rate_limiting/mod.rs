@@ -1,17 +1,21 @@
+use sqlx::postgres::types::PgInterval;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::Extension;
 use serde::{Deserialize, Serialize, Serializer};
-use sqlx::postgres::types::PgInterval;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::db::{
-    ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
-};
+use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, ReturnTicketsRequest};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use tensorzero_auth::key::PUBLIC_ID_LENGTH;
 use tensorzero_auth::middleware::RequestApiKeyExtension;
+
+mod rate_limiting_manager;
+
+// Re-export RateLimitingManager at the module level
+pub use rate_limiting_manager::RateLimitingManager;
 
 /*
  * The high level flow for our rate limiting system is:
@@ -21,22 +25,35 @@ use tensorzero_auth::middleware::RequestApiKeyExtension;
  *       a) use the ScopeInfo to determine which rate limit scopes apply
  *       b) estimate (conservatively) the resource consumption of the request
  *       c) consume tickets from the rate limit scopes
- *       d) actually attempt to consume the tickets from Postgres
+ *       d) actually attempt to consume the tickets from the database (Postgres or Valkey)
  *       e) check success, throw an error on failure, and return a TicketBorrow
  *   3. The caller calls `TicketBorrow::return_tickets` with the actual usage observed.
  *      This will figure out post-facto bookkeeping for over- or under-consumption.
- *   Important Note: the Postgres database has a string column `key`
- *      that is used to identify a particular active rate limit.
+ *   Important Note: the database identifies an active rate limit based on a string `key`.
  *      If two distinct rate limits have the same key, they will be treated as the same rate limit and will trample.
  *      If the key changes, the rate limit will be treated as a new rate limit.
  *      For these reasons, developers should be careful not to change the key serialization and be similarly careful
  *      to not add keys which could trample one another.
  */
 
+/// Specifies which backend to use for rate limiting.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RateLimitingBackend {
+    /// Automatically select: Valkey if available, otherwise Postgres
+    #[default]
+    Auto,
+    /// Force Postgres backend
+    Postgres,
+    /// Force Valkey backend
+    Valkey,
+}
+
 #[derive(Debug, Clone)]
 pub struct RateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     pub(crate) enabled: bool,
+    pub(crate) backend: RateLimitingBackend,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -45,6 +62,8 @@ pub struct UninitializedRateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
     pub(crate) enabled: bool,
+    #[serde(default)]
+    pub(crate) backend: RateLimitingBackend,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -62,6 +81,7 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
         Ok(Self {
             rules: config.rules,
             enabled: config.enabled,
+            backend: config.backend,
         })
     }
 }
@@ -69,10 +89,15 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
 impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
     fn from(config: &RateLimitingConfig) -> Self {
         // Destructure to ensure all fields are handled (compile error if field added/removed)
-        let RateLimitingConfig { rules, enabled } = config;
+        let RateLimitingConfig {
+            rules,
+            enabled,
+            backend,
+        } = config;
         Self {
             rules: rules.clone(),
             enabled: *enabled,
+            backend: *backend,
         }
     }
 }
@@ -86,6 +111,7 @@ impl Default for UninitializedRateLimitingConfig {
         Self {
             rules: Vec::new(),
             enabled: true,
+            backend: RateLimitingBackend::default(),
         }
     }
 }
@@ -95,6 +121,7 @@ impl Default for RateLimitingConfig {
         Self {
             rules: Vec::new(),
             enabled: true,
+            backend: RateLimitingBackend::default(),
         }
     }
 }
@@ -119,8 +146,8 @@ impl ScopeInfo {
         }
     }
 
-    // Expose relevant information from this `ScopeInfo` as OpenTelemetry span attributes
-    fn apply_otel_span_attributes(&self, span: &Span) {
+    /// Expose relevant information from this `ScopeInfo` as OpenTelemetry span attributes
+    pub(crate) fn apply_otel_span_attributes(&self, span: &Span) {
         let ScopeInfo {
             tags,
             api_key_public_id,
@@ -156,64 +183,7 @@ impl RateLimitingConfig {
             .collect::<Vec<_>>()
     }
 
-    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences))]
-    pub async fn consume_tickets<'a>(
-        &'a self,
-        client: &impl RateLimitQueries,
-        scope_info: &'a ScopeInfo,
-        rate_limited_request: &impl RateLimitedRequest,
-    ) -> Result<TicketBorrows, Error> {
-        let res = self
-            .consume_tickets_inner(client, scope_info, rate_limited_request)
-            .await;
-        if let Err(e) = &res {
-            // We want rate-limiting errors to show up as errors in OpenTelemetry,
-            // even though they only get logged as warnings to the console.
-            e.ensure_otel_span_errored(&Span::current());
-        }
-        res
-    }
-
-    // The actual implementation of `consume_tickets`. This is a separate function so that we can
-    // handle `Result::Err` inside `consume_tickets`
-    async fn consume_tickets_inner<'a>(
-        &'a self,
-        client: &impl RateLimitQueries,
-        scope_info: &'a ScopeInfo,
-        rate_limited_request: &impl RateLimitedRequest,
-    ) -> Result<TicketBorrows, Error> {
-        let span = Span::current();
-        scope_info.apply_otel_span_attributes(&span);
-        let limits = self.get_active_limits(scope_info);
-        if limits.is_empty() {
-            return Ok(TicketBorrows::empty());
-        }
-
-        let rate_limited_resources = self.get_rate_limited_resources(scope_info);
-        let rate_limit_resource_requests =
-            rate_limited_request.estimated_resource_usage(&rate_limited_resources)?;
-
-        if let Some(tokens) = rate_limit_resource_requests.tokens {
-            span.record("estimated_usage.tokens", tokens as i64);
-        }
-        if let Some(model_inferences) = rate_limit_resource_requests.model_inferences {
-            span.record("estimated_usage.model_inferences", model_inferences as i64);
-        }
-        let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
-            .iter()
-            .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
-            .collect();
-        let ticket_requests = ticket_requests?;
-        let results = client.consume_tickets(&ticket_requests).await?;
-
-        TicketBorrows::new(results, limits, ticket_requests)
-    }
-
-    /// Given a particular scope, finds the RateLimits that are active for that scope.
-    /// We follow a two-pass approach:
-    /// 1. First pass: collect matching limits and find max priority
-    /// 2. Second pass: filter and flatten based on priority
-    fn get_active_limits<'a>(&'a self, scope_info: &'a ScopeInfo) -> Vec<ActiveRateLimit> {
+    pub(crate) fn get_active_limits(&self, scope_info: &ScopeInfo) -> Vec<ActiveRateLimit> {
         if !self.enabled {
             return vec![];
         }
@@ -288,7 +258,7 @@ pub struct FailedRateLimit {
     pub scope_key: Vec<RateLimitingScopeKey>,
 }
 
-/// Since Postgres will tell us all borrows failed if any failed, we figure out which rate limits
+/// Since the database will tell us all borrows failed if any failed, we figure out which rate limits
 /// actually blocked the request and return an informative error.
 fn get_failed_rate_limits_err(
     requests: Vec<ConsumeTicketsRequest>,
@@ -326,9 +296,9 @@ fn get_failed_rate_limits_err(
 }
 
 #[derive(Debug)]
-struct ActiveRateLimit {
-    limit: Arc<RateLimit>,
-    scope_key: Vec<RateLimitingScopeKey>,
+pub(crate) struct ActiveRateLimit {
+    pub(crate) limit: Arc<RateLimit>,
+    pub(crate) scope_key: Vec<RateLimitingScopeKey>,
 }
 
 impl ActiveRateLimit {
@@ -358,7 +328,7 @@ impl ActiveRateLimit {
             key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_pg_interval(),
+            refill_interval: self.limit.interval,
             requested,
         })
     }
@@ -369,7 +339,7 @@ impl ActiveRateLimit {
             key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_pg_interval(),
+            refill_interval: self.limit.interval,
             returned,
         })
     }
@@ -407,8 +377,9 @@ impl ActiveRateLimit {
     }
 }
 
-#[derive(Debug, Serialize, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
     pub scope: RateLimitingConfigScopes,
@@ -439,8 +410,9 @@ impl RateLimitingConfigRule {
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimit {
     pub resource: RateLimitResource,
     pub interval: RateLimitInterval,
@@ -450,8 +422,8 @@ pub struct RateLimit {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitResource {
     ModelInference,
     Token,
@@ -496,10 +468,10 @@ impl EstimatedRateLimitResourceUsage {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitInterval {
     Second,
     Minute,
@@ -544,10 +516,28 @@ impl RateLimitInterval {
             },
         }
     }
+
+    /// Convert a `RateLimitInterval` to microseconds for Valkey Lua scripts.
+    ///
+    /// Note: in this implementation we define `Month` as exactly 30 days
+    /// (2,592,000,000,000 microseconds), not a calendar-aware month.
+    ///
+    /// TODO(shuyangli): change Postgres to match.
+    pub fn to_microseconds(&self) -> u64 {
+        match *self {
+            RateLimitInterval::Second => 1_000_000,
+            RateLimitInterval::Minute => 60_000_000,
+            RateLimitInterval::Hour => 3_600_000_000,
+            RateLimitInterval::Day => 86_400_000_000,
+            RateLimitInterval::Week => 604_800_000_000,
+            RateLimitInterval::Month => 2_592_000_000_000,
+        }
+    }
 }
 
-#[derive(Debug, Serialize, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
     Always,
@@ -555,9 +545,19 @@ pub enum RateLimitingConfigPriority {
 
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
-#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(try_from = "Vec<RateLimitingConfigScope>")]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
+
+impl TryFrom<Vec<RateLimitingConfigScope>> for RateLimitingConfigScopes {
+    type Error = &'static str;
+
+    fn try_from(scopes: Vec<RateLimitingConfigScope>) -> Result<Self, Self::Error> {
+        Self::new(scopes)
+    }
+}
 
 impl RateLimitingConfigScopes {
     /// Creates a new instance of `RateLimitingConfigScopes`.
@@ -593,10 +593,10 @@ trait Scope {
 // and add a test each time that ensures the sort order is maintained as further changes are made.
 //
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(untagged)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum RateLimitingConfigScope {
     Tag(TagRateLimitingConfigScope),
     ApiKeyPublicId(ApiKeyPublicIdConfigScope),
@@ -615,14 +615,22 @@ impl Scope for RateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TagRateLimitingConfigScope {
     tag_key: String,
     tag_value: TagValueScope,
 }
 
 impl TagRateLimitingConfigScope {
+    /// Creates a new `TagRateLimitingConfigScope`.
+    ///
+    /// Note: This is primarily for internal use by stored config deserialization.
+    pub(crate) fn new(tag_key: String, tag_value: TagValueScope) -> Self {
+        Self { tag_key, tag_value }
+    }
+
     #[cfg(test)]
     pub fn tag_key(&self) -> &str {
         &self.tag_key
@@ -658,13 +666,21 @@ impl TagRateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ApiKeyPublicIdConfigScope {
     api_key_public_id: ApiKeyPublicIdValueScope,
 }
 
 impl ApiKeyPublicIdConfigScope {
+    /// Creates a new `ApiKeyPublicIdConfigScope`.
+    ///
+    /// Note: This is primarily for internal use by stored config deserialization.
+    pub(crate) fn new(api_key_public_id: ApiKeyPublicIdValueScope) -> Self {
+        Self { api_key_public_id }
+    }
+
     fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
         match self.api_key_public_id {
             ApiKeyPublicIdValueScope::Concrete(ref key) => {
@@ -690,8 +706,9 @@ impl ApiKeyPublicIdConfigScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TagValueScope {
     Concrete(String),
     Each,
@@ -711,8 +728,26 @@ impl Serialize for TagValueScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
+impl<'de> Deserialize<'de> for TagValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "tensorzero::each" => Ok(TagValueScope::Each),
+            "tensorzero::total" => Ok(TagValueScope::Total),
+            _ if s.starts_with("tensorzero::") => Err(serde::de::Error::custom(
+                r#"Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with "tensorzero::"."#,
+            )),
+            _ => Ok(TagValueScope::Concrete(s)),
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum ApiKeyPublicIdValueScope {
     Concrete(String),
     Each,
@@ -726,6 +761,28 @@ impl Serialize for ApiKeyPublicIdValueScope {
         match self {
             ApiKeyPublicIdValueScope::Concrete(s) => serializer.serialize_str(s),
             ApiKeyPublicIdValueScope::Each => serializer.serialize_str("tensorzero::each"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ApiKeyPublicIdValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "tensorzero::each" {
+            Ok(ApiKeyPublicIdValueScope::Each)
+        } else if s.starts_with("tensorzero::") {
+            Err(serde::de::Error::custom(
+                r#"API key public ID values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
+            ))
+        } else if s.len() != PUBLIC_ID_LENGTH {
+            Err(serde::de::Error::custom(format!(
+                "API key public ID `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public ID."
+            )))
+        } else {
+            Ok(ApiKeyPublicIdValueScope::Concrete(s))
         }
     }
 }
@@ -771,23 +828,33 @@ impl RateLimitingScopeKey {
 #[must_use]
 #[derive(Debug)]
 pub struct TicketBorrows {
+    pool_manager: Arc<RateLimitingManager>,
     borrows: Vec<TicketBorrow>,
 }
 
 #[derive(Debug)]
-struct TicketBorrow {
-    receipt: ConsumeTicketsReceipt,
-    active_limit: ActiveRateLimit,
+pub(crate) struct TicketBorrow {
+    pub(crate) receipt: ConsumeTicketsReceipt,
+    pub(crate) active_limit: ActiveRateLimit,
 }
 
+// Static assertions to ensure these types are Send + Sync
+const _: () = {
+    const fn assert_send_sync<T: Send + Sync>() {}
+    let _ = assert_send_sync::<TicketBorrows>;
+    let _ = assert_send_sync::<RateLimitingManager>;
+};
+
 impl TicketBorrows {
-    pub fn empty() -> Self {
+    pub(crate) fn empty(pool_manager: Arc<RateLimitingManager>) -> Self {
         Self {
+            pool_manager,
             borrows: Vec::new(),
         }
     }
 
-    fn new(
+    pub(crate) fn new(
+        pool_manager: Arc<RateLimitingManager>,
         results: Vec<ConsumeTicketsReceipt>,
         active_limits: Vec<ActiveRateLimit>,
         ticket_requests: Vec<ConsumeTicketsRequest>,
@@ -813,113 +880,30 @@ impl TicketBorrows {
             })
             .collect();
 
-        Ok(Self { borrows })
+        Ok(Self {
+            pool_manager,
+            borrows,
+        })
     }
 
-    #[tracing::instrument(err, skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, underestimate))]
-    pub async fn return_tickets(
-        self,
-        client: &impl RateLimitQueries,
-        actual_usage: RateLimitResourceUsage,
-    ) -> Result<(), Error> {
-        let res = self.return_tickets_inner(client, actual_usage).await;
-        if let Err(e) = &res {
-            // We want rate-limiting errors to show up as errors in OpenTelemetry,
-            // even though they only get logged as warnings to the console.
-            e.ensure_otel_span_errored(&Span::current());
-        }
-        res
+    /// Get the manager that created this borrow.
+    pub fn manager(&self) -> &Arc<RateLimitingManager> {
+        &self.pool_manager
     }
 
-    // The actual implementation of `return_tickets`. This is a separate function so that we can
-    // handle `Result::Err` inside `return_tickets`
-    async fn return_tickets_inner(
-        self,
-        client: &impl RateLimitQueries,
-        actual_usage: RateLimitResourceUsage,
-    ) -> Result<(), Error> {
-        let span = Span::current();
-        // We cast the usage values to i64 so that they are reported as integers in OpenTelemetry (rather than strings)
-        match actual_usage {
-            RateLimitResourceUsage::Exact {
-                tokens,
-                model_inferences,
-            } => {
-                span.record("actual_usage.tokens", tokens as i64);
-                span.record("actual_usage.model_inferences", model_inferences as i64);
-                span.record("underestimate", false);
-            }
-            RateLimitResourceUsage::UnderEstimate {
-                tokens,
-                model_inferences,
-            } => {
-                span.record("actual_usage.tokens", tokens as i64);
-                span.record("actual_usage.model_inferences", model_inferences as i64);
-                span.record("underestimate", true);
-            }
-        }
-        let mut requests = Vec::new();
-        let mut returns = Vec::new();
-        for borrow in &self.borrows {
-            let TicketBorrow {
-                receipt,
-                active_limit,
-            } = borrow;
+    /// Get access to the borrows for processing by the manager.
+    pub(crate) fn borrows(&self) -> &[TicketBorrow] {
+        &self.borrows
+    }
 
-            // Extract the actual value - we'll check 'Exact/UnderEstimate' further on
-            let actual_usage_this_request = match active_limit.limit.resource {
-                RateLimitResource::ModelInference => match actual_usage {
-                    RateLimitResourceUsage::Exact {
-                        model_inferences, ..
-                    }
-                    | RateLimitResourceUsage::UnderEstimate {
-                        model_inferences, ..
-                    } => model_inferences,
-                },
-                RateLimitResource::Token => match actual_usage {
-                    RateLimitResourceUsage::Exact { tokens, .. }
-                    | RateLimitResourceUsage::UnderEstimate { tokens, .. } => tokens,
-                },
-            };
-
-            match actual_usage_this_request.cmp(&receipt.tickets_consumed) {
-                std::cmp::Ordering::Greater => {
-                    // Actual usage exceeds borrowed, add the difference to requests and log a warning
-                    // We don't care about 'RateLimitResourceUsage::Exact' vs ' RateLimitResourceUsage::UnderEstimate' here.
-                    tracing::warn!(
-                        "Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used",
-                        active_limit.limit.resource,
-                        receipt.tickets_consumed
-                    );
-                    let difference = actual_usage_this_request - receipt.tickets_consumed;
-                    requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
-                }
-                std::cmp::Ordering::Less => {
-                    match actual_usage {
-                        RateLimitResourceUsage::Exact { .. } => {
-                            // Borrowed exceeds actual usage, add the difference to returns
-                            let difference = receipt.tickets_consumed - actual_usage_this_request;
-                            returns.push(active_limit.get_return_tickets_request(difference)?);
-                        }
-                        RateLimitResourceUsage::UnderEstimate { .. } => {
-                            // If our returned usage is only an estimate, then don't return any tickets,
-                            // even if it looks like we over-borrowed.
-                        }
-                    }
-                }
-                std::cmp::Ordering::Equal => (),
-            };
-        }
-
-        let (consume_result, return_result) = tokio::join!(
-            client.consume_tickets(&requests),
-            client.return_tickets(returns)
-        );
-
-        consume_result?;
-        return_result?;
-
-        Ok(())
+    /// Return tickets based on actual resource usage.
+    ///
+    /// This method is synchronous and spawns an async task internally to perform
+    /// the database operations. The DB operations complete asynchronously after
+    /// this method returns.
+    pub async fn return_tickets(self, actual_usage: RateLimitResourceUsage) -> Result<(), Error> {
+        let manager = Arc::clone(&self.pool_manager);
+        manager.return_tickets(self, actual_usage).await
     }
 }
 
@@ -1488,12 +1472,14 @@ mod tests {
         let config_enabled = RateLimitingConfig {
             rules: vec![],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         assert!(config_enabled.enabled());
 
         let config_disabled = RateLimitingConfig {
             rules: vec![],
             enabled: false,
+            backend: RateLimitingBackend::default(),
         };
         assert!(!config_disabled.enabled());
 
@@ -1558,6 +1544,7 @@ mod tests {
         let uninitialized = UninitializedRateLimitingConfig {
             rules: vec![rule_priority_5, rule_always],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let err_message = RateLimitingConfig::try_from(uninitialized)
             .unwrap_err()
@@ -1616,6 +1603,7 @@ mod tests {
         let config_numeric_priorities = RateLimitingConfig {
             rules: vec![rule_priority_3, rule_priority_7],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
 
         let active_limits = config_numeric_priorities.get_active_limits(&scope_info);
@@ -1642,6 +1630,7 @@ mod tests {
         let config_multiple_limits = RateLimitingConfig {
             rules: vec![rule_multiple_limits],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
 
         let active_limits = config_multiple_limits.get_active_limits(&scope_info);
@@ -1803,14 +1792,7 @@ mod tests {
         assert_eq!(consume_request.requested, 50); // tokens usage
         assert_eq!(consume_request.capacity, 100);
         assert_eq!(consume_request.refill_amount, 10);
-        assert_eq!(
-            consume_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000
-            }
-        );
+        assert_eq!(consume_request.refill_interval, RateLimitInterval::Minute);
 
         // Test return tickets request for ModelInference resource
         let inference_limit = Arc::new(RateLimit {
@@ -1833,14 +1815,7 @@ mod tests {
         assert_eq!(return_request.returned, 3);
         assert_eq!(return_request.capacity, 20);
         assert_eq!(return_request.refill_amount, 5);
-        assert_eq!(
-            return_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000
-            }
-        );
+        assert_eq!(return_request.refill_interval, RateLimitInterval::Hour);
 
         // Test consume tickets request for ModelInference resource
         let inference_consume_request = inference_active_limit
@@ -1851,144 +1826,12 @@ mod tests {
         assert_eq!(inference_consume_request.refill_amount, 5);
         assert_eq!(
             inference_consume_request.refill_interval,
-            PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000
-            }
+            RateLimitInterval::Hour
         );
 
         // Test resource usage mapping works correctly
         assert_eq!(usage.get_usage(RateLimitResource::Token), Some(50));
         assert_eq!(usage.get_usage(RateLimitResource::ModelInference), Some(5));
-    }
-
-    #[test]
-    fn test_ticket_borrow_lifecycle() {
-        use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest};
-
-        // Test empty borrow creation
-        let empty_borrow = TicketBorrows::empty();
-        assert_eq!(empty_borrow.borrows.len(), 0);
-
-        // Test valid borrow creation
-        let limit = Arc::new(RateLimit {
-            resource: RateLimitResource::Token,
-            interval: RateLimitInterval::Minute,
-            capacity: 100,
-            refill_rate: 10,
-        });
-
-        let active_limit = ActiveRateLimit {
-            limit,
-            scope_key: vec![RateLimitingScopeKey::TagConcrete {
-                key: "user_id".to_string(),
-                value: "123".to_string(),
-            }],
-        };
-
-        let key = active_limit.get_key().unwrap();
-
-        let receipt = ConsumeTicketsReceipt {
-            key: key.clone(),
-            success: true,
-            tickets_remaining: 50,
-            tickets_consumed: 50,
-        };
-
-        let request = ConsumeTicketsRequest {
-            key: key.clone(),
-            capacity: 100,
-            refill_amount: 10,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000,
-            },
-            requested: 50,
-        };
-
-        let valid_borrow =
-            TicketBorrows::new(vec![receipt], vec![active_limit], vec![request]).unwrap();
-        assert_eq!(valid_borrow.borrows.len(), 1);
-
-        // Test iterator functionality
-        let mut iter_count = 0;
-        for borrow in &valid_borrow.borrows {
-            let TicketBorrow {
-                receipt,
-                active_limit,
-            } = &borrow;
-            assert!(receipt.success);
-            assert_eq!(receipt.tickets_consumed, 50);
-            assert_eq!(active_limit.limit.resource, RateLimitResource::Token);
-            iter_count += 1;
-        }
-        assert_eq!(iter_count, 1);
-
-        // Test mismatched array lengths error
-        let limit2 = Arc::new(RateLimit {
-            resource: RateLimitResource::ModelInference,
-            interval: RateLimitInterval::Hour,
-            capacity: 20,
-            refill_rate: 5,
-        });
-
-        let active_limit2 = ActiveRateLimit {
-            limit: limit2,
-            scope_key: vec![RateLimitingScopeKey::TagTotal {
-                key: "app_id".to_string(),
-            }],
-        };
-
-        let key2 = active_limit2.get_key().unwrap();
-
-        // Try to create with mismatched array lengths
-        let receipt2 = ConsumeTicketsReceipt {
-            key: key2.clone(),
-            success: true,
-            tickets_remaining: 10,
-            tickets_consumed: 10,
-        };
-
-        let request2 = ConsumeTicketsRequest {
-            key: key2.clone(),
-            capacity: 20,
-            refill_amount: 5,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000,
-            },
-            requested: 10,
-        };
-
-        let mismatched_result = TicketBorrows::new(vec![receipt2], vec![], vec![request2]);
-        assert!(mismatched_result.is_err());
-
-        // Another mismatch test - more active limits than receipts
-        let receipt3 = ConsumeTicketsReceipt {
-            key: active_limit2.get_key().unwrap(),
-            success: true,
-            tickets_remaining: 15,
-            tickets_consumed: 15,
-        };
-
-        let request3 = ConsumeTicketsRequest {
-            key: active_limit2.get_key().unwrap(),
-            capacity: 20,
-            refill_amount: 5,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 3_600_000_000,
-            },
-            requested: 15,
-        };
-
-        let mismatched_result2 =
-            TicketBorrows::new(vec![receipt3], vec![active_limit2], vec![request3]);
-        assert!(mismatched_result2.is_ok()); // This should actually work - 1:1 ratio
     }
 
     #[test]
@@ -2024,6 +1867,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let resources = config_with_token.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -2043,6 +1887,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
+            backend: RateLimitingBackend::default(),
         };
         let resources = config_model_only.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -2057,6 +1902,7 @@ mod tests {
                 scope: RateLimitingConfigScopes(vec![]),
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
+            backend: RateLimitingBackend::default(),
         };
         assert!(
             config_disabled
@@ -2099,11 +1945,7 @@ mod tests {
             key: key.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000,
-            },
+            refill_interval: RateLimitInterval::Minute,
             requested: 50,
         };
 
@@ -2142,11 +1984,7 @@ mod tests {
             key: key2.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: PgInterval {
-                months: 0,
-                days: 0,
-                microseconds: 60_000_000,
-            },
+            refill_interval: RateLimitInterval::Minute,
             requested: 50,
         };
 
@@ -2267,33 +2105,21 @@ mod tests {
                 key: key_tokens.clone(),
                 capacity: 100,
                 refill_amount: 10,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 60_000_000,
-                },
+                refill_interval: RateLimitInterval::Minute,
                 requested: 80, // More than available (30)
             },
             ConsumeTicketsRequest {
                 key: key_inferences.clone(),
                 capacity: 50,
                 refill_amount: 5,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 60_000_000,
-                },
+                refill_interval: RateLimitInterval::Minute,
                 requested: 10, // Less than available (20)
             },
             ConsumeTicketsRequest {
                 key: key_tokens_user2.clone(),
                 capacity: 1000,
                 refill_amount: 100,
-                refill_interval: PgInterval {
-                    months: 0,
-                    days: 0,
-                    microseconds: 3_600_000_000,
-                },
+                refill_interval: RateLimitInterval::Hour,
                 requested: 80, // Less than available (500)
             },
         ];
@@ -2370,5 +2196,80 @@ mod tests {
             }
             RateLimitResourceUsage::Exact { .. } => panic!("Expected UnderEstimate variant"),
         }
+    }
+
+    #[test]
+    fn test_tag_value_scope_deserialization_valid() {
+        // Valid special values
+        let each: TagValueScope = serde_json::from_str(r#""tensorzero::each""#).unwrap();
+        assert_eq!(each, TagValueScope::Each);
+
+        let total: TagValueScope = serde_json::from_str(r#""tensorzero::total""#).unwrap();
+        assert_eq!(total, TagValueScope::Total);
+
+        // Valid concrete value
+        let concrete: TagValueScope = serde_json::from_str(r#""my_value""#).unwrap();
+        assert_eq!(concrete, TagValueScope::Concrete("my_value".to_string()));
+    }
+
+    #[test]
+    fn test_tag_value_scope_deserialization_invalid_tensorzero_prefix() {
+        // Invalid tensorzero:: prefix
+        let result: Result<TagValueScope, _> = serde_json::from_str(r#""tensorzero::foo""#);
+        assert!(result.is_err(), "Should reject invalid tensorzero:: prefix");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("may not start with \"tensorzero::\""),
+            "Error should mention tensorzero:: restriction: {err}"
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_valid() {
+        // Valid special value
+        let each: ApiKeyPublicIdValueScope = serde_json::from_str(r#""tensorzero::each""#).unwrap();
+        assert_eq!(each, ApiKeyPublicIdValueScope::Each);
+
+        // Valid concrete value (12 characters)
+        let concrete: ApiKeyPublicIdValueScope = serde_json::from_str(r#""abcdefghijkl""#).unwrap();
+        assert_eq!(
+            concrete,
+            ApiKeyPublicIdValueScope::Concrete("abcdefghijkl".to_string())
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_invalid_tensorzero_prefix() {
+        // Invalid tensorzero:: prefix (not "each")
+        let result: Result<ApiKeyPublicIdValueScope, _> =
+            serde_json::from_str(r#""tensorzero::foo""#);
+        assert!(result.is_err(), "Should reject invalid tensorzero:: prefix");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("may not start with \"tensorzero::\""),
+            "Error should mention tensorzero:: restriction: {err}"
+        );
+    }
+
+    #[test]
+    fn test_api_key_public_id_value_scope_deserialization_invalid_length() {
+        // Too short
+        let result: Result<ApiKeyPublicIdValueScope, _> = serde_json::from_str(r#""abc""#);
+        assert!(result.is_err(), "Should reject short public ID");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must be 12 characters long"),
+            "Error should mention length requirement: {err}"
+        );
+
+        // Too long
+        let result: Result<ApiKeyPublicIdValueScope, _> =
+            serde_json::from_str(r#""abcdefghijklmno""#);
+        assert!(result.is_err(), "Should reject long public ID");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must be 12 characters long"),
+            "Error should mention length requirement: {err}"
+        );
     }
 }

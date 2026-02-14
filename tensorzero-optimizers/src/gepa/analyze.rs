@@ -3,7 +3,6 @@
 //! Analyzes inference outputs to identify errors, improvements, and optimal patterns.
 //! Builds inputs for the analyze function and handles results with optional inference context.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::future::join_all;
@@ -16,9 +15,15 @@ use tensorzero_core::{
         Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
     },
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
-    endpoints::inference::InferenceResponse,
+    endpoints::{
+        datasets::{ChatInferenceDatapoint, Datapoint},
+        inference::InferenceResponse,
+    },
     error::{Error, ErrorDetails},
-    inference::types::{Arguments, ContentBlockChatOutput, InputExt, Role, StoredInput, Template},
+    inference::types::{
+        Arguments, ContentBlockChatOutput, InputExt, Role, StoredInput, StoredInputMessageContent,
+        Template,
+    },
     optimization::gepa::GEPAConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
@@ -26,6 +31,94 @@ use tensorzero_core::{
 use evaluations::stats::EvaluationInfo;
 
 use crate::gepa::validate::FunctionContext;
+
+/// Fields to include when serializing datapoints for GEPA functions.
+/// Only these fields are relevant for prompt optimization analysis.
+/// This reduces token usage by excluding IDs, timestamps, and internal flags.
+/// Note: `tool_params` fields are flattened into the top-level object.
+const DATAPOINT_FIELDS_TO_KEEP: &[&str] = &[
+    "function_name",
+    "input",
+    "output",
+    "output_schema", // JSON datapoints only
+    "tags",
+    // Flattened DynamicToolParams fields (Chat datapoints only)
+    "allowed_tools",
+    "additional_tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "provider_tools",
+];
+
+/// Serialize a datapoint for GEPA functions, including only whitelisted fields.
+///
+/// This reduces token usage by only including fields relevant for prompt
+/// optimization analysis, excluding IDs, timestamps, and internal flags.
+fn serialize_filtered_datapoint(datapoint: &Datapoint) -> Result<Value, Error> {
+    let value = to_value(datapoint)?;
+
+    let Some(obj) = value.as_object() else {
+        return Ok(value);
+    };
+
+    let filtered: Map<String, Value> = obj
+        .iter()
+        .filter(|(key, _)| DATAPOINT_FIELDS_TO_KEEP.contains(&key.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    Ok(Value::Object(filtered))
+}
+
+// ============================================================================
+// Type-safe thought signature stripping
+// ============================================================================
+//
+// These functions remove the `signature` field from Thought content blocks at
+// the Rust type level, before serialization. This is more type-safe than JSON
+// manipulation and ensures compile-time errors if type structures change.
+//
+// Thought signatures are Anthropic-specific encrypted blobs that have no semantic
+// value and waste tokens when passed to GEPA analysis/mutation models.
+
+/// Strip signatures from input message content blocks.
+fn strip_signatures_from_input(input: &mut Input) {
+    for message in &mut input.messages {
+        for content in &mut message.content {
+            if let InputMessageContent::Thought(thought) = content {
+                thought.signature = None;
+            }
+        }
+    }
+}
+
+/// Strip signatures from stored input message content blocks.
+fn strip_signatures_from_stored_input(input: &mut StoredInput) {
+    for message in &mut input.messages {
+        for content in &mut message.content {
+            if let StoredInputMessageContent::Thought(thought) = content {
+                thought.signature = None;
+            }
+        }
+    }
+}
+
+/// Strip signatures from chat output content blocks.
+fn strip_signatures_from_chat_output(blocks: &mut [ContentBlockChatOutput]) {
+    for block in blocks {
+        if let ContentBlockChatOutput::Thought(thought) = block {
+            thought.signature = None;
+        }
+    }
+}
+
+/// Strip signatures from a Chat datapoint's input and output.
+fn strip_signatures_from_chat_datapoint(datapoint: &mut ChatInferenceDatapoint) {
+    strip_signatures_from_input(&mut datapoint.input);
+    if let Some(ref mut output) = datapoint.output {
+        strip_signatures_from_chat_output(output);
+    }
+}
 
 /// Inference input/output pair for GEPA mutation phase.
 ///
@@ -89,23 +182,6 @@ fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatC
     analyze_config
 }
 
-/// Serializes inference output to JSON Value.
-///
-/// Extracts the output from either Chat or Json inference responses.
-///
-/// Returns the serialized output as a JSON Value.
-fn serialize_inference_output(response: &InferenceResponse) -> Result<Value, Error> {
-    match response {
-        InferenceResponse::Chat(chat_response) => to_value(&chat_response.content),
-        InferenceResponse::Json(json_response) => to_value(&json_response.output),
-    }
-    .map_err(|e| {
-        Error::new(ErrorDetails::Inference {
-            message: format!("Failed to serialize inference output: {e}"),
-        })
-    })
-}
-
 /// Builds input JSON for the analyze function.
 ///
 /// Passes high-level objects to the template for serialization.
@@ -127,29 +203,49 @@ pub fn build_analyze_input(
     } = function_context;
 
     // Extract templates map from variant config
-    let templates_map: HashMap<String, String> = variant_config
+    let templates_map: Map<String, Value> = variant_config
         .templates
         .inner
         .iter()
-        .map(|(name, config)| (name.clone(), config.path.data().to_string()))
+        .map(|(name, config)| (name.clone(), json!(config.path.data())))
         .collect();
 
-    let output = serialize_inference_output(&eval_info.response)?;
-
     // Build evaluation_scores map with just the scores
-    let mut evaluation_scores = Map::new();
-    for (evaluator_name, result_opt) in &eval_info.evaluations {
-        // Preserve the score type (number, boolean, or null)
-        let score = result_opt
-            .as_ref()
-            .map(|value| match value {
-                Value::Number(n) => json!(n),
-                Value::Bool(b) => json!(b),
-                _ => json!(null),
-            })
-            .unwrap_or(json!(null));
-        evaluation_scores.insert(evaluator_name.clone(), score);
+    // Preserve the score type (number, boolean, or null)
+    let evaluation_scores: Map<String, Value> = eval_info
+        .evaluations
+        .iter()
+        .map(|(name, result_opt)| {
+            let score = result_opt
+                .as_ref()
+                .map(|value| match value {
+                    Value::Number(n) => json!(n),
+                    Value::Bool(b) => json!(b),
+                    _ => json!(null),
+                })
+                .unwrap_or(json!(null));
+            (name.clone(), score)
+        })
+        .collect();
+
+    // Strip thought signatures at the type level before serialization.
+    // Only Chat types can contain Thought blocks; Json outputs are left intact.
+    let mut datapoint_for_serialization = eval_info.datapoint.clone();
+    match &mut datapoint_for_serialization {
+        Datapoint::Chat(chat_datapoint) => {
+            strip_signatures_from_chat_datapoint(chat_datapoint);
+        }
+        Datapoint::Json(_) => {} // No signatures to strip in JSON
     }
+
+    let output_value = match &eval_info.response {
+        InferenceResponse::Chat(chat_response) => {
+            let mut content = chat_response.content.clone();
+            strip_signatures_from_chat_output(&mut content);
+            to_value(&content)?
+        }
+        InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
+    };
 
     // Build the input with high-level objects that will be serialized in the template
     let mut map = Map::new();
@@ -162,11 +258,23 @@ pub fn build_analyze_input(
         to_value(evaluation_config)?,
     );
     map.insert("templates_map".to_string(), json!(templates_map));
-    map.insert("datapoint".to_string(), to_value(&eval_info.datapoint)?);
-    map.insert("output".to_string(), json!(output));
+    map.insert(
+        "datapoint".to_string(),
+        serialize_filtered_datapoint(&datapoint_for_serialization)?,
+    );
+    map.insert("output".to_string(), output_value);
     map.insert("evaluation_scores".to_string(), json!(evaluation_scores));
 
-    Ok(Arguments(map))
+    // Sort all JSON keys for deterministic serialization (important for caching)
+    let mut value = Value::Object(map);
+    value.sort_all_objects();
+    let Value::Object(sorted_map) = value else {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: "sort_all_objects changed Value variant".to_string(),
+        }));
+    };
+
+    Ok(Arguments(sorted_map))
 }
 
 /// Analyzes a single inference using the analyze function.
@@ -270,13 +378,27 @@ async fn analyze_inference(
 
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {
+        // Strip signatures from input at the type level
+        let mut stored_input = eval_info
+            .datapoint
+            .input()
+            .clone()
+            .into_stored_input_without_file_handling()?;
+        strip_signatures_from_stored_input(&mut stored_input);
+
+        // Strip signatures from output at the type level (Chat only)
+        let output_value = match &eval_info.response {
+            InferenceResponse::Chat(chat_response) => {
+                let mut content = chat_response.content.clone();
+                strip_signatures_from_chat_output(&mut content);
+                to_value(&content)?
+            }
+            InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
+        };
+
         Some(Inference {
-            input: eval_info
-                .datapoint
-                .input()
-                .clone()
-                .into_stored_input_without_file_handling()?,
-            output: serialize_inference_output(&eval_info.response)?,
+            input: stored_input,
+            output: output_value,
         })
     } else {
         None
@@ -415,7 +537,7 @@ mod tests {
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{ContentBlockChatOutput, Input, Text, Usage},
-        jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
+        jsonschema_util::{JSONSchema, SchemaWithMetadata},
         optimization::gepa::GEPAConfig,
         tool::StaticToolConfig,
         utils::retries::RetryConfig,
@@ -436,13 +558,14 @@ mod tests {
             parallel_tool_calls: None,
             description: Some("Test function".to_string()),
             all_explicit_templates_names: std::collections::HashSet::new(),
-            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+            experimentation:
+                tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
         })
     }
 
     /// Create a Chat FunctionConfig with schemas
     fn create_test_function_config_with_schemas() -> FunctionConfig {
-        let system_schema = StaticJSONSchema::from_value(json!({
+        let system_schema = JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "greeting": {"type": "string"}
@@ -450,7 +573,7 @@ mod tests {
         }))
         .unwrap();
 
-        let user_schema = StaticJSONSchema::from_value(json!({
+        let user_schema = JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"}
@@ -486,7 +609,8 @@ mod tests {
             parallel_tool_calls: None,
             description: Some("Test function with schemas".to_string()),
             all_explicit_templates_names: std::collections::HashSet::new(),
-            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+            experimentation:
+                tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
         })
     }
 
@@ -502,6 +626,7 @@ mod tests {
             usage: Usage::default(),
             raw_usage: None,
             original_response: None,
+            raw_response: None,
             finish_reason: None,
         })
     }
@@ -889,7 +1014,7 @@ mod tests {
             name: "test_tool".to_string(),
             key: "test_tool".to_string(),
             description: "Test tool".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({
+            parameters: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "param1": {"type": "string"}
@@ -933,6 +1058,430 @@ mod tests {
         assert_eq!(
             tool_obj.get("description").unwrap().as_str().unwrap(),
             "Test tool"
+        );
+    }
+
+    // ============================================================================
+    // Unit Tests for type-safe thought signature stripping
+    // ============================================================================
+
+    use tensorzero_core::inference::types::{Thought, ThoughtSummaryBlock};
+
+    #[test]
+    fn test_strip_signatures_from_chat_output_removes_signature() {
+        let mut blocks = vec![ContentBlockChatOutput::Thought(Thought {
+            text: Some("Let me think...".to_string()),
+            signature: Some("encrypted-blob".to_string()),
+            summary: None,
+            provider_type: Some("anthropic".to_string()),
+            extra_data: None,
+        })];
+
+        strip_signatures_from_chat_output(&mut blocks);
+
+        let ContentBlockChatOutput::Thought(thought) = &blocks[0] else {
+            panic!("Expected Thought block");
+        };
+        assert!(
+            thought.signature.is_none(),
+            "signature should be removed from thought block"
+        );
+        assert_eq!(
+            thought.text,
+            Some("Let me think...".to_string()),
+            "text should be preserved"
+        );
+        assert_eq!(
+            thought.provider_type,
+            Some("anthropic".to_string()),
+            "provider_type should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_strip_signatures_from_chat_output_mixed_blocks() {
+        let mut blocks = vec![
+            ContentBlockChatOutput::Text(Text {
+                text: "Hello".to_string(),
+            }),
+            ContentBlockChatOutput::Thought(Thought {
+                text: Some("Thinking...".to_string()),
+                signature: Some("sig123".to_string()),
+                summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                    text: "Summary".to_string(),
+                }]),
+                provider_type: None,
+                extra_data: None,
+            }),
+            ContentBlockChatOutput::Text(Text {
+                text: "World".to_string(),
+            }),
+        ];
+
+        strip_signatures_from_chat_output(&mut blocks);
+
+        // First text block unchanged
+        let ContentBlockChatOutput::Text(text1) = &blocks[0] else {
+            panic!("Expected Text block");
+        };
+        assert_eq!(text1.text, "Hello", "first text block should be preserved");
+
+        // Thought block has signature removed
+        let ContentBlockChatOutput::Thought(thought) = &blocks[1] else {
+            panic!("Expected Thought block");
+        };
+        assert!(
+            thought.signature.is_none(),
+            "signature should be removed from thought block"
+        );
+        assert_eq!(
+            thought.text,
+            Some("Thinking...".to_string()),
+            "thought text should be preserved"
+        );
+        assert_eq!(
+            thought.summary,
+            Some(vec![ThoughtSummaryBlock::SummaryText {
+                text: "Summary".to_string(),
+            }]),
+            "thought summary should be preserved"
+        );
+
+        // Second text block unchanged
+        let ContentBlockChatOutput::Text(text2) = &blocks[2] else {
+            panic!("Expected Text block");
+        };
+        assert_eq!(text2.text, "World", "second text block should be preserved");
+    }
+
+    #[test]
+    fn test_strip_signatures_from_chat_output_multiple_thoughts() {
+        let mut blocks = vec![
+            ContentBlockChatOutput::Thought(Thought {
+                text: Some("First thought".to_string()),
+                signature: Some("sig1".to_string()),
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            ContentBlockChatOutput::Thought(Thought {
+                text: Some("Second thought".to_string()),
+                signature: Some("sig2".to_string()),
+                summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                    text: "A summary".to_string(),
+                }]),
+                provider_type: Some("anthropic".to_string()),
+                extra_data: None,
+            }),
+        ];
+
+        strip_signatures_from_chat_output(&mut blocks);
+
+        for (i, block) in blocks.iter().enumerate() {
+            let ContentBlockChatOutput::Thought(thought) = block else {
+                panic!("Expected Thought block at index {i}");
+            };
+            assert!(
+                thought.signature.is_none(),
+                "signature should be removed from thought block at index {i}"
+            );
+        }
+
+        // Verify other fields preserved
+        let ContentBlockChatOutput::Thought(first) = &blocks[0] else {
+            panic!("Expected Thought");
+        };
+        assert_eq!(first.text, Some("First thought".to_string()));
+
+        let ContentBlockChatOutput::Thought(second) = &blocks[1] else {
+            panic!("Expected Thought");
+        };
+        assert_eq!(second.text, Some("Second thought".to_string()));
+        assert_eq!(
+            second.summary,
+            Some(vec![ThoughtSummaryBlock::SummaryText {
+                text: "A summary".to_string(),
+            }])
+        );
+        assert_eq!(second.provider_type, Some("anthropic".to_string()));
+    }
+
+    #[test]
+    fn test_strip_signatures_from_chat_output_no_signature() {
+        let mut blocks = vec![ContentBlockChatOutput::Thought(Thought {
+            text: Some("Already clean".to_string()),
+            signature: None,
+            summary: None,
+            provider_type: None,
+            extra_data: None,
+        })];
+
+        strip_signatures_from_chat_output(&mut blocks);
+
+        let ContentBlockChatOutput::Thought(thought) = &blocks[0] else {
+            panic!("Expected Thought block");
+        };
+        assert!(thought.signature.is_none(), "signature should remain None");
+        assert_eq!(
+            thought.text,
+            Some("Already clean".to_string()),
+            "text should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_strip_signatures_from_chat_output_empty() {
+        let mut blocks: Vec<ContentBlockChatOutput> = vec![];
+        strip_signatures_from_chat_output(&mut blocks);
+        assert!(blocks.is_empty(), "empty vector should remain empty");
+    }
+
+    #[test]
+    fn test_strip_signatures_from_input_removes_signature() {
+        let mut input = Input {
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Thought(Thought {
+                    text: Some("User thought".to_string()),
+                    signature: Some("user-sig".to_string()),
+                    summary: None,
+                    provider_type: None,
+                    extra_data: None,
+                })],
+            }],
+            system: None,
+        };
+
+        strip_signatures_from_input(&mut input);
+
+        let InputMessageContent::Thought(thought) = &input.messages[0].content[0] else {
+            panic!("Expected Thought content");
+        };
+        assert!(
+            thought.signature.is_none(),
+            "signature should be removed from input thought"
+        );
+        assert_eq!(
+            thought.text,
+            Some("User thought".to_string()),
+            "text should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_strip_signatures_from_stored_input_removes_signature() {
+        // Create StoredInput with a Thought block
+        let stored_input_json = json!({
+            "messages": [{
+                "role": "user",
+                "content": [{
+                    "type": "thought",
+                    "text": "Stored thought",
+                    "signature": "stored-sig"
+                }]
+            }]
+        });
+
+        let mut stored_input: StoredInput =
+            serde_json::from_value(stored_input_json).expect("Valid StoredInput JSON");
+
+        strip_signatures_from_stored_input(&mut stored_input);
+
+        let StoredInputMessageContent::Thought(thought) = &stored_input.messages[0].content[0]
+        else {
+            panic!("Expected Thought content");
+        };
+        assert!(
+            thought.signature.is_none(),
+            "signature should be removed from stored input thought"
+        );
+        assert_eq!(
+            thought.text,
+            Some("Stored thought".to_string()),
+            "text should be preserved"
+        );
+    }
+
+    // ============================================================================
+    // Unit Tests for datapoint field filtering
+    // ============================================================================
+
+    #[test]
+    fn test_serialize_filtered_datapoint_chat() {
+        let eval_info = create_test_evaluation_info();
+        let datapoint = match &eval_info.datapoint {
+            Datapoint::Chat(dp) => Datapoint::Chat(dp.clone()),
+            Datapoint::Json(_) => panic!("Expected Chat datapoint"),
+        };
+
+        let filtered = serialize_filtered_datapoint(&datapoint)
+            .expect("Serialization should succeed, expected Chat datapoint with valid fields");
+        let obj = filtered
+            .as_object()
+            .expect("Filtered result should be a JSON object");
+
+        // Verify kept fields are present
+        assert!(
+            obj.contains_key("function_name"),
+            "Expected function_name to be kept for context"
+        );
+        assert!(
+            obj.contains_key("input"),
+            "Expected input to be kept as core data for analysis"
+        );
+        // Note: output might be None in test data, so we check it's either present or absent as an Option
+        // tool_params is flattened so its individual fields would be in the object
+        // tags is optional but if present should be kept
+
+        // Verify dropped fields are absent
+        assert!(
+            !obj.contains_key("dataset_name"),
+            "Expected dataset_name to be dropped as not relevant for optimization"
+        );
+        assert!(
+            !obj.contains_key("id"),
+            "Expected id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("episode_id"),
+            "Expected episode_id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("auxiliary"),
+            "Expected auxiliary to be dropped as extra metadata"
+        );
+        assert!(
+            !obj.contains_key("is_deleted"),
+            "Expected is_deleted to be dropped as internal state flag"
+        );
+        assert!(
+            !obj.contains_key("is_custom"),
+            "Expected is_custom to be dropped as internal flag"
+        );
+        assert!(
+            !obj.contains_key("source_inference_id"),
+            "Expected source_inference_id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("staled_at"),
+            "Expected staled_at to be dropped as timestamp not relevant"
+        );
+        assert!(
+            !obj.contains_key("updated_at"),
+            "Expected updated_at to be dropped as timestamp not relevant"
+        );
+        assert!(
+            !obj.contains_key("name"),
+            "Expected name to be dropped as optional name field typically not relevant"
+        );
+    }
+
+    #[test]
+    fn test_serialize_filtered_datapoint_json() {
+        use tensorzero_core::{
+            db::stored_datapoint::StoredJsonInferenceDatapoint,
+            inference::types::JsonInferenceOutput,
+        };
+
+        // Create a JSON datapoint
+        let input = Input {
+            messages: vec![],
+            system: None,
+        };
+
+        let stored_input = serde_json::from_value(to_value(&input).unwrap()).unwrap();
+
+        let output_schema = json!({
+            "type": "object",
+            "properties": {
+                "result": {"type": "string"}
+            }
+        });
+
+        let stored_datapoint = StoredJsonInferenceDatapoint {
+            dataset_name: "test_dataset".to_string(),
+            function_name: "test_function".to_string(),
+            id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
+            input: stored_input,
+            output: Some(JsonInferenceOutput {
+                raw: Some(r#"{"result": "test"}"#.to_string()),
+                parsed: Some(json!({"result": "test"})),
+            }),
+            output_schema: output_schema.clone(),
+            tags: Some(HashMap::new()),
+            auxiliary: String::new(),
+            is_deleted: false,
+            is_custom: false,
+            source_inference_id: None,
+            staled_at: None,
+            updated_at: "2025-01-01T00:00:00Z".to_string(),
+            name: Some("test_name".to_string()),
+            snapshot_hash: None,
+        };
+
+        let datapoint = Datapoint::Json(stored_datapoint.into_datapoint());
+
+        let filtered = serialize_filtered_datapoint(&datapoint)
+            .expect("Serialization should succeed, expected JSON datapoint with valid fields");
+        let obj = filtered
+            .as_object()
+            .expect("Filtered result should be a JSON object");
+
+        // Verify kept fields are present
+        assert!(
+            obj.contains_key("function_name"),
+            "Expected function_name to be kept for context"
+        );
+        assert!(
+            obj.contains_key("input"),
+            "Expected input to be kept as core data for analysis"
+        );
+        assert!(
+            obj.contains_key("output_schema"),
+            "Expected output_schema to be kept for understanding output format"
+        );
+
+        // Verify dropped fields are absent (same as Chat datapoint)
+        assert!(
+            !obj.contains_key("dataset_name"),
+            "Expected dataset_name to be dropped as not relevant for optimization"
+        );
+        assert!(
+            !obj.contains_key("id"),
+            "Expected id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("episode_id"),
+            "Expected episode_id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("auxiliary"),
+            "Expected auxiliary to be dropped as extra metadata"
+        );
+        assert!(
+            !obj.contains_key("is_deleted"),
+            "Expected is_deleted to be dropped as internal state flag"
+        );
+        assert!(
+            !obj.contains_key("is_custom"),
+            "Expected is_custom to be dropped as internal flag"
+        );
+        assert!(
+            !obj.contains_key("source_inference_id"),
+            "Expected source_inference_id to be dropped as internal identifier"
+        );
+        assert!(
+            !obj.contains_key("staled_at"),
+            "Expected staled_at to be dropped as timestamp not relevant"
+        );
+        assert!(
+            !obj.contains_key("updated_at"),
+            "Expected updated_at to be dropped as timestamp not relevant"
+        );
+        assert!(
+            !obj.contains_key("name"),
+            "Expected name to be dropped as optional name field typically not relevant"
         );
     }
 }

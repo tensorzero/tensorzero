@@ -5,12 +5,18 @@ use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::{Value, json};
+use tensorzero_types_providers::xai::{
+    XAIAssistantRequestMessage, XAIRequestMessage, XAIResponse as XAIResponseGeneric,
+    XAISystemRequestMessage, XAIToolRequestMessage, XAIUsage, XAIUserRequestMessage,
+};
 use tokio::time::Instant;
 use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
+};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
@@ -19,21 +25,22 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ApiType, ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
+    ApiType, ContentBlock, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, Thought, Unknown, Usage,
+    batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::OpenAIMessagesConfig;
+use crate::providers::openai::{
+    OpenAIMessagesConfig, OpenAIResponseChoice, StreamOptions, get_chat_url, handle_openai_error,
+    openai_response_tool_call_to_tensorzero_tool_call, prepare_file_message, stream_openai,
+};
 use uuid::Uuid;
 
-use super::openai::{
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, StreamOptions, SystemOrDeveloper,
-    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-};
 use crate::inference::TensorZeroEventError;
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
@@ -48,8 +55,29 @@ lazy_static! {
 const PROVIDER_NAME: &str = "xAI";
 pub const PROVIDER_TYPE: &str = "xai";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+type XAIResponse = XAIResponseGeneric<OpenAIResponseChoice>;
+
+impl From<XAIUsage> for Usage {
+    fn from(usage: XAIUsage) -> Self {
+        // Add `reasoning_tokens` to `completion_tokens` for total output tokens
+        let output_tokens = match (usage.completion_tokens, usage.completion_tokens_details) {
+            (Some(completion), Some(details)) => {
+                Some(completion + details.reasoning_tokens.unwrap_or(0))
+            }
+            (Some(completion), None) => Some(completion),
+            (None, Some(details)) => details.reasoning_tokens,
+            (None, None) => None,
+        };
+        Usage {
+            input_tokens: usage.prompt_tokens,
+            output_tokens,
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct XAIProvider {
     model_name: String,
     #[serde(skip)]
@@ -169,6 +197,7 @@ impl InferenceProvider for XAIProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -188,6 +217,7 @@ impl InferenceProvider for XAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -200,6 +230,7 @@ impl InferenceProvider for XAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -227,6 +258,7 @@ impl InferenceProvider for XAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
             Err(handle_openai_error(
@@ -235,6 +267,7 @@ impl InferenceProvider for XAIProvider {
                 &response,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -274,6 +307,7 @@ impl InferenceProvider for XAIProvider {
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -283,15 +317,16 @@ impl InferenceProvider for XAIProvider {
         )
         .await?;
 
-        let stream = stream_openai(
+        let inner_stream = stream_openai(
             PROVIDER_TYPE.to_string(),
             model_inference_id,
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
             None,
             &raw_request,
-        )
-        .peekable();
+        );
+        // Wrap with xAI-specific stream to add reasoning tokens to usage
+        let stream = stream_xai(inner_stream).peekable();
         Ok((stream, raw_request))
     }
 
@@ -320,6 +355,245 @@ impl InferenceProvider for XAIProvider {
     }
 }
 
+// =============================================================================
+// Message Preparation
+// =============================================================================
+
+/// Prepares xAI-specific messages from TensorZero request messages.
+/// This is similar to `prepare_openai_messages` but handles Thought blocks
+/// by extracting reasoning_content for assistant messages.
+async fn prepare_xai_messages<'a>(
+    system: Option<&'a str>,
+    messages: &'a [RequestMessage],
+    messages_config: OpenAIMessagesConfig<'a>,
+) -> Result<Vec<XAIRequestMessage<'a>>, Error> {
+    let mut xai_messages = Vec::new();
+
+    // Add system message if present
+    if let Some(system_content) = system {
+        // Check if we need to prepend JSON mode instruction
+        // Only add if neither system content nor messages contain "json"
+        let system_content = if messages_config.json_mode
+            == Some(&ModelInferenceRequestJsonMode::On)
+            && !system_content.to_lowercase().contains("json")
+            && !messages_contain_json_hint(messages)
+        {
+            Cow::Owned(format!("Respond using JSON.\n\n{system_content}"))
+        } else {
+            Cow::Borrowed(system_content)
+        };
+        xai_messages.push(XAIRequestMessage::System(XAISystemRequestMessage {
+            content: system_content,
+        }));
+    } else if messages_config.json_mode == Some(&ModelInferenceRequestJsonMode::On)
+        && !messages_contain_json_hint(messages)
+    {
+        // Add JSON mode instruction as system message if no system message present
+        xai_messages.push(XAIRequestMessage::System(XAISystemRequestMessage {
+            content: Cow::Borrowed("Respond using JSON."),
+        }));
+    }
+
+    // Convert each message
+    for message in messages {
+        let converted = tensorzero_to_xai_message(message, messages_config).await?;
+        xai_messages.extend(converted);
+    }
+
+    Ok(xai_messages)
+}
+
+/// Checks if messages contain the word "json" (case-insensitive)
+fn messages_contain_json_hint(messages: &[RequestMessage]) -> bool {
+    messages.iter().any(|msg| {
+        msg.content.iter().any(|block| match block {
+            ContentBlock::Text(Text { text }) => text.to_lowercase().contains("json"),
+            _ => false,
+        })
+    })
+}
+
+/// Converts a single TensorZero RequestMessage to xAI format
+async fn tensorzero_to_xai_message<'a>(
+    message: &'a RequestMessage,
+    messages_config: OpenAIMessagesConfig<'a>,
+) -> Result<Vec<XAIRequestMessage<'a>>, Error> {
+    match message.role {
+        Role::User => tensorzero_to_xai_user_messages(&message.content, messages_config).await,
+        Role::Assistant => {
+            let msg =
+                tensorzero_to_xai_assistant_message(&message.content, messages_config).await?;
+            // Skip assistant messages without content or tool_calls.
+            // xAI requires at least one content element, so reasoning_content alone is not enough.
+            if msg.content.is_none() && msg.tool_calls.is_none() {
+                Ok(vec![])
+            } else {
+                Ok(vec![XAIRequestMessage::Assistant(msg)])
+            }
+        }
+    }
+}
+
+/// Converts user content blocks to xAI user messages
+async fn tensorzero_to_xai_user_messages<'a>(
+    content_blocks: &'a [ContentBlock],
+    messages_config: OpenAIMessagesConfig<'a>,
+) -> Result<Vec<XAIRequestMessage<'a>>, Error> {
+    let mut messages = Vec::new();
+    let mut user_content_blocks = Vec::new();
+
+    for block in content_blocks {
+        match block {
+            ContentBlock::Text(Text { text }) => {
+                let content_block = serde_json::json!({
+                    "type": "text",
+                    "text": text
+                });
+                user_content_blocks.push(content_block);
+            }
+            ContentBlock::ToolCall(_) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Tool calls are not supported in user messages".to_string(),
+                }));
+            }
+            ContentBlock::ToolResult(tool_result) => {
+                // First, flush any accumulated user content
+                if !user_content_blocks.is_empty() {
+                    messages.push(XAIRequestMessage::User(XAIUserRequestMessage {
+                        content: Cow::Owned(user_content_blocks),
+                    }));
+                    user_content_blocks = Vec::new();
+                }
+                // Add tool result as a separate message
+                messages.push(XAIRequestMessage::Tool(XAIToolRequestMessage {
+                    content: Cow::Borrowed(&tool_result.result),
+                    tool_call_id: Cow::Borrowed(&tool_result.id),
+                }));
+            }
+            ContentBlock::File(file) => {
+                let openai_block = prepare_file_message(file, messages_config).await?;
+                let content_block = serde_json::to_value(&openai_block).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing file content block: {e}"),
+                    })
+                })?;
+                user_content_blocks.push(content_block);
+            }
+            ContentBlock::Thought(thought) => {
+                // Thought blocks in user messages are always discarded
+                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+            }
+            ContentBlock::Unknown(Unknown { data, .. }) => {
+                user_content_blocks.push(data.clone());
+            }
+        }
+    }
+
+    // Flush remaining user content
+    if !user_content_blocks.is_empty() {
+        messages.push(XAIRequestMessage::User(XAIUserRequestMessage {
+            content: Cow::Owned(user_content_blocks),
+        }));
+    }
+
+    Ok(messages)
+}
+
+/// Converts assistant content blocks to xAI assistant message with reasoning_content support
+async fn tensorzero_to_xai_assistant_message<'a>(
+    content_blocks: &'a [ContentBlock],
+    messages_config: OpenAIMessagesConfig<'a>,
+) -> Result<XAIAssistantRequestMessage<'a>, Error> {
+    let mut content_values = Vec::new();
+    let mut tool_calls = Vec::new();
+    let mut reasoning_content: Option<Cow<'a, str>> = None;
+
+    for block in content_blocks {
+        match block {
+            ContentBlock::Text(Text { text }) => {
+                let content_block = serde_json::json!({
+                    "type": "text",
+                    "text": text
+                });
+                content_values.push(content_block);
+            }
+            ContentBlock::ToolCall(tool_call) => {
+                let tool_call_json = serde_json::json!({
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.name,
+                        "arguments": tool_call.arguments
+                    }
+                });
+                tool_calls.push(tool_call_json);
+            }
+            ContentBlock::ToolResult(_) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Tool results are not supported in assistant messages".to_string(),
+                }));
+            }
+            ContentBlock::File(file) => {
+                let openai_block = prepare_file_message(file, messages_config).await?;
+                let content_block = serde_json::to_value(&openai_block).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing file content block: {e}"),
+                    })
+                })?;
+                content_values.push(content_block);
+            }
+            ContentBlock::Thought(thought) => {
+                // Thought blocks from other providers are already filtered at the model layer.
+                // Extract reasoning text for multi-turn reasoning support.
+
+                // INVARIANT: We should've filtered thought content blocks from other providers.
+                debug_assert!(matches!(
+                    thought.provider_type.as_deref(),
+                    None | Some(PROVIDER_TYPE)
+                ));
+
+                if let Some(text) = &thought.text {
+                    // Concatenate multiple thought blocks if present
+                    match &mut reasoning_content {
+                        Some(existing) => {
+                            let combined = format!("{}\n\n{}", existing.as_ref(), text);
+                            reasoning_content = Some(Cow::Owned(combined));
+                        }
+                        None => {
+                            reasoning_content = Some(Cow::Borrowed(text));
+                        }
+                    }
+                }
+            }
+            ContentBlock::Unknown(Unknown { data, .. }) => {
+                content_values.push(data.clone());
+            }
+        }
+    }
+
+    let content = if content_values.is_empty() {
+        None
+    } else {
+        Some(Cow::Owned(content_values))
+    };
+
+    let tool_calls = if tool_calls.is_empty() {
+        None
+    } else {
+        Some(Cow::Owned(tool_calls))
+    };
+
+    Ok(XAIAssistantRequestMessage {
+        content,
+        tool_calls,
+        reasoning_content,
+    })
+}
+
+// =============================================================================
+// Request Types
+// =============================================================================
+
 /// This struct defines the supported parameters for the xAI API
 /// See the [xAI API documentation](https://docs.x.ai/api/endpoints#chat-completions)
 /// for more details.
@@ -329,7 +603,7 @@ impl InferenceProvider for XAIProvider {
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(Default))]
 struct XAIRequest<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
+    messages: Vec<XAIRequestMessage<'a>>,
     model: &'a str,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -419,11 +693,8 @@ impl<'a> XAIRequest<'a> {
 
         let response_format = XAIResponseFormat::new(request.json_mode, request.output_schema);
 
-        let messages = prepare_openai_messages(
-            request
-                .system
-                .as_deref()
-                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
+        let messages = prepare_xai_messages(
+            request.system.as_deref(),
             &request.messages,
             OpenAIMessagesConfig {
                 json_mode: Some(&request.json_mode),
@@ -494,7 +765,7 @@ impl XAIResponseFormat {
 }
 
 struct XAIResponseWithMetadata<'a> {
-    response: OpenAIResponse,
+    response: XAIResponse,
     raw_response: String,
     latency: Latency,
     raw_request: String,
@@ -523,6 +794,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -537,16 +809,28 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
 
@@ -570,7 +854,8 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
-                latency,
+                relay_raw_response: None,
+                provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,
             },
@@ -582,6 +867,43 @@ fn xai_usage_from_raw_response(raw_response: &str) -> Option<Value> {
     serde_json::from_str::<Value>(raw_response)
         .ok()
         .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
+}
+
+/// Extracts reasoning_tokens from a raw JSON response's completion_tokens_details
+fn extract_reasoning_tokens_from_raw(raw_response: &str) -> Option<u32> {
+    serde_json::from_str::<Value>(raw_response)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("usage")
+                .and_then(|u| u.get("completion_tokens_details"))
+                .and_then(|d| d.get("reasoning_tokens"))
+                .and_then(|r| r.as_u64())
+                .map(|r| r as u32)
+        })
+}
+
+/// Wraps the OpenAI stream to add reasoning tokens to usage for xAI.
+/// xAI reports reasoning_tokens separately in completion_tokens_details,
+/// so we need to add them to output_tokens for accurate token counting.
+fn stream_xai(
+    inner_stream: ProviderInferenceResponseStreamInner,
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(
+        inner_stream.map(|result: Result<ProviderInferenceResponseChunk, Error>| {
+            result.map(|mut chunk| {
+                // If this chunk has usage, check for reasoning tokens in raw_response
+                if let Some(ref mut usage) = chunk.usage
+                    && let Some(reasoning_tokens) =
+                        extract_reasoning_tokens_from_raw(&chunk.raw_response)
+                {
+                    // Add reasoning tokens to output_tokens
+                    usage.output_tokens = Some(usage.output_tokens.unwrap_or(0) + reasoning_tokens);
+                }
+                chunk
+            })
+        }),
+    )
 }
 
 #[cfg(test)]
@@ -600,7 +922,7 @@ mod tests {
         ChatCompletionToolChoice, ChatCompletionToolType,
     };
     use crate::providers::openai::{
-        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
@@ -744,7 +1066,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_xai_response_with_metadata_try_into() {
-        let valid_response = OpenAIResponse {
+        let valid_response = XAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
                 message: OpenAIResponseMessage {
@@ -754,9 +1076,10 @@ mod tests {
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],
-            usage: OpenAIUsage {
+            usage: XAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                completion_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -808,7 +1131,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
             }
@@ -840,5 +1163,294 @@ mod tests {
         assert!(logs_contain(
             "xAI does not support the inference parameter `verbosity`, so it will be ignored."
         ));
+    }
+
+    #[tokio::test]
+    async fn test_xai_assistant_message_with_reasoning_content() {
+        // Test that Thought blocks with provider_type = "xai" are included as reasoning_content
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Hello, world!".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("I'm thinking about this...".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("xai".to_string()),
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
+            .await
+            .expect("failed to convert assistant message");
+
+        assert!(result.content.is_some(), "content should be present");
+        assert!(
+            result.reasoning_content.is_some(),
+            "reasoning_content should be present"
+        );
+        assert_eq!(
+            result.reasoning_content.as_deref(),
+            Some("I'm thinking about this...")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_xai_assistant_message_with_no_provider_type_thought() {
+        // Test that Thought blocks with provider_type = None are included as reasoning_content
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Response text".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("Generic reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None, // No provider type specified
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
+            .await
+            .expect("failed to convert assistant message");
+
+        assert!(
+            result.reasoning_content.is_some(),
+            "reasoning_content should be included for None provider_type"
+        );
+        assert_eq!(
+            result.reasoning_content.as_deref(),
+            Some("Generic reasoning")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_xai_assistant_message_includes_all_thought_blocks() {
+        // Thought blocks from other providers are filtered at the model layer,
+        // so any Thought block that reaches the provider should be included.
+        // This test verifies the provider includes all Thought blocks it receives.
+        let content_blocks = vec![
+            ContentBlock::Text(Text {
+                text: "Response text".to_string(),
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("Some reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("xai".to_string()),
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
+            .await
+            .expect("failed to convert assistant message");
+
+        assert!(
+            result.reasoning_content.is_some(),
+            "reasoning_content should be included"
+        );
+        assert_eq!(result.reasoning_content.as_deref(), Some("Some reasoning"));
+    }
+
+    #[tokio::test]
+    async fn test_xai_assistant_message_concatenates_multiple_thoughts() {
+        // Test that multiple Thought blocks are concatenated
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("First thought".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("xai".to_string()),
+                extra_data: None,
+            }),
+            ContentBlock::Thought(Thought {
+                text: Some("Second thought".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None, // Also should be included
+                extra_data: None,
+            }),
+        ];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
+            .await
+            .expect("failed to convert assistant message");
+
+        assert!(
+            result.reasoning_content.is_some(),
+            "reasoning_content should be present"
+        );
+        let reasoning = result.reasoning_content.as_deref().unwrap();
+        assert!(
+            reasoning.contains("First thought"),
+            "should contain first thought"
+        );
+        assert!(
+            reasoning.contains("Second thought"),
+            "should contain second thought"
+        );
+        assert!(
+            reasoning.contains("\n\n"),
+            "thoughts should be separated by double newline"
+        );
+    }
+
+    #[test]
+    fn test_xai_request_message_serialization() {
+        // Test that XAIRequestMessage serializes correctly with reasoning_content
+        let assistant_msg = XAIRequestMessage::Assistant(XAIAssistantRequestMessage {
+            content: Some(Cow::Owned(vec![serde_json::json!({
+                "type": "text",
+                "text": "Hello"
+            })])),
+            tool_calls: None,
+            reasoning_content: Some(Cow::Borrowed("I'm thinking...")),
+        });
+
+        let serialized =
+            serde_json::to_string(&assistant_msg).expect("failed to serialize message");
+
+        // Verify the serialization includes reasoning_content
+        assert!(
+            serialized.contains("reasoning_content"),
+            "serialized message should contain reasoning_content"
+        );
+        assert!(
+            serialized.contains("I'm thinking..."),
+            "serialized message should contain reasoning text"
+        );
+        assert!(
+            serialized.contains("\"role\":\"assistant\""),
+            "serialized message should have assistant role"
+        );
+    }
+
+    #[test]
+    fn test_xai_request_message_serialization_without_reasoning() {
+        // Test that XAIRequestMessage omits reasoning_content when None
+        let assistant_msg = XAIRequestMessage::Assistant(XAIAssistantRequestMessage {
+            content: Some(Cow::Owned(vec![serde_json::json!({
+                "type": "text",
+                "text": "Hello"
+            })])),
+            tool_calls: None,
+            reasoning_content: None,
+        });
+
+        let serialized =
+            serde_json::to_string(&assistant_msg).expect("failed to serialize message");
+
+        // Verify reasoning_content is omitted when None
+        assert!(
+            !serialized.contains("reasoning_content"),
+            "serialized message should not contain reasoning_content when None"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_xai_messages_json_hint_in_system_not_duplicated() {
+        // Test that JSON instruction is NOT prepended when system already contains "json"
+        let system = Some("Output as JSON format");
+        let messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["What's the weather?".to_string().into()],
+        }];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: Some(&ModelInferenceRequestJsonMode::On),
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = prepare_xai_messages(system, &messages, messages_config)
+            .await
+            .expect("failed to prepare messages");
+
+        // Find the system message
+        let system_msg = result
+            .iter()
+            .find_map(|msg| {
+                if let XAIRequestMessage::System(sys) = msg {
+                    Some(sys.content.as_ref())
+                } else {
+                    None
+                }
+            })
+            .expect("system message should be present");
+
+        // Should NOT have the "Respond using JSON." prefix since system already mentions JSON
+        assert!(
+            !system_msg.starts_with("Respond using JSON."),
+            "JSON instruction should not be prepended when system already contains 'json'. Got: {system_msg}"
+        );
+        assert_eq!(
+            system_msg, "Output as JSON format",
+            "system content should be unchanged"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_xai_messages_json_hint_added_when_missing() {
+        // Test that JSON instruction IS prepended when neither system nor messages contain "json"
+        let system = Some("You are a helpful assistant.");
+        let messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["What's the weather?".to_string().into()],
+        }];
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: Some(&ModelInferenceRequestJsonMode::On),
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let result = prepare_xai_messages(system, &messages, messages_config)
+            .await
+            .expect("failed to prepare messages");
+
+        // Find the system message
+        let system_msg = result
+            .iter()
+            .find_map(|msg| {
+                if let XAIRequestMessage::System(sys) = msg {
+                    Some(sys.content.as_ref())
+                } else {
+                    None
+                }
+            })
+            .expect("system message should be present");
+
+        // Should have the "Respond using JSON." prefix since no JSON hint exists
+        assert!(
+            system_msg.starts_with("Respond using JSON."),
+            "JSON instruction should be prepended when no JSON hint exists. Got: {system_msg}"
+        );
     }
 }

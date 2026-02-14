@@ -1,0 +1,51 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                             EMBEDDING MODELS                              │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# DICL requires an embedding model to embed inputs and find similar examples.
+
+[embedding_models.text_embedding_3_small]
+routing = ["openai"]
+
+[embedding_models.text_embedding_3_small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+
+# After running DICL optimization, you can add the generated DICL variant:
+#
+# [functions.extract_entities.variants.dicl]
+# type = "experimental_dynamic_in_context_learning"
+# embedding_model = "text_embedding_3_small"
+# k = 10
+# model = "openai::gpt-5-mini"
+# json_mode = "strict"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# These metrics are optional but useful for tracking the performance of your model.
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"

@@ -1,11 +1,12 @@
-use super::{FunctionInfo, throttled_get_function_info};
+use super::throttled_get_function_info;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::feedback::{FeedbackQueries, StaticEvaluationHumanFeedbackInsert};
+use crate::db::inferences::{FunctionInfo, InferenceQueries};
 use crate::{
     config::MetricConfigLevel,
-    db::clickhouse::{ClickHouseConnectionInfo, TableName},
     error::{Error, ErrorDetails},
 };
 
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -21,7 +22,7 @@ use uuid::Uuid;
 /// This is only necessary if: the feedback contains tags "tensorzero::human_feedback",
 /// "tensorzero::evaluator_inference_id", and "tensorzero::datapoint_id": "uuid"
 pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
-    clickhouse: &ClickHouseConnectionInfo,
+    database: &DelegatingDatabaseConnection,
     maybe_function_info: Option<FunctionInfo>,
     metric_name: &str,
     tags: &HashMap<String, String>,
@@ -35,12 +36,18 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
     let function_info = match maybe_function_info {
         Some(info) => info,
         None => {
-            throttled_get_function_info(clickhouse, &MetricConfigLevel::Inference, &target_id)
-                .await?
+            throttled_get_function_info(database, &MetricConfigLevel::Inference, &target_id).await?
         }
     };
-    let output = get_output(clickhouse, &function_info, target_id).await?;
-    let row = StaticEvaluationHumanFeedback {
+    let output = database
+        .get_inference_output(&function_info, target_id)
+        .await?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InferenceNotFound {
+                inference_id: target_id,
+            })
+        })?;
+    let row = StaticEvaluationHumanFeedbackInsert {
         output,
         feedback_id,
         metric_name: metric_name.to_string(),
@@ -48,9 +55,7 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
         datapoint_id: info.datapoint_id,
         evaluator_inference_id: Some(info.evaluator_inference_id),
     };
-    clickhouse
-        .write_batched(&[row], TableName::StaticEvaluationHumanFeedback)
-        .await?;
+    database.insert_static_eval_feedback(&row).await?;
     Ok(())
 }
 
@@ -98,56 +103,6 @@ fn get_static_evaluation_human_feedback_info(
 struct InferenceEvaluationInfo {
     datapoint_id: Uuid,
     evaluator_inference_id: Uuid,
-}
-
-async fn get_output(
-    clickhouse: &ClickHouseConnectionInfo,
-    function_info: &FunctionInfo,
-    inference_id: Uuid,
-) -> Result<String, Error> {
-    let FunctionInfo {
-        function_type,
-        episode_id,
-        name,
-        variant_name,
-    } = function_info;
-    let table_name = function_type.inference_table_name();
-    let output: OutputResponse = clickhouse
-        .run_query_synchronous_no_params_de(format!(
-            r"
-    SELECT output FROM {table_name}
-    WHERE
-        id = '{inference_id}' AND
-        episode_id = '{episode_id}' AND
-        function_name = '{name}' AND
-        variant_name = '{variant_name}'
-    LIMIT 1
-    FORMAT JSONEachRow
-    SETTINGS max_threads=1"
-        ))
-        .await?;
-    Ok(output.output)
-}
-
-/// This is so we're absolutely sure things are escaped properly.
-#[derive(Debug, Deserialize)]
-struct OutputResponse {
-    output: String,
-}
-
-/// Represents a row in the StaticEvaluationHumanFeedback database table.
-///
-/// Note: The "Static" prefix is retained for backward compatibility with existing
-/// database schemas. This feature is now called "Inference Evaluations" in the
-/// product, configuration, and user-facing documentation.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct StaticEvaluationHumanFeedback {
-    pub metric_name: String,
-    pub datapoint_id: Uuid,
-    pub output: String,
-    pub value: String,
-    pub feedback_id: Uuid,
-    pub evaluator_inference_id: Option<Uuid>,
 }
 
 #[cfg(test)]

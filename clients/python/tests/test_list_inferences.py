@@ -44,6 +44,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         assert isinstance(inference, StoredInferenceJson)
         assert isinstance(inference.variant_name, str)
         input = inference.input
+        assert input is not None
         messages = input.messages
         assert messages is not None
         assert isinstance(messages, list)
@@ -51,6 +52,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         # Type narrowing: we know these are JSON inferences
         assert inference.type == "json"
         output = inference.output
+        assert output is not None
         assert output.raw is not None
         assert output.parsed is not None
         inference_id = inference.inference_id
@@ -100,7 +102,7 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
     order_by = [OrderBy(by="timestamp", direction="ascending")]
     inferences = embedded_sync_client.experimental_list_inferences(
         function_name="write_haiku",
-        variant_name="better_prompt_haiku_3_5",
+        variant_name="better_prompt_haiku_4_5",
         filters=None,
         output_source="inference",
         limit=3,
@@ -115,8 +117,9 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
 
     for inference in inferences:
         assert inference.function_name == "write_haiku"
-        assert inference.variant_name == "better_prompt_haiku_3_5"
+        assert inference.variant_name == "better_prompt_haiku_4_5"
         input = inference.input
+        assert input is not None
         messages = input.messages
         assert messages is not None
         assert isinstance(messages, list)
@@ -124,6 +127,7 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
+        assert output is not None
         assert len(output) == 1
         output_0 = output[0]
         assert output_0.type == "text"
@@ -165,6 +169,7 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
     for inference in inferences:
         assert inference.function_name == "multi_hop_rag_agent"
         input = inference.input
+        assert input is not None
         messages = input.messages
         assert messages is not None
         assert isinstance(messages, list)
@@ -192,6 +197,7 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
+        assert output is not None
         assert len(output) >= 1
         for output_item in output:
             if output_item.type == "text":
@@ -524,6 +530,7 @@ async def test_simple_list_json_inferences_async(
         assert inference.function_name == "extract_entities"
         assert isinstance(inference.variant_name, str)
         inp = inference.input
+        assert inp is not None
         messages = inp.messages
         assert isinstance(messages, list)
         assert len(messages) == 1
@@ -531,6 +538,7 @@ async def test_simple_list_json_inferences_async(
         assert isinstance(inference, StoredInferenceJson)
         assert inference.type == "json"
         output = inference.output
+        assert output is not None
         assert output.raw is not None
         assert output.parsed is not None
         inference_id = inference.inference_id
@@ -585,7 +593,7 @@ async def test_simple_query_chat_function_async(
     order_by = [OrderBy(by="timestamp", direction="ascending")]
     inferences = await embedded_async_client.experimental_list_inferences(
         function_name="write_haiku",
-        variant_name="better_prompt_haiku_3_5",
+        variant_name="better_prompt_haiku_4_5",
         filters=None,
         output_source="inference",
         limit=3,
@@ -600,14 +608,16 @@ async def test_simple_query_chat_function_async(
 
     for inference in inferences:
         assert inference.function_name == "write_haiku"
-        assert inference.variant_name == "better_prompt_haiku_3_5"
+        assert inference.variant_name == "better_prompt_haiku_4_5"
         inp = inference.input
+        assert inp is not None
         messages = inp.messages
         assert isinstance(messages, list)
         assert len(messages) == 1
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
+        assert output is not None
         assert len(output) == 1
         output_0 = output[0]
         assert output_0.type == "text"

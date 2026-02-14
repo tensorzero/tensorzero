@@ -11,15 +11,17 @@ workspace = true
 [features]
 e2e_tests = ["tensorzero/e2e_tests"]
 optimization_tests = ["e2e_tests"]
+ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
 evaluations = { path = "../evaluations" }
 
 # Core async and serialization
-async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
+tensorzero-derive = { path = "../internal/tensorzero-derive" }
 tokio = { workspace = true }
 tokio-util = "0.7.12"
 
@@ -42,11 +44,14 @@ reqwest = { workspace = true }
 object_store = { workspace = true }
 mime = { workspace = true }
 
+# Database
+sqlx = { workspace = true }
+
 # Tracing and logging
 tracing = { workspace = true }
 
 # ts-rs
-ts-rs = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
@@ -54,7 +59,7 @@ tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 evaluations = { path = "../evaluations" }
 minijinja = { workspace = true }
 paste = "1.0.15"
-tempfile = "3.21.0"
+tempfile = { workspace = true }
 base64 = "0.22.1"
 tokio-stream = { workspace = true }
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
@@ -67,11 +72,6 @@ required-features = ["optimization_tests"]
 [[test]]
 name = "optimization-mock"
 path = "tests/mock_tests.rs"
-required-features = ["e2e_tests"]
-
-[[test]]
-name = "e2e_dicl"
-path = "tests/e2e/dicl.rs"
 required-features = ["e2e_tests"]
 
 [[test]]

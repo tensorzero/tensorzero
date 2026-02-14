@@ -7,7 +7,7 @@ mod openai_compatible;
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -117,10 +117,8 @@ fn assert_openai_embeddings_usage_details(entry: &Value) {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_chat_completions_non_streaming() {
+async fn test_raw_usage_chat_completions_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai",
@@ -130,7 +128,7 @@ async fn e2e_test_raw_usage_chat_completions_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Tokyo? {random_suffix}")
+                    "content": "What is the weather in Tokyo?"
                 }
             ]
         },
@@ -205,10 +203,8 @@ async fn e2e_test_raw_usage_chat_completions_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_chat_completions_streaming() {
+async fn test_raw_usage_chat_completions_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai",
@@ -218,7 +214,7 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Paris? {random_suffix}")
+                    "content": "What is the weather in Paris?"
                 }
             ]
         },
@@ -230,6 +226,7 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -286,10 +283,8 @@ async fn e2e_test_raw_usage_chat_completions_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_responses_api_non_streaming() {
+async fn test_raw_usage_responses_api_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai-responses",
@@ -299,7 +294,7 @@ async fn e2e_test_raw_usage_responses_api_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in London? {random_suffix}")
+                    "content": "What is the weather in London?"
                 }
             ]
         },
@@ -352,10 +347,8 @@ async fn e2e_test_raw_usage_responses_api_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_responses_api_streaming() {
+async fn test_raw_usage_responses_api_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai-responses",
@@ -365,7 +358,7 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Berlin? {random_suffix}")
+                    "content": "What is the weather in Berlin?"
                 }
             ]
         },
@@ -377,6 +370,7 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -432,10 +426,8 @@ async fn e2e_test_raw_usage_responses_api_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_not_requested_non_streaming() {
+async fn test_raw_usage_not_requested_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai",
@@ -445,7 +437,7 @@ async fn e2e_test_raw_usage_not_requested_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Sydney? {random_suffix}")
+                    "content": "What is the weather in Sydney?"
                 }
             ]
         },
@@ -472,10 +464,8 @@ async fn e2e_test_raw_usage_not_requested_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_not_requested_streaming() {
+async fn test_raw_usage_not_requested_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai",
@@ -485,7 +475,7 @@ async fn e2e_test_raw_usage_not_requested_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Madrid? {random_suffix}")
+                    "content": "What is the weather in Madrid?"
                 }
             ]
         },
@@ -497,6 +487,7 @@ async fn e2e_test_raw_usage_not_requested_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(chunk) = chunks.next().await {
@@ -523,10 +514,8 @@ async fn e2e_test_raw_usage_not_requested_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_best_of_n_non_streaming() {
+async fn test_raw_usage_best_of_n_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "best_of_n",
         "variant_name": "best_of_n_variant_openai",
@@ -536,7 +525,7 @@ async fn e2e_test_raw_usage_best_of_n_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("Hello, what is your name? {random_suffix}")
+                    "content": "Hello, what is your name?"
                 }
             ]
         },
@@ -594,10 +583,8 @@ async fn e2e_test_raw_usage_best_of_n_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_best_of_n_streaming() {
+async fn test_raw_usage_best_of_n_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "best_of_n",
         "variant_name": "best_of_n_variant_openai",
@@ -607,7 +594,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is your favorite color? {random_suffix}")
+                    "content": "What is your favorite color?"
                 }
             ]
         },
@@ -619,6 +606,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -640,7 +628,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
         if let Some(raw_usage) = chunk_json.get("raw_usage") {
             found_raw_usage = true;
             if let Some(arr) = raw_usage.as_array() {
-                raw_usage_count = arr.len();
+                raw_usage_count += arr.len();
 
                 // Validate each entry has required fields
                 for entry in arr {
@@ -653,7 +641,7 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
 
     assert!(
         found_raw_usage,
-        "Streaming Best-of-N response should include raw_usage in final chunk"
+        "Streaming Best-of-N response should include raw_usage in at least one chunk"
     );
 
     // Best-of-N should have multiple entries:
@@ -671,10 +659,8 @@ async fn e2e_test_raw_usage_best_of_n_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_mixture_of_n_non_streaming() {
+async fn test_raw_usage_mixture_of_n_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "mixture_of_n",
         "variant_name": "mixture_of_n_variant",
@@ -684,7 +670,7 @@ async fn e2e_test_raw_usage_mixture_of_n_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("Please write a short sentence. {random_suffix}")
+                    "content": "Please write a short sentence."
                 }
             ]
         },
@@ -747,10 +733,8 @@ async fn e2e_test_raw_usage_mixture_of_n_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_mixture_of_n_streaming() {
+async fn test_raw_usage_mixture_of_n_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "mixture_of_n",
         "variant_name": "mixture_of_n_variant",
@@ -760,7 +744,7 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("Please write a short sentence about colors. {random_suffix}")
+                    "content": "Please write a short sentence about colors."
                 }
             ]
         },
@@ -772,6 +756,7 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -796,7 +781,7 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
         if let Some(raw_usage) = chunk_json.get("raw_usage") {
             found_raw_usage = true;
             if let Some(arr) = raw_usage.as_array() {
-                raw_usage_count = arr.len();
+                raw_usage_count += arr.len();
 
                 // Validate each entry has required fields
                 for entry in arr {
@@ -808,7 +793,7 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
 
     assert!(
         found_raw_usage,
-        "Streaming Mixture-of-N response should include raw_usage in final chunk.\n\
+        "Streaming Mixture-of-N response should include raw_usage in at least one chunk.\n\
         Total chunks received: {}\n\
         Last few chunks:\n{:#?}",
         all_chunks.len(),
@@ -830,10 +815,8 @@ async fn e2e_test_raw_usage_mixture_of_n_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_dicl_non_streaming() {
+async fn test_raw_usage_dicl_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": "dicl",
@@ -843,7 +826,7 @@ async fn e2e_test_raw_usage_dicl_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the capital of France? {random_suffix}")
+                    "content": "What is the capital of France?"
                 }
             ]
         },
@@ -916,10 +899,8 @@ async fn e2e_test_raw_usage_dicl_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_dicl_streaming() {
+async fn test_raw_usage_dicl_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": "dicl",
@@ -929,7 +910,7 @@ async fn e2e_test_raw_usage_dicl_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the capital of Germany? {random_suffix}")
+                    "content": "What is the capital of Germany?"
                 }
             ]
         },
@@ -941,6 +922,7 @@ async fn e2e_test_raw_usage_dicl_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;
@@ -998,7 +980,7 @@ async fn e2e_test_raw_usage_dicl_streaming() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_streaming_requires_include_usage() {
+async fn test_raw_usage_streaming_requires_include_usage() {
     let episode_id = Uuid::now_v7();
 
     // OpenAI-compatible API: include_raw_usage without include_usage should error
@@ -1038,7 +1020,7 @@ async fn e2e_test_raw_usage_streaming_requires_include_usage() {
 // =============================================================================
 
 #[tokio::test]
-async fn e2e_test_raw_usage_json_function_non_streaming() {
+async fn test_raw_usage_json_function_non_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1099,7 +1081,7 @@ async fn e2e_test_raw_usage_json_function_non_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_raw_usage_json_function_streaming() {
+async fn test_raw_usage_json_function_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1123,6 +1105,7 @@ async fn e2e_test_raw_usage_json_function_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .expect("Failed to create eventsource for streaming request");
 
     let mut found_raw_usage = false;

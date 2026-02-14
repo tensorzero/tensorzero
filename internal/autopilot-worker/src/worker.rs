@@ -6,10 +6,10 @@ use anyhow::Result;
 use async_trait::async_trait;
 use autopilot_client::AutopilotSideInfo;
 use autopilot_tools::ToolVisitor;
+use autopilot_tools::tools::AutoRejectToolCallTool;
 use durable_tools::{
     SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };
-use serde::Serialize;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -27,6 +27,8 @@ pub struct AutopilotWorkerConfig {
     pub t0_client: Arc<dyn TensorZeroClient>,
     /// Default max attempts for a task in the worker
     pub default_max_attempts: u32,
+    /// Options for the durable worker (poll interval, claim timeout, etc.)
+    pub worker_options: WorkerOptions,
 }
 
 impl AutopilotWorkerConfig {
@@ -36,6 +38,8 @@ impl AutopilotWorkerConfig {
     ///
     /// * `pool` - Database pool for the durable task queue
     /// * `t0_client` - TensorZero client for inference and autopilot operations
+    /// * `default_max_attempts` - Default max attempts for a task
+    /// * `worker_options` - Options for the durable worker (poll interval, etc.)
     ///
     /// Environment variables:
     /// - `TENSORZERO_AUTOPILOT_QUEUE_NAME`: Queue name (default: "autopilot")
@@ -43,6 +47,7 @@ impl AutopilotWorkerConfig {
         pool: PgPool,
         t0_client: Arc<dyn TensorZeroClient>,
         default_max_attempts: u32,
+        worker_options: WorkerOptions,
     ) -> Self {
         let mut queue_name = autopilot_client::DEFAULT_SPAWN_QUEUE_NAME.to_string();
         if cfg!(feature = "e2e_tests")
@@ -56,6 +61,7 @@ impl AutopilotWorkerConfig {
             queue_name,
             t0_client,
             default_max_attempts,
+            worker_options,
         }
     }
 }
@@ -63,6 +69,7 @@ impl AutopilotWorkerConfig {
 /// The autopilot worker that executes client tools.
 pub struct AutopilotWorker {
     executor: Arc<ToolExecutor>,
+    worker_options: WorkerOptions,
 }
 
 impl AutopilotWorker {
@@ -82,15 +89,25 @@ impl AutopilotWorker {
 
         Ok(Self {
             executor: Arc::new(executor),
+            worker_options: config.worker_options,
         })
     }
 
     /// Register all autopilot tools with the executor.
+    #[allow(clippy::unused_async, clippy::allow_attributes)]
     pub async fn register_tools(&self) -> Result<()> {
         let visitor = LocalToolVisitor {
             executor: &self.executor,
         };
         autopilot_tools::for_each_tool(&visitor).await?;
+
+        // Register internal tools directly without the ClientTaskToolWrapper.
+        // AutoRejectToolCallTool only writes a NotAvailable authorization -
+        // it doesn't need the wrapper to publish a tool_result.
+        self.executor
+            .register_task_tool_instance(AutoRejectToolCallTool)
+            .await?;
+
         Ok(())
     }
 
@@ -111,7 +128,7 @@ impl AutopilotWorker {
     /// migrations not applied, database connection issues).
     pub async fn start(&self) -> Result<Worker> {
         self.executor
-            .start_worker(WorkerOptions::default())
+            .start_worker(self.worker_options.clone())
             .await
             .map_err(Into::into)
     }
@@ -145,27 +162,23 @@ struct LocalToolVisitor<'a> {
 impl ToolVisitor for LocalToolVisitor<'_> {
     type Error = ToolError;
 
-    async fn visit_task_tool<T>(&self) -> Result<(), ToolError>
+    async fn visit_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
     where
-        T: TaskTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+        T: TaskTool<SideInfo = AutopilotSideInfo>,
     {
         self.executor
-            .register_task_tool::<ClientTaskToolWrapper<T>>()
+            .register_task_tool_instance(ClientTaskToolWrapper::new(tool))
             .await?;
         Ok(())
     }
 
     async fn visit_simple_tool<T>(&self) -> Result<(), ToolError>
     where
-        T: SimpleTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: Into<anyhow::Error>,
+        T: SimpleTool<SideInfo = AutopilotSideInfo> + Default,
     {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor
-            .register_task_tool::<ClientSimpleToolWrapper<T>>()
+            .register_task_tool_instance(ClientSimpleToolWrapper::<T>::default())
             .await?;
         Ok(())
     }

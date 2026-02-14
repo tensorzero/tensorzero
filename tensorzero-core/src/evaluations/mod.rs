@@ -9,7 +9,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use crate::variant::chain_of_thought::ChainOfThoughtConfig;
 
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
-use crate::experimentation::ExperimentationConfig;
+use crate::experimentation::ExperimentationConfigWithNamespaces;
 use crate::utils::retries::RetryConfig;
 use crate::variant::Variant;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -24,7 +24,7 @@ use crate::{
         chat_completion_inference_params::ServiceTier, extra_body::ExtraBodyConfig,
         extra_headers::ExtraHeadersConfig,
     },
-    jsonschema_util::StaticJSONSchema,
+    jsonschema_util::JSONSchema,
     tool::create_json_mode_tool_call_config,
     variant::{
         JsonMode, VariantConfig, VariantInfo,
@@ -43,8 +43,9 @@ pub const LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT: &str =
 pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct InferenceEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub function_name: String,
@@ -55,17 +56,21 @@ pub struct InferenceEvaluationConfig {
 /// Deprecated: Use `InferenceEvaluationConfig` instead
 pub type StaticEvaluationConfig = InferenceEvaluationConfig;
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum EvaluationConfig {
     #[serde(alias = "static")]
     Inference(InferenceEvaluationConfig),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum EvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
@@ -74,14 +79,15 @@ pub enum EvaluatorConfig {
 
 /// Minimal function configuration for evaluation purposes.
 /// Contains only the information needed to validate output schemas during evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EvaluationFunctionConfig {
     /// Chat function - no output schema validation needed
     Chat,
     /// JSON function - contains output schema for validation
-    Json { output_schema: StaticJSONSchema },
+    Json { output_schema: JSONSchema },
 }
 
 impl From<&FunctionConfig> for EvaluationFunctionConfig {
@@ -125,16 +131,18 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
     pub input_format: LLMJudgeInputFormat,
@@ -147,16 +155,18 @@ pub struct LLMJudgeConfig {
     pub description: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeIncludeConfig {
     #[serde(default)]
     pub reference_output: bool,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
     #[default]
@@ -164,8 +174,9 @@ pub enum LLMJudgeInputFormat {
     Messages,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOutputType {
     Float,
@@ -181,8 +192,9 @@ impl From<LLMJudgeOutputType> for MetricConfigType {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOptimize {
     Min,
@@ -208,6 +220,8 @@ pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) ->
 
 #[derive(Clone, Debug, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedEvaluationConfig {
     Inference(UninitializedInferenceEvaluationConfig),
 }
@@ -291,6 +305,8 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedInferenceEvaluationConfig {
     pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     pub function_name: String,
@@ -382,9 +398,11 @@ impl UninitializedInferenceEvaluationConfig {
     }
 }
 
-#[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedEvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
@@ -393,6 +411,8 @@ pub enum UninitializedEvaluatorConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedLLMJudgeConfig {
     #[serde(default)]
     pub input_format: LLMJudgeInputFormat,
@@ -401,9 +421,11 @@ pub struct UninitializedLLMJudgeConfig {
     pub optimize: LLMJudgeOptimize,
     #[serde(default)]
     pub include: LLMJudgeIncludeConfig,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub cutoff: Option<f32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub description: Option<String>,
 }
 
@@ -430,6 +452,7 @@ impl UninitializedEvaluatorConfig {
                     r#type: MetricConfigType::Boolean,
                     optimize: MetricConfigOptimize::Max,
                     level: MetricConfigLevel::Inference,
+                    description: None,
                 },
             )),
             UninitializedEvaluatorConfig::LLMJudge(params) => {
@@ -442,9 +465,7 @@ impl UninitializedEvaluatorConfig {
                         })?),
                     LLMJudgeInputFormat::Messages => None,
                 };
-                let user_schema = user_schema_value
-                    .map(StaticJSONSchema::from_value)
-                    .transpose()?;
+                let user_schema = user_schema_value.map(JSONSchema::from_value).transpose()?;
                 let output_schema_str = match params.output_type {
                     LLMJudgeOutputType::Float => LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
                     LLMJudgeOutputType::Boolean => LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT,
@@ -455,7 +476,7 @@ impl UninitializedEvaluatorConfig {
                             message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
                         })
                     })?;
-                let output_schema = StaticJSONSchema::from_value(output_schema_value)?;
+                let output_schema = JSONSchema::from_value(output_schema_value)?;
                 let json_mode_tool_call_config =
                     create_json_mode_tool_call_config(output_schema.clone());
 
@@ -527,7 +548,8 @@ impl UninitializedEvaluatorConfig {
                     .values()
                     .flat_map(|v| v.get_all_explicit_template_names())
                     .collect();
-                let experimentation = ExperimentationConfig::legacy_from_variants_map(&variants);
+                let experimentation =
+                    ExperimentationConfigWithNamespaces::legacy_from_variants_map(&variants);
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: SchemaData::load(
@@ -557,6 +579,7 @@ impl UninitializedEvaluatorConfig {
                         r#type: params.output_type.into(),
                         optimize: params.optimize.into(),
                         level: MetricConfigLevel::Inference,
+                        description: None,
                     },
                 ))
             }
@@ -565,15 +588,21 @@ impl UninitializedEvaluatorConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedLLMJudgeVariantInfo {
     #[serde(flatten)]
     pub inner: UninitializedLLMJudgeVariantConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub timeouts: Option<TimeoutsConfig>,
 }
 
-#[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedLLMJudgeVariantConfig {
     ChatCompletion(UninitializedLLMJudgeChatCompletionVariantConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]
@@ -588,32 +617,55 @@ pub enum UninitializedLLMJudgeVariantConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub active: Option<bool>,
     pub model: Arc<str>,
     pub system_instructions: ResolvedTomlPathData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub seed: Option<u32>,
     pub json_mode: JsonMode, // This is a JSON function
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub stop_sequences: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub service_tier: Option<ServiceTier>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub thinking_budget_tokens: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub verbosity: Option<String>,
     #[serde(default)]
     pub retries: RetryConfig,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub extra_body: Option<ExtraBodyConfig>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
@@ -626,7 +678,7 @@ fn convert_chat_completion_judge_to_variant(
     variant_name: &str,
     input_format: &LLMJudgeInputFormat,
     params: UninitializedLLMJudgeChatCompletionVariantConfig,
-    user_schema: Option<StaticJSONSchema>,
+    user_schema: Option<JSONSchema>,
 ) -> Result<ChatCompletionConfig, Error> {
     let system_instructions = params.system_instructions.data();
     let templated_system_instructions = format!(
@@ -692,11 +744,15 @@ fn convert_chat_completion_judge_to_variant(
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedLLMJudgeBestOfNVariantConfig {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub active: Option<bool>,
     #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub timeout_s: Option<f64>,
     #[serde(default)]
     pub candidates: Vec<String>,
@@ -705,11 +761,15 @@ pub struct UninitializedLLMJudgeBestOfNVariantConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedLLMJudgeMixtureOfNVariantConfig {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub active: Option<bool>,
     #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub timeout_s: Option<f64>,
     #[serde(default)]
     pub candidates: Vec<String>,
@@ -718,31 +778,56 @@ pub struct UninitializedLLMJudgeMixtureOfNVariantConfig {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedLLMJudgeDiclVariantConfig {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub active: Option<bool>,
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub system_instructions: Option<ResolvedTomlPathData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub json_mode: Option<JsonMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub stop_sequences: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub retries: RetryConfig,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
     #[serde(flatten)]
     pub inner: UninitializedLLMJudgeChatCompletionVariantConfig,
@@ -783,7 +868,7 @@ impl UninitializedLLMJudgeVariantInfo {
         evaluator_name: &str,
         input_format: &LLMJudgeInputFormat,
         variant_name: &str,
-        user_schema: Option<StaticJSONSchema>,
+        user_schema: Option<JSONSchema>,
     ) -> Result<VariantInfo, Error> {
         let inner = match self.inner {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
@@ -1198,7 +1283,9 @@ mod tests {
             json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
+            experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                &HashMap::new(),
+            ),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -1682,7 +1769,7 @@ mod tests {
                     ),
                     description: None,
                     all_explicit_template_names: HashSet::new(),
-                    experimentation: ExperimentationConfig::legacy_from_variants_map(
+                    experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
                         &HashMap::new(),
                     ),
                 })),
@@ -1950,7 +2037,9 @@ mod tests {
             json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
+            experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                &HashMap::new(),
+            ),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -1996,7 +2085,7 @@ mod tests {
     }
 
     // Helper functions for tests
-    fn create_test_schema() -> StaticJSONSchema {
+    fn create_test_schema() -> JSONSchema {
         let schema_value = serde_json::json!({
             "type": "object",
             "properties": {
@@ -2006,6 +2095,6 @@ mod tests {
             },
             "required": ["result"]
         });
-        StaticJSONSchema::from_value(schema_value).unwrap()
+        JSONSchema::from_value(schema_value).unwrap()
     }
 }

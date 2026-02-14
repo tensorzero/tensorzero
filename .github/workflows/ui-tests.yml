@@ -2,6 +2,11 @@ name: UI Tests
 
 on:
   workflow_call:
+    secrets:
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
     inputs:
       is_merge_group:
         required: true
@@ -10,6 +15,9 @@ on:
 permissions:
   contents: read
   actions: read
+
+env:
+  CARGO_INCREMENTAL: 0
 
 jobs:
   ui-tests:
@@ -27,7 +35,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Install Rust toolchain
         run: |
@@ -46,7 +54,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Setup `pnpm`
         run: |
@@ -82,9 +90,11 @@ jobs:
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
@@ -101,17 +111,9 @@ jobs:
 
       - name: Run `pnpm test`
         env:
-          TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm ui:test
-
-      - name: Run `pnpm test` for tensorzero-node
-        working-directory: internal/tensorzero-node
-        env:
-          TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
-          TENSORZERO_GATEWAY_URL: http://localhost:3000
-        run: pnpm test
 
       - name: Print Docker Compose logs
         if: always()

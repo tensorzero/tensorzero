@@ -1,26 +1,39 @@
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { Button } from "~/components/ui/button";
+import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
-import type { Event } from "~/types/tensorzero";
+import type { GatewayEvent } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
-import { getToolCallEventId, isToolEvent, ToolEventId } from "./EventStream";
+import {
+  getToolCallEventId,
+  isToolEvent,
+  TOOL_CONTENT_MAX_HEIGHT,
+  ToolEventId,
+} from "./EventStream";
 
 type PendingToolCallCardProps = {
-  event: Event;
+  event: GatewayEvent;
   isLoading: boolean;
-  loadingAction?: "approving" | "rejecting";
-  onAuthorize: (approved: boolean) => void;
+  loadingAction?: "approving" | "rejecting" | "approving_all";
+  onApprove: () => void;
+  onReject: () => void;
+  onApproveAll?: () => void;
   additionalCount: number;
   isInCooldown?: boolean;
+  className?: string;
 };
 
 export function PendingToolCallCard({
   event,
   isLoading,
   loadingAction,
-  onAuthorize,
+  onApprove,
+  onReject,
+  onApproveAll,
   additionalCount,
   isInCooldown = false,
+  className,
 }: PendingToolCallCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
@@ -33,7 +46,7 @@ export function PendingToolCallCard({
   const { name, arguments: args } = event.payload;
 
   const handleApprove = () => {
-    onAuthorize(true);
+    onApprove();
   };
 
   const handleRejectClick = () => {
@@ -41,7 +54,7 @@ export function PendingToolCallCard({
   };
 
   const handleRejectConfirm = () => {
-    onAuthorize(false);
+    onReject();
     setConfirmReject(false);
   };
 
@@ -60,6 +73,7 @@ export function PendingToolCallCard({
         "flex flex-col gap-2 rounded-md border border-blue-300 bg-blue-50 px-4 py-3 dark:border-blue-700 dark:bg-blue-950/30",
         isInCooldown &&
           "animate-in fade-in zoom-in-95 duration-1000 ease-in-out",
+        className,
       )}
     >
       <div className="flex items-center justify-between gap-4">
@@ -72,8 +86,9 @@ export function PendingToolCallCard({
           className="inline-flex cursor-pointer items-center gap-2 text-left"
           onClick={() => setIsExpanded((current) => !current)}
         >
-          <span className="text-sm font-medium">
-            Tool Call &middot;{" "}
+          <span className="inline-flex items-center gap-2 text-sm font-medium">
+            Tool Call
+            <DotSeparator />
             <span className="font-mono font-medium">{name}</span>
           </span>
           <span
@@ -96,24 +111,24 @@ export function PendingToolCallCard({
               role="group"
               aria-label="Confirm rejection"
             >
-              <button
-                type="button"
-                className="h-6 cursor-pointer rounded bg-red-600 px-2 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              <Button
+                variant="destructive"
+                size="xs"
                 disabled={isDisabled}
                 onClick={handleRejectConfirm}
                 aria-label="Confirm rejection"
               >
                 {loadingAction === "rejecting" ? "Rejecting..." : "Yes, reject"}
-              </button>
-              <button
-                type="button"
-                className="h-6 cursor-pointer rounded bg-gray-100 px-2 text-xs font-medium hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:hover:bg-gray-700"
+              </Button>
+              <Button
+                variant="secondary"
+                size="xs"
                 disabled={isDisabled}
                 onClick={handleRejectCancel}
                 aria-label="Cancel rejection"
               >
                 No, keep it
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -122,27 +137,34 @@ export function PendingToolCallCard({
                   +{additionalCount}
                 </span>
               )}
-              <button
-                type="button"
-                className="bg-fg-primary text-bg-primary hover:bg-fg-secondary h-6 cursor-pointer rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={isDisabled}
-                onClick={handleApprove}
-              >
+              {additionalCount > 0 && onApproveAll && (
+                <Button
+                  variant="successOutline"
+                  size="xs"
+                  disabled={isDisabled}
+                  onClick={onApproveAll}
+                >
+                  {loadingAction === "approving_all"
+                    ? "Approving..."
+                    : `Approve All (${additionalCount + 1})`}
+                </Button>
+              )}
+              <Button size="xs" disabled={isDisabled} onClick={handleApprove}>
                 {loadingAction === "approving" ? "Approving..." : "Approve"}
-              </button>
-              <button
-                type="button"
-                className="h-6 cursor-pointer rounded border border-red-300 px-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+              </Button>
+              <Button
+                variant="destructiveOutline"
+                size="xs"
                 disabled={isDisabled}
                 onClick={handleRejectClick}
               >
                 Reject
-              </button>
+              </Button>
             </div>
           )}
           <div className="text-fg-muted flex items-center gap-1.5 text-xs">
             <ToolEventId id={getToolCallEventId(event)} />
-            <span aria-hidden="true">&middot;</span>
+            <DotSeparator />
             <TableItemTime timestamp={event.created_at} />
           </div>
         </div>
@@ -150,7 +172,10 @@ export function PendingToolCallCard({
 
       {/* Tool arguments (expandable) */}
       {isExpanded && args && (
-        <pre className="text-fg-secondary overflow-x-auto font-mono text-xs whitespace-pre-wrap">
+        <pre
+          className="text-fg-secondary overflow-auto font-mono text-xs whitespace-pre-wrap"
+          style={{ maxHeight: TOOL_CONTENT_MAX_HEIGHT }}
+        >
           {JSON.stringify(args, null, 2)}
         </pre>
       )}

@@ -65,7 +65,7 @@ export function ThoughtContentBlock({
       >
         Thought
       </ContentBlockLabel>
-      <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] place-content-center gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
+      <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
         {/* Empty state */}
         {isEmpty && !isEditing && (
           <div className="text-fg-muted col-span-2 flex items-center justify-center py-8 text-sm">

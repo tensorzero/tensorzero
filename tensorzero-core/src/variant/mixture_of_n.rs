@@ -20,7 +20,7 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::usage::RawUsageEntry;
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
-    JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
+    JsonInferenceResultChunk, Latency, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role, System,
@@ -46,8 +46,9 @@ use super::{
     infer_model_request_stream, prepare_model_inference_request,
 };
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MixtureOfNConfig {
     weight: Option<f64>,
     candidates: Vec<String>,
@@ -85,9 +86,10 @@ impl MixtureOfNConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -98,16 +100,18 @@ pub struct UninitializedMixtureOfNConfig {
     pub fuser: UninitializedFuserConfig,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(deny_unknown_fields)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedFuserConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
@@ -381,6 +385,17 @@ fn make_stream_from_non_stream(
     usage: Option<Usage>,
     raw_usage_entries: Option<Vec<RawUsageEntry>>,
 ) -> Result<InferenceResultStream, Error> {
+    // Extract provider-level response_time from the original model inference.
+    // For non-streaming, we use response_time as the provider_latency for the fake chunk.
+    let provider_latency = inference_result
+        .model_inference_results()
+        .last()
+        .and_then(|mir| match &mir.latency {
+            Latency::NonStreaming { response_time } => Some(*response_time),
+            Latency::Streaming { response_time, .. } => Some(*response_time),
+            Latency::Batch => None,
+        });
+
     let mut id = 0;
     let chunk = match inference_result {
         InferenceResult::Chat(chat) => {
@@ -412,6 +427,7 @@ fn make_stream_from_non_stream(
                         summary_id: None,
                         summary_text: None,
                         provider_type: thought.provider_type,
+                        extra_data: thought.extra_data,
                     });
                     id += 1;
                     Ok(chunk)
@@ -426,22 +442,22 @@ fn make_stream_from_non_stream(
         }).collect::<Result<Vec<_>, Error>>()?;
             Ok(InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: content_blocks,
-                created: chat.created,
-                latency: tokio::time::Duration::from_secs(0),
-                raw_response: chat.original_response.unwrap_or_default(),
+                provider_latency,
+                raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: chat.finish_reason,
                 usage,
                 raw_usage: raw_usage_entries.clone(),
+                raw_response: None, // Not used for fused stream chunks
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
             raw: json.output.raw,
-            thought: None,
-            created: json.created,
+            thought_chunks: Vec::new(),
             usage,
             raw_usage: raw_usage_entries,
-            latency: tokio::time::Duration::from_secs(0),
-            raw_response: json.original_response.unwrap_or_default(),
+            raw_response: None, // Not used for fused stream chunks
+            provider_latency,
+            raw_chunk: String::new(), // No actual streaming data for fake streams
             finish_reason: json.finish_reason,
         })),
     };
@@ -932,23 +948,24 @@ impl FuserConfig {
 mod tests {
     use crate::rate_limiting::ScopeInfo;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use tokio_stream::StreamExt;
     use uuid::Uuid;
 
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheEnabledMode, CacheManager, CacheOptions},
         config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
-        experimentation::ExperimentationConfig,
+        experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
             Arguments, ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
             JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
-        jsonschema_util::StaticJSONSchema,
+        jsonschema_util::JSONSchema,
         minijinja_util::tests::{
             get_system_filled_template, get_system_template, get_test_template_config,
             test_system_template_schema,
@@ -956,6 +973,7 @@ mod tests {
         model::{ModelConfig, ModelProvider, ProviderConfig},
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
+        rate_limiting::RateLimitingManager,
         tool::{InferenceResponseToolCall, ToolCallConfig, ToolChoice},
     };
 
@@ -1149,7 +1167,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1167,6 +1184,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1184,7 +1202,6 @@ mod tests {
 
         let model_inference_response2 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1202,6 +1219,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1238,7 +1256,6 @@ mod tests {
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1256,6 +1273,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1272,7 +1290,6 @@ mod tests {
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec![
                 "{\"response\": \"Malformed JSON response\""
                     .to_string()
@@ -1294,6 +1311,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1346,16 +1364,15 @@ mod tests {
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
-            output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
+            output_schema: JSONSchema::from_value(json!({})).unwrap(),
             json_mode_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 0".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1373,6 +1390,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1390,7 +1408,6 @@ mod tests {
 
         let model_inference_response1 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![]),
@@ -1408,6 +1425,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1463,8 +1481,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1473,6 +1492,7 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1670,7 +1690,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
 
         let models_arc = Arc::new(models);
@@ -1747,12 +1767,14 @@ mod tests {
                         signature: Some("my_first_signature".into()),
                         summary: None,
                         provider_type: Some("my_first_provider_type".into()),
+                        extra_data: None,
                     }),
                     ContentBlockChatOutput::Thought(Thought {
                         text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
                         summary: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "456".into(),
@@ -1802,6 +1824,7 @@ mod tests {
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some("my_first_provider_type".into()),
+                        extra_data: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         id: "2".into(),
@@ -1810,6 +1833,7 @@ mod tests {
                         summary_id: None,
                         summary_text: None,
                         provider_type: None,
+                        extra_data: None,
                     }),
                     ContentBlockChunk::ToolCall(ToolCallChunk {
                         id: "456".into(),
@@ -1821,14 +1845,14 @@ mod tests {
                         text: "Second text message".to_string(),
                     }),
                 ],
-                created: 123456,
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
                 }),
                 raw_usage: None,
-                latency: std::time::Duration::from_secs(0),
-                raw_response: "My raw response".to_string(),
+                raw_response: None,
+                provider_latency: None,
+                raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: Some(FinishReason::Length),
             })),]
         );
@@ -1866,7 +1890,7 @@ mod tests {
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
         );
-        assert_eq!(exported.fuser.inner.model, "gpt-4".into());
+        assert_eq!(exported.fuser.inner.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.fuser.inner.temperature, Some(0.3));
     }
 
@@ -1894,7 +1918,7 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.fuser.inner.model, "fuser-model".into());
+        assert_eq!(exported.fuser.inner.model, Arc::<str>::from("fuser-model"));
         assert_eq!(exported.fuser.inner.temperature, Some(0.1));
         assert_eq!(exported.fuser.inner.max_tokens, Some(50));
         assert_eq!(exported.fuser.inner.seed, Some(99));

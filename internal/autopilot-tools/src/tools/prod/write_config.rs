@@ -4,7 +4,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -12,6 +14,12 @@ use tensorzero::{WriteConfigRequest, WriteConfigResponse};
 use tensorzero_core::config::UninitializedConfig;
 
 use autopilot_client::AutopilotSideInfo;
+
+// Re-export EditPayload types from config-applier
+pub use config_applier::{
+    EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
+    UpsertVariantPayload,
+};
 
 /// Parameters for the write_config tool (visible to LLM).
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -21,6 +29,9 @@ pub struct WriteConfigToolParams {
     /// Templates that should be stored with the config.
     #[serde(default)]
     pub extra_templates: HashMap<String, String>,
+    /// We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
+    /// Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
+    pub edit: Option<Vec<EditPayload>>,
 }
 
 /// Tool for writing config snapshots.
@@ -32,18 +43,22 @@ impl ToolMetadata for WriteConfigTool {
     type Output = WriteConfigResponse;
     type LlmParams = WriteConfigToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("write_config")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Write a config snapshot to storage and return its hash. \
              Autopilot tags are automatically merged into the provided tags.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // Config objects have arbitrary nested structures (tools, gateway)
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Write a config snapshot to storage.",
@@ -68,7 +83,8 @@ impl ToolMetadata for WriteConfigTool {
                                         "type": "object",
                                         "description": "Map of variant names to variant configurations."
                                     }
-                                }
+                                },
+                                "additionalProperties": false
                             }
                         },
                         "metrics": {
@@ -92,7 +108,8 @@ impl ToolMetadata for WriteConfigTool {
                                         "enum": ["inference", "episode"],
                                         "description": "Whether metric applies to individual inferences or episodes."
                                     }
-                                }
+                                },
+                                "additionalProperties": false
                             }
                         },
                         "tools": {
@@ -103,7 +120,8 @@ impl ToolMetadata for WriteConfigTool {
                             "type": "object",
                             "description": "Gateway configuration settings."
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 },
                 "extra_templates": {
                     "type": "object",
@@ -111,10 +129,16 @@ impl ToolMetadata for WriteConfigTool {
                     "additionalProperties": { "type": "string" }
                 }
             },
-            "required": ["config"]
+            "required": ["config"],
+            "additionalProperties": false
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -126,10 +150,8 @@ impl SimpleTool for WriteConfigTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
-        let config: UninitializedConfig =
-            serde_json::from_value(llm_params.config).map_err(|e| ToolError::Validation {
-                message: format!("Invalid `config`: {e}"),
-            })?;
+        let config: UninitializedConfig = serde_json::from_value(llm_params.config)
+            .map_err(|e| AutopilotToolError::validation(format!("Invalid `config`: {e}")))?;
 
         let request = WriteConfigRequest {
             config,
@@ -140,6 +162,6 @@ impl SimpleTool for WriteConfigTool {
         ctx.client()
             .write_config(request)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("write_config", e).into())
     }
 }

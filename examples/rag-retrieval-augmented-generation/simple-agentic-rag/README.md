@@ -51,7 +51,7 @@ Feel free to edit it to tune the behavior of the agent!
 ### Prerequisites
 
 1. Install Python 3.10+
-2. Install the Python dependencies with `pip install -r requirements.txt`.
+2. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 3. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 
 ### Setup

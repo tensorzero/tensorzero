@@ -37,6 +37,10 @@ pub struct GatewayArgs {
     /// These arguments influence the execution of early exit "command" arguments.
     #[command(flatten)]
     pub early_exit_command_arguments: EarlyExitCommandArguments,
+
+    /// Arguments that control the behavior of Postgres migrations.
+    #[command(flatten)]
+    pub postgres_migration_args: PostgresMigrationArgs,
 }
 
 #[derive(Args, Debug)]
@@ -46,7 +50,7 @@ pub struct EarlyExitCommands {
     #[arg(long, alias = "run-migrations")] // TODO: remove (deprecated)
     pub run_clickhouse_migrations: bool,
 
-    /// Run PostgreSQL migrations manually then exit.
+    /// Run Postgres migrations manually then exit.
     #[arg(long)]
     pub run_postgres_migrations: bool,
 
@@ -70,4 +74,11 @@ pub struct EarlyExitCommandArguments {
     /// be set.
     #[arg(long, requires = "create_api_key", value_name = "DATETIME")]
     pub expiration: Option<DateTime<Utc>>,
+}
+
+#[derive(Args, Debug)]
+pub struct PostgresMigrationArgs {
+    /// Run Postgres migrations for optimizations.
+    #[arg(long, default_value_t = false)]
+    pub enable_optimization_postgres_migrations: bool,
 }

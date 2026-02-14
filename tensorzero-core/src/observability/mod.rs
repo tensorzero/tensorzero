@@ -283,7 +283,7 @@ fn build_tracer<T: SpanExporter + 'static>(
         })?;
 
     let mut builder = SdkTracerProvider::builder().with_resource(
-        Resource::builder_empty()
+        Resource::builder()
             .with_attribute(KeyValue::new(
                 opentelemetry_semantic_conventions::resource::SERVICE_NAME,
                 "tensorzero-gateway",
@@ -1090,6 +1090,7 @@ pub async fn setup_observability(
     .await
 }
 
+#[expect(clippy::unused_async)]
 pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'static>(
     log_format: LogFormat,
     exporter_override: Option<T>,

@@ -9,15 +9,16 @@ use crate::{
     config::{ErrorContext, PathWithContents, SchemaData, path::ResolvedTomlPathData},
     error::{Error, ErrorDetails},
     inference::types::Role,
-    jsonschema_util::StaticJSONSchema,
+    jsonschema_util::JSONSchema,
     variant::chat_completion::{
         TemplateWithSchema, UninitializedChatCompletionConfig, UninitializedInputWrappers,
     },
 };
 
 /// Holds of all of the templates and schemas used by a chat-completion variant.
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ChatTemplates {
     #[serde(flatten)]
     templates: HashMap<String, Arc<TemplateWithSchema>>,
@@ -80,7 +81,7 @@ impl ChatTemplates {
     // is set.
     fn validate_wrapper(
         template_and_schema: Option<TemplateWithSchema>,
-        schema: Option<&StaticJSONSchema>,
+        schema: Option<&JSONSchema>,
         wrapper: Option<ResolvedTomlPathData>,
         error_prefix: &str,
         name: &str,

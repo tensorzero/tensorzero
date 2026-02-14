@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
@@ -9,18 +11,19 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
+use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
-use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
-use durable_tools::EmbeddedClient;
+use durable_tools::{EmbeddedClient, WorkerOptions};
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error;
+use tensorzero_core::error::{self, Error, ErrorDetails};
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
@@ -80,6 +83,28 @@ async fn handle_create_api_key(
     Ok(())
 }
 
+async fn run_optimization_postgres_migrations() -> Result<(), Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
+        })
+    })?;
+    let pool = sqlx::PgPool::connect(&postgres_url).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: e.to_string(),
+        })
+    })?;
+    tensorzero_optimizers::postgres::make_migrator()
+        .run(&pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresMigration {
+                message: format!("Failed to run optimization migrations: {e}"),
+            })
+        })?;
+    Ok(())
+}
+
 async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
@@ -102,6 +127,7 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
+
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config
@@ -136,10 +162,18 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_postgres_migrations {
-        tracing::info!("Applying PostgreSQL migrations...");
+        tracing::info!("Applying Postgres migrations...");
         manual_run_postgres_migrations()
             .await
-            .log_err_pretty("Failed to run PostgreSQL migrations")?;
+            .log_err_pretty("Failed to run Postgres migrations")?;
+        if args
+            .postgres_migration_args
+            .enable_optimization_postgres_migrations
+        {
+            run_optimization_postgres_migrations()
+                .await
+                .log_err_pretty("Failed to run optimization Postgres migrations")?;
+        }
         tracing::info!("Postgres is ready.");
         return Ok(());
     }
@@ -254,8 +288,13 @@ async fn run() -> Result<(), ExitCode> {
         );
     }
 
+    // Collect available tool names for autopilot (single source of truth)
+    let available_tools = autopilot_tools::collect_tool_names()
+        .await
+        .log_err_pretty("Failed to collect autopilot tool names")?;
+
     // Initialize GatewayHandle
-    let gateway_handle = gateway::GatewayHandle::new(unwritten_config)
+    let gateway_handle = gateway::GatewayHandle::new(unwritten_config, available_tools)
         .await
         .log_err_pretty("Failed to initialize AppState")?;
 
@@ -285,7 +324,7 @@ async fn run() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    let (router, in_flight_requests_counter) = router::build_axum_router(
+    let (router, in_flight_requests_data) = router::build_axum_router(
         base_path,
         delayed_log_config.otel_tracer.clone(),
         gateway_handle.app_state.clone(),
@@ -360,6 +399,11 @@ async fn run() -> Result<(), ExitCode> {
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");
 
+    // Print whether valkey is enabled
+    let valkey_enabled_pretty =
+        get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info);
+    tracing::info!("├ Valkey: {valkey_enabled_pretty}");
+
     if let Some(gateway_url) = config
         .gateway
         .relay
@@ -385,10 +429,17 @@ async fn run() -> Result<(), ExitCode> {
         tracing::info!("└ OpenTelemetry: disabled");
     }
 
-    let shutdown_signal = shutdown_signal().shared();
+    let shutdown_token = gateway_handle.app_state.shutdown_token.clone();
+    let shutdown_token_clone = shutdown_token.clone();
+    // This is responsible for starting the shutdown
+    #[expect(clippy::disallowed_methods)]
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        shutdown_token_clone.cancel();
+    });
 
     let server_fut = axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal.clone())
+        .with_graceful_shutdown(shutdown_token.clone().cancelled_owned())
         .into_future()
         .map(|r| {
             let _ = r.log_err_pretty("Failed to start server");
@@ -398,9 +449,9 @@ async fn run() -> Result<(), ExitCode> {
     // This is a purely informational logging task, so we don't need to wait for it to finish.
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(monitor_server_shutdown(
-        shutdown_signal,
+        shutdown_token.clone().cancelled_owned(),
         server_fut.clone(),
-        in_flight_requests_counter,
+        in_flight_requests_data,
     ));
 
     // Wait for the server to finish - this happens once the shutdown signal is received,
@@ -438,7 +489,7 @@ async fn run() -> Result<(), ExitCode> {
 async fn monitor_server_shutdown(
     shutdown_signal: impl Future<Output = ()>,
     server_fut: impl Future<Output = ()>,
-    in_flight_requests_counter: InFlightRequestsCounter,
+    in_flight_requests_data: InFlightRequestsData,
 ) {
     // First, wait for the shutdown signal
     shutdown_signal.await;
@@ -446,10 +497,23 @@ async fn monitor_server_shutdown(
     IntervalStream::new(tokio::time::interval(Duration::from_secs(5)))
         .take_until(server_fut)
         .for_each(|_| async {
+            let counts = in_flight_requests_data
+                .current_counts_by_route()
+                .collect::<Vec<_>>();
+
+            let total = counts.iter().map(|(_, count)| *count).sum::<u32>();
             tracing::info!(
                 "Server shutdown in progress: {} in-flight requests remaining",
-                in_flight_requests_counter.get()
+                total
             );
+            if total > 0 {
+                tracing::info!("In-flight requests by route:");
+                for (route, count) in counts {
+                    if count > 0 {
+                        tracing::info!("├ `{route}` -> {count} requests in flight");
+                    }
+                }
+            }
         })
         .await;
     tracing::info!("Server shutdown complete");
@@ -463,6 +527,13 @@ fn get_postgres_status_string(postgres: &PostgresConnectionInfo) -> String {
         #[cfg(test)]
         #[expect(unreachable_patterns)]
         _ => "test".to_string(),
+    }
+}
+
+fn get_valkey_status_string(valkey: &ValkeyConnectionInfo) -> String {
+    match valkey {
+        ValkeyConnectionInfo::Disabled => "disabled".to_string(),
+        ValkeyConnectionInfo::Enabled { .. } => "enabled".to_string(),
     }
 }
 
@@ -543,12 +614,17 @@ async fn spawn_autopilot_worker_if_configured(
 
     // TODO: decide how we want to do autopilot config.
     let default_max_attempts = 5;
-    let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts);
+    let worker_options = WorkerOptions {
+        poll_interval: Duration::from_secs(1),
+        concurrency: 8,
+        ..Default::default()
+    };
+    let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts, worker_options);
 
     Ok(Some(
         spawn_autopilot_worker(
             &gateway_handle.app_state.deferred_tasks,
-            gateway_handle.cancel_token.clone(),
+            gateway_handle.app_state.shutdown_token.clone(),
             config,
         )
         .await

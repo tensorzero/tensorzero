@@ -3,12 +3,16 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{TaskTool, ToolContext, ToolError, ToolMetadata, ToolResult};
+use autopilot_client::AutopilotSideInfo;
+use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the failing tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct FailingToolParams {
     /// The error message to return.
     pub error_message: String,
@@ -20,15 +24,15 @@ pub struct FailingToolParams {
 pub struct FailingTool;
 
 impl ToolMetadata for FailingTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = ();
     type LlmParams = FailingToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("failing")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Always returns an error with the specified message. Used for testing error propagation.",
         )
@@ -38,12 +42,11 @@ impl ToolMetadata for FailingTool {
 #[async_trait]
 impl TaskTool for FailingTool {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
     ) -> ToolResult<Self::Output> {
-        Err(ToolError::Validation {
-            message: llm_params.error_message,
-        })
+        Err(AutopilotToolError::test_error(llm_params.error_message).into())
     }
 }

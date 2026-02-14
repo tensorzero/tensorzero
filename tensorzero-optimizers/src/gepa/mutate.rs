@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use serde_json::{Map, from_value, json, to_value};
+use serde_json::{Map, Value, from_value, json, to_value};
 
 use tensorzero_core::{
     client::{
@@ -102,14 +102,16 @@ fn build_mutate_input(
     } = function_context;
 
     // Extract templates map from variant config
-    let templates_map: HashMap<String, String> = variant_config
+    let templates_map: Map<String, Value> = variant_config
         .templates
         .inner
         .iter()
-        .map(|(name, config)| (name.clone(), config.path.data().to_string()))
+        .map(|(name, config)| (name.clone(), json!(config.path.data())))
         .collect();
 
     // Serialize analyses to JSON
+    // Note: Thought signatures in inference outputs are already conditionally stripped
+    // in analyze_inference based on response type (Chat only, not Json)
     let analyses_json = serde_json::to_value(analyses).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to serialize analyses: {e}"),
@@ -129,7 +131,16 @@ fn build_mutate_input(
     map.insert("templates_map".to_string(), json!(templates_map));
     map.insert("analyses".to_string(), analyses_json);
 
-    Ok(Arguments(map))
+    // Sort all JSON keys for deterministic serialization (important for caching)
+    let mut value = Value::Object(map);
+    value.sort_all_objects();
+    let Value::Object(sorted_map) = value else {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: "sort_all_objects changed Value variant".to_string(),
+        }));
+    };
+
+    Ok(Arguments(sorted_map))
 }
 
 /// Generate improved templates using the GEPA mutate function.
@@ -332,7 +343,7 @@ mod tests {
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{Input, StoredInput},
-        jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
+        jsonschema_util::{JSONSchema, SchemaWithMetadata},
         tool::StaticToolConfig,
     };
 
@@ -352,13 +363,14 @@ mod tests {
             parallel_tool_calls: None,
             description: Some("Test function".to_string()),
             all_explicit_templates_names: std::collections::HashSet::new(),
-            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+            experimentation:
+                tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
         })
     }
 
     /// Create a Chat FunctionConfig with schemas
     fn create_test_function_config_with_schemas() -> FunctionConfig {
-        let system_schema = StaticJSONSchema::from_value(json!({
+        let system_schema = JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "greeting": {"type": "string"}
@@ -366,7 +378,7 @@ mod tests {
         }))
         .unwrap();
 
-        let user_schema = StaticJSONSchema::from_value(json!({
+        let user_schema = JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"}
@@ -402,7 +414,8 @@ mod tests {
             parallel_tool_calls: None,
             description: Some("Test function with schemas".to_string()),
             all_explicit_templates_names: std::collections::HashSet::new(),
-            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+            experimentation:
+                tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
         })
     }
 
@@ -651,7 +664,7 @@ mod tests {
             name: "test_tool".to_string(),
             key: "test_tool".to_string(),
             description: "Test tool".to_string(),
-            parameters: StaticJSONSchema::from_value(json!({
+            parameters: JSONSchema::from_value(json!({
                 "type": "object",
                 "properties": {
                     "param1": {"type": "string"}

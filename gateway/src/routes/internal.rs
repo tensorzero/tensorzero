@@ -156,6 +156,14 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/evaluations/results",
             get(endpoints::internal::evaluations::get_evaluation_results_handler),
         )
+        .route(
+            "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback",
+            post(endpoints::internal::evaluations::get_human_feedback_handler),
+        )
+        .route(
+            "/internal/evaluations/run",
+            post(super::evaluations::run_evaluation_handler),
+        )
         // Workflow evaluation endpoints
         .route(
             "/internal/workflow_evaluations/projects",
@@ -229,7 +237,7 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         // Action endpoint for executing with historical config snapshots
         .route(
             "/internal/action",
-            post(endpoints::internal::action::action_handler),
+            post(super::action::action_handler),
         )
         // Autopilot proxy endpoints
         .route(
@@ -244,5 +252,27 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/autopilot/v1/sessions/{session_id}/events/stream",
             get(endpoints::internal::autopilot::stream_events_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/actions/approve_all",
+            post(endpoints::internal::autopilot::approve_all_tool_calls_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/actions/interrupt",
+            post(endpoints::internal::autopilot::interrupt_session_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/config-writes",
+            get(endpoints::internal::autopilot::list_config_writes_handler),
+        )
+        // Resolve UUID endpoint
+        .route(
+            "/internal/resolve_uuid/{id}",
+            get(endpoints::internal::resolve_uuid::resolve_uuid_handler),
+        )
+        // Other Autopilot endpoints
+        .route(
+            "/internal/autopilot/status",
+            get(endpoints::internal::autopilot::autopilot_status_handler),
         )
 }

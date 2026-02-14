@@ -17,6 +17,7 @@ permissions:
   actions: read
 
 env:
+  CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
@@ -34,7 +35,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Write GCP JWT key to file
         env:

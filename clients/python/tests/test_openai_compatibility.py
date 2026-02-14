@@ -124,6 +124,9 @@ async def test_async_inference_cache(async_openai_client):
     ]
 
     result = await async_openai_client.chat.completions.create(
+        extra_body={
+            "tensorzero::cache_options": {"enabled": "write_only"},
+        },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         temperature=0.4,
@@ -175,9 +178,12 @@ async def test_async_inference_streaming_with_cache(async_openai_client):
         {"role": "user", "content": "Hello"},
     ]
 
-    # First request without cache to populate the cache
+    # First request with write_only cache to populate the cache
     stream = await async_openai_client.chat.completions.create(
-        extra_body={"tensorzero::episode_id": str(uuid7())},
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::cache_options": {"enabled": "write_only"},
+        },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         stream=True,
@@ -216,11 +222,9 @@ async def test_async_inference_streaming_with_cache(async_openai_client):
             assert chunk.choices[0].delta.content == expected_text[i]
             content += chunk.choices[0].delta.content
 
-    # Check second-to-last chunk has correct finish reason
-    stop_chunk = chunks[-2]
-    assert stop_chunk.choices[0].finish_reason == "stop"
-
+    # Check last chunk has correct finish reason and usage
     final_chunk = chunks[-1]
+    assert final_chunk.choices[0].finish_reason == "stop"
     assert final_chunk.usage.prompt_tokens == 10
     assert final_chunk.usage.completion_tokens == 16
 
@@ -253,12 +257,10 @@ async def test_async_inference_streaming_with_cache(async_openai_client):
 
     assert content == cached_content
 
-    # Check second-to-last chunk has the correct finish reason
+    # Check last chunk has the correct finish reason and usage
     print("Chunks: ", cached_chunks)
-    finish_chunk = cached_chunks[-2]
-    assert finish_chunk.choices[0].finish_reason == "stop"
-
     final_cached_chunk = cached_chunks[-1]
+    assert final_cached_chunk.choices[0].finish_reason == "stop"
 
     # In streaming mode, the cached response will not include usage statistics
     # This is still correct behavior as no tokens were used
@@ -327,17 +329,14 @@ async def test_async_inference_streaming(async_openai_client):
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
         assert chunk.model == "tensorzero::function_name::basic_test::variant_name::test"
-        if i + 2 < len(chunks):
+        if i + 1 < len(chunks):
             assert len(chunk.choices) == 1
             assert chunk.choices[0].delta.content == expected_text[i]
             assert chunk.choices[0].finish_reason is None
 
-    stop_chunk = chunks[-2]
-    assert stop_chunk.choices[0].finish_reason == "stop"
-    assert stop_chunk.choices[0].delta.content is None
-
     final_chunk = chunks[-1]
-    assert len(final_chunk.choices) == 0
+    assert final_chunk.choices[0].finish_reason == "stop"
+    assert final_chunk.choices[0].delta.content is None
     assert final_chunk.usage.prompt_tokens == 10
     assert final_chunk.usage.completion_tokens == 16
     assert final_chunk.usage.total_tokens == 26
@@ -371,7 +370,7 @@ async def test_async_inference_streaming_nonexistent_function(async_openai_clien
         # TODO(#3192): handle json errors in patched client
         assert (
             str(exc_info.value)
-            == "Error code: 404 - {'error': 'Unknown function: does_not_exist', 'error_json': {'UnknownFunction': {'name': 'does_not_exist'}}}"
+            == "Error code: 404 - {'error': {'message': 'Unknown function: does_not_exist', 'error_json': {'UnknownFunction': {'name': 'does_not_exist'}}, 'tensorzero_error_json': {'UnknownFunction': {'name': 'does_not_exist'}}}}"
         )
 
 
@@ -403,7 +402,7 @@ async def test_async_inference_streaming_missing_function(async_openai_client):
         # TODO(#3192): handle json errors in patched client
         assert (
             str(exc_info.value)
-            == """Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after "tensorzero::function_name::") cannot be empty', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': 'function_name (passed in model field after "tensorzero::function_name::") cannot be empty'}}}"""
+            == """Error code: 400 - {'error': {'message': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after "tensorzero::function_name::") cannot be empty', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': 'function_name (passed in model field after "tensorzero::function_name::") cannot be empty'}}, 'tensorzero_error_json': {'InvalidOpenAICompatibleRequest': {'message': 'function_name (passed in model field after "tensorzero::function_name::") cannot be empty'}}}}"""
         )
 
 
@@ -435,7 +434,7 @@ async def test_async_inference_streaming_malformed_function(async_openai_client)
         # TODO(#3192): handle json errors in patched client
         assert (
             str(exc_info.value)
-            == """Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': '`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}}}"""
+            == """Error code: 400 - {'error': {'message': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.', 'error_json': {'InvalidOpenAICompatibleRequest': {'message': '`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}}, 'tensorzero_error_json': {'InvalidOpenAICompatibleRequest': {'message': '`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}}}}"""
         )
 
 

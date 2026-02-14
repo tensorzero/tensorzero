@@ -136,6 +136,36 @@ impl MetricsConfig {
     }
 }
 
+// TODO(shuyangli): Move per-request cache config (cache enabled option) here.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelInferenceCacheConfig {
+    #[serde(default)]
+    pub valkey: ValkeyModelInferenceCacheConfig,
+}
+
+// By default, cache entries in Valkey are retained for 24 hours.
+const DEFAULT_VALKEY_CACHE_TTL_S: u64 = 86400; // 24 hours
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ValkeyModelInferenceCacheConfig {
+    #[serde(default = "default_valkey_cache_ttl_s")]
+    pub ttl_s: u64,
+}
+
+fn default_valkey_cache_ttl_s() -> u64 {
+    DEFAULT_VALKEY_CACHE_TTL_S
+}
+
+impl Default for ValkeyModelInferenceCacheConfig {
+    fn default() -> Self {
+        Self {
+            ttl_s: DEFAULT_VALKEY_CACHE_TTL_S,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
@@ -172,6 +202,8 @@ pub struct UninitializedGatewayConfig {
     pub relay: Option<UninitializedRelayConfig>,
     #[serde(default)]
     pub metrics: MetricsConfig,
+    #[serde(default)]
+    pub cache: ModelInferenceCacheConfig,
 }
 
 impl UninitializedGatewayConfig {
@@ -230,6 +262,7 @@ impl UninitializedGatewayConfig {
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
             relay,
             metrics: self.metrics,
+            cache: self.cache,
         })
     }
 }
@@ -255,6 +288,7 @@ pub struct GatewayConfig {
     #[serde(skip)]
     pub relay: Option<TensorzeroRelay>,
     pub metrics: MetricsConfig,
+    pub cache: ModelInferenceCacheConfig,
 }
 
 impl Default for GatewayConfig {
@@ -274,6 +308,7 @@ impl Default for GatewayConfig {
             global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
             relay: Default::default(),
             metrics: Default::default(),
+            cache: Default::default(),
         }
     }
 }

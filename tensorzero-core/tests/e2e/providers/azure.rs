@@ -8,8 +8,8 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let credentials = match std::env::var("AZURE_OPENAI_API_KEY") {
-        Ok(key) => HashMap::from([("azure_openai_api_key".to_string(), key)]),
+    let credentials = match std::env::var("AZURE_API_KEY") {
+        Ok(key) => HashMap::from([("azure_api_key".to_string(), key)]),
         Err(_) => HashMap::new(),
     };
 
@@ -108,11 +108,21 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
+    let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "azure-gpt-5-mini".to_string(),
+        model_name: "gpt-5-mini-azure".into(),
+        model_provider_name: "azure".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        reasoning_usage_inference: reasoning_providers,
+        cache_input_tokens_inference: standard_providers.clone(),
         embeddings: embedding_providers,
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

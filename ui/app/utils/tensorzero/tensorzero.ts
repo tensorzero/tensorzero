@@ -7,11 +7,13 @@ TODO(shuyangli): Figure out a way to generate the HTTP client, possibly from Sch
 import { z } from "zod";
 import { BaseTensorZeroClient } from "./base-client";
 import {
-  contentBlockChatOutputSchema,
   ZodJsonValueSchema,
   type ZodStoragePath,
 } from "~/utils/clickhouse/common";
+import { logger } from "~/utils/logger";
 import type {
+  AutopilotStatusResponse,
+  CacheEnabledMode,
   CloneDatapointsResponse,
   CountFeedbackByTargetIdResponse,
   CountInferencesRequest,
@@ -21,107 +23,76 @@ import type {
   CountWorkflowEvaluationRunEpisodesResponse,
   CountWorkflowEvaluationRunsResponse,
   CreateDatapointsFromInferenceRequest,
-  CumulativeFeedbackTimeSeriesPoint,
-  DatapointStatsResponse,
-  DemonstrationFeedbackRow,
-  EvaluationRunStatsResponse,
   CreateDatapointsRequest,
   CreateDatapointsResponse,
-  FeedbackRow,
-  FunctionInferenceCount,
-  MetricsWithFeedbackResponse,
+  CumulativeFeedbackTimeSeriesPoint,
   Datapoint,
-  GetDatapointCountResponse,
+  DatapointStatsResponse,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
-  GetDemonstrationFeedbackResponse,
-  GetFeedbackBoundsResponse,
-  GetFeedbackByTargetIdResponse,
-  GetFunctionThroughputByVariantResponse,
-  GetModelLatencyResponse,
-  GetModelUsageResponse,
-  GetWorkflowEvaluationProjectCountResponse,
-  GetWorkflowEvaluationProjectsResponse,
-  GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
-  GetWorkflowEvaluationRunsResponse,
-  GetWorkflowEvaluationRunStatisticsResponse,
-  InferenceWithFeedbackCountResponse,
+  DemonstrationFeedbackRow,
+  EvaluationConfig,
+  EvaluationFunctionConfig,
+  EvaluationRunEvent,
+  EvaluationRunStatsResponse,
+  FeedbackRow,
+  FunctionInferenceCount,
+  GetDatapointCountResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
-  GetInferencesRequest,
-  GetInferencesResponse,
-  GetModelInferencesResponse,
-  InferenceCountResponse,
-  LatestFeedbackIdByMetricResponse,
-  ListDatapointsRequest,
-  ListDatasetsResponse,
-  ListEvaluationRunsResponse,
-  ListFunctionsWithInferenceCountResponse,
-  ListInferencesRequest,
-  ListInferenceMetadataResponse,
-  ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
-  ListWorkflowEvaluationRunsResponse,
-  SearchEvaluationRunsResponse,
-  SearchWorkflowEvaluationRunsResponse,
-  StatusResponse,
-  TimeWindow,
-  TableBoundsWithCount,
-  UiConfig,
-  UpdateDatapointRequest,
-  UpdateDatapointsMetadataRequest,
-  UpdateDatapointsRequest,
-  UpdateDatapointsResponse,
-  ListEpisodesResponse,
+  GetDemonstrationFeedbackResponse,
   GetEpisodeInferenceCountResponse,
   GetEvaluationResultsResponse,
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
-  VariantPerformancesResponse,
+  GetFeedbackBoundsResponse,
+  GetFeedbackByTargetIdResponse,
+  GetFunctionThroughputByVariantResponse,
+  GetInferencesRequest,
+  GetInferencesResponse,
+  GetModelInferencesResponse,
+  GetModelLatencyResponse,
+  GetModelUsageResponse,
+  GetVariantSamplingProbabilitiesResponse,
+  GetWorkflowEvaluationProjectCountResponse,
+  GetWorkflowEvaluationProjectsResponse,
+  GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
+  GetWorkflowEvaluationRunStatisticsResponse,
+  GetWorkflowEvaluationRunsResponse,
   InferenceCountByVariant,
+  LaunchOptimizationWorkflowParams,
+  OptimizationJobHandle,
+  OptimizationJobInfo,
+  InferenceCountResponse,
+  InferenceWithFeedbackCountResponse,
+  LatestFeedbackIdByMetricResponse,
+  ListDatapointsRequest,
+  ListDatasetsResponse,
+  ListEpisodesResponse,
+  ListEvaluationRunsResponse,
+  ListFunctionsWithInferenceCountResponse,
+  ListInferenceMetadataResponse,
+  ListInferencesRequest,
+  ListWorkflowEvaluationRunEpisodesByTaskNameResponse,
+  ListWorkflowEvaluationRunsResponse,
+  MetricsWithFeedbackResponse,
+  RunEvaluationRequest,
+  SearchEvaluationRunsResponse,
+  SearchWorkflowEvaluationRunsResponse,
+  StatusResponse,
+  TableBoundsWithCount,
+  TimeWindow,
+  UiConfig,
+  UninitializedVariantInfo,
+  UpdateDatapointRequest,
+  UpdateDatapointsMetadataRequest,
+  UpdateDatapointsRequest,
+  UpdateDatapointsResponse,
+  VariantPerformancesResponse,
+  ClientInferenceParams,
+  InferenceResponse,
+  ResolveUuidResponse,
 } from "~/types/tensorzero";
-
-/**
- * Inference responses vary based on the function type.
- */
-export const ChatInferenceResponseSchema = z.object({
-  inference_id: z.string(),
-  episode_id: z.string(),
-  variant_name: z.string(),
-  content: z.array(contentBlockChatOutputSchema),
-  usage: z
-    .object({
-      input_tokens: z.number(),
-      output_tokens: z.number(),
-    })
-    .optional(),
-});
-export type ChatInferenceResponse = z.infer<typeof ChatInferenceResponseSchema>;
-
-export const JSONInferenceResponseSchema = z.object({
-  inference_id: z.string(),
-  episode_id: z.string(),
-  variant_name: z.string(),
-  output: z.object({
-    raw: z.string(),
-    parsed: ZodJsonValueSchema.nullable(),
-  }),
-  usage: z
-    .object({
-      input_tokens: z.number(),
-      output_tokens: z.number(),
-    })
-    .optional(),
-});
-export type JSONInferenceResponse = z.infer<typeof JSONInferenceResponseSchema>;
-
-/**
- * The overall inference response is a union of chat and JSON responses.
- */
-export const InferenceResponseSchema = z.union([
-  ChatInferenceResponseSchema,
-  JSONInferenceResponseSchema,
-]);
-export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
 
 /**
  * Feedback requests attach a metric value to a given inference or episode.
@@ -161,6 +132,29 @@ export interface GetCumulativeFeedbackTimeseriesResponse {
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient extends BaseTensorZeroClient {
+  /**
+   * Performs an inference request.
+   * @param request - The inference request payload.
+   * @returns A promise that resolves with the inference response.
+   * @throws Error if streaming is requested (not supported) or if the request fails.
+   */
+  async inference(request: ClientInferenceParams): Promise<InferenceResponse> {
+    if (request.stream) {
+      // TODO(#5394): support streaming inference.
+      throw new Error("Streaming inference is not supported from the UI");
+    }
+    const response = await this.fetch("/inference", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as InferenceResponse;
+    return body;
+  }
+
   /**
    * Sends feedback for a particular inference or episode.
    * @param request - The feedback request payload.
@@ -495,6 +489,25 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Marks all datapoints in a dataset as deleted in a dataset by setting their `staled_at` timestamp.
+   * @param datasetName - The name of the dataset containing the datapoints
+   * @returns A promise that resolves with the response containing the number of marked datapoints
+   * @throws Error if the dataset name is invalid, the IDs array is empty, or the request fails
+   */
+  async deleteDataset(datasetName: string): Promise<DeleteDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}`;
+    const response = await this.fetch(endpoint, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as DeleteDatapointsResponse;
+    return body;
+  }
+
+  /**
    * Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
    * @param targetDatasetName - The name of the target dataset to clone datapoints to
    * @param datapointIds - Array of datapoint UUIDs to clone
@@ -584,6 +597,24 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as StatusResponse;
+  }
+
+  /**
+   * Gets the autopilot configuration status.
+   * Returns whether autopilot is configured (i.e., whether TENSORZERO_AUTOPILOT_API_KEY is set).
+   * This endpoint does not require authentication.
+   * @returns A promise that resolves with the autopilot status
+   * @throws Error if the request fails
+   */
+  async getAutopilotStatus(): Promise<AutopilotStatusResponse> {
+    const response = await this.fetch("/internal/autopilot/status", {
+      method: "GET",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as AutopilotStatusResponse;
   }
 
   /**
@@ -786,6 +817,25 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as MetricsWithFeedbackResponse;
+  }
+
+  /**
+   * Fetches variant sampling probabilities for a function from the gateway.
+   * @param functionName - The name of the function to get variant sampling probabilities for
+   * @returns A promise that resolves with variant sampling probabilities
+   * @throws Error if the request fails
+   */
+  async getVariantSamplingProbabilities(
+    functionName: string,
+  ): Promise<GetVariantSamplingProbabilitiesResponse> {
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_sampling_probabilities`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetVariantSamplingProbabilitiesResponse;
   }
 
   /**
@@ -1636,4 +1686,228 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     }
     return (await response.json()) as GetEvaluationResultsResponse;
   }
+
+  /**
+   * Runs an evaluation via SSE streaming.
+   * @param params - The evaluation parameters
+   * @param params.evaluationConfig - The evaluation configuration object
+   * @param params.functionConfig - The function configuration for validation
+   * @param params.evaluationName - The name of the evaluation
+   * @param params.datasetName - The name of the dataset to evaluate (optional)
+   * @param params.datapointIds - Specific datapoint IDs to evaluate (optional)
+   * @param params.variantName - The name of the variant to use (optional)
+   * @param params.internalDynamicVariantConfig - Dynamic variant configuration (optional)
+   * @param params.concurrency - Number of concurrent requests
+   * @param params.inferenceCache - Cache mode for inference
+   * @param params.maxDatapoints - Maximum number of datapoints to evaluate (optional)
+   * @param params.precisionTargets - Per-evaluator precision targets (optional)
+   * @param params.onEvent - Callback for SSE events
+   * @returns A promise that resolves when the evaluation completes
+   */
+  async runEvaluationStreaming(
+    params: RunEvaluationStreamingParams,
+  ): Promise<void> {
+    const {
+      evaluationConfig,
+      functionConfig,
+      evaluationName,
+      datasetName,
+      datapointIds,
+      variantName,
+      internalDynamicVariantConfig,
+      concurrency,
+      inferenceCache,
+      maxDatapoints,
+      precisionTargets,
+      onEvent,
+    } = params;
+
+    const requestBody: RunEvaluationRequest = {
+      evaluation_config: evaluationConfig,
+      function_config: functionConfig,
+      evaluation_name: evaluationName,
+      dataset_name: datasetName,
+      datapoint_ids: datapointIds,
+      variant_name: variantName,
+      internal_dynamic_variant_config: internalDynamicVariantConfig,
+      concurrency,
+      inference_cache: inferenceCache,
+      max_datapoints: maxDatapoints,
+      precision_targets: precisionTargets,
+    };
+
+    const response = await this.fetch("/internal/evaluations/run", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    if (!response.body) {
+      throw new Error("Response body is null");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events in the buffer
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith("data:")) {
+            const data = line.slice(5).trim();
+            if (data) {
+              try {
+                const event = JSON.parse(data) as EvaluationRunEvent;
+                onEvent(event);
+              } catch (e) {
+                logger.error(
+                  "Failed to parse SSE event for runEvaluationStreaming:",
+                  e,
+                  "Data:",
+                  data,
+                );
+              }
+            }
+          }
+        }
+      }
+
+      // Process any remaining data in buffer
+      if (buffer.startsWith("data:")) {
+        const data = buffer.slice(5).trim();
+        if (data) {
+          try {
+            const event = JSON.parse(data) as EvaluationRunEvent;
+            onEvent(event);
+          } catch (e) {
+            logger.error(
+              "Failed to parse final SSE event for runEvaluationStreaming:",
+              e,
+              "Data:",
+              data,
+            );
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  /**
+   * Launches an experimental optimization workflow.
+   * @param params - The optimization workflow parameters
+   * @returns A promise that resolves with the job handle (opaque base64-encoded string)
+   * @throws Error if the request fails
+   */
+  async experimentalLaunchOptimizationWorkflow(
+    params: LaunchOptimizationWorkflowParams,
+  ): Promise<OptimizationJobHandle> {
+    const response = await this.fetch("/experimental_optimization_workflow", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    const encodedJobHandle = await response.text();
+
+    // TODO(shuyangli): We should avoid decoding the job handle, but the UI needs to decode
+    // it for the job URL from the provider.
+    const decoded = Buffer.from(encodedJobHandle, "base64url").toString(
+      "utf-8",
+    );
+    return JSON.parse(decoded) as OptimizationJobHandle;
+  }
+
+  /**
+   * Polls for the status of an experimental optimization job.
+   * @param jobHandle - The opaque job handle string returned from experimentalLaunchOptimizationWorkflow
+   * @returns A promise that resolves with the optimization job info
+   * @throws Error if the request fails
+   */
+  async experimentalPollOptimization(
+    jobHandle: OptimizationJobHandle,
+  ): Promise<OptimizationJobInfo> {
+    const encodedJobHandle = Buffer.from(JSON.stringify(jobHandle)).toString(
+      "base64url",
+    );
+    const response = await this.fetch(
+      `/experimental_optimization/${encodeURIComponent(encodedJobHandle)}`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as OptimizationJobInfo;
+  }
+
+  /**
+   * Resolves a UUID to determine what type(s) of object it represents.
+   * @param id - The UUID to resolve
+   * @returns A promise that resolves with the resolved object types
+   * @throws Error if the request fails
+   */
+  async resolveUuid(id: string): Promise<ResolveUuidResponse> {
+    const endpoint = `/internal/resolve_uuid/${encodeURIComponent(id)}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ResolveUuidResponse;
+  }
+}
+
+/**
+ * Parameters for running an evaluation via SSE streaming.
+ */
+export interface RunEvaluationStreamingParams {
+  /** The evaluation configuration */
+  evaluationConfig: EvaluationConfig;
+  /** The function configuration for output schema validation */
+  functionConfig: EvaluationFunctionConfig;
+  /** Name of the evaluation */
+  evaluationName: string;
+  /** Name of the dataset to evaluate (optional) */
+  datasetName?: string;
+  /** Specific datapoint IDs to evaluate (optional) */
+  datapointIds?: string[];
+  /** Variant name to use (optional) */
+  variantName?: string;
+  /** Dynamic variant configuration (optional) */
+  internalDynamicVariantConfig?: UninitializedVariantInfo;
+  /** Number of concurrent requests */
+  concurrency: number;
+  /** Cache mode for inference requests */
+  inferenceCache: CacheEnabledMode;
+  /** Maximum number of datapoints to evaluate (optional) */
+  maxDatapoints?: number;
+  /** Per-evaluator precision targets for adaptive stopping (optional) */
+  precisionTargets?: Record<string, number>;
+  /** Callback for SSE events */
+  onEvent: (event: EvaluationRunEvent) => void;
 }

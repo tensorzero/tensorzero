@@ -43,6 +43,7 @@
 use arc_swap::ArcSwap;
 use check_stopping::{CheckStoppingArgs, StoppingResult, check_stopping};
 use error::TrackAndStopError;
+use schemars::JsonSchema;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
@@ -58,6 +59,7 @@ use estimate_optimal_probabilities::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -78,8 +80,9 @@ mod check_stopping;
 mod error;
 pub mod estimate_optimal_probabilities;
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
@@ -87,7 +90,7 @@ pub struct TrackAndStopConfig {
     min_samples_per_variant: u64,
     delta: f64,
     epsilon: f64,
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     update_period: Duration,
     min_prob: Option<f64>,
     #[serde(skip)]
@@ -146,9 +149,11 @@ pub fn compute_track_and_stop_state(
 /// Public representation of Track-and-Stop state for external callers (tests, UI, monitoring).
 /// This type exposes sampling probabilities but hides internal implementation details like
 /// the `Nursery` struct and atomic counters.
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum TrackAndStopState {
     Stopped {
         winner_variant_name: String,
@@ -175,13 +180,14 @@ pub enum TrackAndStopState {
 /// variant gets sampled until it graduates to the bandit phase.
 ///
 /// When serialized for external use, only the variant list is exposed (not the atomic counter).
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct Nursery {
     pub variants: Vec<String>,
     #[serde(skip)]
     #[serde(default)]
-    #[ts(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     index: AtomicU64,
 }
 
@@ -252,7 +258,9 @@ impl Nursery {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedTrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
@@ -266,7 +274,8 @@ pub struct UninitializedTrackAndStopConfig {
     epsilon: f64,
     #[serde(default = "default_update_period_s")]
     update_period_s: u64,
-    #[serde(default = "default_min_prob")]
+    #[serde(default = "default_min_prob", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     min_prob: Option<f64>,
 }
 
@@ -445,13 +454,13 @@ impl VariantSampler for TrackAndStopConfig {
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
-        // Track-and-Stop requires PostgreSQL for episode-to-variant mapping
+        // Track-and-Stop requires Postgres for episode-to-variant mapping
         match postgres {
             PostgresConnectionInfo::Disabled => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is not available. \
-                        Track-and-Stop requires PostgreSQL for episode-to-variant consistency. \
+                        "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is not available. \
+                        Track-and-Stop requires Postgres for episode-to-variant consistency. \
                         Please set the `TENSORZERO_POSTGRES_URL` environment variable.",
                     ),
                 }));
@@ -466,8 +475,8 @@ impl VariantSampler for TrackAndStopConfig {
         postgres.health().await.map_err(|e| {
             Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is unhealthy: {e}. \
-                    Track-and-Stop requires a healthy PostgreSQL connection for episode-to-variant consistency.",
+                    "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is unhealthy: {e}. \
+                    Track-and-Stop requires a healthy Postgres connection for episode-to-variant consistency.",
                 ),
             })
         })?;
@@ -479,11 +488,13 @@ impl VariantSampler for TrackAndStopConfig {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
-            return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Track-and-Stop probability update task has already been spawned for function '{function_name}'"
-                ),
-            }));
+            // This can happen when running GEPA, which re-uses the existing gateway config.
+            // We don't need to spawn another background update task - the existing task will update
+            // the `ArcSwap` read by all consumers
+            tracing::info!(
+                "Track-and-Stop experimentation background task has already been spawned for function '{function_name}'"
+            );
+            return Ok(());
         }
 
         // Spawn a background task that continuously updates sampling probabilities.
@@ -2075,6 +2086,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_prevents_duplicate_task_spawning() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
         // Create a TrackAndStopConfig instance
         let config = TrackAndStopConfig {
             metric: "test_metric".to_string(),
@@ -2103,17 +2116,21 @@ mod tests {
             .await;
         assert!(result1.is_ok(), "First setup call should succeed");
 
-        // Second call to setup should fail with an error
+        // Second call to setup should also succeed (no-op) and log a message
         let result2 = config
             .setup(db, "test_function", &postgres, cancel_token.clone())
             .await;
-        assert!(result2.is_err(), "Second setup call should fail");
-
-        // Verify the error message mentions the task has already been spawned
-        let err = result2.unwrap_err();
         assert!(
-            err.to_string().contains("already been spawned"),
-            "Error should mention task already spawned, got: {err}"
+            result2.is_ok(),
+            "Second setup call should succeed (task already spawned)"
+        );
+
+        // Verify the info log message is emitted
+        assert!(
+            logs_contain(
+                "Track-and-Stop experimentation background task has already been spawned for function"
+            ),
+            "Expected log message about task already being spawned"
         );
 
         // Clean up: cancel the spawned task
@@ -2165,8 +2182,8 @@ mod tests {
             "Error message should mention Track-and-Stop, got: {err_msg}"
         );
         assert!(
-            err_msg.contains("PostgreSQL"),
-            "Error message should mention PostgreSQL, got: {err_msg}"
+            err_msg.contains("Postgres"),
+            "Error message should mention Postgres, got: {err_msg}"
         );
         assert!(
             err_msg.contains("test_function"),
@@ -2789,6 +2806,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 
@@ -2823,6 +2841,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 
@@ -2856,6 +2875,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 
@@ -2889,6 +2909,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 
@@ -2925,6 +2946,7 @@ mod tests {
                 r#type: MetricConfigType::Float,
                 optimize: MetricConfigOptimize::Max,
                 level: MetricConfigLevel::Inference,
+                description: None,
             },
         );
 

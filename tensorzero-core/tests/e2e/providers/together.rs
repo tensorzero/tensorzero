@@ -71,7 +71,7 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together-tool".to_string(),
-        model_name: "llama3.1-405b-instruct-turbo-together".into(),
+        model_name: "llama4-maverick-instruct-together".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
@@ -122,6 +122,8 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: reasoning_providers.clone(),
+        reasoning_usage_inference: reasoning_providers.clone(),
+        cache_input_tokens_inference: standard_providers.clone(),
         embeddings: vec![],
         inference_params_inference: standard_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

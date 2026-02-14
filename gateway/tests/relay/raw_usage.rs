@@ -6,7 +6,7 @@
 use crate::common::relay::start_relay_test_environment;
 use futures::StreamExt;
 use reqwest::Client;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -155,6 +155,7 @@ async fn test_relay_raw_usage_streaming() {
             }
         }))
         .eventsource()
+        .await
         .unwrap();
 
     let mut found_raw_usage = false;
@@ -297,6 +298,7 @@ async fn test_relay_raw_usage_not_requested_streaming() {
             }
         }))
         .eventsource()
+        .await
         .unwrap();
 
     while let Some(event) = stream.next().await {
@@ -488,6 +490,7 @@ reasoning_effort = "minimal"
             "include_raw_usage": true
         }))
         .eventsource()
+        .await
         .unwrap();
 
     let mut raw_usage_entries: Vec<Value> = Vec::new();
@@ -507,14 +510,14 @@ reasoning_effort = "minimal"
         if let Some(raw_usage) = chunk.get("raw_usage")
             && let Some(arr) = raw_usage.as_array()
         {
-            raw_usage_entries = arr.clone();
+            raw_usage_entries.extend(arr.clone());
         }
     }
 
     // Best-of-n streaming should have at least 3 entries: 2 candidates + 1 judge
     assert!(
         raw_usage_entries.len() >= 3,
-        "Best-of-n relay streaming should have at least 3 raw_usage entries (2 candidates + 1 judge), got {}",
+        "Best-of-n relay streaming should have at least 3 raw_usage entries (2 candidates + 1 judge), got {} (accumulated across all chunks)",
         raw_usage_entries.len()
     );
 

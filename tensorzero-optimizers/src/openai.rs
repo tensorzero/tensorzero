@@ -2,6 +2,7 @@ use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap};
+use tensorzero_derive::TensorZeroDeserialize;
 
 use tensorzero_core::providers::openai::{
     OpenAIFileID, OpenAIRequestMessage, OpenAISFTTool, SystemOrDeveloper, prepare_openai_messages,
@@ -31,8 +32,9 @@ pub struct OpenAIFineTuningRequest {
     pub validation_file: Option<OpenAIFileID>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum OpenAIFineTuningMethod {
     #[serde(rename = "dpo")]
     Dpo {
@@ -406,8 +408,9 @@ mod tests {
 
     use tensorzero_core::{
         inference::types::{
-            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            ContentBlockChatOutput, FunctionType, ModelInput, ResolvedContentBlock,
+            ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, System, Text,
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
@@ -421,6 +424,7 @@ mod tests {
         })]);
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![ResolvedRequestMessage {
@@ -486,6 +490,7 @@ mod tests {
     async fn test_convert_to_rft_row() {
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![ResolvedRequestMessage {
@@ -555,6 +560,7 @@ mod tests {
     async fn test_convert_to_rft_row_with_tool_calls() {
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("You are a helpful assistant.".to_string()),
                 messages: vec![ResolvedRequestMessage {

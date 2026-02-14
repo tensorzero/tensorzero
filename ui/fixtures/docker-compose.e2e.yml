@@ -83,6 +83,7 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - TENSORZERO_SKIP_LARGE_FIXTURES
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
@@ -99,6 +100,6 @@ services:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_interval: 1s
       start_period: 300s # Give the script time to start

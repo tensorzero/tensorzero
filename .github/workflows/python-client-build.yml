@@ -8,6 +8,7 @@ permissions:
   contents: read
 
 env:
+  CARGO_INCREMENTAL: 0
   RUST_TOOLCHAIN: "1.90"
 
 jobs:
@@ -28,9 +29,9 @@ jobs:
           python-version: "3.10"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Install Rust toolchain
         run: |
@@ -98,9 +99,9 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
       - name: Build wheels
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
@@ -149,9 +150,9 @@ jobs:
           python-version: "3.10"
           architecture: ${{ matrix.platform.target }}
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
       - name: Build wheels
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
@@ -204,9 +205,9 @@ jobs:
           python-version: "3.10"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Build wheels
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
@@ -242,9 +243,9 @@ jobs:
           name: wheels-sdist
           path: ./clients/python/dist
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
       - name: Check local sdist
         run: |
           ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero-*.tar.gz
@@ -259,9 +260,11 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          pattern: wheels-*
       - name: Count wheels
         run: |
           ls -lh ./wheels-*/*
-          # Count the number of files named 'tensorzero-*.whl', and verify that it equals 6
+          # Count the number of files named 'tensorzero-*.whl', and verify that it equals 5
           # If we add new platforms / python versions, update this number
           ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 6

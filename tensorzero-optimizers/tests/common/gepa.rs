@@ -8,9 +8,9 @@ use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse,
     http::TensorzeroHttpClient,
     inference::types::{
-        Arguments, ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedContentBlock,
-        ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
-        Template, Text,
+        Arguments, ContentBlockChatOutput, FunctionType, JsonInferenceOutput, ModelInput,
+        ResolvedContentBlock, ResolvedRequestMessage, StoredInput, StoredInputMessage,
+        StoredInputMessageContent, Template, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, gepa::GEPAConfig},
@@ -338,6 +338,7 @@ fn create_chat_example(
 ) -> RenderedSample {
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: system.as_ref().map(std::string::ToString::to_string),
             messages: vec![ResolvedRequestMessage {
@@ -428,6 +429,7 @@ fn create_json_example(
 
     RenderedSample {
         function_name: "json_success".to_string(),
+        function_type: FunctionType::Json,
         input: ModelInput {
             system: system.as_ref().map(std::string::ToString::to_string),
             messages: vec![ResolvedRequestMessage {

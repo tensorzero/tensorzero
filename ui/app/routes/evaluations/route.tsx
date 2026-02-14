@@ -1,5 +1,11 @@
 import type { Route } from "./+types/route";
-import { isRouteErrorResponse, redirect, useNavigate } from "react-router";
+import {
+  Await,
+  redirect,
+  useAsyncError,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -7,16 +13,121 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import EvaluationRunsTable from "./EvaluationRunsTable";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { EvaluationsActions } from "./EvaluationsActions";
 import LaunchEvaluationModal from "./LaunchEvaluationModal";
 import {
   parseEvaluationFormData,
   runEvaluation,
 } from "~/utils/evaluations.server";
-import { logger } from "~/utils/logger";
 import { toEvaluationUrl } from "~/utils/urls";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { logger } from "~/utils/logger";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
+import { PageErrorContent } from "~/components/ui/error";
+import type { EvaluationRunInfo } from "~/types/tensorzero";
+
+export type EvaluationsData = {
+  totalEvaluationRuns: number;
+  evaluationRuns: EvaluationRunInfo[];
+  offset: number;
+  limit: number;
+};
+
+function EvaluationsPageHeader({ count }: { count?: number }) {
+  return <PageHeader heading="Evaluation Runs" count={count} />;
+}
+
+function EvaluationsContentSkeleton() {
+  return (
+    <>
+      <EvaluationsPageHeader />
+      <SectionLayout>
+        <div className="flex flex-wrap gap-2">
+          <Skeleton className="h-8 w-36" />
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Run ID</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Dataset</TableHead>
+              <TableHead>Function</TableHead>
+              <TableHead>Variant</TableHead>
+              <TableHead>Last Updated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-32" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-28" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Skeleton className="h-9 w-9 rounded-md" />
+          <Skeleton className="h-9 w-9 rounded-md" />
+        </div>
+      </SectionLayout>
+    </>
+  );
+}
+
+function EvaluationsErrorState() {
+  const error = useAsyncError();
+  return (
+    <>
+      <EvaluationsPageHeader />
+      <SectionLayout>
+        <PageErrorContent error={error} />
+      </SectionLayout>
+    </>
+  );
+}
+
+async function fetchEvaluationsData(
+  limit: number,
+  offset: number,
+): Promise<EvaluationsData> {
+  const [totalEvaluationRuns, evaluationRunsResponse] = await Promise.all([
+    getTensorZeroClient().countEvaluationRuns(),
+    getTensorZeroClient().listEvaluationRuns(limit, offset),
+  ]);
+  return {
+    totalEvaluationRuns,
+    evaluationRuns: evaluationRunsResponse.runs,
+    offset,
+    limit,
+  };
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -24,17 +135,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const limit = parseInt(searchParams.get("limit") || "15");
 
-  const [totalEvaluationRuns, evaluationRunsResponse] = await Promise.all([
-    getTensorZeroClient().countEvaluationRuns(),
-    getTensorZeroClient().listEvaluationRuns(limit, offset),
-  ]);
-  const evaluationRuns = evaluationRunsResponse.runs;
-
   return {
-    totalEvaluationRuns,
-    evaluationRuns,
-    offset,
-    limit,
+    evaluationsData: fetchEvaluationsData(limit, offset),
   };
 }
 
@@ -88,32 +190,33 @@ export async function action({ request }: Route.ActionArgs) {
   );
 }
 
-export default function EvaluationSummaryPage({
-  loaderData,
-}: Route.ComponentProps) {
+function EvaluationsContent({
+  data,
+  onOpenModal,
+}: {
+  data: EvaluationsData;
+  onOpenModal: () => void;
+}) {
+  const { totalEvaluationRuns, evaluationRuns, offset, limit } = data;
   const navigate = useNavigate();
-  const { totalEvaluationRuns, evaluationRuns, offset, limit } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
+    searchParams.set("offset", String(Math.max(0, offset - limit)));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-  const [launchEvaluationModalIsOpen, setLaunchEvaluationModalIsOpen] =
-    useState(false);
 
   return (
-    <PageLayout>
-      <PageHeader heading="Evaluation Runs" count={totalEvaluationRuns} />
+    <>
+      <EvaluationsPageHeader count={totalEvaluationRuns} />
       <SectionLayout>
-        <EvaluationsActions
-          onNewRun={() => setLaunchEvaluationModalIsOpen(true)}
-        />
+        <EvaluationsActions onNewRun={onOpenModal} />
         <EvaluationRunsTable evaluationRuns={evaluationRuns} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
@@ -122,38 +225,37 @@ export default function EvaluationSummaryPage({
           disableNext={offset + limit >= totalEvaluationRuns}
         />
       </SectionLayout>
+    </>
+  );
+}
+
+export default function EvaluationSummaryPage({
+  loaderData,
+}: Route.ComponentProps) {
+  const { evaluationsData } = loaderData;
+  const location = useLocation();
+  const [launchEvaluationModalIsOpen, setLaunchEvaluationModalIsOpen] =
+    useState(false);
+
+  return (
+    <PageLayout>
+      <Suspense key={location.key} fallback={<EvaluationsContentSkeleton />}>
+        <Await
+          resolve={evaluationsData}
+          errorElement={<EvaluationsErrorState />}
+        >
+          {(data) => (
+            <EvaluationsContent
+              data={data}
+              onOpenModal={() => setLaunchEvaluationModalIsOpen(true)}
+            />
+          )}
+        </Await>
+      </Suspense>
       <LaunchEvaluationModal
         isOpen={launchEvaluationModalIsOpen}
         onClose={() => setLaunchEvaluationModalIsOpen(false)}
       />
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

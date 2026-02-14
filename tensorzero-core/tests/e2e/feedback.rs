@@ -1,6 +1,9 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
     db::{
@@ -9,6 +12,7 @@ use tensorzero_core::{
             select_feedback_tags_clickhouse_with_feedback_id,
         },
         postgres::PostgresConnectionInfo,
+        valkey::ValkeyConnectionInfo,
     },
     endpoints::feedback::{Params, feedback},
     http::TensorzeroHttpClient,
@@ -24,8 +28,8 @@ use crate::common::get_gateway_endpoint;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
-async fn e2e_test_comment_feedback_normal_function() {
-    e2e_test_comment_feedback_with_payload(serde_json::json!({
+async fn test_comment_feedback_normal_function() {
+    test_comment_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
@@ -36,8 +40,8 @@ async fn e2e_test_comment_feedback_normal_function() {
 }
 
 #[tokio::test]
-async fn e2e_test_comment_feedback_default_function() {
-    e2e_test_comment_feedback_with_payload(serde_json::json!({
+async fn test_comment_feedback_default_function() {
+    test_comment_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
             "messages": [{"role": "user", "content": "Hello, world!"}]
@@ -47,7 +51,7 @@ async fn e2e_test_comment_feedback_default_function() {
     .await;
 }
 
-async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::Value) {
+async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value) {
     let client = Client::new();
     // // Running without valid episode_id. Should fail.
     let episode_id = Uuid::now_v7();
@@ -241,7 +245,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn e2e_test_comment_feedback_validation_disabled() {
+async fn test_comment_feedback_validation_disabled() {
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -252,8 +256,10 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         Arc::new(config),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();
@@ -283,8 +289,8 @@ async fn e2e_test_comment_feedback_validation_disabled() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_normal_function() {
-    e2e_test_demonstration_feedback_with_payload(serde_json::json!({
+async fn test_demonstration_feedback_normal_function() {
+    test_demonstration_feedback_with_payload(serde_json::json!({
         "function_name": "basic_test",
         "input": {
             "system": {"assistant_name": "AskJeeves"},
@@ -296,8 +302,8 @@ async fn e2e_test_demonstration_feedback_normal_function() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_default_function() {
-    e2e_test_demonstration_feedback_with_payload(serde_json::json!({
+async fn test_demonstration_feedback_default_function() {
+    test_demonstration_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
             "messages": [{"role": "user", "content": "Hello, world!"}]
@@ -307,7 +313,7 @@ async fn e2e_test_demonstration_feedback_default_function() {
     .await;
 }
 
-async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_json::Value) {
+async fn test_demonstration_feedback_with_payload(inference_payload: serde_json::Value) {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let tag_value = Uuid::now_v7().to_string();
@@ -475,7 +481,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_json() {
+async fn test_demonstration_feedback_json() {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -610,7 +616,7 @@ async fn e2e_test_demonstration_feedback_json() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_llm_judge() {
+async fn test_demonstration_feedback_llm_judge() {
     let client = Client::new();
     // Run inference (standard, no dryrun) to get an inference_id
     let old_output_schema = json!({
@@ -696,7 +702,7 @@ async fn e2e_test_demonstration_feedback_llm_judge() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_dynamic_json() {
+async fn test_demonstration_feedback_dynamic_json() {
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -866,7 +872,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_tool() {
+async fn test_demonstration_feedback_tool() {
     // Running without valid inference_id. Should fail.
     let client = Client::new();
     let inference_id = Uuid::now_v7();
@@ -1062,7 +1068,7 @@ async fn e2e_test_demonstration_feedback_tool() {
 }
 
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_dynamic_tool() {
+async fn test_demonstration_feedback_dynamic_tool() {
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an inference_id
@@ -1256,8 +1262,8 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
 }
 
 #[tokio::test]
-async fn e2e_test_float_feedback_normal_function() {
-    e2e_test_float_feedback_with_payload(serde_json::json!({
+async fn test_float_feedback_normal_function() {
+    test_float_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
@@ -1268,8 +1274,8 @@ async fn e2e_test_float_feedback_normal_function() {
 }
 
 #[tokio::test]
-async fn e2e_test_float_feedback_default_function() {
-    e2e_test_float_feedback_with_payload(serde_json::json!({
+async fn test_float_feedback_default_function() {
+    test_float_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
             "messages": [{"role": "user", "content": "Hello, world!"}]
@@ -1279,7 +1285,7 @@ async fn e2e_test_float_feedback_default_function() {
     .await;
 }
 
-async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Value) {
+async fn test_float_feedback_with_payload(inference_payload: serde_json::Value) {
     let client = Client::new();
     let tag_value = Uuid::now_v7().to_string();
     // Running without valid episode_id. Should fail.
@@ -1537,7 +1543,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn e2e_test_float_feedback_validation_disabled() {
+async fn test_float_feedback_validation_disabled() {
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -1546,6 +1552,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
     config
         .metrics
@@ -1556,8 +1563,10 @@ async fn e2e_test_float_feedback_validation_disabled() {
         Arc::new(config),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();
@@ -1587,8 +1596,8 @@ async fn e2e_test_float_feedback_validation_disabled() {
 }
 
 #[tokio::test]
-async fn e2e_test_boolean_feedback_normal_function() {
-    e2e_test_boolean_feedback_with_payload(serde_json::json!({
+async fn test_boolean_feedback_normal_function() {
+    test_boolean_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
@@ -1599,8 +1608,8 @@ async fn e2e_test_boolean_feedback_normal_function() {
 }
 
 #[tokio::test]
-async fn e2e_test_boolean_feedback_default_function() {
-    e2e_test_boolean_feedback_with_payload(serde_json::json!({
+async fn test_boolean_feedback_default_function() {
+    test_boolean_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
             "messages": [{"role": "user", "content": "Hello, world!"}]
@@ -1610,7 +1619,7 @@ async fn e2e_test_boolean_feedback_default_function() {
     .await;
 }
 
-async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::Value) {
+async fn test_boolean_feedback_with_payload(inference_payload: serde_json::Value) {
     let client = Client::new();
     let inference_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
@@ -1876,7 +1885,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn e2e_test_boolean_feedback_validation_disabled() {
+async fn test_boolean_feedback_validation_disabled() {
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -1885,6 +1894,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
         level: MetricConfigLevel::Inference,
+        description: None,
     };
     config
         .metrics
@@ -1895,8 +1905,10 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         Arc::new(config),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();

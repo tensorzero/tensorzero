@@ -1,11 +1,15 @@
 import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import {
+  Await,
   data,
-  isRouteErrorResponse,
+  useAsyncError,
+  useLocation,
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
+import { useAutopilotAvailable } from "~/context/autopilot-available";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
@@ -14,24 +18,257 @@ import FunctionSchema from "./FunctionSchema";
 import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
-import FunctionVariantTable from "./FunctionVariantTable";
 import {
   PageHeader,
   PageLayout,
   SectionLayout,
   SectionsGroup,
   SectionHeader,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
-import { getFunctionTypeIcon } from "~/utils/icon";
-import { logger } from "~/utils/logger";
+import { FunctionTypeBadge } from "~/components/function/FunctionSelector";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
-import type { TimeWindow } from "~/types/tensorzero";
-import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import type { FunctionConfig, TimeWindow } from "~/types/tensorzero";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
+import { Skeleton } from "~/components/ui/skeleton";
+import { PageErrorContent } from "~/components/ui/error";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
+import { fetchVariantsSectionData } from "./variants-data.server";
+import { VariantsSection } from "./VariantsSection";
+
+export type FunctionDetailData = Awaited<
+  ReturnType<typeof fetchFunctionDetailData>
+>;
+
+function FunctionDetailPageHeader({
+  functionName,
+  functionConfig,
+}: {
+  functionName: string;
+  functionConfig: FunctionConfig | null;
+}) {
+  const autopilotAvailable = useAutopilotAvailable();
+
+  return (
+    <PageHeader
+      eyebrow={
+        <Breadcrumbs
+          segments={[{ label: "Functions", href: "/observability/functions" }]}
+        />
+      }
+      name={functionName}
+      tag={
+        functionConfig ? (
+          <FunctionTypeBadge type={functionConfig.type} />
+        ) : undefined
+      }
+    >
+      {functionConfig && <BasicInfo functionConfig={functionConfig} />}
+      {autopilotAvailable && (
+        <AskAutopilotButton message={`Function: ${functionName}\n\n`} />
+      )}
+    </PageHeader>
+  );
+}
+
+function SectionsSkeleton() {
+  return (
+    <>
+      <SectionLayout>
+        <SectionHeader heading="Experimentation" />
+        <Skeleton className="h-32 w-full" />
+      </SectionLayout>
+
+      <SectionLayout>
+        <SectionHeader heading="Throughput" />
+        <Skeleton className="h-64 w-full" />
+      </SectionLayout>
+
+      <SectionLayout>
+        <SectionHeader heading="Metrics" />
+        <Skeleton className="mb-4 h-10 w-64" />
+        <Skeleton className="h-64 w-full" />
+      </SectionLayout>
+
+      <SectionLayout>
+        <SectionHeader heading="Schemas" />
+        <Skeleton className="h-32 w-full" />
+      </SectionLayout>
+
+      <SectionLayout>
+        <SectionHeader heading="Inferences" />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Variant</TableHead>
+              <TableHead>Time</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <TableRow key={i}>
+                <TableCell>
+                  <Skeleton className="h-4 w-48" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-32" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </SectionLayout>
+    </>
+  );
+}
+
+function SectionsErrorState() {
+  const error = useAsyncError();
+  return (
+    <SectionLayout>
+      <PageErrorContent error={error} />
+    </SectionLayout>
+  );
+}
+
+type FetchParams = {
+  function_name: string;
+  function_config: FunctionConfig;
+  config: Awaited<ReturnType<typeof getConfig>>;
+  beforeInference: string | null;
+  afterInference: string | null;
+  limit: number;
+  metric_name: string | undefined;
+  time_granularity: TimeWindow;
+  throughput_time_granularity: TimeWindow;
+  feedback_time_granularity: TimeWindow;
+};
+
+async function fetchFunctionDetailData(params: FetchParams) {
+  const {
+    function_name,
+    function_config,
+    config,
+    beforeInference,
+    afterInference,
+    limit,
+    metric_name,
+    time_granularity,
+    throughput_time_granularity,
+    feedback_time_granularity,
+  } = params;
+
+  const client = getTensorZeroClient();
+  const inferencePromise = client.listInferenceMetadata({
+    function_name,
+    before: beforeInference || undefined,
+    after: afterInference || undefined,
+    limit: limit + 1, // Fetch one extra to determine pagination
+  });
+  const numInferencesPromise = countInferencesForFunction(function_name);
+  const tensorZeroClient = getTensorZeroClient();
+  const metricsWithFeedbackPromise =
+    tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
+  const variantPerformancesPromise =
+    // Only get variant performances if metric_name is provided and valid
+    metric_name && config.metrics[metric_name]
+      ? tensorZeroClient
+          .getVariantPerformances(function_name, metric_name, time_granularity)
+          .then((response) =>
+            response.performances.length > 0
+              ? response.performances
+              : undefined,
+          )
+      : Promise.resolve(undefined);
+  const variantThroughputPromise = tensorZeroClient
+    .getFunctionThroughputByVariant(
+      function_name,
+      throughput_time_granularity,
+      10,
+    )
+    .then((response) => response.throughput);
+
+  // Get feedback timeseries
+  // For now, we only fetch this for track_and_stop experimentation
+  // but the underlying query is general and could be used for other experimentation types
+  const feedbackParams =
+    function_config.experimentation.base.type === "track_and_stop"
+      ? {
+          metric_name: function_config.experimentation.base.metric,
+          variant_names:
+            function_config.experimentation.base.candidate_variants,
+        }
+      : null;
+  const feedbackTimeseriesPromise = feedbackParams
+    ? tensorZeroClient.getCumulativeFeedbackTimeseries({
+        function_name,
+        ...feedbackParams,
+        time_window: feedback_time_granularity as TimeWindow,
+        max_periods: 10,
+      })
+    : Promise.resolve(undefined);
+
+  // Get variant sampling probabilities from the gateway
+  const variantSamplingProbabilitiesPromise = tensorZeroClient
+    .getVariantSamplingProbabilities(function_name)
+    .then((response) => response.probabilities);
+
+  const [
+    inferenceResult,
+    num_inferences,
+    metricsWithFeedback,
+    variant_performances,
+    variant_throughput,
+    feedback_timeseries,
+    variant_sampling_probabilities,
+  ] = await Promise.all([
+    inferencePromise,
+    numInferencesPromise,
+    metricsWithFeedbackPromise,
+    variantPerformancesPromise,
+    variantThroughputPromise,
+    feedbackTimeseriesPromise,
+    variantSamplingProbabilitiesPromise,
+  ]);
+
+  // Handle pagination from listInferenceMetadata response
+  const {
+    items: inferences,
+    hasNextPage: hasNextInferencePage,
+    hasPreviousPage: hasPreviousInferencePage,
+  } = applyPaginationLogic(inferenceResult.inference_metadata, limit, {
+    before: beforeInference,
+    after: afterInference,
+  });
+
+  return {
+    function_name,
+    inferences,
+    hasNextInferencePage,
+    hasPreviousInferencePage,
+    num_inferences,
+    metricsWithFeedback,
+    variant_performances,
+    variant_throughput,
+    feedback_timeseries,
+    variant_sampling_probabilities,
+  };
+}
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -57,171 +294,35 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
-  const client = getTensorZeroClient();
-  const inferencePromise = client.listInferenceMetadata({
-    function_name,
-    before: beforeInference || undefined,
-    after: afterInference || undefined,
-    limit: limit + 1, // Fetch one extra to determine pagination
-  });
-  const numInferencesPromise = countInferencesForFunction(function_name);
-  const tensorZeroClient = getTensorZeroClient();
-  const metricsWithFeedbackPromise =
-    tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
-  const variantCountsPromise = tensorZeroClient.getInferenceCount(
-    function_name,
-    {
-      groupBy: "variant",
-    },
-  );
-  const variantPerformancesPromise =
-    // Only get variant performances if metric_name is provided and valid
-    metric_name && config.metrics[metric_name]
-      ? tensorZeroClient
-          .getVariantPerformances(function_name, metric_name, time_granularity)
-          .then((response) =>
-            response.performances.length > 0
-              ? response.performances
-              : undefined,
-          )
-      : Promise.resolve(undefined);
-  const variantThroughputPromise = tensorZeroClient
-    .getFunctionThroughputByVariant(
-      function_name,
-      throughput_time_granularity,
-      10,
-    )
-    .then((response) => response.throughput);
-
-  // Get feedback timeseries
-  // For now, we only fetch this for track_and_stop experimentation
-  // but the underlying query is general and could be used for other experimentation types
-  const feedbackParams =
-    function_config.experimentation.type === "track_and_stop"
-      ? {
-          metric_name: function_config.experimentation.metric,
-          variant_names: function_config.experimentation.candidate_variants,
-        }
-      : null;
-  const feedbackTimeseriesPromise = feedbackParams
-    ? tensorZeroClient.getCumulativeFeedbackTimeseries({
-        function_name,
-        ...feedbackParams,
-        time_window: feedback_time_granularity as TimeWindow,
-        max_periods: 10,
-      })
-    : Promise.resolve(undefined);
-
-  // Get variant sampling probabilities from the gateway
-  // Skip for default function - it has no configured variants
-  const variantSamplingProbabilitiesPromise = (async () => {
-    if (function_name === DEFAULT_FUNCTION) {
-      return {};
-    }
-    try {
-      const tensorZeroClient = await getNativeTensorZeroClient();
-      return await tensorZeroClient.getVariantSamplingProbabilities(
-        function_name,
-      );
-    } catch (error) {
-      logger.error("Failed to get variant sampling probabilities:", error);
-      return {};
-    }
-  })();
-
-  const [
-    inferenceResult,
-    num_inferences,
-    metricsWithFeedback,
-    variant_performances,
-    variant_counts,
-    variant_throughput,
-    feedback_timeseries,
-    variant_sampling_probabilities,
-  ] = await Promise.all([
-    inferencePromise,
-    numInferencesPromise,
-    metricsWithFeedbackPromise,
-    variantPerformancesPromise,
-    variantCountsPromise,
-    variantThroughputPromise,
-    feedbackTimeseriesPromise,
-    variantSamplingProbabilitiesPromise,
-  ]);
-
-  const variant_counts_with_metadata = (
-    variant_counts.count_by_variant ?? []
-  ).map((variant_count) => {
-    let variant_config = function_config.variants[
-      variant_count.variant_name
-    ] || {
-      inner: {
-        // In case the variant is not found, we still want to display the variant name
-        type: "unknown",
-        weight: 0,
-      },
-    };
-
-    if (function_name === DEFAULT_FUNCTION) {
-      variant_config = {
-        inner: {
-          type: "chat_completion",
-          model: variant_count.variant_name,
-          weight: null,
-          templates: {},
-          temperature: null,
-          top_p: null,
-          max_tokens: null,
-          presence_penalty: null,
-          frequency_penalty: null,
-          seed: null,
-          stop_sequences: null,
-          json_mode: null,
-          retries: { num_retries: 0, max_delay_s: 0 },
-        },
-        timeouts: {
-          non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null },
-        },
-      };
-      function_config.variants[variant_count.variant_name] = variant_config;
-    }
-
-    return {
-      ...variant_count,
-      type: variant_config.inner.type,
-      weight: variant_config.inner.weight,
-    };
-  });
-
-  // Handle pagination from listInferenceMetadata response
-  const {
-    items: inferences,
-    hasNextPage: hasNextInferencePage,
-    hasPreviousPage: hasPreviousInferencePage,
-  } = applyPaginationLogic(inferenceResult.inference_metadata, limit, {
-    before: beforeInference,
-    after: afterInference,
-  });
 
   return {
     function_name,
-    inferences,
-    hasNextInferencePage,
-    hasPreviousInferencePage,
-    num_inferences,
-    metricsWithFeedback,
-    variant_performances,
-    variant_throughput,
-    variant_counts: variant_counts_with_metadata,
-    feedback_timeseries,
-    variant_sampling_probabilities,
+    variantsData: fetchVariantsSectionData({ function_name, function_config }),
+    functionDetailData: fetchFunctionDetailData({
+      function_name,
+      function_config,
+      config,
+      beforeInference,
+      afterInference,
+      limit,
+      metric_name,
+      time_granularity,
+      throughput_time_granularity,
+      feedback_time_granularity,
+    }),
   };
 }
 
-export default function InferencesPage({ loaderData }: Route.ComponentProps) {
+function SectionsContent({
+  data,
+  functionName,
+  functionConfig,
+}: {
+  data: FunctionDetailData;
+  functionName: string;
+  functionConfig: FunctionConfig;
+}) {
   const {
-    function_name,
     inferences,
     hasNextInferencePage,
     hasPreviousInferencePage,
@@ -229,17 +330,12 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    variant_counts,
     feedback_timeseries,
     variant_sampling_probabilities,
-  } = loaderData;
+  } = data;
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const function_config = useFunctionConfig(function_name);
-  if (!function_config) {
-    throw data(`Function ${function_name} not found`, { status: 404 });
-  }
 
   // Only get top/bottom inferences if array is not empty
   const topInference = inferences.length > 0 ? inferences[0] : null;
@@ -280,100 +376,98 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   );
 
   return (
+    <>
+      {functionName !== DEFAULT_FUNCTION && (
+        <SectionLayout>
+          <SectionHeader heading="Experimentation" />
+          <FunctionExperimentation
+            functionConfig={functionConfig}
+            functionName={functionName}
+            feedbackTimeseries={feedback_timeseries}
+            variantSamplingProbabilities={variant_sampling_probabilities}
+          />
+        </SectionLayout>
+      )}
+
+      <SectionLayout>
+        <SectionHeader heading="Throughput" />
+        <VariantThroughput variant_throughput={variant_throughput} />
+      </SectionLayout>
+
+      <SectionLayout>
+        <SectionHeader heading="Metrics" />
+        <MetricSelector
+          metricsWithFeedback={metricsExcludingDemonstrations}
+          selectedMetric={metric_name || ""}
+          onMetricChange={handleMetricChange}
+        />
+        {variant_performances && (
+          <VariantPerformance
+            variant_performances={variant_performances}
+            metric_name={metric_name}
+          />
+        )}
+      </SectionLayout>
+
+      <SectionLayout>
+        <SectionHeader heading="Schemas" />
+        <FunctionSchema functionConfig={functionConfig} />
+      </SectionLayout>
+
+      <SectionLayout>
+        <SectionHeader heading="Inferences" count={num_inferences} />
+        <FunctionInferenceTable inferences={inferences} />
+        <PageButtons
+          onPreviousPage={handlePreviousInferencePage}
+          onNextPage={handleNextInferencePage}
+          disablePrevious={!hasPreviousInferencePage}
+          disableNext={!hasNextInferencePage}
+        />
+      </SectionLayout>
+    </>
+  );
+}
+
+export default function FunctionDetailPage({
+  loaderData,
+}: Route.ComponentProps) {
+  const { function_name, variantsData, functionDetailData } = loaderData;
+  const location = useLocation();
+  const function_config = useFunctionConfig(function_name);
+
+  if (!function_config) {
+    throw data(`Function ${function_name} not found`, { status: 404 });
+  }
+
+  return (
     <PageLayout>
-      <PageHeader
-        name={function_name}
-        label={`${function_config.type} · Function`}
-        icon={getFunctionTypeIcon(function_config.type).icon}
-        iconBg={getFunctionTypeIcon(function_config.type).iconBg}
-      >
-        <BasicInfo functionConfig={function_config} />
-      </PageHeader>
+      <FunctionDetailPageHeader
+        functionName={function_name}
+        functionConfig={function_config}
+      />
 
       <SectionsGroup>
-        <SectionLayout>
-          <SectionHeader heading="Variants" />
-          <FunctionVariantTable
-            variant_counts={variant_counts}
-            function_name={function_name}
-          />
-        </SectionLayout>
+        <VariantsSection
+          variantsData={variantsData}
+          functionName={function_name}
+          locationKey={location.key}
+        />
 
-        {function_name !== DEFAULT_FUNCTION && (
-          <SectionLayout>
-            <SectionHeader heading="Experimentation" />
-            <FunctionExperimentation
-              functionConfig={function_config}
-              functionName={function_name}
-              feedbackTimeseries={feedback_timeseries}
-              variantSamplingProbabilities={variant_sampling_probabilities}
-            />
-          </SectionLayout>
-        )}
-
-        <SectionLayout>
-          <SectionHeader heading="Throughput" />
-          <VariantThroughput variant_throughput={variant_throughput} />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Metrics" />
-          <MetricSelector
-            metricsWithFeedback={metricsExcludingDemonstrations}
-            selectedMetric={metric_name || ""}
-            onMetricChange={handleMetricChange}
-          />
-          {variant_performances && (
-            <VariantPerformance
-              variant_performances={variant_performances}
-              metric_name={metric_name}
-            />
-          )}
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Schemas" />
-          <FunctionSchema functionConfig={function_config} />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Inferences" count={num_inferences} />
-          <FunctionInferenceTable inferences={inferences} />
-          <PageButtons
-            onPreviousPage={handlePreviousInferencePage}
-            onNextPage={handleNextInferencePage}
-            disablePrevious={!hasPreviousInferencePage}
-            disableNext={!hasNextInferencePage}
-          />
-        </SectionLayout>
+        <Suspense key={location.key} fallback={<SectionsSkeleton />}>
+          <Await
+            resolve={functionDetailData}
+            errorElement={<SectionsErrorState />}
+          >
+            {(data) => (
+              <SectionsContent
+                data={data}
+                functionName={function_name}
+                functionConfig={function_config}
+              />
+            )}
+          </Await>
+        </Suspense>
       </SectionsGroup>
     </PageLayout>
   );
-}
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

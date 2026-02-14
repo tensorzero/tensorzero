@@ -2,9 +2,6 @@ import { forwardRef } from "react";
 import { Input } from "~/components/ui/input";
 import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
-import type { IconProps } from "~/components/icons/Icons";
-
-type IconComponent = React.FC<IconProps>;
 
 type ComboboxInputProps = {
   value: string;
@@ -14,9 +11,11 @@ type ComboboxInputProps = {
   onBlur: (e: React.FocusEvent<HTMLInputElement>) => void;
   placeholder: string;
   disabled?: boolean;
-  monospace?: boolean;
   open: boolean;
-  icon: IconComponent;
+  isEditing?: boolean;
+  prefix?: React.ReactNode;
+  suffix?: React.ReactNode;
+  ariaLabel?: string;
 };
 
 export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
@@ -29,22 +28,21 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
       onBlur,
       placeholder,
       disabled = false,
-      monospace = false,
       open,
-      icon: Icon,
+      isEditing = false,
+      prefix,
+      suffix,
+      ariaLabel,
     },
     ref,
   ) {
     return (
       <div ref={ref} className="relative">
-        <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
-          <Icon
-            className={clsx(
-              "h-4 w-4",
-              value ? "text-fg-primary" : "text-fg-tertiary",
-            )}
-          />
-        </div>
+        {prefix && (
+          <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center gap-2">
+            {prefix}
+          </div>
+        )}
         <Input
           value={value}
           onChange={onChange}
@@ -53,9 +51,18 @@ export const ComboboxInput = forwardRef<HTMLDivElement, ComboboxInputProps>(
           onBlur={onBlur}
           placeholder={placeholder}
           disabled={disabled}
-          className={clsx("cursor-text pr-8 pl-9", monospace && "font-mono")}
+          role="combobox"
+          aria-expanded={open}
+          aria-label={ariaLabel}
+          className={clsx(
+            "cursor-text",
+            !isEditing && value && "font-mono",
+            prefix ? "pl-9" : "pl-3",
+            suffix ? "pr-16" : "pr-8",
+          )}
         />
-        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2">
+          {suffix}
           <ChevronDown
             className={clsx("text-fg-tertiary h-4 w-4", open && "-rotate-180")}
           />

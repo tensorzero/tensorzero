@@ -4,9 +4,9 @@
 )]
 mod common;
 use clap::Parser;
-use evaluations::Clients;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use evaluations::stopping::MIN_DATAPOINTS;
+use evaluations::{ClientInferenceExecutor, Clients};
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{Input, InputMessage, InputMessageContent};
@@ -17,6 +17,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
     v1::{list_datapoints, types::ListDatapointsRequest},
@@ -45,8 +46,8 @@ use tensorzero_core::config::{
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
-        clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
-        select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
+        get_clickhouse, select_chat_inference_clickhouse, select_feedback_by_target_id_clickhouse,
+        select_json_inference_clickhouse,
     },
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
 };
@@ -145,7 +146,7 @@ async fn run_evaluations_json() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -345,7 +346,7 @@ async fn run_evaluations_json() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -521,9 +522,12 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
     // Test: Both datapoint_ids and max_datapoints provided should fail
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse,
         evaluation_config,
         function_configs,
@@ -534,6 +538,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         concurrency: 10,
         inference_cache: CacheEnabledMode::On,
+        tags: HashMap::new(),
     };
 
     let result = run_evaluation_core_streaming(core_args, Some(10), HashMap::new()).await;
@@ -608,7 +613,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
 
     let output_str = String::from_utf8(output).unwrap();
@@ -702,7 +707,7 @@ async fn run_exact_match_evaluation_chat() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -843,7 +848,7 @@ async fn run_llm_judge_evaluation_chat() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -993,7 +998,7 @@ async fn run_llm_judge_evaluation_chat() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1071,7 +1076,7 @@ async fn run_image_evaluation() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1293,7 +1298,7 @@ async fn check_invalid_image_evaluation() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1655,7 +1660,7 @@ async fn run_evaluations_errors() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1687,7 +1692,8 @@ async fn test_run_llm_judge_evaluator_chat() {
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: None,
-        postgres_url: None,
+        postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -1695,8 +1701,9 @@ async fn test_run_llm_judge_evaluator_chat() {
     .build()
     .await
     .unwrap();
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: get_clickhouse().await,
     });
     let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
@@ -1704,6 +1711,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             text: "Hello, world!".to_string(),
         })],
         original_response: None,
+        raw_response: None,
         finish_reason: None,
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
@@ -1761,6 +1769,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             })],
         }],
     };
+    let external_tags = HashMap::new();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1771,6 +1780,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1787,6 +1797,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1803,6 +1814,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1819,6 +1831,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1862,6 +1875,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap();
@@ -1872,8 +1886,9 @@ async fn test_run_llm_judge_evaluator_chat() {
 async fn test_run_llm_judge_evaluator_json() {
     init_tracing_for_tests();
     let tensorzero_client = get_tensorzero_client().await;
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: get_clickhouse().await,
     });
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
@@ -1882,6 +1897,7 @@ async fn test_run_llm_judge_evaluator_json() {
             raw: Some("{\"answer\": \"LeBron James\"}".to_string()),
         },
         original_response: None,
+        raw_response: None,
         finish_reason: None,
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
@@ -1940,6 +1956,7 @@ async fn test_run_llm_judge_evaluator_json() {
             })],
         }],
     };
+    let external_tags = HashMap::new();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1950,6 +1967,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1966,6 +1984,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1982,6 +2001,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -1998,6 +2018,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap()
@@ -2041,6 +2062,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
+        external_tags: &external_tags,
     })
     .await
     .unwrap();
@@ -2083,7 +2105,7 @@ async fn run_evaluations_best_of_3() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2276,7 +2298,7 @@ async fn run_evaluations_mixture_of_3() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2472,7 +2494,7 @@ async fn run_evaluations_dicl() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse_flush_async_insert(&clickhouse).await;
+    clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2686,7 +2708,8 @@ async fn test_evaluation_with_dynamic_variant() {
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path.clone()),
         clickhouse_url: None,
-        postgres_url: None,
+        postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -2744,8 +2767,11 @@ async fn test_evaluation_with_dynamic_variant() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
+
     let core_args = EvaluationCoreArgs {
-        tensorzero_client,
+        inference_executor,
         clickhouse_client: clickhouse,
         evaluation_config,
         function_configs,
@@ -2756,6 +2782,7 @@ async fn test_evaluation_with_dynamic_variant() {
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
+        tags: HashMap::new(),
     };
 
     let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await;
@@ -2805,9 +2832,12 @@ async fn test_max_datapoints_parameter() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
+
     // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
-        tensorzero_client: tensorzero_client.clone(),
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
         evaluation_config,
         function_configs,
@@ -2818,6 +2848,7 @@ async fn test_max_datapoints_parameter() {
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
+        tags: HashMap::new(),
     };
 
     let max_datapoints = Some(3);
@@ -2869,6 +2900,7 @@ async fn test_precision_targets_parameter() {
 
     let evaluation_run_id = Uuid::now_v7();
     let evaluation_name = "haiku_without_outputs".to_string(); // Has both exact_match and topic_starts_with_f
+    let evaluation_name_tag = evaluation_name.clone();
 
     // Extract evaluation config and function configs table
     let evaluation_config = config
@@ -2884,6 +2916,19 @@ async fn test_precision_targets_parameter() {
         .collect();
     let function_configs = Arc::new(function_configs);
 
+    // Wrap the client in ClientInferenceExecutor for use with evaluations
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
+
+    let external_session_id = "session-123".to_string();
+    let external_tag_value = "external-value".to_string();
+    let external_tags = HashMap::from([
+        (
+            "tensorzero::autopilot::session_id".to_string(),
+            external_session_id.clone(),
+        ),
+        ("custom_tag".to_string(), external_tag_value.clone()),
+    ]);
+
     // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
     // topic_starts_with_f: CI half-width <= 0.13
@@ -2892,7 +2937,7 @@ async fn test_precision_targets_parameter() {
     precision_targets.insert("topic_starts_with_f".to_string(), 0.13);
 
     let core_args = EvaluationCoreArgs {
-        tensorzero_client: tensorzero_client.clone(),
+        inference_executor,
         clickhouse_client: clickhouse.clone(),
         evaluation_config,
         function_configs,
@@ -2903,6 +2948,7 @@ async fn test_precision_targets_parameter() {
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 5,
+        tags: external_tags.clone(),
     };
 
     // Run with precision targets
@@ -2915,14 +2961,19 @@ async fn test_precision_targets_parameter() {
     .unwrap();
 
     // Consume results and track evaluations, computing statistics as we go
+    let batcher_join_handle = result.batcher_join_handle.clone();
     let mut receiver = result.receiver;
     let mut exact_match_stats = PerEvaluatorStats::new(true); // Bernoulli evaluator (uses Wilson CI)
     let mut topic_stats = PerEvaluatorStats::new(false); // Treated as float evaluator (uses Wald CI)
     let mut total_datapoints = 0;
+    let mut tagged_inference_id = None;
 
     while let Some(update) = receiver.recv().await {
         if let EvaluationUpdate::Success(info) = update {
             total_datapoints += 1;
+            if tagged_inference_id.is_none() {
+                tagged_inference_id = Some(info.response.inference_id());
+            }
 
             // Track exact_match values (boolean)
             if let Some(Some(serde_json::Value::Bool(b))) = info.evaluations.get("exact_match") {
@@ -2969,6 +3020,106 @@ async fn test_precision_targets_parameter() {
         "topic_starts_with_f CI half-width {:.3} should be <= limit {:.3}",
         topic_ci.unwrap(),
         precision_targets["topic_starts_with_f"]
+    );
+
+    if let Some(handle) = batcher_join_handle {
+        handle
+            .await
+            .expect("ClickHouse batch writer should complete before tag assertions");
+    }
+    clickhouse.flush_pending_writes().await;
+    sleep(Duration::from_secs(5)).await;
+
+    let inference_id =
+        tagged_inference_id.expect("Should capture an inference id to validate tags");
+    let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .expect("Should load evaluation inference from ClickHouse");
+    assert_eq!(
+        clickhouse_inference["tags"]["tensorzero::evaluation_run_id"]
+            .as_str()
+            .unwrap(),
+        evaluation_run_id.to_string(),
+        "Evaluation inferences should include `tensorzero::evaluation_run_id` tags"
+    );
+    assert_eq!(
+        clickhouse_inference["tags"]["tensorzero::evaluation_name"]
+            .as_str()
+            .unwrap(),
+        evaluation_name_tag.as_str(),
+        "Evaluation inferences should include `tensorzero::evaluation_name` tags"
+    );
+    assert_eq!(
+        clickhouse_inference["tags"]["tensorzero::autopilot::session_id"]
+            .as_str()
+            .unwrap(),
+        external_session_id.as_str(),
+        "Evaluation inferences should include external tags"
+    );
+    assert_eq!(
+        clickhouse_inference["tags"]["custom_tag"].as_str().unwrap(),
+        external_tag_value.as_str(),
+        "Evaluation inferences should include custom external tags"
+    );
+
+    let metric_name = format!(
+        "tensorzero::evaluation_name::{}::evaluator_name::topic_starts_with_f",
+        evaluation_name_tag.as_str()
+    );
+    let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
+        &clickhouse,
+        "BooleanMetricFeedback",
+        inference_id,
+        Some(metric_name.as_str()),
+    )
+    .await
+    .expect("Should load evaluator feedback from ClickHouse");
+    assert_eq!(
+        clickhouse_feedback["tags"]["tensorzero::autopilot::session_id"]
+            .as_str()
+            .unwrap(),
+        external_session_id.as_str(),
+        "Evaluator feedback should include external tags"
+    );
+    assert_eq!(
+        clickhouse_feedback["tags"]["custom_tag"].as_str().unwrap(),
+        external_tag_value.as_str(),
+        "Evaluator feedback should include custom external tags"
+    );
+    let evaluator_inference_id = Uuid::parse_str(
+        clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let evaluator_inference = select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        .await
+        .expect("Should load judge inference from ClickHouse");
+    assert_eq!(
+        evaluator_inference["tags"]["tensorzero::evaluation_run_id"]
+            .as_str()
+            .unwrap(),
+        evaluation_run_id.to_string(),
+        "Judge inferences should include `tensorzero::evaluation_run_id` tags"
+    );
+    assert_eq!(
+        evaluator_inference["tags"]["tensorzero::evaluation_name"]
+            .as_str()
+            .unwrap(),
+        evaluation_name_tag.as_str(),
+        "Judge inferences should include `tensorzero::evaluation_name` tags"
+    );
+    assert_eq!(
+        evaluator_inference["tags"]["tensorzero::autopilot::session_id"]
+            .as_str()
+            .unwrap(),
+        external_session_id.as_str(),
+        "Judge inferences should include external tags"
+    );
+    assert_eq!(
+        evaluator_inference["tags"]["custom_tag"].as_str().unwrap(),
+        external_tag_value.as_str(),
+        "Judge inferences should include custom external tags"
     );
 }
 

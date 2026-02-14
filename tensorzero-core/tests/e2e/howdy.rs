@@ -1,4 +1,5 @@
 #![expect(clippy::print_stdout)]
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::clickhouse::get_clean_clickhouse;
@@ -16,6 +17,7 @@ use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{Arguments, System, Template, Text};
@@ -25,7 +27,9 @@ use tokio::time::Duration;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_deployment_id() {
     let clickhouse = get_clickhouse().await;
-    let deployment_id = get_deployment_id(&clickhouse).await.unwrap();
+    let deployment_id = get_deployment_id(&clickhouse, &PostgresConnectionInfo::Disabled)
+        .await
+        .unwrap();
     println!("deployment_id: {deployment_id}");
     assert!(!deployment_id.is_empty());
 }
@@ -53,12 +57,14 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         config,
         clickhouse,
         PostgresConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        HashSet::new(), // available_tools
     )
     .await
     .unwrap();
-    ClientBuilder::build_from_state(handle).await.unwrap()
+    ClientBuilder::build_from_state(handle).unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -66,7 +72,9 @@ async fn test_get_howdy_report() {
     let (clickhouse, _guard) = get_clean_clickhouse(true).await;
     let client = get_embedded_client(clickhouse.clone()).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    let deployment_id = get_deployment_id(&clickhouse).await.unwrap();
+    let deployment_id = get_deployment_id(&clickhouse, &PostgresConnectionInfo::Disabled)
+        .await
+        .unwrap();
     let howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
     assert_eq!(howdy_report.inference_count, "0");
     assert_eq!(howdy_report.feedback_count, "0");

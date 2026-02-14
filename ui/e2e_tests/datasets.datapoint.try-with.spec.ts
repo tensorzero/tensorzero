@@ -23,7 +23,11 @@ test.describe("Try with on datapoint page", () => {
       });
 
       // Verify we're on the datapoint page
-      await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .getByRole("navigation", { name: "breadcrumb" })
+          .getByText("Datapoints", { exact: true }),
+      ).toBeVisible();
 
       // Click on the "Try with variant/model" button
       const button = page.getByText(buttonText);
@@ -32,8 +36,10 @@ test.describe("Try with on datapoint page", () => {
       await button.click();
 
       // Wait for the dropdown menu to appear and select an option
-      const menuOption = page.getByRole("menuitem").filter({
-        has: page.locator(`text="${option}"`),
+      // ButtonSelect uses cmdk CommandItem which has role="option"
+      const menuOption = page.getByRole("option", {
+        name: option,
+        exact: true,
       });
 
       await menuOption.waitFor({ state: "visible" });
@@ -71,7 +77,7 @@ test.describe("Try with on datapoint page", () => {
       await deleteButton.click();
 
       // Wait for the dialog to appear and click the Delete button
-      const dialog = page.locator('div[role="dialog"]');
+      const dialog = page.getByRole("alertdialog");
       await dialog.waitFor({ state: "visible" });
       await dialog.getByRole("button", { name: /Delete/ }).click();
 

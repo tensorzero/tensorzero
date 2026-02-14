@@ -27,11 +27,14 @@ use crate::stored_inference::{
 };
 use pyo3::types::PyNone;
 
+pub mod tensorzero_error {
+    pyo3::import_exception!(tensorzero.types, TensorZeroError);
+    pyo3::import_exception!(tensorzero.types, TensorZeroInternalError);
+}
+
 pub static JSON_LOADS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 pub static JSON_DUMPS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 pub static UUID_UUID: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static TENSORZERO_INTERNAL_ERROR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static TENSORZERO_ERROR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 pub fn uuid_to_python(py: Python<'_>, uuid: Uuid) -> PyResult<Bound<'_, PyAny>> {
     let uuid_class = UUID_UUID.get_or_try_init::<_, PyErr>(py, || {
@@ -383,7 +386,11 @@ pub fn deserialize_from_stored_sample<'a>(
         let wire = deserialize_from_pyobj::<StoredInference>(py, obj)?;
         let storage = match wire.to_storage(config) {
             Ok(s) => s,
-            Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+            Err(e) => {
+                return Err(tensorzero_error::TensorZeroInternalError::new_err(
+                    e.to_string(),
+                ));
+            }
         };
         return Ok(StoredSampleItem::StoredInference(storage));
     }
@@ -395,7 +402,11 @@ pub fn deserialize_from_stored_sample<'a>(
             Datapoint::Chat(chat_wire) => {
                 let function_config = match config.get_function(&chat_wire.function_name) {
                     Ok(f) => f,
-                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                    Err(e) => {
+                        return Err(tensorzero_error::TensorZeroInternalError::new_err(
+                            e.to_string(),
+                        ));
+                    }
                 };
                 let datapoint = match chat_wire.into_storage_without_file_handling(
                     &function_config,
@@ -403,7 +414,11 @@ pub fn deserialize_from_stored_sample<'a>(
                     &config.hash,
                 ) {
                     Ok(d) => d,
-                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                    Err(e) => {
+                        return Err(tensorzero_error::TensorZeroInternalError::new_err(
+                            e.to_string(),
+                        ));
+                    }
                 };
                 Ok(StoredSampleItem::Datapoint(StoredDatapoint::Chat(
                     datapoint,
@@ -413,7 +428,11 @@ pub fn deserialize_from_stored_sample<'a>(
                 let datapoint =
                     match json_wire.into_storage_without_file_handling(config.hash.clone()) {
                         Ok(d) => d,
-                        Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                        Err(e) => {
+                            return Err(tensorzero_error::TensorZeroInternalError::new_err(
+                                e.to_string(),
+                            ));
+                        }
                     };
                 Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
                     datapoint,
@@ -487,24 +506,24 @@ impl StoredSample for StoredSampleItem {
         }
     }
 
-    fn input(&self) -> &StoredInput {
+    fn input(&self) -> Option<&StoredInput> {
         match self {
             StoredSampleItem::StoredInference(inference) => inference.input(),
-            StoredSampleItem::Datapoint(datapoint) => datapoint.input(),
+            StoredSampleItem::Datapoint(datapoint) => StoredSample::input(datapoint),
         }
     }
 
-    fn input_mut(&mut self) -> &mut StoredInput {
+    fn input_mut(&mut self) -> Option<&mut StoredInput> {
         match self {
             StoredSampleItem::StoredInference(inference) => inference.input_mut(),
-            StoredSampleItem::Datapoint(datapoint) => datapoint.input_mut(),
+            StoredSampleItem::Datapoint(datapoint) => StoredSample::input_mut(datapoint),
         }
     }
 
-    fn into_input(self) -> StoredInput {
+    fn into_input(self) -> Option<StoredInput> {
         match self {
             StoredSampleItem::StoredInference(inference) => inference.into_input(),
-            StoredSampleItem::Datapoint(datapoint) => datapoint.into_input(),
+            StoredSampleItem::Datapoint(datapoint) => StoredSample::into_input(datapoint),
         }
     }
 
@@ -541,35 +560,10 @@ pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
     let val: Result<T, _> = serde_path_to_error::deserialize(&mut deserializer);
     match val {
         Ok(val) => Ok(val),
-        Err(e) => Err(tensorzero_core_error(
-            py,
-            &format!(
-                "Failed to deserialize JSON to {}: {}",
-                std::any::type_name::<T>(),
-                e
-            ),
-        )?),
+        Err(e) => Err(tensorzero_error::TensorZeroInternalError::new_err(format!(
+            "Failed to deserialize JSON to {}: {}",
+            std::any::type_name::<T>(),
+            e
+        ))),
     }
-}
-
-pub fn tensorzero_error_class(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    TENSORZERO_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero.types")?;
-        let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroError")?;
-        Ok(err.unbind())
-    })
-}
-
-pub fn tensorzero_core_error_class(py: Python<'_>) -> PyResult<&Py<PyAny>> {
-    TENSORZERO_INTERNAL_ERROR.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "tensorzero.types")?;
-        let err: Bound<'_, PyAny> = self_module.getattr("TensorZeroInternalError")?;
-        Ok(err.unbind())
-    })
-}
-
-pub fn tensorzero_core_error(py: Python<'_>, msg: &str) -> PyResult<PyErr> {
-    Ok(PyErr::from_value(
-        tensorzero_core_error_class(py)?.bind(py).call1((msg,))?,
-    ))
 }

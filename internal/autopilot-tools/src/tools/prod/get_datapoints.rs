@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::GetDatapointsResponse;
@@ -32,18 +34,18 @@ impl ToolMetadata for GetDatapointsTool {
     type Output = GetDatapointsResponse;
     type LlmParams = GetDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Get specific datapoints by their IDs. \
              Optionally provide dataset_name for better query performance.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Get specific datapoints by their IDs.",
@@ -58,10 +60,16 @@ impl ToolMetadata for GetDatapointsTool {
                     "description": "The IDs of the datapoints to retrieve."
                 }
             },
-            "required": ["ids"]
+            "required": ["ids"],
+            "additionalProperties": false
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -76,6 +84,6 @@ impl SimpleTool for GetDatapointsTool {
         ctx.client()
             .get_datapoints(llm_params.dataset_name, llm_params.ids)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("get_datapoints", e).into())
     }
 }

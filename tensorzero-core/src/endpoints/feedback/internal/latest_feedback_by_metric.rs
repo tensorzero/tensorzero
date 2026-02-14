@@ -8,12 +8,14 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LatestFeedbackIdByMetricResponse {
     pub feedback_id_by_metric: HashMap<String, String>,
 }
@@ -31,17 +33,20 @@ pub async fn get_latest_feedback_id_by_metric_handler(
     State(app_state): AppState,
     Path(target_id): Path<Uuid>,
 ) -> Result<Json<LatestFeedbackIdByMetricResponse>, Error> {
-    let response =
-        get_latest_feedback_id_by_metric(&app_state.clickhouse_connection_info, target_id).await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = get_latest_feedback_id_by_metric(&database, target_id).await?;
     Ok(Json(response))
 }
 
 /// Core business logic for getting the latest feedback ID for each metric
 pub async fn get_latest_feedback_id_by_metric(
-    clickhouse: &impl FeedbackQueries,
+    database: &(dyn FeedbackQueries + Sync),
     target_id: Uuid,
 ) -> Result<LatestFeedbackIdByMetricResponse, Error> {
-    let latest_feedback_rows = clickhouse
+    let latest_feedback_rows = database
         .query_latest_feedback_id_by_metric(target_id)
         .await?;
 
@@ -63,7 +68,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_latest_feedback_id_by_metric_calls_clickhouse() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
         let target_id = Uuid::now_v7();
         let accuracy_id = Uuid::now_v7().to_string();
@@ -73,7 +78,7 @@ mod tests {
         expected_map.insert("accuracy".to_string(), accuracy_id.clone());
         expected_map.insert("quality".to_string(), quality_id.clone());
 
-        mock_clickhouse
+        mock_db
             .expect_query_latest_feedback_id_by_metric()
             .withf(move |id| *id == target_id)
             .times(1)
@@ -95,7 +100,7 @@ mod tests {
                 }
             });
 
-        let result = get_latest_feedback_id_by_metric(&mock_clickhouse, target_id)
+        let result = get_latest_feedback_id_by_metric(&mock_db, target_id)
             .await
             .unwrap();
 
@@ -104,18 +109,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_latest_feedback_id_by_metric_empty_result() {
-        let mut mock_clickhouse = MockFeedbackQueries::new();
+        let mut mock_db = MockFeedbackQueries::new();
 
         let target_id = Uuid::now_v7();
         let expected_map = HashMap::new();
 
-        mock_clickhouse
+        mock_db
             .expect_query_latest_feedback_id_by_metric()
             .withf(move |id| *id == target_id)
             .times(1)
             .returning(move |_| Box::pin(async move { Ok(vec![]) }));
 
-        let result = get_latest_feedback_id_by_metric(&mock_clickhouse, target_id)
+        let result = get_latest_feedback_id_by_metric(&mock_db, target_id)
             .await
             .unwrap();
 

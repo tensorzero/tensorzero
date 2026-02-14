@@ -4,12 +4,16 @@ use std::borrow::Cow;
 use std::time::Instant;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
+
+use crate::fix_strict_tool_schema::fix_strict_tool_schema;
 
 /// Parameters for the slow tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct SlowToolParams {
     /// How long to sleep before returning (in milliseconds).
     pub delay_ms: u64,
@@ -32,15 +36,19 @@ pub struct SlowToolOutput {
 pub struct SlowTool;
 
 impl ToolMetadata for SlowTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = SlowToolOutput;
     type LlmParams = SlowToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
+        Ok(fix_strict_tool_schema(schema_for!(SlowToolParams)))
+    }
+
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("slow")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Sleeps for the specified duration before returning. Used for testing timeout behavior.",
         )
@@ -50,6 +58,7 @@ impl ToolMetadata for SlowTool {
 #[async_trait]
 impl TaskTool for SlowTool {
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,

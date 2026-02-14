@@ -1,24 +1,47 @@
-use async_trait::async_trait;
-use futures::TryStreamExt;
+use std::sync::Arc;
 use std::{collections::HashSet, time::Duration};
-use tokio::time::timeout;
 
+use async_trait::async_trait;
 use durable;
+use futures::TryStreamExt;
 use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
+use tokio::time::timeout;
 
 use crate::error::{Error, ErrorDetails};
 
+use self::batching::{PostgresBatchSender, PostgresBatchWriterHandle};
 use super::HealthCheckable;
 
+pub mod batch_inference;
+pub mod batching;
+pub mod config_queries;
+pub mod dataset_queries;
+pub mod deployment_queries;
+pub mod dicl_queries;
+pub mod evaluation_queries;
 pub mod experimentation;
+pub mod feedback;
+mod howdy_queries;
+pub mod inference_queries;
+pub mod model_inferences;
+pub mod pgcron;
 pub mod rate_limiting;
+mod resolve_uuid;
+pub mod workflow_evaluation_queries;
 
-const RUN_MIGRATIONS_COMMAND: &str = "Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres";
+mod episode_queries;
+mod inference_filter_helpers;
+
+#[cfg(any(test, feature = "e2e_tests"))]
+pub mod test_helpers;
+
+const RUN_MIGRATIONS_COMMAND: &str = "You likely need to apply migrations to your Postgres database with `--run-postgres-migrations`. Please see our documentation to learn more: https://www.tensorzero.com/docs/deployment/postgres";
 
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
     Enabled {
         pool: PgPool,
+        batch_sender: Option<Arc<PostgresBatchSender>>,
     },
     #[cfg(test)]
     Mock {
@@ -29,7 +52,17 @@ pub enum PostgresConnectionInfo {
 
 impl PostgresConnectionInfo {
     pub fn new_with_pool(pool: PgPool) -> Self {
-        Self::Enabled { pool }
+        Self::Enabled {
+            pool,
+            batch_sender: None,
+        }
+    }
+
+    pub fn new_with_pool_and_batcher(pool: PgPool, batch_sender: Arc<PostgresBatchSender>) -> Self {
+        Self::Enabled {
+            pool,
+            batch_sender: Some(batch_sender),
+        }
     }
 
     #[cfg(test)]
@@ -43,7 +76,7 @@ impl PostgresConnectionInfo {
 
     pub fn get_pool(&self) -> Option<&PgPool> {
         match self {
-            Self::Enabled { pool } => Some(pool),
+            Self::Enabled { pool, .. } => Some(pool),
             #[cfg(test)]
             Self::Mock { .. } => None,
             Self::Disabled => None,
@@ -52,7 +85,7 @@ impl PostgresConnectionInfo {
 
     pub fn get_pool_result(&self) -> Result<&PgPool, Error> {
         match self {
-            Self::Enabled { pool } => Ok(pool),
+            Self::Enabled { pool, .. } => Ok(pool),
             #[cfg(test)]
             Self::Mock { .. } => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: "Mock database is not supported".to_string(),
@@ -60,6 +93,26 @@ impl PostgresConnectionInfo {
             Self::Disabled => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: "Database is disabled".to_string(),
             })),
+        }
+    }
+
+    pub fn batch_sender(&self) -> Option<&Arc<PostgresBatchSender>> {
+        match self {
+            Self::Enabled { batch_sender, .. } => batch_sender.as_ref(),
+            #[cfg(test)]
+            Self::Mock { .. } => None,
+            Self::Disabled => None,
+        }
+    }
+
+    pub fn batcher_join_handle(&self) -> Option<PostgresBatchWriterHandle> {
+        match self {
+            Self::Enabled { batch_sender, .. } => {
+                batch_sender.as_ref().map(|s| s.writer_handle.clone())
+            }
+            #[cfg(test)]
+            Self::Mock { .. } => None,
+            Self::Disabled => None,
         }
     }
 
@@ -104,20 +157,82 @@ impl PostgresConnectionInfo {
         Ok(())
     }
 
+    /// Checks that the set of applied migrations is acceptable for the current gateway version (which contains an expected set of migrations).
+    ///
+    /// During rolling upgrades, the older gateway version will see new database schema, which is expected (so far everything has been backwards
+    /// compatible). However, if the database doesn't contain some migrations the current gateway version requires, we should fail the startup.
+    ///
+    /// TODO(shuyangli): When we need to make backwards incompatible schema changes, properly support expand-contract.
     fn check_applied_expected(
         name: &str,
         applied_migrations: &HashSet<i64>,
         expected_migrations: &HashSet<i64>,
     ) -> Result<(), Error> {
-        // NOTE: this will break old versions of the gateway once new migrations are applied.
-        // We should revisit this behavior prior to releasing a new version of the gateway.
-        if applied_migrations != expected_migrations {
-            return Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
-                message: format!(
-                    "Applied `{name}` migrations do not match expected migrations. Applied: {applied_migrations:?}, Expected: {expected_migrations:?}. {RUN_MIGRATIONS_COMMAND}"
-                ),
-            }));
+        if expected_migrations.is_subset(applied_migrations) {
+            // If expected migrations (what this gateway version expects) is a subset of applied migrations, we are okay - during rolling upgrades
+            // or with optional features, this is expected.
+            return Ok(());
         }
+
+        let missing_migrations = expected_migrations
+            .difference(applied_migrations)
+            .collect::<Vec<_>>();
+        Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: format!(
+                "Applied `{name}` migrations do not match expected migrations: {missing_migrations:?} are missing from the database. {RUN_MIGRATIONS_COMMAND}"
+            ),
+        }))
+    }
+
+    /// Writes retention configuration to the `tensorzero.retention_config` table.
+    /// This is called on gateway startup to sync config from tensorzero.toml to Postgres.
+    pub async fn write_retention_config(
+        &self,
+        inference_retention_days: Option<u32>,
+    ) -> Result<(), Error> {
+        let Some(pool) = self.get_pool() else {
+            return Ok(());
+        };
+
+        match inference_retention_days {
+            Some(days) => {
+                sqlx::query(
+                    r"
+                    INSERT INTO tensorzero.retention_config (key, value, updated_at)
+                    VALUES ('inference_retention_days', $1, NOW())
+                    ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+                    ",
+                )
+                .bind(days.to_string())
+                .execute(pool)
+                .await
+                .map_err(|e| {
+                    Error::new(ErrorDetails::PostgresQuery {
+                        message: format!("Failed to write inference_retention_days config: {e}"),
+                    })
+                })?;
+                tracing::info!(
+                    inference_retention_days = days,
+                    "Configured inference retention policy"
+                );
+            }
+            None => {
+                sqlx::query(
+                    "DELETE FROM tensorzero.retention_config WHERE key = 'inference_retention_days'",
+                )
+                .execute(pool)
+                .await
+                .map_err(|e| {
+                    Error::new(ErrorDetails::PostgresQuery {
+                        message: format!("Failed to clear inference_retention_days config: {e}"),
+                    })
+                })?;
+                tracing::debug!(
+                    "Inference retention policy not configured (partitions retained indefinitely)"
+                );
+            }
+        }
+
         Ok(())
     }
 }
@@ -137,7 +252,7 @@ impl HealthCheckable for PostgresConnectionInfo {
                     }))
                 }
             }
-            Self::Enabled { pool } => {
+            Self::Enabled { pool, .. } => {
                 let check = async {
                     let _result = sqlx::query("SELECT 1").fetch_one(pool).await.map_err(|e| {
                         Error::new(ErrorDetails::PostgresConnection {
@@ -206,6 +321,19 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
         })
     })?;
 
+    // Try to set up pg_cron extension and schedule partition management jobs.
+    // This is idempotent and runs every time.
+    pgcron::setup_pgcron(&pool).await?;
+
+    // Verify pg_cron is available
+    // TODO(#6176): Once we promote pgcron_setup.sql to a migration, we can remove this check.
+    if let Err(e) = pgcron::check_pgcron_configured_correctly(&pool).await {
+        let msg = e.suppress_logging_of_error_message();
+        tracing::warn!(
+            "pg_cron extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_cron soon. Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres",
+        );
+    }
+
     Ok(())
 }
 
@@ -225,4 +353,74 @@ async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Err
 
 pub fn make_migrator() -> sqlx::migrate::Migrator {
     migrate!("src/db/postgres/migrations")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_check_applied_expected_exact_match() {
+        let applied: HashSet<i64> = [1, 2, 3].into();
+        let expected: HashSet<i64> = [1, 2, 3].into();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect("exact match should succeed");
+    }
+
+    #[test]
+    fn test_check_applied_expected_applied_superset() {
+        // During rolling upgrades, the database may have newer migrations than this gateway version expects.
+        let applied: HashSet<i64> = [1, 2, 3, 4, 5].into();
+        let expected: HashSet<i64> = [1, 2, 3].into();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect("applied superset of expected should succeed");
+    }
+
+    #[test]
+    fn test_check_applied_expected_missing_migrations() {
+        // The database is missing migrations this gateway version requires.
+        let applied: HashSet<i64> = [1, 2].into();
+        let expected: HashSet<i64> = [1, 2, 3].into();
+        let err = PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect_err("missing required migrations should fail");
+        let message = err.to_string();
+        assert!(
+            message.contains("[3]"),
+            "error should report migration 3 as missing, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_check_applied_expected_disjoint_sets() {
+        let applied: HashSet<i64> = [1, 2].into();
+        let expected: HashSet<i64> = [3, 4].into();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect_err("completely disjoint sets should fail");
+    }
+
+    #[test]
+    fn test_check_applied_expected_both_empty() {
+        let applied: HashSet<i64> = HashSet::new();
+        let expected: HashSet<i64> = HashSet::new();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect("both empty should succeed");
+    }
+
+    #[test]
+    fn test_check_applied_expected_empty_expected() {
+        // Gateway expects no migrations (e.g. feature not enabled).
+        let applied: HashSet<i64> = [1, 2, 3].into();
+        let expected: HashSet<i64> = HashSet::new();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect("empty expected should succeed");
+    }
+
+    #[test]
+    fn test_check_applied_expected_empty_applied() {
+        // Database has no migrations but gateway expects some.
+        let applied: HashSet<i64> = HashSet::new();
+        let expected: HashSet<i64> = [1, 2].into();
+        PostgresConnectionInfo::check_applied_expected("test", &applied, &expected)
+            .expect_err("empty applied with expected migrations should fail");
+    }
 }

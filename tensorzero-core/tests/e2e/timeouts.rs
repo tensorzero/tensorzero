@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use http::StatusCode;
 use reqwest::Client;
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
 use tensorzero_core::{
@@ -171,6 +171,7 @@ async fn test_inference_ttft_ms(payload: Value, json: bool) {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut inference_id = None;
@@ -519,6 +520,7 @@ async fn slow_second_chunk_streaming(payload: Value) {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut inference_id = None;

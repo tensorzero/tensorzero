@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::{EpisodeByIdRow, SelectQueries, TableBoundsWithCount};
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::{EpisodeByIdRow, EpisodeQueries, TableBoundsWithCount};
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -21,8 +22,9 @@ pub struct ListEpisodesParams {
     pub after: Option<Uuid>,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListEpisodesResponse {
     pub episodes: Vec<EpisodeByIdRow>,
 }
@@ -34,13 +36,17 @@ pub async fn list_episodes_handler(
     State(app_state): AppState,
     Query(params): Query<ListEpisodesParams>,
 ) -> Result<Json<ListEpisodesResponse>, Error> {
-    let episodes = list_episodes(&app_state.clickhouse_connection_info, params).await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let episodes = list_episodes(&database, params).await?;
     Ok(Json(ListEpisodesResponse { episodes }))
 }
 
 /// Core business logic for listing episodes
 pub async fn list_episodes(
-    clickhouse: &impl SelectQueries,
+    database: &impl EpisodeQueries,
     params: ListEpisodesParams,
 ) -> Result<Vec<EpisodeByIdRow>, Error> {
     if params.limit > 100 {
@@ -49,7 +55,7 @@ pub async fn list_episodes(
         }
         .into());
     }
-    clickhouse
+    database
         .query_episode_table(params.limit, params.before, params.after)
         .await
 }
@@ -60,32 +66,36 @@ pub async fn list_episodes(
 pub async fn query_episode_table_bounds_handler(
     State(app_state): AppState,
 ) -> Result<Json<TableBoundsWithCount>, Error> {
-    let bounds = query_episode_table_bounds(&app_state.clickhouse_connection_info).await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let bounds = query_episode_table_bounds(&database).await?;
     Ok(Json(bounds))
 }
 
 /// Core business logic for querying episode table bounds
 pub async fn query_episode_table_bounds(
-    clickhouse: &impl SelectQueries,
+    database: &impl EpisodeQueries,
 ) -> Result<TableBoundsWithCount, Error> {
-    clickhouse.query_episode_table_bounds().await
+    database.query_episode_table_bounds().await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::MockSelectQueries;
+    use crate::db::MockEpisodeQueries;
     use chrono::Utc;
 
     #[tokio::test]
-    async fn test_query_episode_table_calls_clickhouse() {
-        let mut mock_clickhouse = MockSelectQueries::new();
+    async fn test_query_episode_table_calls_database() {
+        let mut mock_database = MockEpisodeQueries::new();
 
         let episode_id = Uuid::now_v7();
         let last_inference_id = Uuid::now_v7();
         let now = Utc::now();
 
-        mock_clickhouse
+        mock_database
             .expect_query_episode_table()
             .withf(|limit, before, after| {
                 assert_eq!(*limit, 10);
@@ -95,15 +105,13 @@ mod tests {
             })
             .times(1)
             .returning(move |_, _, _| {
-                Box::pin(async move {
-                    Ok(vec![EpisodeByIdRow {
-                        episode_id,
-                        count: 5,
-                        start_time: now,
-                        end_time: now,
-                        last_inference_id,
-                    }])
-                })
+                Ok(vec![EpisodeByIdRow {
+                    episode_id,
+                    count: 5,
+                    start_time: now,
+                    end_time: now,
+                    last_inference_id,
+                }])
             });
 
         let params = ListEpisodesParams {
@@ -112,7 +120,7 @@ mod tests {
             after: None,
         };
 
-        let result = list_episodes(&mock_clickhouse, params).await.unwrap();
+        let result = list_episodes(&mock_database, params).await.unwrap();
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].episode_id, episode_id);
@@ -122,12 +130,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_episode_table_with_pagination() {
-        let mut mock_clickhouse = MockSelectQueries::new();
+        let mut mock_database = MockEpisodeQueries::new();
 
         let before_id = Uuid::now_v7();
         let after_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_database
             .expect_query_episode_table()
             .withf(move |limit, before, after| {
                 assert_eq!(*limit, 20);
@@ -136,7 +144,7 @@ mod tests {
                 true
             })
             .times(1)
-            .returning(|_, _, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _| Ok(vec![]));
 
         let params = ListEpisodesParams {
             limit: 20,
@@ -144,32 +152,30 @@ mod tests {
             after: Some(after_id),
         };
 
-        let result = list_episodes(&mock_clickhouse, params).await.unwrap();
+        let result = list_episodes(&mock_database, params).await.unwrap();
 
         assert!(result.is_empty());
     }
 
     #[tokio::test]
-    async fn test_query_episode_table_bounds_calls_clickhouse() {
-        let mut mock_clickhouse = MockSelectQueries::new();
+    async fn test_query_episode_table_bounds_calls_database() {
+        let mut mock_database = MockEpisodeQueries::new();
 
         let first_id = Uuid::now_v7();
         let last_id = Uuid::now_v7();
 
-        mock_clickhouse
+        mock_database
             .expect_query_episode_table_bounds()
             .times(1)
             .returning(move || {
-                Box::pin(async move {
-                    Ok(TableBoundsWithCount {
-                        first_id: Some(first_id),
-                        last_id: Some(last_id),
-                        count: 100,
-                    })
+                Ok(TableBoundsWithCount {
+                    first_id: Some(first_id),
+                    last_id: Some(last_id),
+                    count: 100,
                 })
             });
 
-        let result = query_episode_table_bounds(&mock_clickhouse).await.unwrap();
+        let result = query_episode_table_bounds(&mock_database).await.unwrap();
 
         assert_eq!(result.first_id, Some(first_id));
         assert_eq!(result.last_id, Some(last_id));
@@ -178,22 +184,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_episode_table_bounds_empty() {
-        let mut mock_clickhouse = MockSelectQueries::new();
+        let mut mock_database = MockEpisodeQueries::new();
 
-        mock_clickhouse
+        mock_database
             .expect_query_episode_table_bounds()
             .times(1)
             .returning(|| {
-                Box::pin(async move {
-                    Ok(TableBoundsWithCount {
-                        first_id: None,
-                        last_id: None,
-                        count: 0,
-                    })
+                Ok(TableBoundsWithCount {
+                    first_id: None,
+                    last_id: None,
+                    count: 0,
                 })
             });
 
-        let result = query_episode_table_bounds(&mock_clickhouse).await.unwrap();
+        let result = query_episode_table_bounds(&mock_database).await.unwrap();
 
         assert!(result.first_id.is_none());
         assert!(result.last_id.is_none());
@@ -202,7 +206,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_episode_table_rejects_limit_over_100() {
-        let mock_clickhouse = MockSelectQueries::new();
+        let mock_database = MockEpisodeQueries::new();
 
         let params = ListEpisodesParams {
             limit: 101,
@@ -210,7 +214,7 @@ mod tests {
             after: None,
         };
 
-        let result = list_episodes(&mock_clickhouse, params).await;
+        let result = list_episodes(&mock_database, params).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();

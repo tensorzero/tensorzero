@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -48,11 +50,11 @@ impl ToolMetadata for FeedbackTool {
     type Output = FeedbackResponse;
     type LlmParams = FeedbackToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("feedback")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Submit feedback for a TensorZero inference or episode. \
              Use metric_name='comment' for free-text comments, 'demonstration' for demonstrations, \
@@ -60,7 +62,11 @@ impl ToolMetadata for FeedbackTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // Value uses anyOf with array type without explicit items
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Submit feedback for an inference or episode.",
@@ -80,17 +86,29 @@ impl ToolMetadata for FeedbackTool {
                     "description": "The metric name: 'comment' for free-text, 'demonstration' for demonstrations, or a configured metric name for float/boolean values."
                 },
                 "value": {
-                    "description": "The feedback value. Type depends on metric_name: string for 'comment', string/array for 'demonstration', number for float metrics, boolean for boolean metrics."
+                    "description": "The feedback value. Type depends on metric_name: string for 'comment', string/array for 'demonstration', number for float metrics, boolean for boolean metrics.",
+                    "anyOf": [
+                        { "type": "string" },
+                        { "type": "array", "items": { "type": "object" } },
+                        { "type": "number" },
+                        { "type": "boolean" }
+                    ]
                 },
                 "dryrun": {
                     "type": "boolean",
                     "description": "If true, feedback will not be stored (useful for testing)."
                 }
             },
-            "required": ["metric_name", "value"]
+            "required": ["metric_name", "value"],
+            "additionalProperties": false
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -115,6 +133,6 @@ impl SimpleTool for FeedbackTool {
         ctx.client()
             .feedback(params)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| AutopilotToolError::client_error("feedback", e).into())
     }
 }

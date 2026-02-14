@@ -28,8 +28,8 @@ interface BasicInfoProps {
   evaluation_config: InferenceEvaluationConfig;
   dataset_name: string;
   datapoint_id: string;
-  datapoint_name: string | null;
-  datapoint_staled_at: string | null;
+  datapoint_name?: string;
+  datapoint_staled_at?: string;
   onRenameDatapoint?: (newName: string) => void | Promise<void>;
 }
 

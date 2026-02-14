@@ -13,16 +13,18 @@ use crate::inference::types::{ContentBlockOutput, StoredRequestMessage};
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Response containing model inferences
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetModelInferencesResponse {
     pub model_inferences: Vec<ModelInference>,
 }
 
 // NOTE(shuyangli): Internal-only until we sort out `input_messages` types.
 /// Wire type for a single ModelInference (raw request and response sent to a model).
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ModelInference {
     /// Unique identifier for the ModelInference.
     pub id: Uuid,
@@ -31,10 +33,12 @@ pub struct ModelInference {
     pub inference_id: Uuid,
 
     /// Raw request sent to the model.
-    pub raw_request: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_request: Option<String>,
 
     /// Raw response received from the model.
-    pub raw_response: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<String>,
 
     /// Name of the model used for the inference.
     pub model_name: String,
@@ -69,10 +73,12 @@ pub struct ModelInference {
 
     // TODO(shuyangli): Figure out if this should be a different message type, since we should not send Stored* types in API.
     /// Input messages sent to the model.
-    pub input_messages: Vec<StoredRequestMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_messages: Option<Vec<StoredRequestMessage>>,
 
     /// Output content blocks from the model.
-    pub output: Vec<ContentBlockOutput>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<Vec<ContentBlockOutput>>,
 
     /// Whether the inference was cached.
     pub cached: bool,

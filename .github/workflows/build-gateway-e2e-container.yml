@@ -1,4 +1,4 @@
-name: Build Gateway Container
+name: Build Gateway E2E Container
 
 on:
   workflow_call:
@@ -8,13 +8,8 @@ on:
       DOCKERHUB_LIMITED_TOKEN:
         required: true
 
-env:
-  TAG: tensorzero/gateway-e2e:sha-${{ github.sha }}
-  LATEST_TAG: tensorzero/gateway-e2e:latest
-  TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
-
 jobs:
-  build-gateway-container:
+  build-gateway-e2e-container:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
@@ -51,11 +46,38 @@ jobs:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      # For some reason, 'docker compose build --push' doesn't work when using a remote builder (i.e. Namespace)
-      - name: Build test containers
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml build --push provider-proxy gateway live-tests
+      - name: Build `gateway-e2e` container
+        run: |
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f gateway/Dockerfile --build-arg PROFILE=dev --build-arg "CARGO_BUILD_FLAGS=--features e2e_tests" --target gateway . -t tensorzero/gateway-e2e:sha-${{ github.sha }}
+
+      - name: Save `gateway-e2e` container
+        run: docker save tensorzero/gateway-e2e:sha-${{ github.sha }} > gateway-e2e-container.tar
+
+      - name: Upload `gateway-e2e` container as an artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: build-gateway-e2e-container
+          path: gateway-e2e-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
 
       # Note that this pushes an e2e build of the gateway to 'tensorzero/gateway-e2e'.
       # It does *not* push to the production 'tensorzero/gateway' repo.
-      - name: Push test containers
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml push provider-proxy gateway live-tests
+      - name: Push `gateway-e2e` container to DockerHub
+        run: docker push tensorzero/gateway-e2e:sha-${{ github.sha }}
+
+      - name: Wait for image to be available on Docker Hub
+        run: |
+          IMAGE="tensorzero/gateway-e2e:sha-${{ github.sha }}"
+          echo "Waiting for ${IMAGE} to be available on Docker Hub..."
+          for i in $(seq 1 30); do
+            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+              echo "Image ${IMAGE} is available on Docker Hub"
+              exit 0
+            fi
+            echo "Attempt ${i}/30: Image not yet available, waiting 10s..."
+            sleep 10
+          done
+          echo "Timed out waiting for ${IMAGE} to appear on Docker Hub"
+          exit 1

@@ -3,12 +3,16 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use autopilot_client::AutopilotSideInfo;
+use durable_tools::{SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the error simple tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct ErrorSimpleParams {
     /// The error message to return.
     pub error_message: String,
@@ -20,15 +24,15 @@ pub struct ErrorSimpleParams {
 pub struct ErrorSimpleTool;
 
 impl ToolMetadata for ErrorSimpleTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = ();
     type LlmParams = ErrorSimpleParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("error_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Always returns an error with the specified message. A SimpleTool for testing error propagation.",
         )
@@ -43,8 +47,6 @@ impl SimpleTool for ErrorSimpleTool {
         _ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<Self::Output> {
-        Err(ToolError::Validation {
-            message: llm_params.error_message,
-        })
+        Err(AutopilotToolError::test_error(llm_params.error_message).into())
     }
 }

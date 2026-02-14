@@ -138,6 +138,31 @@
   --color-purple-800: hsl(var(--purple-800));
   --color-purple-900: hsl(var(--purple-900));
 
+  --color-orange-50: hsl(var(--orange-50));
+  --color-orange-100: hsl(var(--orange-100));
+  --color-orange-200: hsl(var(--orange-200));
+  --color-orange-300: hsl(var(--orange-300));
+  --color-orange-400: hsl(var(--orange-400));
+  --color-orange-500: hsl(var(--orange-500));
+  --color-orange-600: hsl(var(--orange-600));
+  --color-orange-700: hsl(var(--orange-700));
+  --color-orange-800: hsl(var(--orange-800));
+  --color-orange-900: hsl(var(--orange-900));
+  --color-orange-950: hsl(var(--orange-950));
+
+  --color-menu-highlight: hsl(var(--menu-highlight));
+  --color-menu-highlight-foreground: hsl(var(--menu-highlight-foreground));
+  --color-menu-highlight-icon: hsl(var(--menu-highlight-icon));
+  --color-menu-highlight-badge: hsl(var(--menu-highlight-badge));
+  --color-menu-highlight-badge-foreground: hsl(
+    var(--menu-highlight-badge-foreground)
+  );
+
+  --color-card-highlight: hsl(var(--card-highlight));
+  --color-card-highlight-icon: hsl(var(--card-highlight-icon));
+  --color-card-highlight-icon-bg: hsl(var(--card-highlight-icon-bg));
+  --color-card-highlight-border: hsl(var(--card-highlight-border));
+
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
 
@@ -241,7 +266,7 @@
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 0 0% 47%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
@@ -298,6 +323,28 @@
     --purple-700: 260 72% 36%;
     --purple-800: 260 80% 24%;
     --purple-900: 260 88% 16%;
+
+    --orange-50: 32 100% 96%;
+    --orange-100: 34 100% 91%;
+    --orange-200: 31 100% 82%;
+    --orange-300: 30 100% 71%;
+    --orange-400: 26 100% 60%;
+    --orange-500: 23 100% 52%;
+    --orange-600: 19 100% 50%;
+    --orange-700: 15 98% 40%;
+    --orange-800: 13 87% 34%;
+    --orange-900: 13 83% 28%;
+    --orange-950: 11 89% 15%;
+
+    --menu-highlight: var(--orange-50);
+    --menu-highlight-foreground: var(--orange-900);
+    --menu-highlight-icon: var(--orange-800);
+    --menu-highlight-badge: var(--orange-100);
+    --menu-highlight-badge-foreground: var(--orange-800);
+    --card-highlight: var(--orange-50);
+    --card-highlight-icon: var(--orange-600);
+    --card-highlight-icon-bg: var(--orange-100);
+    --card-highlight-border: var(--orange-100);
   }
 
   .dark {
@@ -318,7 +365,7 @@
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted-foreground: 0 0% 65%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
@@ -339,6 +386,16 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --menu-highlight: var(--orange-900);
+    --menu-highlight-foreground: var(--orange-100);
+    --menu-highlight-icon: var(--orange-200);
+    --menu-highlight-badge: var(--orange-800);
+    --menu-highlight-badge-foreground: var(--orange-200);
+    --card-highlight: var(--orange-900);
+    --card-highlight-icon: var(--orange-200);
+    --card-highlight-icon-bg: var(--orange-800);
+    --card-highlight-border: var(--orange-800);
   }
 }
 

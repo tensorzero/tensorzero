@@ -7,4 +7,5 @@ export type MetricConfig = {
   type: MetricConfigType;
   optimize: MetricConfigOptimize;
   level: MetricConfigLevel;
+  description?: string;
 };

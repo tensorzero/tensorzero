@@ -10,9 +10,10 @@ use mockall::mock;
 use sqlx::types::chrono::Utc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
-    GetConfigResponse, GetDatapointsResponse, GetInferencesResponse, InferenceResponse,
-    ListDatapointsRequest, ListInferencesRequest, Role, StoredChatInference, StoredInference,
+    CreateDatapointsResponse, DatasetMetadata, DeleteDatapointsResponse, FeedbackParams,
+    FeedbackResponse, GetConfigResponse, GetDatapointsResponse, GetInferencesRequest,
+    GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
+    ListDatasetsResponse, ListInferencesRequest, Role, StoredChatInference, StoredInference,
     UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
     WriteConfigResponse,
 };
@@ -56,7 +57,7 @@ mock! {
             &self,
             session_id: Uuid,
             params: durable_tools::ListEventsParams,
-        ) -> Result<durable_tools::ListEventsResponse, TensorZeroClientError>;
+        ) -> Result<durable_tools::GatewayListEventsResponse, TensorZeroClientError>;
 
         async fn list_autopilot_sessions(
             &self,
@@ -66,8 +67,8 @@ mock! {
         async fn action(
             &self,
             snapshot_hash: SnapshotHash,
-            input: tensorzero::ActionInput,
-        ) -> Result<InferenceResponse, TensorZeroClientError>;
+            input: durable_tools::ActionInput,
+        ) -> Result<durable_tools::ActionResponse, TensorZeroClientError>;
 
         async fn get_config_snapshot(
             &self,
@@ -90,6 +91,11 @@ mock! {
             dataset_name: String,
             params: CreateDatapointsFromInferenceRequestParams,
         ) -> Result<CreateDatapointsResponse, TensorZeroClientError>;
+
+        async fn list_datasets(
+            &self,
+            request: ListDatasetsRequest,
+        ) -> Result<ListDatasetsResponse, TensorZeroClientError>;
 
         async fn list_datapoints(
             &self,
@@ -118,6 +124,11 @@ mock! {
         async fn list_inferences(
             &self,
             request: ListInferencesRequest,
+        ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+        async fn get_inferences(
+            &self,
+            request: GetInferencesRequest,
         ) -> Result<GetInferencesResponse, TensorZeroClientError>;
 
         async fn launch_optimization_workflow(
@@ -169,6 +180,7 @@ pub fn create_mock_chat_response(text: &str) -> InferenceResponse {
         },
         raw_usage: None,
         original_response: None,
+        raw_response: None,
         finish_reason: None,
     })
 }
@@ -254,7 +266,7 @@ pub fn create_mock_stored_chat_inference(
     StoredInference::Chat(StoredChatInference {
         function_name: function_name.to_string(),
         variant_name: variant_name.to_string(),
-        input: StoredInput {
+        input: Some(StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
@@ -262,18 +274,18 @@ pub fn create_mock_stored_chat_inference(
                     text: "test input".to_string(),
                 })],
             }],
-        },
-        output: vec![ContentBlockChatOutput::Text(Text {
+        }),
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test output".to_string(),
-        })],
+        })]),
         dispreferred_outputs: vec![],
         timestamp: Utc::now(),
         episode_id: Uuid::now_v7(),
         inference_id,
         tool_params: DynamicToolParams::default(),
         tags: HashMap::new(),
-        extra_body: Default::default(),
-        inference_params: Default::default(),
+        extra_body: Some(Default::default()),
+        inference_params: Some(Default::default()),
         processing_time_ms: Some(100),
         ttft_ms: Some(50),
     })
@@ -290,5 +302,23 @@ pub fn create_mock_feedback_by_variant(
         mean,
         variance: if count > 1 { Some(0.1) } else { None },
         count,
+    }
+}
+
+/// Create a mock ListDatasetsResponse with the given datasets.
+pub fn create_mock_list_datasets_response(datasets: Vec<DatasetMetadata>) -> ListDatasetsResponse {
+    ListDatasetsResponse { datasets }
+}
+
+/// Create a mock DatasetMetadata for testing.
+pub fn create_mock_dataset_metadata(
+    dataset_name: &str,
+    datapoint_count: u32,
+    last_updated: &str,
+) -> DatasetMetadata {
+    DatasetMetadata {
+        dataset_name: dataset_name.to_string(),
+        datapoint_count,
+        last_updated: last_updated.to_string(),
     }
 }

@@ -9,15 +9,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use autopilot_client::OptimizationWorkflowSideInfo;
+use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use autopilot_tools::tools::{
     LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolParams,
 };
 use common::MockTensorZeroClient;
 use durable::MIGRATOR;
-use durable_tools::{
-    SpawnOptions, TensorZeroClient, TensorZeroClientError, ToolExecutor, WorkerOptions,
-};
+use durable_tools::{TensorZeroClient, TensorZeroClientError, ToolExecutor, WorkerOptions};
 use sqlx::PgPool;
 use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::optimization::dicl::{
@@ -58,10 +56,15 @@ fn create_test_params() -> LaunchOptimizationWorkflowToolParams {
     }
 }
 
-fn create_test_side_info() -> OptimizationWorkflowSideInfo {
-    OptimizationWorkflowSideInfo {
-        poll_interval_secs: 1, // Short for tests
-        max_wait_secs: 30,     // Reasonable timeout for tests
+fn create_test_side_info() -> AutopilotSideInfo {
+    AutopilotSideInfo {
+        optimization: OptimizationWorkflowSideInfo {
+            poll_interval_secs: 1, // Short for tests
+            max_wait_secs: 30,     // Reasonable timeout for tests
+        },
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "test-config-hash".to_string(),
     }
 }
 
@@ -127,17 +130,17 @@ async fn test_launch_optimization_workflow_tool_immediate_completion(
         .expect("Failed to create queue");
 
     executor
-        .register_task_tool::<LaunchOptimizationWorkflowTool>()
+        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
         .await
         .unwrap();
 
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
-        .spawn_tool::<LaunchOptimizationWorkflowTool>(
-            create_test_params(),
-            create_test_side_info(),
+        .spawn_tool_by_name(
+            "launch_optimization_workflow",
+            serde_json::to_value(create_test_params()).unwrap(),
+            serde_json::to_value(create_test_side_info()).unwrap(),
             episode_id,
-            SpawnOptions::default(),
         )
         .await
         .expect("Failed to spawn task");
@@ -206,17 +209,17 @@ async fn test_launch_optimization_workflow_tool_multiple_polls(pool: PgPool) -> 
         .expect("Failed to create queue");
 
     executor
-        .register_task_tool::<LaunchOptimizationWorkflowTool>()
+        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
         .await
         .unwrap();
 
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
-        .spawn_tool::<LaunchOptimizationWorkflowTool>(
-            create_test_params(),
-            create_test_side_info(),
+        .spawn_tool_by_name(
+            "launch_optimization_workflow",
+            serde_json::to_value(create_test_params()).unwrap(),
+            serde_json::to_value(create_test_side_info()).unwrap(),
             episode_id,
-            SpawnOptions::default(),
         )
         .await
         .expect("Failed to spawn task");
@@ -274,17 +277,17 @@ async fn test_launch_optimization_workflow_tool_failed(pool: PgPool) -> sqlx::Re
         .expect("Failed to create queue");
 
     executor
-        .register_task_tool::<LaunchOptimizationWorkflowTool>()
+        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
         .await
         .unwrap();
 
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
-        .spawn_tool::<LaunchOptimizationWorkflowTool>(
-            create_test_params(),
-            create_test_side_info(),
+        .spawn_tool_by_name(
+            "launch_optimization_workflow",
+            serde_json::to_value(create_test_params()).unwrap(),
+            serde_json::to_value(create_test_side_info()).unwrap(),
             episode_id,
-            SpawnOptions::default(),
         )
         .await
         .expect("Failed to spawn task");
@@ -337,17 +340,17 @@ async fn test_launch_optimization_workflow_tool_launch_error(pool: PgPool) -> sq
         .expect("Failed to create queue");
 
     executor
-        .register_task_tool::<LaunchOptimizationWorkflowTool>()
+        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
         .await
         .unwrap();
 
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
-        .spawn_tool::<LaunchOptimizationWorkflowTool>(
-            create_test_params(),
-            create_test_side_info(),
+        .spawn_tool_by_name(
+            "launch_optimization_workflow",
+            serde_json::to_value(create_test_params()).unwrap(),
+            serde_json::to_value(create_test_side_info()).unwrap(),
             episode_id,
-            SpawnOptions::default(),
         )
         .await
         .expect("Failed to spawn task");

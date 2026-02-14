@@ -13,12 +13,16 @@ durable-tools = { path = "../durable-tools" }
 tensorzero = { path = "../../clients/rust" }
 autopilot-client = { path = "../autopilot-client" }
 tensorzero-core = { path = "../../tensorzero-core" }
+config-applier = { path = "../config-applier" }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 anyhow.workspace = true
 async-trait.workspace = true
 schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+serde_path_to_error.workspace = true
+tensorzero-derive = { path = "../tensorzero-derive" }
+thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 

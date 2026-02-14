@@ -4,7 +4,9 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use autopilot_client::AutopilotSideInfo;
-use durable_tools::{SimpleTool, SimpleToolContext, ToolError, ToolMetadata, ToolResult};
+use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
+
+use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
@@ -31,11 +33,11 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsFromInferencesToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("create_datapoints_from_inferences")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Create datapoints in a dataset from existing inferences. \
              Specify either specific inference IDs or a query to find inferences. \
@@ -43,7 +45,7 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Create datapoints from existing inferences.",
@@ -53,29 +55,74 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
                     "description": "The name of the dataset to create datapoints in."
                 },
                 "params": {
-                    "type": "object",
-                    "description": "Parameters specifying which inferences to use.",
-                    "properties": {
-                        "inference_ids": {
-                            "type": "array",
-                            "items": { "type": "string", "format": "uuid" },
-                            "description": "Specific inference IDs to create datapoints from (use this OR query parameters)."
+                    "description": "Parameters specifying which inferences to use. Use 'inference_ids' mode to specify exact IDs, or 'inference_query' mode to query by function name.",
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "description": "Create datapoints from specific inference IDs.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["inference_ids"],
+                                    "description": "Mode selector - must be 'inference_ids' for this variant."
+                                },
+                                "inference_ids": {
+                                    "type": "array",
+                                    "items": { "type": "string", "format": "uuid" },
+                                    "description": "The inference IDs to create datapoints from."
+                                },
+                                "output_source": {
+                                    "type": "string",
+                                    "enum": ["none", "inference", "demonstration"],
+                                    "description": "Source for datapoint output: 'none' (input-only), 'inference' (original output, default), or 'demonstration' (use demonstration feedback)."
+                                }
+                            },
+                            "required": ["type", "inference_ids"],
+                            "additionalProperties": false
                         },
-                        "function_name": {
-                            "type": "string",
-                            "description": "Filter inferences by function name (for query mode)."
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of inferences to use (for query mode)."
+                        {
+                            "type": "object",
+                            "description": "Create datapoints from inferences matching a query.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["inference_query"],
+                                    "description": "Mode selector - must be 'inference_query' for this variant."
+                                },
+                                "function_name": {
+                                    "type": "string",
+                                    "description": "Filter inferences by function name."
+                                },
+                                "variant_name": {
+                                    "type": "string",
+                                    "description": "Filter inferences by variant name."
+                                },
+                                "limit": {
+                                    "type": "integer",
+                                    "description": "Maximum number of inferences to use.",
+                                },
+                                "output_source": {
+                                    "type": "string",
+                                    "enum": ["none", "inference", "demonstration"],
+                                    "description": "Source for datapoint output: 'none' (input-only), 'inference' (original output, default), or 'demonstration' (use demonstration feedback)."
+                                }
+                            },
+                            "required": ["type"],
+                            "additionalProperties": false
                         }
-                    }
+                    ]
                 }
             },
-            "required": ["dataset_name", "params"]
+            "required": ["dataset_name", "params"],
+            "additionalProperties": false
         });
 
-        serde_json::from_value(schema).map_err(|e| ToolError::SchemaGeneration(e.into()))
+        serde_json::from_value(schema).map_err(|e| {
+            NonControlToolError::SchemaGeneration {
+                message: e.to_string(),
+            }
+            .into()
+        })
     }
 }
 
@@ -90,6 +137,8 @@ impl SimpleTool for CreateDatapointsFromInferencesTool {
         ctx.client()
             .create_datapoints_from_inferences(llm_params.dataset_name, llm_params.params)
             .await
-            .map_err(|e| ToolError::ExecutionFailed(e.into()))
+            .map_err(|e| {
+                AutopilotToolError::client_error("create_datapoints_from_inferences", e).into()
+            })
     }
 }

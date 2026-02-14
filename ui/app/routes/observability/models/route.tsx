@@ -7,7 +7,6 @@ export const handle: RouteHandle = {
 };
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { TimeWindow } from "~/types/tensorzero";
-import { getQuantiles } from "tensorzero-node";
 import { ModelUsage } from "~/components/model/ModelUsage";
 import { ModelLatency } from "~/components/model/ModelLatency";
 import {
@@ -53,29 +52,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   const modelUsageTimeseriesPromise = client
     .getModelUsageTimeseries(usageTimeGranularity, numPeriods)
     .then((response) => response.data);
-  const modelLatencyQuantilesPromise = client
-    .getModelLatencyQuantiles(latencyTimeGranularity)
-    .then((response) => response.data);
-  const quantiles = getQuantiles();
+  const modelLatencyQuantilesPromise = client.getModelLatencyQuantiles(
+    latencyTimeGranularity,
+  );
   return {
     modelUsageTimeseriesPromise,
     usageTimeGranularity,
     latencyTimeGranularity,
     modelLatencyQuantilesPromise,
-    quantiles,
   };
 }
 
 export default function ModelsPage({ loaderData }: Route.ComponentProps) {
-  const {
-    modelUsageTimeseriesPromise,
-    modelLatencyQuantilesPromise,
-    quantiles,
-  } = loaderData;
+  const { modelUsageTimeseriesPromise, modelLatencyQuantilesPromise } =
+    loaderData;
 
   return (
     <PageLayout>
-      <PageHeader name="Models" />
+      <PageHeader heading="Models" />
 
       <SectionsGroup>
         <SectionLayout>
@@ -85,8 +79,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Latency" />
           <ModelLatency
-            modelLatencyDataPromise={modelLatencyQuantilesPromise}
-            quantiles={quantiles}
+            modelLatencyResponsePromise={modelLatencyQuantilesPromise}
           />
         </SectionLayout>
       </SectionsGroup>

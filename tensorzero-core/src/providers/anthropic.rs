@@ -3,12 +3,14 @@ use futures::future::try_join_all;
 use lazy_static::lazy_static;
 use mime::MediaType;
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::time::Duration;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use url::Url;
 
@@ -43,6 +45,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
+use crate::utils::deprecation_warning;
 use uuid::Uuid;
 
 use super::helpers::convert_stream_error;
@@ -51,7 +54,7 @@ use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_t
 lazy_static! {
     static ref ANTHROPIC_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
-        Url::parse("https://api.anthropic.com/v1/messages")
+        Url::parse("https://api.anthropic.com/v1/")
             .expect("Failed to parse ANTHROPIC_DEFAULT_BASE_URL")
     };
 }
@@ -59,14 +62,76 @@ const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+/// Checks if the api_base ends with `/messages` and warns if it does.
+/// This mirrors the OpenAI pattern in `check_api_base_suffix`.
+fn check_api_base_suffix(api_base: &Url) {
+    let path = api_base.path();
+    if path.ends_with("/messages") || path.ends_with("/messages/") {
+        // IMPORTANT: After the deprecation period, we should still keep `check_api_base_suffix` but change the warning message.
+        // See OpenAI's `check_api_base_suffix` for more details.
+        // Deprecation #5668: https://github.com/tensorzero/tensorzero/issues/5668
+        deprecation_warning(&format!(
+            "The gateway automatically appends `/messages` to the `api_base`. \
+            You provided `{api_base}` which includes the `/messages` suffix. \
+            Please remove the `/messages` suffix from `api_base`. \
+            The suffix will be stripped automatically for now, but this behavior \
+            may be removed in a future release."
+        ));
+    }
+}
+
+/// Normalizes an api_base by stripping the `/messages` suffix if present.
+/// Returns the normalized URL.
+fn normalize_api_base(mut api_base: Url) -> Url {
+    let path = api_base.path().to_string();
+    if path.ends_with("/messages") {
+        let new_path = &path[..path.len() - "/messages".len()];
+        // Ensure trailing slash
+        let new_path = if new_path.ends_with('/') {
+            new_path.to_string()
+        } else {
+            format!("{new_path}/")
+        };
+        api_base.set_path(&new_path);
+        api_base
+    } else if path.ends_with("/messages/") {
+        let new_path = &path[..path.len() - "/messages/".len()];
+        // Ensure trailing slash
+        let new_path = if new_path.ends_with('/') {
+            new_path.to_string()
+        } else {
+            format!("{new_path}/")
+        };
+        api_base.set_path(&new_path);
+        api_base
+    } else {
+        api_base
+    }
+}
+
+/// Constructs the messages URL by appending `/messages` to the base URL.
+/// This mirrors the OpenAI pattern in `get_chat_url`.
+fn get_messages_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("messages").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AnthropicProvider {
     model_name: String,
     api_base: Option<Url>,
     #[serde(skip)]
     credentials: AnthropicCredentials,
-    beta_structured_outputs: bool,
+    provider_tools: Vec<Value>,
 }
 
 impl AnthropicProvider {
@@ -74,13 +139,19 @@ impl AnthropicProvider {
         model_name: String,
         api_base: Option<Url>,
         credentials: AnthropicCredentials,
-        beta_structured_outputs: bool,
+        provider_tools: Vec<Value>,
     ) -> Self {
+        // Check and normalize api_base if provided
+        let normalized_api_base = api_base.map(|url| {
+            check_api_base_suffix(&url);
+            normalize_api_base(url)
+        });
+
         AnthropicProvider {
             model_name,
-            api_base,
+            api_base: normalized_api_base,
             credentials,
-            beta_structured_outputs,
+            provider_tools,
         }
     }
 
@@ -88,10 +159,18 @@ impl AnthropicProvider {
         &self.model_name
     }
 
+    pub fn provider_tools(&self) -> &[Value] {
+        &self.provider_tools
+    }
+
     fn base_url(&self) -> &Url {
         self.api_base
             .as_ref()
             .unwrap_or(&ANTHROPIC_DEFAULT_BASE_URL)
+    }
+
+    fn messages_url(&self) -> Result<Url, Error> {
+        get_messages_url(self.base_url())
     }
 }
 
@@ -163,14 +242,32 @@ impl AnthropicCredentials {
     }
 }
 
+/// Collects all provider tools (static from config + dynamic scoped from request).
+pub(super) fn collect_all_provider_tools(
+    static_tools: &[Value],
+    request: &ModelInferenceRequest<'_>,
+    model_name: &str,
+    provider_name: &str,
+) -> Vec<Value> {
+    let mut all_tools: Vec<Value> = static_tools.to_vec();
+    if let Some(tc) = request.tool_config.as_deref() {
+        all_tools.extend(
+            tc.get_scoped_provider_tools(model_name, provider_name)
+                .into_iter()
+                .map(|pt| pt.tool.clone()),
+        );
+    }
+    all_tools
+}
+
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
-            model_name: tensorzero_model_name,
+            provider_name,
+            model_name,
             otlp_config: _,
             model_inference_id,
         }: ModelProviderRequest<'a>,
@@ -178,9 +275,10 @@ impl InferenceProvider for AnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
+        let all_provider_tools =
+            collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
-            AnthropicRequestBody::new(&self.model_name, request, self.beta_structured_outputs)
-                .await?,
+            AnthropicRequestBody::new(&self.model_name, request, &all_provider_tools).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -195,21 +293,19 @@ impl InferenceProvider for AnthropicProvider {
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let mut builder = http_client
-            .post(self.base_url().as_ref())
+        let request_url = self.messages_url()?;
+        let builder = http_client
+            .post(request_url.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
-        if self.beta_structured_outputs {
-            builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
-        }
-
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
-            tensorzero_model_name,
+            model_name,
             request_body,
             builder,
         )
@@ -225,6 +321,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -237,6 +334,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -249,9 +347,8 @@ impl InferenceProvider for AnthropicProvider {
                 generic_request: request,
                 input_messages: request.messages.clone(),
                 raw_response,
-                model_name: tensorzero_model_name,
+                model_name,
                 provider_name: &model_provider.name,
-                beta_structured_outputs: self.beta_structured_outputs,
                 model_inference_id,
             };
             Ok(response_with_latency.try_into()?)
@@ -261,11 +358,17 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error fetching response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
-            handle_anthropic_error(response_code, raw_request, response_text)
+            handle_anthropic_error(
+                response_code,
+                raw_request,
+                response_text,
+                ApiType::ChatCompletions,
+            )
         }
     }
 
@@ -283,9 +386,10 @@ impl InferenceProvider for AnthropicProvider {
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
+        let all_provider_tools =
+            collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
-            AnthropicRequestBody::new(&self.model_name, request, self.beta_structured_outputs)
-                .await?,
+            AnthropicRequestBody::new(&self.model_name, request, &all_provider_tools).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -297,17 +401,15 @@ impl InferenceProvider for AnthropicProvider {
         })?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
-        let mut builder = http_client
-            .post(self.base_url().as_ref())
+        let request_url = self.messages_url()?;
+        let builder = http_client
+            .post(request_url.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
-        if self.beta_structured_outputs {
-            builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
-        }
-
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -326,8 +428,14 @@ impl InferenceProvider for AnthropicProvider {
             model_inference_id,
         )
         .peekable();
-        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
-        if needs_json_prefill(request, self.beta_structured_outputs) {
+        let chunk = peek_first_chunk(
+            &mut stream,
+            &raw_request,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+        )
+        .await?;
+        if needs_json_prefill(request) {
             prefill_json_chunk_response(chunk);
         }
         Ok((stream, raw_request))
@@ -375,13 +483,13 @@ fn stream_anthropic(
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
-        let mut current_tool_id : Option<String> = None;
-        let mut current_tool_name: Option<String> = None;
+        // Track tool state per content block index for robust handling of interleaved blocks
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
 
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -393,6 +501,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.to_string()),
                                 raw_response: Some(message.data.clone()),
                             }));
@@ -406,8 +515,7 @@ fn stream_anthropic(
                                 message.data,
                                 data,
                                 start_time.elapsed(),
-                                &mut current_tool_id,
-                                &mut current_tool_name,
+                                &mut tool_state,
                                 discard_unknown_chunks,
                                 &model_name,
                                 &provider_name,
@@ -491,7 +599,7 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(super) struct AnthropicTool<'a> {
+pub(super) struct AnthropicFunctionTool<'a> {
     pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) description: Option<&'a str>,
@@ -500,14 +608,62 @@ pub(super) struct AnthropicTool<'a> {
     pub(super) strict: Option<bool>,
 }
 
-impl<'a> AnthropicTool<'a> {
-    pub fn new(tool: &'a FunctionToolConfig, beta_structured_outputs: bool) -> Self {
+impl<'a> AnthropicFunctionTool<'a> {
+    pub fn new(tool: &'a FunctionToolConfig, supports_strict_mode: bool) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
         Self {
             name: tool.name(),
             description: Some(tool.description()),
             input_schema: tool.parameters(),
-            strict: beta_structured_outputs.then_some(tool.strict()),
+            strict: supports_strict_mode.then_some(tool.strict()),
+        }
+    }
+}
+
+/// Wrapper enum for tools sent to Anthropic API.
+/// Can be either a function tool (with name, description, input_schema) or a provider tool (raw JSON like web_search, bash).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(super) enum AnthropicTool<'a> {
+    Function(AnthropicFunctionTool<'a>),
+    Provider(&'a Value),
+}
+
+/// Builds the tools list for Anthropic requests, combining function tools and provider tools.
+/// Returns None if no tools should be sent (ToolChoice::None or empty lists).
+///
+/// This is shared between Anthropic and GCP Vertex Anthropic providers.
+pub(super) fn build_anthropic_tools<'a>(
+    tool_config: Option<&'a Cow<'a, ToolCallConfig>>,
+    provider_tools: &'a [Value],
+    supports_strict_mode: bool,
+) -> Result<Option<Vec<AnthropicTool<'a>>>, Error> {
+    // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
+    // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
+    // request payload to achieve the same effect.
+    match tool_config {
+        // ToolChoice::None - don't send any tools (function or provider)
+        Some(c) if matches!(c.tool_choice, ToolChoice::None) => Ok(None),
+        // Other tool choices - send both function and provider tools
+        Some(c) => {
+            let mut all_tools: Vec<AnthropicTool<'a>> = c
+                .strict_tools_available()?
+                .map(|tool| {
+                    AnthropicTool::Function(AnthropicFunctionTool::new(tool, supports_strict_mode))
+                })
+                .collect();
+            all_tools.extend(provider_tools.iter().map(AnthropicTool::Provider));
+            Ok(Some(all_tools))
+        }
+        // No tool_config - only send provider tools if any exist
+        None => {
+            if provider_tools.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(
+                    provider_tools.iter().map(AnthropicTool::Provider).collect(),
+                ))
+            }
         }
     }
 }
@@ -573,6 +729,7 @@ impl<'a> AnthropicMessageContent<'a> {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: provider_type.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -583,6 +740,7 @@ impl<'a> AnthropicMessageContent<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: provider_type.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }));
@@ -742,6 +900,12 @@ pub enum AnthropicOutputFormat {
     JsonSchema { schema: Value },
 }
 
+#[derive(Debug, PartialEq, Serialize)]
+pub struct AnthropicOutputConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<AnthropicOutputFormat>,
+}
+
 #[derive(Debug, Default, PartialEq, Serialize)]
 struct AnthropicRequestBody<'a> {
     model: &'a str,
@@ -750,7 +914,7 @@ struct AnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    output_format: Option<AnthropicOutputFormat>,
+    output_config: Option<AnthropicOutputConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     // This is the system message
     system: Option<Vec<AnthropicSystemBlock<'a>>>,
@@ -775,21 +939,19 @@ pub(super) struct AnthropicMessagesConfig {
     pub(super) fetch_and_encode_input_files_before_inference: bool,
 }
 
-fn needs_json_prefill(request: &ModelInferenceRequest<'_>, beta_structured_outputs: bool) -> bool {
-    matches!(
-        request.json_mode,
-        ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-    ) && matches!(request.function_type, FunctionType::Json)
-        // Anthropic rejects prefill when 'output_format' is specified
-        && !(beta_structured_outputs
-            && matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict))
+/// Returns true if we should use JSON prefill for this request.
+/// Prefill is only used for json_mode=on. For json_mode=strict, we use
+/// the beta structured outputs feature with output_format instead.
+fn needs_json_prefill(request: &ModelInferenceRequest<'_>) -> bool {
+    matches!(request.json_mode, ModelInferenceRequestJsonMode::On)
+        && matches!(request.function_type, FunctionType::Json)
 }
 
 impl<'a> AnthropicRequestBody<'a> {
     async fn new(
         model_name: &'a str,
         request: &'a ModelInferenceRequest<'_>,
-        beta_structured_outputs: bool,
+        provider_tools: &'a [Value],
     ) -> Result<AnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -812,23 +974,13 @@ impl<'a> AnthropicRequestBody<'a> {
                 AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
             }))
             .await?;
-        let messages = if needs_json_prefill(request, beta_structured_outputs) {
+        let messages = if needs_json_prefill(request) {
             prefill_json_message(messages)
         } else {
             messages
         };
 
-        // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
-        // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
-        // request payload to achieve the same effect.
-        let tools = match &request.tool_config {
-            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
-                c.strict_tools_available()?
-                    .map(|tool| AnthropicTool::new(tool, beta_structured_outputs))
-                    .collect::<Vec<_>>(),
-            ),
-            _ => None,
-        };
+        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools, true)?;
 
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
@@ -855,19 +1007,15 @@ impl<'a> AnthropicRequestBody<'a> {
             service_tier: None, // handled below
             tool_choice,
             tools,
-            output_format: if beta_structured_outputs {
-                match request.json_mode {
-                    ModelInferenceRequestJsonMode::Strict => {
-                        request
-                            .output_schema
-                            .map(|schema| AnthropicOutputFormat::JsonSchema {
-                                schema: schema.clone(),
-                            })
-                    }
-                    ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
+            output_config: match request.json_mode {
+                ModelInferenceRequestJsonMode::Strict => {
+                    request.output_schema.map(|schema| AnthropicOutputConfig {
+                        format: Some(AnthropicOutputFormat::JsonSchema {
+                            schema: schema.clone(),
+                        }),
+                    })
                 }
-            } else {
-                None
+                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
             },
             stop_sequences: request.borrow_stop_sequences(),
         };
@@ -956,6 +1104,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
             ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }))
@@ -1020,8 +1169,9 @@ pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseC
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlock {
     Text {
         text: String,
@@ -1058,6 +1208,7 @@ fn convert_to_output(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(serde_json::to_string(&input).unwrap_or_default()),
                     })
@@ -1072,6 +1223,7 @@ fn convert_to_output(
             signature: Some(signature),
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         })),
         FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
@@ -1079,6 +1231,7 @@ fn convert_to_output(
                 signature: Some(data),
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }))
         }
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown(Unknown {
@@ -1089,17 +1242,40 @@ fn convert_to_output(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct AnthropicUsage {
-    input_tokens: u32,
-    output_tokens: u32,
+    #[serde(default)]
+    input_tokens: Option<u32>,
+    #[serde(default)]
+    output_tokens: Option<u32>,
+    /// Number of input tokens used to create a new cache entry
+    #[serde(default)]
+    cache_creation_input_tokens: Option<u32>,
+    /// Number of input tokens read from cache
+    #[serde(default)]
+    cache_read_input_tokens: Option<u32>,
 }
 
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
+        // Anthropic reports cache tokens separately from input_tokens.
+        // We need to add them back to get the total input token count.
+        let total_input_tokens = match (
+            value.input_tokens,
+            value.cache_creation_input_tokens,
+            value.cache_read_input_tokens,
+        ) {
+            (None, None, None) => None,
+            _ => Some(
+                value.input_tokens.unwrap_or(0)
+                    + value.cache_creation_input_tokens.unwrap_or(0)
+                    + value.cache_read_input_tokens.unwrap_or(0),
+            ),
+        };
+
         Usage {
-            input_tokens: Some(value.input_tokens),
-            output_tokens: Some(value.output_tokens),
+            input_tokens: total_input_tokens,
+            output_tokens: value.output_tokens,
         }
     }
 }
@@ -1152,7 +1328,6 @@ struct AnthropicResponseWithMetadata<'a> {
     input_messages: Vec<RequestMessage>,
     model_name: &'a str,
     provider_name: &'a str,
-    beta_structured_outputs: bool,
     model_inference_id: Uuid,
 }
 
@@ -1168,7 +1343,6 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             input_messages,
             model_name,
             provider_name,
-            beta_structured_outputs,
             model_inference_id,
         } = value;
         let output: Vec<ContentBlockOutput> = response
@@ -1176,7 +1350,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             .into_iter()
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
-        let content = if needs_json_prefill(generic_request, beta_structured_outputs) {
+        let content = if needs_json_prefill(generic_request) {
             prefill_json_response(output)?
         } else {
             output
@@ -1199,8 +1373,9 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_request,
                 raw_response,
                 raw_usage,
+                relay_raw_response: None,
                 usage,
-                latency,
+                provider_latency: latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
                 id: model_inference_id,
             },
@@ -1218,6 +1393,7 @@ pub(super) fn handle_anthropic_error(
     response_code: StatusCode,
     raw_request: String,
     raw_response: String,
+    api_type: ApiType,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
@@ -1226,6 +1402,7 @@ pub(super) fn handle_anthropic_error(
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
             raw_request: Some(raw_request),
             raw_response: Some(raw_response.clone()),
             message: raw_response,
@@ -1237,14 +1414,16 @@ pub(super) fn handle_anthropic_error(
             raw_response: Some(raw_response.clone()),
             message: raw_response,
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
             raw_request: Some(raw_request),
         }
         .into()),
     }
 }
 
-#[derive(Deserialize, Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum AnthropicContentBlockDelta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
@@ -1290,18 +1469,19 @@ pub enum AnthropicStreamMessage {
 }
 
 /// This function converts an Anthropic stream message to a TensorZero stream message.
-/// It must keep track of the current tool ID and name in order to correctly handle ToolCallChunks (which we force to always contain the tool name and ID)
-/// Anthropic only sends the tool ID and name in the ToolUse chunk so we need to keep the most recent ones as mutable references so
-/// subsequent InputJSONDelta chunks can be initialized with this information as well.
-/// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
-/// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
+/// It must keep track of tool IDs and names per content block index in order to correctly handle ToolCallChunks
+/// (which we force to always contain the tool name and ID).
+/// Anthropic only sends the tool ID and name in the ToolUse/server_tool_use ContentBlockStart events,
+/// so we track them per index so that subsequent InputJsonDelta chunks can be initialized with this information.
+/// Using per-index tracking (rather than a single global state) ensures correct behavior even if content blocks
+/// are interleaved in the stream.
+/// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details.
 #[expect(clippy::too_many_arguments)]
 pub(super) fn anthropic_to_tensorzero_stream_message(
     raw_message: String,
     message: AnthropicStreamMessage,
     message_latency: Duration,
-    current_tool_id: &mut Option<String>,
-    current_tool_name: &mut Option<String>,
+    tool_state: &mut HashMap<u32, (String, String)>, // index -> (tool_id, tool_name)
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
@@ -1326,18 +1506,20 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                 )))
             }
             AnthropicContentBlockDelta::InputJsonDelta { partial_json } => {
+                // Look up tool info by index for robust handling of interleaved content blocks
+                let (tool_id, _tool_name) = tool_state.get(&index).ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Got InputJsonDelta chunk from Anthropic for index {index} without a preceding ToolUse ContentBlockStart"
+                    ),
+                    provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    raw_request: None,
+                    raw_response: None,
+                }))?;
                 Ok(Some(ProviderInferenceResponseChunk::new(
-                    // Take the current tool name and ID and use them to create a ToolCallChunk
-                    // This is necessary because the ToolCallChunk must always contain the tool name and ID
-                    // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         raw_name: None,
-                        id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
-                            message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
-                            provider_type: provider_type.to_string(),
-                            raw_request: None,
-                            raw_response: None,
-                        }))?,
+                        id: tool_id.clone(),
                         raw_arguments: partial_json,
                     })],
                     None,
@@ -1355,6 +1537,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1371,6 +1554,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1397,9 +1581,8 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                 )))
             }
             AnthropicContentBlock::ToolUse { id, name, .. } => {
-                // This is a new tool call, update the ID for future chunks
-                *current_tool_id = Some(id.clone());
-                *current_tool_name = Some(name.clone());
+                // Store tool info by index for subsequent InputJsonDelta events
+                tool_state.insert(index, (id.clone(), name.clone()));
                 Ok(Some(ProviderInferenceResponseChunk::new(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
@@ -1424,6 +1607,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(provider_type.to_string()),
+                    extra_data: None,
                 })],
                 None,
                 raw_message,
@@ -1439,6 +1623,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         summary_id: None,
                         summary_text: None,
                         provider_type: Some(provider_type.to_string()),
+                        extra_data: None,
                     })],
                     None,
                     raw_message,
@@ -1451,6 +1636,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }
@@ -1541,6 +1727,18 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
             content_block: FlattenUnknown::Unknown(content_block),
             index,
         } => {
+            // For server_tool_use blocks (e.g., web_search), extract the tool ID and name
+            // and store them by index (same as regular ToolUse blocks)
+            if let Some(obj) = content_block.as_object()
+                && obj.get("type").and_then(|v| v.as_str()) == Some("server_tool_use")
+                && let (Some(id), Some(name)) = (
+                    obj.get("id").and_then(|v| v.as_str()),
+                    obj.get("name").and_then(|v| v.as_str()),
+                )
+            {
+                tool_state.insert(index, (id.to_string(), name.to_string()));
+            }
+
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(provider_type, &content_block.to_string());
                 return Ok(None);
@@ -1583,23 +1781,13 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
 }
 
 fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
-    let input_tokens = usage_info
-        .get("input_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
-    let output_tokens = usage_info
-        .get("output_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
-    AnthropicUsage {
-        input_tokens,
-        output_tokens,
-    }
+    serde_json::from_value(usage_info.clone()).unwrap_or_default()
 }
 
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::collections::HashMap;
 
     use futures::FutureExt;
     use serde_json::json;
@@ -1610,7 +1798,7 @@ mod tests {
     use crate::inference::types::file::Detail;
     use crate::inference::types::resolved_input::{FileUrl, LazyFile};
     use crate::inference::types::{ContentBlock, FunctionType, ModelInferenceRequestJsonMode};
-    use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::tool::{DynamicToolConfig, ToolResult};
     use crate::utils::testing::capture_logs;
@@ -1686,17 +1874,17 @@ mod tests {
         let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
-            parameters: DynamicJSONSchema::new(parameters.clone()),
+            parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
+        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, true);
         assert_eq!(
             anthropic_tool,
-            AnthropicTool {
+            AnthropicFunctionTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
-                strict: None,
+                strict: Some(false),
             }
         );
     }
@@ -1851,7 +2039,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         let error = anthropic_request_body.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -1885,7 +2073,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1941,7 +2129,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -2011,7 +2199,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         assert!(anthropic_request_body.is_ok());
         // Convert messages asynchronously
         let expected_messages = try_join_all(inference_request.messages.iter().map(|m| {
@@ -2071,7 +2259,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         assert!(anthropic_request_body.is_ok());
         let result = anthropic_request_body.unwrap();
         assert_eq!(result.messages.len(), 3); // Original 2 messages + JSON prefill
@@ -2129,105 +2317,105 @@ mod tests {
         };
 
         let model = "claude-opus-4-1-20250805".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-20250219".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-1".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku-20240307".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-haiku-4-5-20251001".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-5-20250929".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-ballad-latest".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-4-5-haiku-20260101".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request, false).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
     }
 
@@ -2238,6 +2426,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2247,6 +2436,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2256,6 +2446,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2265,6 +2456,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2274,6 +2466,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2283,6 +2476,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2292,6 +2486,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2302,6 +2497,7 @@ mod tests {
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
@@ -2309,6 +2505,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2319,6 +2516,7 @@ mod tests {
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
     }
@@ -2326,14 +2524,47 @@ mod tests {
     #[test]
     fn test_anthropic_usage_to_usage() {
         let anthropic_usage = AnthropicUsage {
-            input_tokens: 100,
-            output_tokens: 50,
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            ..Default::default()
         };
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, Some(100));
-        assert_eq!(usage.output_tokens, Some(50));
+        assert_eq!(usage.input_tokens, Some(100), "input_tokens should match");
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
+
+        // Test with None values
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: None,
+            output_tokens: Some(100),
+            ..Default::default()
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(
+            usage.input_tokens, None,
+            "input_tokens should be None when not provided"
+        );
+        assert_eq!(usage.output_tokens, Some(100), "output_tokens should match");
+
+        // Test with cache tokens
+        let anthropic_usage = AnthropicUsage {
+            input_tokens: Some(10),
+            output_tokens: Some(50),
+            cache_creation_input_tokens: Some(100),
+            cache_read_input_tokens: Some(200),
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(
+            usage.input_tokens,
+            Some(310),
+            "input_tokens should include cache tokens (10 + 100 + 200)"
+        );
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
     }
 
     #[test]
@@ -2350,8 +2581,9 @@ mod tests {
             stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2402,7 +2634,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
 
@@ -2416,7 +2647,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.input_messages, input_messages);
 
@@ -2434,8 +2665,9 @@ mod tests {
             stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2460,7 +2692,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
 
@@ -2478,7 +2709,7 @@ mod tests {
         assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(
             inference_response.finish_reason,
@@ -2505,8 +2736,9 @@ mod tests {
             stop_reason: None,
             stop_sequence: None,
             usage: AnthropicUsage {
-                input_tokens: 100,
-                output_tokens: 50,
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let request_body = AnthropicRequestBody {
@@ -2531,7 +2763,6 @@ mod tests {
             input_messages: input_messages.clone(),
             model_name: "model-name",
             provider_name: "dummy",
-            beta_structured_outputs: false,
             model_inference_id: Uuid::now_v7(),
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -2554,7 +2785,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, None);
-        assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.provider_latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.input_messages, input_messages);
     }
@@ -2564,8 +2795,7 @@ mod tests {
         use serde_json::json;
 
         // Test ContentBlockDelta with TextDelta
-        let mut current_tool_id = None;
-        let mut current_tool_name = None;
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::TextDelta {
                 text: "Hello".to_string(),
@@ -2577,8 +2807,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2595,11 +2824,10 @@ mod tests {
             }
             _ => panic!("Expected a text content block"),
         }
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
 
         // Test ContentBlockDelta with InputJsonDelta but no previous tool info
-        let mut current_tool_id = None;
-        let mut current_tool_name = None;
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
@@ -2611,8 +2839,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2624,16 +2851,17 @@ mod tests {
         assert_eq!(
             *details,
             ErrorDetails::InferenceServer {
-                message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
+                message: "Got InputJsonDelta chunk from Anthropic for index 0 without a preceding ToolUse ContentBlockStart".to_string(),
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
 
         // Test ContentBlockDelta with InputJsonDelta and previous tool info
-        let mut current_tool_id = Some("tool_id".to_string());
-        let mut current_tool_name = Some("tool_name".to_string());
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
+        tool_state.insert(0, ("tool_id".to_string(), "tool_name".to_string()));
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Normal(AnthropicContentBlockDelta::InputJsonDelta {
                 partial_json: "aaaa: bbbbb".to_string(),
@@ -2645,8 +2873,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             content_block_delta,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2663,11 +2890,10 @@ mod tests {
             }
             _ => panic!("Expected a tool call content block"),
         }
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
 
         // Test ContentBlockStart with ToolUse
-        let mut current_tool_id = None;
-        let mut current_tool_name = None;
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
         let content_block_start = AnthropicStreamMessage::ContentBlockStart {
             content_block: FlattenUnknown::Normal(AnthropicContentBlock::ToolUse {
                 id: "tool1".to_string(),
@@ -2681,8 +2907,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             content_block_start,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2700,13 +2925,15 @@ mod tests {
             }
             _ => panic!("Expected a tool call content block"),
         }
-        assert_eq!(chunk.latency, latency);
-        assert_eq!(current_tool_id, Some("tool1".to_string()));
-        assert_eq!(current_tool_name, Some("calculator".to_string()));
+        assert_eq!(chunk.provider_latency, latency);
+        assert_eq!(
+            tool_state.get(&1),
+            Some(&("tool1".to_string(), "calculator".to_string())),
+            "Tool state should be stored by index"
+        );
 
         // Test ContentBlockStart with Text
-        let mut current_tool_id = None;
-        let mut current_tool_name = None;
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
         let content_block_start = AnthropicStreamMessage::ContentBlockStart {
             content_block: FlattenUnknown::Normal(AnthropicContentBlock::Text {
                 text: "Hello".to_string(),
@@ -2718,8 +2945,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             content_block_start,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2735,7 +2961,7 @@ mod tests {
             }
             _ => panic!("Expected a text content block"),
         }
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
 
         // Test ContentBlockStop
         let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
@@ -2744,8 +2970,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             content_block_stop,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2764,8 +2989,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             error_message,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2781,6 +3005,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
 
@@ -2797,8 +3022,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             message_delta,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2812,7 +3036,7 @@ mod tests {
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.input_tokens, Some(10));
         assert_eq!(usage.output_tokens, Some(20));
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
         // Test MessageStart with usage
@@ -2824,8 +3048,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             message_start,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2839,7 +3062,7 @@ mod tests {
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.input_tokens, Some(5));
         assert_eq!(usage.output_tokens, Some(15));
-        assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.provider_latency, latency);
 
         // Test MessageStop
         let message_stop = AnthropicStreamMessage::MessageStop;
@@ -2848,8 +3071,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             message_stop,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2866,8 +3088,7 @@ mod tests {
             "my_raw_chunk".to_string(),
             ping,
             latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -2886,52 +3107,101 @@ mod tests {
             "output_tokens": 200
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 100);
-        assert_eq!(result.output_tokens, 200);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(200),
+                ..Default::default()
+            },
+            "both fields should be Some when present"
+        );
 
-        // Test with missing fields
+        // Test with missing output_tokens
         let usage_info = json!({
             "input_tokens": 50
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 50);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: Some(50),
+                output_tokens: None,
+                ..Default::default()
+            },
+            "output_tokens should be None when missing"
+        );
+
+        // Test with missing input_tokens (like Anthropic's message_delta)
+        let usage_info = json!({
+            "output_tokens": 100
+        });
+        let result = parse_usage_info(&usage_info);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: None,
+                output_tokens: Some(100),
+                ..Default::default()
+            },
+            "input_tokens should be None when missing"
+        );
 
         // Test with empty object
         let usage_info = json!({});
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage {
+                input_tokens: None,
+                output_tokens: None,
+                ..Default::default()
+            },
+            "both fields should be None for empty object"
+        );
 
-        // Test with non-numeric values
+        // Test with non-numeric values (falls back to default)
         let usage_info = json!({
             "input_tokens": "not a number",
             "output_tokens": true
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            AnthropicUsage::default(),
+            "non-numeric values should fall back to default"
+        );
     }
 
     #[test]
     fn test_anthropic_base_url() {
         assert_eq!(
             ANTHROPIC_DEFAULT_BASE_URL.as_str(),
-            "https://api.anthropic.com/v1/messages"
+            "https://api.anthropic.com/v1/",
+            "Default base URL should be the API root without /messages"
         );
     }
 
     #[test]
     fn test_anthropic_provider_custom_api_base() {
-        let custom_url = Url::parse("https://example.com/custom").unwrap();
+        let custom_url = Url::parse("https://example.com/custom/").unwrap();
         let provider = AnthropicProvider::new(
             "claude".to_string(),
             Some(custom_url.clone()),
             AnthropicCredentials::None,
-            false,
+            vec![],
         );
 
-        assert_eq!(provider.base_url(), &custom_url);
+        assert_eq!(
+            provider.base_url(),
+            &custom_url,
+            "Custom api_base should be stored as-is"
+        );
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://example.com/custom/messages",
+            "messages_url() should append /messages to custom base URL"
+        );
     }
 
     #[test]
@@ -2940,12 +3210,150 @@ mod tests {
             "claude".to_string(),
             None,
             AnthropicCredentials::None,
-            false,
+            vec![],
         );
 
         assert_eq!(
             provider.base_url().as_str(),
-            ANTHROPIC_DEFAULT_BASE_URL.as_str()
+            "https://api.anthropic.com/v1/",
+            "Default base URL should be the API root"
+        );
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "messages_url() should return URL with /messages appended"
+        );
+    }
+
+    #[test]
+    fn test_get_messages_url() {
+        // Test with URL with trailing slash
+        let base_url = Url::parse("https://api.anthropic.com/v1/").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "Should append /messages to base URL with trailing slash"
+        );
+
+        // Test with URL without trailing slash
+        let base_url = Url::parse("https://api.anthropic.com/v1").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://api.anthropic.com/v1/messages",
+            "Should append /messages to base URL without trailing slash"
+        );
+
+        // Test with custom base URL
+        let base_url = Url::parse("https://example.com/anthropic/v1/").unwrap();
+        let messages_url = get_messages_url(&base_url).unwrap();
+        assert_eq!(
+            messages_url.as_str(),
+            "https://example.com/anthropic/v1/messages",
+            "Should work with custom base URLs"
+        );
+    }
+
+    #[test]
+    fn test_check_api_base_suffix() {
+        let logs_contain = capture_logs();
+
+        // Valid cases (should not warn)
+        check_api_base_suffix(&Url::parse("https://api.anthropic.com/v1/").unwrap());
+        check_api_base_suffix(&Url::parse("https://api.anthropic.com/v1").unwrap());
+        check_api_base_suffix(&Url::parse("https://example.com/anthropic/").unwrap());
+
+        // Invalid cases (should warn with deprecation)
+        let url1 = Url::parse("https://api.anthropic.com/v1/messages").unwrap();
+        check_api_base_suffix(&url1);
+        assert!(
+            logs_contain("Deprecation Warning"),
+            "Should emit deprecation warning for URL ending with /messages"
+        );
+        assert!(
+            logs_contain("automatically appends `/messages`"),
+            "Warning should mention automatic appending"
+        );
+
+        let url2 = Url::parse("https://api.anthropic.com/v1/messages/").unwrap();
+        check_api_base_suffix(&url2);
+        assert!(
+            logs_contain(url2.as_ref()),
+            "Warning should include the problematic URL"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_base() {
+        // Test URL ending with /messages
+        let url = Url::parse("https://api.anthropic.com/v1/messages").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should strip /messages and add trailing slash"
+        );
+
+        // Test URL ending with /messages/
+        let url = Url::parse("https://api.anthropic.com/v1/messages/").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should strip /messages/ and preserve trailing slash"
+        );
+
+        // Test URL without /messages suffix (should remain unchanged)
+        let url = Url::parse("https://api.anthropic.com/v1/").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://api.anthropic.com/v1/",
+            "Should not modify URL without /messages suffix"
+        );
+
+        // Test custom URL with /messages
+        let url = Url::parse("https://example.com/anthropic/v1/messages").unwrap();
+        let normalized = normalize_api_base(url);
+        assert_eq!(
+            normalized.as_str(),
+            "https://example.com/anthropic/v1/",
+            "Should work with custom URLs"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_provider_normalizes_api_base_with_messages() {
+        let logs_contain = capture_logs();
+
+        // Create provider with api_base that includes /messages
+        let url_with_messages = Url::parse("https://example.com/v1/messages").unwrap();
+        let provider = AnthropicProvider::new(
+            "claude".to_string(),
+            Some(url_with_messages),
+            AnthropicCredentials::None,
+            vec![],
+        );
+
+        // Verify the stored api_base is normalized
+        assert_eq!(
+            provider.base_url().as_str(),
+            "https://example.com/v1/",
+            "Provider should store normalized base URL without /messages"
+        );
+
+        // Verify messages_url() returns the correct full URL
+        assert_eq!(
+            provider.messages_url().unwrap().as_str(),
+            "https://example.com/v1/messages",
+            "messages_url() should return URL with /messages appended"
+        );
+
+        // Verify deprecation warning was emitted
+        assert!(
+            logs_contain("Deprecation Warning"),
+            "Should emit deprecation warning when api_base includes /messages"
         );
     }
 
@@ -3031,11 +3439,10 @@ mod tests {
         // Test case 1: Empty content
         let chunk = ProviderInferenceResponseChunk {
             content: vec![],
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(0),
+            provider_latency: Duration::from_millis(0),
             finish_reason: None,
         };
         let mut result = chunk.clone();
@@ -3049,11 +3456,10 @@ mod tests {
         );
         // Test case 2: Single text block
         let chunk = ProviderInferenceResponseChunk {
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(0),
+            provider_latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::Text(TextChunk {
                 text: "\"key\": \"value ".to_string(),
@@ -3072,11 +3478,10 @@ mod tests {
 
         // Test case 3: Multiple blocks (should remain unchanged)
         let chunk = ProviderInferenceResponseChunk {
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(0),
+            provider_latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![
                 ContentBlockChunk::Text(TextChunk {
@@ -3095,11 +3500,10 @@ mod tests {
 
         // Test case 4: Non-text block (should remain unchanged)
         let chunk = ProviderInferenceResponseChunk {
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: String::new(),
-            latency: Duration::from_millis(0),
+            provider_latency: Duration::from_millis(0),
             finish_reason: None,
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "1".to_string(),
@@ -3141,6 +3545,7 @@ mod tests {
 
     #[test]
     fn test_convert_unknown_chunk_returns_chunk() {
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
         let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             AnthropicStreamMessage::ContentBlockStart {
@@ -3150,8 +3555,7 @@ mod tests {
                 index: 0,
             },
             Duration::from_secs(0),
-            &mut Default::default(),
-            &mut Default::default(),
+            &mut tool_state,
             false,
             "test_model",
             "test_provider",
@@ -3177,6 +3581,7 @@ mod tests {
     #[test]
     fn test_convert_unknown_chunk_warn() {
         let logs_contain = crate::utils::testing::capture_logs();
+        let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             AnthropicStreamMessage::ContentBlockStart {
@@ -3186,8 +3591,7 @@ mod tests {
                 index: 0,
             },
             Duration::from_secs(0),
-            &mut Default::default(),
-            &mut Default::default(),
+            &mut tool_state,
             true,
             "test_model",
             "test_provider",
@@ -3287,10 +3691,10 @@ mod tests {
         };
 
         // Convert to Anthropic tools
-        let tools: Vec<AnthropicTool> = tool_config
+        let tools: Vec<AnthropicFunctionTool> = tool_config
             .strict_tools_available()
             .unwrap()
-            .map(|tool| AnthropicTool::new(tool, false))
+            .map(|tool| AnthropicFunctionTool::new(tool, true))
             .collect();
 
         // Verify only the allowed tool is included

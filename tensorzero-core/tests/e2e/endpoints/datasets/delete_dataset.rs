@@ -5,8 +5,8 @@ use serde_json::json;
 use std::time::Duration;
 use uuid::Uuid;
 
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{DatasetQueries, GetDatapointsParams};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -21,7 +21,7 @@ use crate::common::get_gateway_endpoint;
 #[tokio::test]
 async fn test_delete_dataset_with_single_datapoint() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-delete-dataset-single-{}", Uuid::now_v7());
 
     // Create a single datapoint
@@ -55,7 +55,7 @@ async fn test_delete_dataset_with_single_datapoint() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(std::slice::from_ref(&datapoint_insert))
         .await
         .unwrap();
@@ -63,7 +63,7 @@ async fn test_delete_dataset_with_single_datapoint() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the datapoint exists
-    let datapoints = clickhouse
+    let datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -95,7 +95,7 @@ async fn test_delete_dataset_with_single_datapoint() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify all datapoints are now stale
-    let datapoints = clickhouse
+    let datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -116,7 +116,7 @@ async fn test_delete_dataset_with_single_datapoint() {
     );
 
     // Verify we can still fetch stale datapoints
-    let stale_datapoints = clickhouse
+    let stale_datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -145,7 +145,7 @@ async fn test_delete_dataset_with_single_datapoint() {
 #[tokio::test]
 async fn test_delete_dataset_with_multiple_mixed_datapoints() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-delete-dataset-multiple-{}", Uuid::now_v7());
 
     // Create multiple datapoints: 3 chat and 2 JSON
@@ -214,12 +214,12 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
         }));
     }
 
-    clickhouse.insert_datapoints(&inserts).await.unwrap();
+    database.insert_datapoints(&inserts).await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify we have 5 datapoints
-    let datapoints = clickhouse
+    let datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -251,7 +251,7 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify all datapoints are now stale
-    let datapoints = clickhouse
+    let datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -268,7 +268,7 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
     assert_eq!(datapoints.len(), 0, "All datapoints should be stale");
 
     // Verify we can still fetch all 5 as stale
-    let stale_datapoints = clickhouse
+    let stale_datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -333,7 +333,7 @@ async fn test_delete_dataset_invalid_name() {
 #[tokio::test]
 async fn test_delete_dataset_twice() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-delete-dataset-twice-{}", Uuid::now_v7());
 
     // Create a datapoint
@@ -367,7 +367,7 @@ async fn test_delete_dataset_twice() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(std::slice::from_ref(&datapoint_insert))
         .await
         .unwrap();
@@ -406,7 +406,7 @@ async fn test_delete_dataset_twice() {
 #[tokio::test]
 async fn test_delete_dataset_with_different_function_names() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-delete-dataset-functions-{}", Uuid::now_v7());
 
     // Create datapoints with different function names in the same dataset
@@ -468,7 +468,7 @@ async fn test_delete_dataset_with_different_function_names() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[function1_insert, function2_insert])
         .await
         .unwrap();
@@ -491,7 +491,7 @@ async fn test_delete_dataset_with_different_function_names() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify both function's datapoints are stale
-    let datapoints_func1 = clickhouse
+    let datapoints_func1 = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: Some("function_one".to_string()),
@@ -507,7 +507,7 @@ async fn test_delete_dataset_with_different_function_names() {
         .unwrap();
     assert_eq!(datapoints_func1.len(), 0);
 
-    let datapoints_func2 = clickhouse
+    let datapoints_func2 = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: Some("function_two".to_string()),
