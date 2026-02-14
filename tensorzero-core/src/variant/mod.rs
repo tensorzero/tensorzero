@@ -1201,6 +1201,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1514,6 +1515,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1689,6 +1691,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1852,6 +1855,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let inference_params = InferenceParams::default();
 

@@ -483,6 +483,7 @@ impl Params {
                 .tensorzero_include_original_response,
             include_raw_response: openai_compatible_params.tensorzero_include_raw_response,
             include_raw_usage: openai_compatible_params.tensorzero_include_raw_usage,
+            include_aggregated_response: false,
             extra_body: openai_compatible_params.tensorzero_extra_body,
             extra_headers: openai_compatible_params.tensorzero_extra_headers,
             internal_dynamic_variant_config: openai_compatible_params
