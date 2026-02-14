@@ -8,12 +8,6 @@ debug = true
 [models."gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
 
-[functions.answer_question.variants.baseline.templates]
-
-[functions.answer_question.variants.baseline.retries]
-num_retries = 4
-max_delay_s = 10.0
-
 [models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
@@ -207,10 +201,12 @@ system_schema = "functions/answer_question/system_schema.json"
 
 [functions.answer_question.variants.baseline]
 type = "chat_completion"
-weight = 1.0
+weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
-temperature = 0.8
-system_template= "functions/answer_question/variants/baseline/system_template.minijinja"
+system_template = "functions/answer_question/baseline/system_template.minijinja"
+# for honesty
+temperature = 0.5
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.unleash_kraken]
 type = "chat"
