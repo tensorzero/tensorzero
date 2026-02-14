@@ -19,7 +19,7 @@ beforeAll(() => {
 });
 
 describe("Raw Response", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: legacy test code
   const assertRawResponseEntryStructure = (entry: any) => {
     expect(entry.model_inference_id).toBeDefined();
     expect(entry.provider_type).toBeDefined();
