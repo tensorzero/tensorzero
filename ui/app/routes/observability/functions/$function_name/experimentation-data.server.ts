@@ -31,7 +31,8 @@ export async function fetchExperimentationSectionData(params: {
     function_config.experimentation.base.type === "track_and_stop"
       ? {
           metric_name: function_config.experimentation.base.metric,
-          variant_names: function_config.experimentation.base.candidate_variants,
+          variant_names:
+            function_config.experimentation.base.candidate_variants,
         }
       : null;
 
