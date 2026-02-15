@@ -10,7 +10,7 @@ use super::{
 
 use crate::config::snapshot::SnapshotHash;
 use crate::inference::types::StoredRequestMessage;
-use crate::serde_util::deserialize_json_string;
+use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::{
     endpoints::{
         batch_inference::{BatchEpisodeIdInput, BatchOutputSchemas},
@@ -205,17 +205,18 @@ pub struct BatchModelInferenceRow<'a> {
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
     pub episode_id: Uuid,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub input_messages: Vec<StoredRequestMessage>,
+    #[serde(default, deserialize_with = "deserialize_optional_json_string")]
+    pub input: Option<StoredInput>,
+    #[serde(default, deserialize_with = "deserialize_optional_json_string")]
+    pub input_messages: Option<Vec<StoredRequestMessage>>,
     pub system: Option<Cow<'a, str>>,
     #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub inference_params: Cow<'a, InferenceParams>,
+    #[serde(default, deserialize_with = "deserialize_optional_json_string")]
+    pub inference_params: Option<Cow<'a, InferenceParams>>,
     pub output_schema: Option<String>,
-    pub raw_request: Cow<'a, str>,
+    #[serde(default)]
+    pub raw_request: Option<Cow<'a, str>>,
     pub model_name: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
     pub tags: HashMap<String, String>,

@@ -1990,7 +1990,7 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: StoredInput,
+        input: Option<StoredInput>,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -2005,7 +2005,7 @@ impl ChatInferenceDatabaseInsert {
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
-            input: Some(input),
+            input,
             tool_params,
             inference_params: Some(inference_params),
             output: Some(chat_result.content),
@@ -2021,7 +2021,7 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: StoredInput,
+        input: Option<StoredInput>,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -2042,7 +2042,7 @@ impl JsonInferenceDatabaseInsert {
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
-            input: Some(input),
+            input,
             auxiliary_content: Some(auxiliary_content),
             inference_params: Some(inference_params),
             output: Some(output),

@@ -1425,13 +1425,13 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
             InferenceResult::Chat(result) => {
                 let stored_input = input.clone().into_stored_input();
                 let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
+                    ChatInferenceDatabaseInsert::new(result, Some(stored_input), metadata);
                 let _ = database.insert_chat_inferences(&[chat_inference]).await;
             }
             InferenceResult::Json(result) => {
                 let stored_input = input.clone().into_stored_input();
                 let json_inference =
-                    JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
+                    JsonInferenceDatabaseInsert::new(result, Some(stored_input), metadata);
                 let _ = database.insert_json_inferences(&[json_inference]).await;
             }
         }
