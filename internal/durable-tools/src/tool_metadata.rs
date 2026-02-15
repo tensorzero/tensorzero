@@ -114,4 +114,24 @@ pub trait ToolMetadata: Send + Sync + 'static {
         })?;
         Ok(())
     }
+
+    /// Returns the TypeScript type bundle for the `LlmParams` type.
+    ///
+    /// Contains all declarations needed to fully define the type and its
+    /// transitive dependencies, concatenated in dependency order.
+    #[cfg(feature = "ts-bindings")]
+    #[expect(clippy::panic)]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        panic!("TypeScript type bundle not available for this tool's LlmParams")
+    }
+
+    /// Returns the TypeScript type bundle for the `Output` type.
+    ///
+    /// Contains all declarations needed to fully define the type and its
+    /// transitive dependencies, concatenated in dependency order.
+    #[cfg(feature = "ts-bindings")]
+    #[expect(clippy::panic)]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        panic!("TypeScript type bundle not available for this tool's Output")
+    }
 }

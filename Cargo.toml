@@ -25,6 +25,7 @@ members = [
     "internal/reqwest-sse-stream",
     "internal/config-applier",
     "internal/tensorzero-config-paths",
+    "internal/tensorzero-ts-types",
 ]
 resolver = "2"
 

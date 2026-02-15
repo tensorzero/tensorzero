@@ -378,8 +378,10 @@ dependencies = [
  "tensorzero-core",
  "tensorzero-derive",
  "tensorzero-optimizers",
+ "tensorzero-ts-types",
  "thiserror 2.0.18",
  "tokio",
+ "ts-rs",
  "uuid",
 ]
 
@@ -1953,8 +1955,10 @@ dependencies = [
  "tensorzero-core",
  "tensorzero-derive",
  "tensorzero-optimizers",
+ "tensorzero-ts-types",
  "thiserror 2.0.18",
  "tokio",
+ "ts-rs",
  "url",
  "uuid",
 ]
@@ -2117,6 +2121,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "ts-rs",
  "url",
  "uuid",
 ]
@@ -6546,6 +6551,10 @@ dependencies = [
  "url",
  "uuid",
 ]
+
+[[package]]
+name = "tensorzero-ts-types"
+version = "2026.2.1"
 
 [[package]]
 name = "tensorzero-types"
