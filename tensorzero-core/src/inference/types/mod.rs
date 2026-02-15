@@ -134,7 +134,7 @@ pub use streams::{
     ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk, InferenceResultChunk,
     InferenceResultStream, JsonInferenceResultChunk, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
-    UnknownChunk, collect_chunks,
+    UnknownChunk, collect_chunks, stream_with_deadline,
 };
 pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
 
