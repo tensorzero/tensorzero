@@ -9,6 +9,10 @@ model = "slow_model_timeout"
 type = "chat_completion"
 model = "slow_second_chunk_timeout"
 
+[functions.basic_test_model_timeout.variants.slow_second_chunk_total_timeout]
+type = "chat_completion"
+model = "slow_second_chunk_model_total_timeout"
+
 [functions.basic_test_variant_timeout]
 type = "chat"
 
@@ -27,6 +31,13 @@ model = "slow_second_chunk"
 [functions.basic_test_variant_timeout.variants.slow_second_chunk.timeouts]
 non_streaming = { total_ms = 400 }
 streaming = { ttft_ms = 500 }
+
+[functions.basic_test_variant_timeout.variants.slow_second_chunk_total_timeout]
+type = "chat_completion"
+model = "slow_second_chunk"
+
+[functions.basic_test_variant_timeout.variants.slow_second_chunk_total_timeout.timeouts]
+streaming = { total_ms = 500 }
 
 [functions.basic_test_variant_timeout.variants.best_of_n]
 type = "experimental_best_of_n_sampling"
@@ -51,6 +62,10 @@ type = "chat"
 [functions.basic_test_timeout.variants.slow_second_chunk]
 type = "chat_completion"
 model = "slow_second_chunk"
+
+[functions.basic_test_timeout.variants.slow_second_chunk_total_timeout]
+type = "chat_completion"
+model = "slow_second_chunk_provider_total_timeout"
 
 [functions.basic_test_timeout.variants.good]
 type = "chat_completion"

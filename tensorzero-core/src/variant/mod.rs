@@ -22,6 +22,7 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::error::TimeoutKind;
 use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::Role;
@@ -34,7 +35,7 @@ use crate::inference::types::extra_headers::{
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RawResponseEntry, RequestMessage,
+    ModelInferenceResponseWithMetadata, RawResponseEntry, RequestMessage, stream_with_deadline,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -376,7 +377,7 @@ impl Variant for VariantInfo {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -468,20 +469,59 @@ impl Variant for VariantInfo {
 
         // This future includes a call to `peek_first_chunk`, so applying
         // `streaming_ttft_timeout` is correct.
-        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
-            let timeout = tokio::time::Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, fut)
+        let start = tokio::time::Instant::now();
+
+        // Compute the effective pre-TTFT deadline from both ttft_ms and total_ms.
+        let ttft_timeout = self
+            .timeouts
+            .streaming
+            .ttft_ms
+            .map(tokio::time::Duration::from_millis);
+        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let total_timeout = streaming_total_ms.map(tokio::time::Duration::from_millis);
+        let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
+            (Some(ttft), Some(total)) => {
+                if ttft <= total {
+                    Some((start + ttft, ttft, TimeoutKind::StreamingTtft))
+                } else {
+                    Some((start + total, total, TimeoutKind::StreamingTotal))
+                }
+            }
+            (Some(ttft), None) => Some((start + ttft, ttft, TimeoutKind::StreamingTtft)),
+            (None, Some(total)) => Some((start + total, total, TimeoutKind::StreamingTotal)),
+            (None, None) => None,
+        };
+
+        let (mut stream, info) = if let Some((deadline, timeout, kind)) = pre_ttft_timeout {
+            tokio::time::timeout_at(deadline, fut)
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        streaming: true,
+                        kind,
                     }))
                 })
         } else {
             fut.await
+        }?;
+
+        // Wrap the post-TTFT stream with the remaining total deadline
+        if let Some(total_ms) = streaming_total_ms {
+            let total_timeout = tokio::time::Duration::from_millis(total_ms);
+            let deadline = start + total_timeout;
+            let variant_name = variant_name.to_string();
+            stream = stream_with_deadline(stream, deadline, move || {
+                Error::new(ErrorDetails::VariantTimeout {
+                    variant_name,
+                    timeout: total_timeout,
+                    kind: TimeoutKind::StreamingTotal,
+                })
+            })
+            .peekable();
         }
+
+        Ok((stream, info))
     }
 
     #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.as_ref()).unwrap_or("")))]
