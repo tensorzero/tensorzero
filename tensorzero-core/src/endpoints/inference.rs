@@ -598,18 +598,18 @@ pub async fn inference(
         match result {
             Ok(output) => {
                 // Collect raw response entries from failed variant attempts
-                let mut failed_raw_entries: Vec<RawResponseEntry> = Vec::new();
-                if params.include_raw_response {
-                    for error in variant_errors.values() {
-                        if let Some(entries) = error.extract_raw_response_entries() {
-                            failed_raw_entries.extend(entries);
-                        }
+                let output = if params.include_raw_response {
+                    let failed_raw_entries: Vec<RawResponseEntry> = variant_errors
+                        .values()
+                        .flat_map(|error| error.extract_raw_response_entries().unwrap_or_default())
+                        .collect();
+                    if failed_raw_entries.is_empty() {
+                        output
+                    } else {
+                        inject_failed_variant_raw_response(output, failed_raw_entries)
                     }
-                }
-                let output = if failed_raw_entries.is_empty() {
-                    output
                 } else {
-                    inject_failed_variant_raw_response(output, failed_raw_entries)
+                    output
                 };
                 return Ok(InferenceOutputData {
                     output,
@@ -1100,6 +1100,16 @@ fn create_previous_raw_response_chunk(
             if let Some(passed_through) = &r.relay_raw_response {
                 entries.extend(passed_through.clone());
             } else {
+                // Relay sets `provider_type` to `"tensorzero::relay"` because the real
+                // downstream provider is unknown at that level. The actual provider type is
+                // carried inside `relay_raw_response` entries (handled in the branch above).
+                // So we should never reach this branch for relay responses.
+                debug_assert!(
+                    &*r.provider_type != "tensorzero::relay",
+                    "Relay responses should always have `relay_raw_response` populated; \
+                     got `provider_type`={} without `relay_raw_response`",
+                    r.provider_type
+                );
                 let api_type = r
                     .raw_usage
                     .as_ref()
@@ -1678,6 +1688,16 @@ impl InferenceResponse {
                     if let Some(passed_through) = &r.relay_raw_response {
                         entries.extend(passed_through.clone());
                     } else {
+                        // Relay sets `provider_type` to `"tensorzero::relay"` because the real
+                        // downstream provider is unknown at that level. The actual provider type is
+                        // carried inside `relay_raw_response` entries (handled in the branch above).
+                        // So we should never reach this branch for relay responses.
+                        debug_assert!(
+                            &*r.provider_type != "tensorzero::relay",
+                            "Relay responses should always have `relay_raw_response` populated; \
+                             got `provider_type`={} without `relay_raw_response`",
+                            r.provider_type
+                        );
                         let api_type = r
                             .raw_usage
                             .as_ref()
