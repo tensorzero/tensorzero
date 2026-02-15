@@ -120,6 +120,11 @@ async fn test_list_episodes_tool_with_before_pagination(pool: PgPool) {
         .expect("ListEpisodesTool execution should succeed");
 
     assert!(result.is_object(), "Result should be a JSON object");
+    let episodes = result.get("episodes").expect("Should have episodes field");
+    assert!(
+        episodes.as_array().unwrap().is_empty(),
+        "Episodes should be empty when no results match"
+    );
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -163,6 +168,11 @@ async fn test_list_episodes_tool_with_after_pagination(pool: PgPool) {
         .expect("ListEpisodesTool execution should succeed");
 
     assert!(result.is_object(), "Result should be a JSON object");
+    let episodes = result.get("episodes").expect("Should have episodes field");
+    assert!(
+        episodes.as_array().unwrap().is_empty(),
+        "Episodes should be empty when no results match"
+    );
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -207,13 +217,15 @@ async fn test_list_episodes_tool_error(pool: PgPool) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_list_episodes_tool_with_function_name(pool: PgPool) {
+    let episode_id = Uuid::now_v7();
+    let inference_id = Uuid::now_v7();
     let now = Utc::now();
     let mock_response = create_mock_list_episodes_response(vec![EpisodeByIdRow {
-        episode_id: Uuid::now_v7(),
+        episode_id,
         count: 3,
         start_time: now,
         end_time: now,
-        last_inference_id: Uuid::now_v7(),
+        last_inference_id: inference_id,
     }]);
 
     let llm_params = ListEpisodesToolParams {
@@ -252,17 +264,33 @@ async fn test_list_episodes_tool_with_function_name(pool: PgPool) {
         .expect("ListEpisodesTool execution should succeed");
 
     assert!(result.is_object(), "Result should be a JSON object");
+    let episodes = result.get("episodes").expect("Should have episodes field");
+    let episodes_arr = episodes.as_array().expect("episodes should be an array");
+    assert_eq!(episodes_arr.len(), 1, "Should have 1 episode");
+    let episode = &episodes_arr[0];
+    assert_eq!(
+        episode.get("episode_id").unwrap().as_str().unwrap(),
+        episode_id.to_string(),
+        "Episode ID should match the mock response"
+    );
+    assert_eq!(
+        episode.get("count").unwrap().as_u64().unwrap(),
+        3,
+        "Episode should have 3 inferences"
+    );
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_list_episodes_tool_with_boolean_filter(pool: PgPool) {
+    let episode_id = Uuid::now_v7();
+    let inference_id = Uuid::now_v7();
     let now = Utc::now();
     let mock_response = create_mock_list_episodes_response(vec![EpisodeByIdRow {
-        episode_id: Uuid::now_v7(),
+        episode_id,
         count: 3,
         start_time: now,
         end_time: now,
-        last_inference_id: Uuid::now_v7(),
+        last_inference_id: inference_id,
     }]);
 
     let llm_params = ListEpisodesToolParams {
@@ -304,6 +332,23 @@ async fn test_list_episodes_tool_with_boolean_filter(pool: PgPool) {
         .expect("ListEpisodesTool execution should succeed");
 
     assert!(result.is_object(), "Result should be a JSON object");
+    let episodes = result.get("episodes").expect("Should have episodes field");
+    let episodes_arr = episodes.as_array().expect("episodes should be an array");
+    assert_eq!(
+        episodes_arr.len(),
+        1,
+        "Should have 1 episode matching the boolean filter"
+    );
+    assert_eq!(
+        episodes_arr[0].get("episode_id").unwrap().as_str().unwrap(),
+        episode_id.to_string(),
+        "Episode ID should match the mock response"
+    );
+    assert_eq!(
+        episodes_arr[0].get("count").unwrap().as_u64().unwrap(),
+        3,
+        "Episode should have 3 inferences"
+    );
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -351,6 +396,11 @@ async fn test_list_episodes_tool_with_combined_filters(pool: PgPool) {
         .expect("ListEpisodesTool execution should succeed");
 
     assert!(result.is_object(), "Result should be a JSON object");
+    let episodes = result.get("episodes").expect("Should have episodes field");
+    assert!(
+        episodes.as_array().unwrap().is_empty(),
+        "Episodes should be empty when no results match combined filters"
+    );
 }
 
 #[test]
