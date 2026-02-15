@@ -599,14 +599,14 @@ pub async fn inference(
             Ok(output) => {
                 // Collect raw response entries from failed variant attempts
                 let output = if params.include_raw_response {
-                    let failed_raw_entries: Vec<RawResponseEntry> = variant_errors
+                    let failed_raw_response: Vec<RawResponseEntry> = variant_errors
                         .values()
                         .flat_map(|error| error.extract_raw_response_entries().unwrap_or_default())
                         .collect();
-                    if failed_raw_entries.is_empty() {
+                    if failed_raw_response.is_empty() {
                         output
                     } else {
-                        inject_failed_variant_raw_response(output, failed_raw_entries)
+                        inject_failed_variant_raw_response(output, failed_raw_response)
                     }
                 } else {
                     output
@@ -646,7 +646,7 @@ pub async fn inference(
 /// (to copy its metadata: inference_id, episode_id, variant_name).
 fn inject_failed_variant_raw_response(
     output: InferenceOutput,
-    failed_raw_entries: Vec<RawResponseEntry>,
+    failed_raw_response: Vec<RawResponseEntry>,
 ) -> InferenceOutput {
     match output {
         InferenceOutput::NonStreaming(mut response) => {
@@ -654,13 +654,13 @@ fn inject_failed_variant_raw_response(
                 InferenceResponse::Chat(r) => {
                     let entries = r.raw_response.get_or_insert_with(Vec::new);
                     // Prepend failed entries before the success entries
-                    let mut combined = failed_raw_entries;
+                    let mut combined = failed_raw_response;
                     combined.append(entries);
                     *entries = combined;
                 }
                 InferenceResponse::Json(r) => {
                     let entries = r.raw_response.get_or_insert_with(Vec::new);
-                    let mut combined = failed_raw_entries;
+                    let mut combined = failed_raw_response;
                     combined.append(entries);
                     *entries = combined;
                 }
@@ -674,7 +674,7 @@ fn inject_failed_variant_raw_response(
                     match &first_result {
                         Ok(first_chunk) => {
                             // Build a synthetic chunk with the failed entries using the first chunk's metadata
-                            let raw_response = Some(failed_raw_entries);
+                            let raw_response = Some(failed_raw_response);
                             let failed_chunk = match first_chunk {
                                 InferenceResponseChunk::Chat(c) => {
                                     InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
