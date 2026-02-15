@@ -5,6 +5,8 @@ import { cn } from "~/utils/common";
 import { toDatapointUrl, toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
 import { Inferences, Episodes, Dataset } from "~/components/icons/Icons";
 
+const ICON_CLASS = "inline h-2 w-2 shrink-0";
+
 function getUrlForResolvedObject(
   uuid: string,
   obj: ResolvedObject,
@@ -30,15 +32,15 @@ function getUrlForResolvedObject(
   }
 }
 
-function getEntityIcon(obj: ResolvedObject) {
-  switch (obj.type) {
+function EntityIcon({ type }: { type: ResolvedObject["type"] }) {
+  switch (type) {
     case "inference":
-      return <Inferences className="h-2.5 w-2.5 shrink-0" />;
+      return <Inferences className={ICON_CLASS} />;
     case "episode":
-      return <Episodes className="h-2.5 w-2.5 shrink-0" />;
+      return <Episodes className={ICON_CLASS} />;
     case "chat_datapoint":
     case "json_datapoint":
-      return <Dataset className="h-2.5 w-2.5 shrink-0" />;
+      return <Dataset className={ICON_CLASS} />;
     case "model_inference":
     case "boolean_feedback":
     case "float_feedback":
@@ -46,7 +48,7 @@ function getEntityIcon(obj: ResolvedObject) {
     case "demonstration_feedback":
       return null;
     default: {
-      const _exhaustiveCheck: never = obj;
+      const _exhaustiveCheck: never = type;
       return _exhaustiveCheck;
     }
   }
@@ -65,13 +67,12 @@ export function UuidLink({ uuid }: { uuid: string }) {
         url ? "bg-orange-50 text-orange-500" : "bg-muted",
       )}
     >
-      {url && obj ? (
+      {url ? (
         <Link
           to={url}
-          className="inline-flex items-center gap-1 text-inherit no-underline after:absolute after:inset-0 hover:underline"
+          className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
         >
-          {getEntityIcon(obj)}
-          {uuid}
+          {obj && <EntityIcon type={obj.type} />} {uuid}
         </Link>
       ) : (
         uuid
