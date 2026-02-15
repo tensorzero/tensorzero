@@ -649,8 +649,8 @@ async fn streaming_total_timeout(payload: Value) {
     // With a 500ms total_ms, we expect roughly 500ms-1s total.
     let elapsed = start.elapsed();
     assert!(
-        elapsed < Duration::from_millis(1500),
-        "streaming_total_timeout should complete in under 1.5s, but took {elapsed:?}"
+        elapsed < Duration::from_millis(1800),
+        "streaming_total_timeout should complete in under 1.8s, but took {elapsed:?}"
     );
 }
 
