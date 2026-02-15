@@ -9,6 +9,7 @@ import {
   TooltipContent,
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
+import { DotSeparator } from "~/components/ui/DotSeparator";
 
 interface InferencePreview {
   timestamp: string;
@@ -78,7 +79,9 @@ function InferenceHoverContent({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
-        <TypeBadge>{`Inference · ${obj.function_type}`}</TypeBadge>
+        <TypeBadge>
+          Inference <DotSeparator /> {obj.function_type}
+        </TypeBadge>
         <LazyTimestamp data={data} isLoading={isLoading} />
       </div>
       <div className="flex flex-col gap-1">
@@ -146,7 +149,7 @@ function DatapointHoverContent({
 
 function TypeBadge({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+    <div className="text-muted-foreground inline-flex items-center gap-1 text-xs font-medium tracking-wide uppercase">
       {children}
     </div>
   );
@@ -226,7 +229,7 @@ function ViewDetailsLink({ url }: { url: string }) {
   return (
     <Link
       to={url}
-      className="text-muted-foreground hover:text-foreground -mx-3 mt-1 border-t px-3 pt-2 text-xs transition-colors"
+      className="text-muted-foreground hover:text-foreground -mx-3 -mb-3 mt-1 border-t px-3 pb-3 pt-3 text-xs transition-colors"
     >
       View details &rarr;
     </Link>
