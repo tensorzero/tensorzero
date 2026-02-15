@@ -175,12 +175,16 @@ impl AWSBedrockProvider {
     }
 
     /// Get the base URL for AWS Bedrock requests.
-    fn get_base_url(&self, dynamic_api_keys: &InferenceCredentials) -> Result<String, Error> {
+    fn get_base_url(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        api_type: ApiType,
+    ) -> Result<String, Error> {
         if let Some(endpoint_url) = &self.endpoint_url {
             let url = endpoint_url.resolve(dynamic_api_keys)?;
             Ok(url.to_string().trim_end_matches('/').to_string())
         } else {
-            let region = self.get_region(dynamic_api_keys)?;
+            let region = self.get_region(dynamic_api_keys, api_type)?;
             Ok(format!(
                 "https://bedrock-runtime.{}.amazonaws.com",
                 region.as_ref()
@@ -189,14 +193,18 @@ impl AWSBedrockProvider {
     }
 
     /// Get the region for this request.
-    fn get_region(&self, dynamic_api_keys: &InferenceCredentials) -> Result<Region, Error> {
+    fn get_region(
+        &self,
+        dynamic_api_keys: &InferenceCredentials,
+        api_type: ApiType,
+    ) -> Result<Region, Error> {
         // Extract SDK config from IAM credentials if available
         let sdk_config = match &self.credentials {
             AWSBedrockCredentials::IAM { sdk_config, .. } => Some(sdk_config.as_ref()),
             _ => None,
         };
         self.region
-            .resolve_with_sdk_config(dynamic_api_keys, sdk_config, PROVIDER_TYPE)
+            .resolve_with_sdk_config(dynamic_api_keys, sdk_config, PROVIDER_TYPE, api_type)
     }
 }
 
@@ -222,7 +230,7 @@ impl InferenceProvider for AWSBedrockProvider {
         } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url = self.get_base_url(dynamic_api_keys, ApiType::ChatCompletions)?;
         let url = format!(
             "{}/model/{}/converse",
             base_url,
@@ -241,6 +249,7 @@ impl InferenceProvider for AWSBedrockProvider {
                     api_key,
                     PROVIDER_TYPE,
                     &raw_request,
+                    ApiType::ChatCompletions,
                 )
                 .await?
             }
@@ -260,6 +269,7 @@ impl InferenceProvider for AWSBedrockProvider {
                     api_key,
                     PROVIDER_TYPE,
                     &raw_request,
+                    ApiType::ChatCompletions,
                 )
                 .await?
             }
@@ -273,9 +283,10 @@ impl InferenceProvider for AWSBedrockProvider {
                     sdk_config,
                     dynamic_api_keys,
                     PROVIDER_TYPE,
+                    ApiType::ChatCompletions,
                 )
                 .await?;
-                let region = self.get_region(dynamic_api_keys)?;
+                let region = self.get_region(dynamic_api_keys, ApiType::ChatCompletions)?;
                 send_aws_request(
                     http_client,
                     &url,
@@ -286,6 +297,7 @@ impl InferenceProvider for AWSBedrockProvider {
                     "bedrock",
                     PROVIDER_TYPE,
                     &raw_request,
+                    ApiType::ChatCompletions,
                 )
                 .await?
             }
@@ -303,6 +315,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -344,7 +357,7 @@ impl InferenceProvider for AWSBedrockProvider {
         } = prepare_request_body(&self.model_id, request, model_provider, model_name).await?;
 
         // Build URL for streaming endpoint
-        let base_url = self.get_base_url(dynamic_api_keys)?;
+        let base_url = self.get_base_url(dynamic_api_keys, ApiType::ChatCompletions)?;
         let url = format!(
             "{}/model/{}/converse-stream",
             base_url,
@@ -378,9 +391,10 @@ impl InferenceProvider for AWSBedrockProvider {
                     sdk_config,
                     dynamic_api_keys,
                     PROVIDER_TYPE,
+                    ApiType::ChatCompletions,
                 )
                 .await?;
-                let region = self.get_region(dynamic_api_keys)?;
+                let region = self.get_region(dynamic_api_keys, ApiType::ChatCompletions)?;
 
                 let mut headers = http_extra_headers;
                 headers.insert(
@@ -397,6 +411,7 @@ impl InferenceProvider for AWSBedrockProvider {
                     region.as_ref(),
                     "bedrock",
                     PROVIDER_TYPE,
+                    ApiType::ChatCompletions,
                 )?
             }
         };
@@ -415,6 +430,7 @@ impl InferenceProvider for AWSBedrockProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -426,6 +442,7 @@ impl InferenceProvider for AWSBedrockProvider {
                 raw_request: Some(raw_request),
                 raw_response: Some(raw_response),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }));
         }
 
@@ -440,7 +457,13 @@ impl InferenceProvider for AWSBedrockProvider {
         .peekable();
 
         // Peek first chunk
-        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
+        let chunk = peek_first_chunk(
+            &mut stream,
+            &raw_request,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+        )
+        .await?;
 
         // Handle JSON prefill for streaming.
         if needs_json_prefill(&self.model_id, request) {
@@ -713,6 +736,7 @@ async fn convert_content_block_to_bedrock(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?;
 
@@ -855,6 +879,7 @@ fn convert_converse_response(
             raw_response: Some(raw_response.clone()),
             message: "AWS Bedrock returned an empty message.".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -929,6 +954,7 @@ fn convert_response_content_block(
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -1007,6 +1033,7 @@ where
                         raw_response: None,
                         message: format!("Error reading stream: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     }.into());
                     return;
                 }
@@ -1024,6 +1051,7 @@ where
                                         raw_response: Some(error_message),
                                         message: format!("AWS Bedrock streaming exception: {exception_type}"),
                                         provider_type: PROVIDER_TYPE.to_string(),
+                                        api_type: ApiType::ChatCompletions,
                                     }.into());
                                     return;
                                 }
@@ -1060,6 +1088,7 @@ where
                                     raw_response: None,
                                     message: format!("Error decoding event stream frame: {e}"),
                                     provider_type: PROVIDER_TYPE.to_string(),
+                                    api_type: ApiType::ChatCompletions,
                                 }.into());
                                 return;
                             }
@@ -1083,6 +1112,7 @@ fn parse_stream_event<T: serde::de::DeserializeOwned>(
             raw_response: Some(raw_message.to_string()),
             message: format!("Error parsing {event_name}: {e}"),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })
 }
@@ -1146,6 +1176,7 @@ fn process_stream_event(
                         Error::new(ErrorDetails::InferenceServer {
                             message: "Got tool use delta without current tool id".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            api_type: ApiType::ChatCompletions,
                             raw_request: None,
                             raw_response: None,
                         })

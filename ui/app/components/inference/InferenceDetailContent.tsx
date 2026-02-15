@@ -45,7 +45,7 @@ import type { Input } from "~/types/tensorzero";
 export interface InferenceDetailData {
   inference: StoredInference;
   // TODO: remove
-  input: Input;
+  input?: Input;
   model_inferences: ParsedModelInferenceRow[];
   feedback: FeedbackRow[];
   feedback_bounds: FeedbackBounds;
@@ -190,6 +190,13 @@ export function InferenceDetailContent({
   };
 
   const onVariantSelect = (variant: string) => {
+    if (!input) {
+      toast.error({
+        title: "Input Unavailable",
+        description: "Cannot retry inference without input data.",
+      });
+      return;
+    }
     processRequest(variant, {
       resource: inference,
       input,
@@ -199,6 +206,13 @@ export function InferenceDetailContent({
   };
 
   const onModelSelect = (model: string) => {
+    if (!input) {
+      toast.error({
+        title: "Input Unavailable",
+        description: "Cannot retry inference without input data.",
+      });
+      return;
+    }
     processRequest(model, {
       resource: inference,
       input,
@@ -331,7 +345,7 @@ export function InferenceDetailContent({
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <InputElement input={input} />
+          {input && <InputElement input={input} />}
         </SectionLayout>
 
         <SectionLayout>
@@ -369,9 +383,15 @@ export function InferenceDetailContent({
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard
-            parameters={JSON.stringify(inference.inference_params, null, 2)}
-          />
+          {inference.inference_params ? (
+            <ParameterCard
+              parameters={JSON.stringify(inference.inference_params, null, 2)}
+            />
+          ) : (
+            <div className="text-fg-muted flex items-center justify-center py-12 text-sm">
+              Parameters missing
+            </div>
+          )}
         </SectionLayout>
 
         {inference.type === "chat" && (

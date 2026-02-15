@@ -235,6 +235,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -256,6 +257,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: None,
             })
@@ -266,6 +268,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -286,7 +289,12 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
             Ok(response_with_latency.try_into()?)
         } else {
-            handle_anthropic_error(response_status, raw_request, raw_response)
+            handle_anthropic_error(
+                response_status,
+                raw_request,
+                raw_response,
+                ApiType::ChatCompletions,
+            )
         }
     }
 
@@ -330,6 +338,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -348,7 +357,13 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_inference_id,
         )
         .peekable();
-        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
+        let chunk = peek_first_chunk(
+            &mut stream,
+            &raw_request,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+        )
+        .await?;
         // Handle JSON prefill for streaming.
         if matches!(
             request.json_mode,
@@ -407,7 +422,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -419,6 +434,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }));
@@ -627,6 +643,7 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
             ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }))

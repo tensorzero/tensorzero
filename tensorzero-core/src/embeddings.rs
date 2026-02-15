@@ -189,7 +189,7 @@ impl EmbeddingModelConfig {
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
                     let cache_lookup = embedding_cache_lookup(
-                        &clients.clickhouse_connection_info,
+                        &clients.cache_manager,
                         &provider_request,
                         clients.cache_options.max_age_s,
                     )
@@ -214,7 +214,7 @@ impl EmbeddingModelConfig {
                             .into());
                             };
                             let _ = start_cache_write(
-                                &clients.clickhouse_connection_info,
+                                &clients.cache_manager,
                                 provider_request.get_cache_key()?,
                                 CacheData {
                                     output: EmbeddingCacheData {
@@ -821,7 +821,7 @@ impl<'a> Embedding {
 #[cfg(test)]
 mod tests {
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheEnabledMode, CacheManager, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         model_table::ProviderTypeDefaultCredentials,
         rate_limiting::{RateLimitingManager, ScopeInfo},
@@ -868,19 +868,21 @@ mod tests {
             dimensions: None,
             encoding_format: EmbeddingEncodingFormat::Float,
         };
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let response = fallback_embedding_model
             .embed(
                 &request,
                 "fallback",
                 &InferenceClients {
                     http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                    clickhouse_connection_info: clickhouse_connection_info.clone(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(InferenceCredentials::default()),
                     cache_options: CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
                     tags: Arc::new(Default::default()),
                     rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
                     otlp_config: Default::default(),

@@ -20,6 +20,7 @@ use crate::config::snapshot::SnapshotHash;
 use crate::db::clickhouse::migration_manager::RUN_MIGRATIONS_COMMAND;
 use crate::inference::types::Thought;
 use crate::inference::types::storage::StoragePath;
+use crate::inference::types::usage::{ApiType, RawResponseEntry};
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
@@ -169,13 +170,73 @@ impl Error {
         self.0.is_retryable()
     }
 
+    /// Extracts raw response entries from inference errors in the error tree.
+    ///
+    /// Walks `AllVariantsFailed` → `ModelProvidersExhausted` → individual provider errors
+    /// and collects `RawResponseEntry` values from errors that have `raw_response` data.
+    ///
+    /// Returns `None` if no entries were collected.
+    pub fn extract_raw_response_entries(&self) -> Option<Vec<RawResponseEntry>> {
+        let mut entries = Vec::new();
+        self.0.collect_raw_response_entries(&mut entries);
+        if entries.is_empty() {
+            None
+        } else {
+            Some(entries)
+        }
+    }
+
+    /// Builds an HTTP error response, optionally including raw response entries from failed providers.
+    pub fn into_response_with_raw_entries(
+        self,
+        openai_format: bool,
+        include_raw_response: bool,
+    ) -> Response {
+        let raw_response_entries = if include_raw_response {
+            self.extract_raw_response_entries()
+        } else {
+            None
+        };
+        let body = self.build_response_body(openai_format, raw_response_entries);
+        let mut response = (self.status_code(), Json(body)).into_response();
+        response.extensions_mut().insert(self);
+        response
+    }
+
+    /// Builds a JSON value for a mid-stream streaming error SSE event.
+    ///
+    /// Uses `raw_chunk` / `tensorzero_raw_chunk` (matching success chunk format)
+    /// instead of the structured `raw_response` array used in terminal errors.
+    pub fn build_streaming_error_event(
+        &self,
+        openai_format: bool,
+        include_raw_response: bool,
+    ) -> Value {
+        let mut body = self.build_response_body(openai_format, None);
+        if include_raw_response && let Some(raw_chunk) = self.0.extract_raw_chunk() {
+            let key = if openai_format {
+                "tensorzero_raw_chunk"
+            } else {
+                "raw_chunk"
+            };
+            body[key] = Value::String(raw_chunk);
+        }
+        body
+    }
+
     /// Builds the JSON response body for this error.
     ///
     /// When `openai_format` is true, returns `{"error": {"message": "..."}}` (OpenAI-compatible).
     /// When `openai_format` is false, returns `{"error": "..."}` (TensorZero default).
     ///
     /// If `unstable_error_json` is enabled, includes structured error details as `error_json` and `tensorzero_error_json`.
-    pub fn build_response_body(&self, openai_format: bool) -> Value {
+    ///
+    /// If `raw_response_entries` is `Some`, includes the raw response entries in the body.
+    pub fn build_response_body(
+        &self,
+        openai_format: bool,
+        raw_response_entries: Option<Vec<RawResponseEntry>>,
+    ) -> Value {
         let message = self.to_string();
         let mut body = if openai_format {
             json!({"error": {"message": message}})
@@ -190,6 +251,15 @@ impl Error {
                 body["error"]["tensorzero_error_json"] = error_json;
             } else {
                 body["error_json"] = error_json;
+            }
+        }
+        if let Some(entries) = raw_response_entries {
+            let entries_json =
+                serde_json::to_value(entries).unwrap_or_else(|e| json!(e.to_string()));
+            if openai_format {
+                body["tensorzero_raw_response"] = entries_json;
+            } else {
+                body["raw_response"] = entries_json;
             }
         }
         body
@@ -343,6 +413,7 @@ pub enum ErrorDetails {
         #[serde(serialize_with = "serialize_status")]
         status_code: Option<StatusCode>,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -354,6 +425,7 @@ pub enum ErrorDetails {
     FatalStreamError {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -362,6 +434,7 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
         raw_request: Option<String>,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -980,6 +1053,70 @@ impl ErrorDetails {
             _ => true,
         }
     }
+
+    /// Recursively collects `RawResponseEntry` values from inference errors in the error tree.
+    fn collect_raw_response_entries(&self, entries: &mut Vec<RawResponseEntry>) {
+        match self {
+            ErrorDetails::AllVariantsFailed { errors } => {
+                for error in errors.values() {
+                    error.0.collect_raw_response_entries(entries);
+                }
+            }
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => {
+                for error in provider_errors.values() {
+                    error.0.collect_raw_response_entries(entries);
+                }
+            }
+            ErrorDetails::InferenceClient {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            }
+            | ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            }
+            | ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            } => {
+                entries.push(RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: provider_type.clone(),
+                    api_type: *api_type,
+                    data: data.clone(),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    /// Extracts the raw response string from a mid-stream error.
+    ///
+    /// Unlike `collect_raw_response_entries` which produces structured `RawResponseEntry` values,
+    /// this returns just the raw response string for use as `raw_chunk` in streaming error events.
+    fn extract_raw_chunk(&self) -> Option<String> {
+        match self {
+            ErrorDetails::InferenceClient {
+                raw_response: Some(data),
+                ..
+            }
+            | ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                ..
+            }
+            | ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                ..
+            } => Some(data.clone()),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for ErrorDetails {
@@ -1241,6 +1378,7 @@ impl std::fmt::Display for ErrorDetails {
                 raw_request,
                 raw_response,
                 status_code,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1274,6 +1412,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1298,6 +1437,7 @@ impl std::fmt::Display for ErrorDetails {
                 provider_type,
                 raw_request,
                 raw_response,
+                ..
             } => {
                 // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
@@ -1707,7 +1847,7 @@ impl std::fmt::Display for ErrorDetails {
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        let body = self.build_response_body(false);
+        let body = self.build_response_body(false, None);
         let mut response = (self.status_code(), Json(body)).into_response();
         // Attach the error to the response, so that we can set a nice message in our
         // `apply_otel_http_trace_layer` middleware
@@ -1824,5 +1964,225 @@ impl From<tensorzero_types::TypeError> for Error {
                 Self::new(ErrorDetails::Base64 { message })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_from_inference_client() {
+        let error = Error::new(ErrorDetails::InferenceClient {
+            message: "bad request".to_string(),
+            status_code: Some(StatusCode::BAD_REQUEST),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: Some(r#"{"error":{"message":"invalid"}}"#.to_string()),
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_some(),
+            "should extract entries from InferenceClient with raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 1, "should have exactly one entry");
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].api_type, ApiType::ChatCompletions);
+        assert_eq!(entries[0].data, r#"{"error":{"message":"invalid"}}"#);
+        assert!(
+            entries[0].model_inference_id.is_none(),
+            "model_inference_id should be None for error entries"
+        );
+    }
+
+    #[test]
+    fn test_extract_from_model_providers_exhausted() {
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert(
+            "provider_a".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "error a".to_string(),
+                status_code: None,
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("response_a".to_string()),
+            }),
+        );
+        provider_errors.insert(
+            "provider_b".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "error b".to_string(),
+                status_code: None,
+                provider_type: "anthropic".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: None, // No raw_response
+            }),
+        );
+        let error = Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_some(),
+            "should extract entries even if only some providers have raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(
+            entries.len(),
+            1,
+            "should have one entry (only provider_a has raw_response)"
+        );
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].data, "response_a");
+    }
+
+    #[test]
+    fn test_extract_from_all_variants_failed() {
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert(
+            "provider_1".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "err".to_string(),
+                status_code: None,
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("raw_1".to_string()),
+            }),
+        );
+        provider_errors.insert(
+            "provider_2".to_string(),
+            Error::new(ErrorDetails::InferenceServer {
+                message: "server err".to_string(),
+                provider_type: "anthropic".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("raw_2".to_string()),
+            }),
+        );
+        let mut variant_errors = IndexMap::new();
+        variant_errors.insert(
+            "variant_a".to_string(),
+            Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors }),
+        );
+        let error = Error::new(ErrorDetails::AllVariantsFailed {
+            errors: variant_errors,
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_some(),
+            "should extract entries from nested AllVariantsFailed -> ModelProvidersExhausted"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 2, "should have two entries");
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].data, "raw_1");
+        assert_eq!(entries[1].provider_type, "anthropic");
+        assert_eq!(entries[1].data, "raw_2");
+    }
+
+    #[test]
+    fn test_extract_from_non_inference_error() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "bad config".to_string(),
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(entries.is_none(), "non-inference errors should return None");
+    }
+
+    #[test]
+    fn test_extract_all_none_raw_responses() {
+        let error = Error::new(ErrorDetails::InferenceClient {
+            message: "err".to_string(),
+            status_code: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: None,
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_none(),
+            "InferenceClient with raw_response: None should return None"
+        );
+    }
+
+    #[test]
+    fn test_build_response_body_with_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let entries = vec![RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: r#"{"error":"bad"}"#.to_string(),
+        }];
+        let body = error.build_response_body(false, Some(entries));
+        assert!(
+            body.get("raw_response").is_some(),
+            "TZ native body should have `raw_response` field"
+        );
+        let raw_response = body["raw_response"].as_array().unwrap();
+        assert_eq!(raw_response.len(), 1, "should have one raw_response entry");
+        assert_eq!(raw_response[0]["provider_type"], "openai");
+        assert!(
+            raw_response[0]["model_inference_id"].is_null(),
+            "model_inference_id should be null when None"
+        );
+    }
+
+    #[test]
+    fn test_build_response_body_openai_with_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let entries = vec![RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "anthropic".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: "raw data".to_string(),
+        }];
+        let body = error.build_response_body(true, Some(entries));
+        assert!(
+            body.get("tensorzero_raw_response").is_some(),
+            "OAI body should have `tensorzero_raw_response` field"
+        );
+        let raw_response = body["tensorzero_raw_response"].as_array().unwrap();
+        assert_eq!(raw_response.len(), 1, "should have one entry");
+        assert_eq!(raw_response[0]["provider_type"], "anthropic");
+    }
+
+    #[test]
+    fn test_build_response_body_without_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let body = error.build_response_body(false, None);
+        assert!(
+            body.get("raw_response").is_none(),
+            "should not have `raw_response` field when entries is None"
+        );
+    }
+
+    #[test]
+    fn test_extract_from_fatal_stream_error() {
+        let error = Error::new(ErrorDetails::FatalStreamError {
+            message: "stream died".to_string(),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: Some("stream_error_data".to_string()),
+        });
+        let entries = error.extract_raw_response_entries();
+        assert!(
+            entries.is_some(),
+            "should extract entries from FatalStreamError with raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 1, "should have exactly one entry");
+        assert_eq!(entries[0].data, "stream_error_data");
     }
 }

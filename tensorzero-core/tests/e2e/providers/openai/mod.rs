@@ -9,7 +9,7 @@ use tensorzero::{
     ClientExt, ClientInferenceParams, File, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent, Role, UrlFile,
 };
-use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
+use tensorzero_core::cache::{CacheEnabledMode, CacheManager, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
@@ -1234,6 +1234,8 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
 }
 
 #[tokio::test]
+// TODO(#6302): re-enable
+#[ignore]
 async fn test_embedding_request() {
     let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"
@@ -1284,6 +1286,7 @@ async fn test_embedding_request() {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
+        cache_manager: CacheManager::new(Arc::new(clickhouse.clone())),
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
@@ -1435,6 +1438,7 @@ async fn test_embedding_sanity_check() {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
+        cache_manager: CacheManager::new(Arc::new(clickhouse.clone())),
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,

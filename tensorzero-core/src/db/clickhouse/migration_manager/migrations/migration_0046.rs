@@ -6,18 +6,19 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
-/// This migration adds bloom filter indices on `id` columns to the feedback tables:
-/// `BooleanMetricFeedback`, `FloatMetricFeedback`, `CommentFeedback`, and `DemonstrationFeedback`.
-/// This allows efficient lookup of feedback rows by their primary ID (used by the resolve_uuid endpoint).
+/// This migration adds bloom filter indices on `id` columns to the feedback tables
+/// and the `ModelInference` table.
+/// This allows efficient lookup of rows by their primary ID (used by the resolve_uuid endpoint).
 pub struct Migration0046<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-const TABLES: [&str; 4] = [
+const TABLES: [&str; 5] = [
     "BooleanMetricFeedback",
     "FloatMetricFeedback",
     "CommentFeedback",
     "DemonstrationFeedback",
+    "ModelInference",
 ];
 
 #[async_trait]

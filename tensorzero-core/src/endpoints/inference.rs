@@ -25,7 +25,7 @@ use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use crate::cache::{CacheOptions, CacheParamsOptions};
+use crate::cache::{CacheManager, CacheOptions, CacheParamsOptions};
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{
     Config, ErrorContext, Namespace, OtlpConfig, SchemaData, UninitializedVariantInfo,
@@ -194,6 +194,7 @@ pub async fn inference_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         ..
@@ -215,11 +216,13 @@ pub async fn inference_handler(
             .extra_overhead_labels
             .push(Label::new("function_name", "tensorzero::default"));
     }
+    let include_raw_response = params.include_raw_response;
     let inference_output = Box::pin(inference(
         config,
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         params,
@@ -236,7 +239,7 @@ pub async fn inference_handler(
             match data.output {
                 InferenceOutput::NonStreaming(response) => Json(response).into_response(),
                 InferenceOutput::Streaming(stream) => {
-                    let event_stream = prepare_serialized_events(stream);
+                    let event_stream = prepare_serialized_events(stream, include_raw_response);
 
                     Sse::new(event_stream)
                         .keep_alive(axum::response::sse::KeepAlive::new())
@@ -244,7 +247,7 @@ pub async fn inference_handler(
                 }
             }
         }
-        Err(e) => e.into_response(),
+        Err(e) => e.into_response_with_raw_entries(false, include_raw_response),
     };
     response.extensions_mut().insert(metric_data);
     response
@@ -302,6 +305,7 @@ pub async fn inference(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    cache_manager: CacheManager,
     deferred_tasks: TaskTracker,
     rate_limiting_manager: Arc<RateLimitingManager>,
     mut params: Params,
@@ -466,6 +470,7 @@ pub async fn inference(
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
+        cache_manager,
         tags: tags.clone(),
         rate_limiting_manager,
         otlp_config: config.gateway.export.otlp.clone(),
@@ -999,7 +1004,7 @@ fn create_previous_raw_response_chunk(
                     .map(|entry| entry.api_type)
                     .unwrap_or(ApiType::ChatCompletions);
                 vec![RawResponseEntry {
-                    model_inference_id: r.id,
+                    model_inference_id: Some(r.id),
                     provider_type: r.model_provider_name.to_string(),
                     api_type,
                     data: r.raw_response.clone(),
@@ -1264,10 +1269,6 @@ fn should_stream_chunk_in_create_stream(
     include_raw_response: bool,
     include_raw_usage: bool,
 ) -> bool {
-    if include_original_response || include_raw_response {
-        return true;
-    }
-
     match chunk {
         InferenceResultChunk::Chat(c) => {
             let ChatInferenceResultChunk {
@@ -1280,11 +1281,16 @@ fn should_stream_chunk_in_create_stream(
                 raw_usage,
                 // Only stream if `include_raw_response` is enabled
                 raw_response,
-                // We already handled `include_original_response` above
-                raw_chunk: _,
+                // Only stream if `include_original_response` or `include_raw_response` is enabled
+                raw_chunk,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
             } = c;
+
+            // We want to stream the chunk if `raw_chunk` is relevant (non-empty and requested)
+            if (include_original_response || include_raw_response) && !raw_chunk.is_empty() {
+                return true;
+            }
 
             // We want to stream the chunk if `raw_usage` is relevant
             if include_raw_usage && raw_usage.as_ref().is_some_and(|x| !x.is_empty()) {
@@ -1309,13 +1315,18 @@ fn should_stream_chunk_in_create_stream(
                 raw_usage,
                 // Only stream if `include_raw_response` is enabled
                 raw_response,
-                // We already handled `include_original_response` above
-                raw_chunk: _,
+                // Only stream if `include_original_response` or `include_raw_response` is enabled
+                raw_chunk,
                 // We never actually stream this field, so we don't need it
                 thought_chunks: _,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
             } = c;
+
+            // We want to stream the chunk if `raw_chunk` is relevant (non-empty and requested)
+            if (include_original_response || include_raw_response) && !raw_chunk.is_empty() {
+                return true;
+            }
 
             // We want to stream the chunk if `raw_usage` is relevant
             if include_raw_usage && raw_usage.as_ref().is_some_and(|x| !x.is_empty()) {
@@ -1355,6 +1366,7 @@ fn prepare_response_chunk(
 // When None is passed in, we send "[DONE]" to the client to signal the end of the stream
 fn prepare_serialized_events(
     mut stream: InferenceStream,
+    include_raw_response: bool,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         while let Some(chunk) = stream.next().await {
@@ -1367,8 +1379,7 @@ fn prepare_serialized_events(
                     })?
                 },
                 Err(e) => {
-                    // NOTE - in the future, we may want to end the stream early if we get an error
-                    serde_json::json!({"error": e.to_string()})
+                    e.build_streaming_error_event(false, include_raw_response)
                 }
             };
             yield Event::default().json_data(chunk_json).map_err(|e| {
@@ -1535,7 +1546,7 @@ impl InferenceResponse {
                             .map(|entry| entry.api_type)
                             .unwrap_or(ApiType::ChatCompletions);
                         vec![RawResponseEntry {
-                            model_inference_id: r.id,
+                            model_inference_id: Some(r.id),
                             provider_type: r.model_provider_name.to_string(),
                             api_type,
                             data: r.raw_response.clone(),
@@ -1885,6 +1896,7 @@ pub struct InferenceClients {
     pub postgres_connection_info: PostgresConnectionInfo,
     pub credentials: Arc<InferenceCredentials>,
     pub cache_options: CacheOptions,
+    pub cache_manager: CacheManager,
     pub tags: Arc<HashMap<String, String>>,
     pub rate_limiting_manager: Arc<RateLimitingManager>,
     pub otlp_config: OtlpConfig,
@@ -3124,5 +3136,101 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_should_stream_chunk_in_create_stream() {
+        // Chunk with content should always stream
+        let chunk_with_content = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "hello".to_string(),
+                id: "0".to_string(),
+            })],
+            ..Default::default()
+        });
+        assert!(
+            should_stream_chunk_in_create_stream(&chunk_with_content, false, false, false),
+            "Chunk with content should stream"
+        );
+        assert!(
+            should_stream_chunk_in_create_stream(&chunk_with_content, false, true, false),
+            "Chunk with content should stream even with include_raw_response"
+        );
+
+        // Chunk with usage should stream
+        let chunk_with_usage = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            usage: Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(5),
+                cost: None,
+            }),
+            ..Default::default()
+        });
+        assert!(
+            should_stream_chunk_in_create_stream(&chunk_with_usage, false, false, false),
+            "Chunk with usage should stream"
+        );
+
+        // Chunk with finish_reason should stream
+        let chunk_with_finish = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            finish_reason: Some(FinishReason::Stop),
+            ..Default::default()
+        });
+        assert!(
+            should_stream_chunk_in_create_stream(&chunk_with_finish, false, false, false),
+            "Chunk with finish_reason should stream"
+        );
+
+        // Empty chunk should NOT stream
+        let empty_chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk::default());
+        assert!(
+            !should_stream_chunk_in_create_stream(&empty_chunk, false, false, false),
+            "Empty chunk should not stream"
+        );
+
+        // Empty chunk should NOT stream even with include_raw_response=true
+        // (This is the bug fix: previously it would unconditionally return true)
+        assert!(
+            !should_stream_chunk_in_create_stream(&empty_chunk, false, true, false),
+            "Empty chunk should not stream even with include_raw_response=true"
+        );
+        assert!(
+            !should_stream_chunk_in_create_stream(&empty_chunk, true, false, false),
+            "Empty chunk should not stream even with include_original_response=true"
+        );
+
+        // Chunk with non-empty raw_chunk SHOULD stream when include_raw_response=true
+        let chunk_with_raw = InferenceResultChunk::Chat(ChatInferenceResultChunk {
+            raw_chunk: "raw data".to_string(),
+            ..Default::default()
+        });
+        assert!(
+            !should_stream_chunk_in_create_stream(&chunk_with_raw, false, false, false),
+            "Chunk with only raw_chunk should not stream when flags are off"
+        );
+        assert!(
+            should_stream_chunk_in_create_stream(&chunk_with_raw, false, true, false),
+            "Chunk with raw_chunk should stream when include_raw_response=true"
+        );
+        assert!(
+            should_stream_chunk_in_create_stream(&chunk_with_raw, true, false, false),
+            "Chunk with raw_chunk should stream when include_original_response=true"
+        );
+
+        // Same tests for Json variant
+        let json_empty = InferenceResultChunk::Json(JsonInferenceResultChunk::default());
+        assert!(
+            !should_stream_chunk_in_create_stream(&json_empty, false, true, false),
+            "Empty JSON chunk should not stream even with include_raw_response=true"
+        );
+
+        let json_with_raw = InferenceResultChunk::Json(JsonInferenceResultChunk {
+            raw_chunk: "raw data".to_string(),
+            ..Default::default()
+        });
+        assert!(
+            should_stream_chunk_in_create_stream(&json_with_raw, false, true, false),
+            "JSON chunk with raw_chunk should stream when include_raw_response=true"
+        );
     }
 }

@@ -5,7 +5,7 @@ use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    cache::CacheOptions,
+    cache::{CacheManager, CacheOptions},
     config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
     db::{
         DICLQueries, StoredDICLExample,
@@ -355,12 +355,14 @@ async fn process_embedding_batch(
         rate_limiting_config.clone(),
         Arc::new(postgres_connection_info.clone()),
     ));
+    let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
     let clients = InferenceClients {
         http_client: client.clone(),
         credentials: Arc::new(credentials.clone()),
-        clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+        clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info,
         cache_options: CacheOptions::default(),
+        cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info)),
         tags: tags.clone(),
         rate_limiting_manager,
         // We don't currently perform any OTLP export in optimization workflows
@@ -562,8 +564,9 @@ mod tests {
         function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
-            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            ContentBlockChatOutput, FunctionType, ModelInput, ResolvedContentBlock,
+            ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, System, Text,
         },
         jsonschema_util::JSONSchema,
         model_table::ProviderTypeDefaultCredentials,
@@ -764,6 +767,7 @@ mod tests {
     fn create_test_rendered_sample() -> RenderedSample {
         RenderedSample {
             function_name: "test_function".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("Test system".to_string()),
                 messages: vec![ResolvedRequestMessage {

@@ -794,6 +794,12 @@ model = "err_in_stream"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.err_in_stream_with_raw_response]
+type = "chat_completion"
+model = "err_in_stream_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.dicl]
 type = "experimental_dynamic_in_context_learning"
 model = "gpt-4o-mini-2024-07-18"

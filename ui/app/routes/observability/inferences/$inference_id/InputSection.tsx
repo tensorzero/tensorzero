@@ -7,7 +7,7 @@ import { InputElement } from "~/components/input_output/InputElement";
 import type { Input } from "~/types/tensorzero";
 
 interface InputSectionProps {
-  promise: Promise<Input>;
+  promise: Promise<Input | undefined>;
   locationKey: string;
 }
 
@@ -25,7 +25,7 @@ export function InputSection({ promise, locationKey }: InputSectionProps) {
             <SectionAsyncErrorState defaultMessage="Failed to load input" />
           }
         >
-          {(input) => <InputElement input={input} />}
+          {(input) => input && <InputElement input={input} />}
         </Await>
       </Suspense>
     </SectionLayout>

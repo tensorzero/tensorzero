@@ -409,8 +409,9 @@ mod tests {
 
     use tensorzero_core::{
         inference::types::{
-            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            ContentBlockChatOutput, FunctionType, ModelInput, ResolvedContentBlock,
+            ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, System, Text,
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
@@ -424,6 +425,7 @@ mod tests {
         })]);
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![ResolvedRequestMessage {
@@ -489,6 +491,7 @@ mod tests {
     async fn test_convert_to_rft_row() {
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![ResolvedRequestMessage {
@@ -558,6 +561,7 @@ mod tests {
     async fn test_convert_to_rft_row_with_tool_calls() {
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("You are a helpful assistant.".to_string()),
                 messages: vec![ResolvedRequestMessage {

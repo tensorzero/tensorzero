@@ -273,6 +273,7 @@ async def test_async_tool_call_roundtrip_complete_flow(
     follow_up_inference = follow_up_stored.inferences[0]
 
     # Verify input contains our tool call and tool result
+    assert follow_up_inference.input is not None, "Follow-up inference input must not be None"
     input_messages = follow_up_inference.input.messages
     assert input_messages is not None, "Input messages must not be None"
     assert len(input_messages) >= 3, "Should have user, assistant, and follow-up user messages"
@@ -701,6 +702,7 @@ def test_sync_tool_call_roundtrip_complete_flow(sync_client: TensorZeroGateway):
     follow_up_inference = follow_up_stored.inferences[0]
 
     # Verify input contains our tool call and tool result
+    assert follow_up_inference.input is not None, "Follow-up inference input must not be None"
     input_messages = follow_up_inference.input.messages
     assert input_messages is not None, "Input messages must not be None"
     assert len(input_messages) >= 3, "Should have user, assistant, and follow-up user messages"

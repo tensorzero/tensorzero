@@ -9,8 +9,12 @@ use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
+use tensorzero_types_providers::mistral::{
+    MistralChatChunk, MistralFinishReason, MistralResponse, MistralResponseChoice,
+    MistralResponseFormat, MistralResponseToolCall, MistralUsage,
+};
 use tokio::time::Instant;
 use url::Url;
 
@@ -192,6 +196,7 @@ impl InferenceProvider for MistralProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -211,6 +216,7 @@ impl InferenceProvider for MistralProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -223,6 +229,7 @@ impl InferenceProvider for MistralProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -247,10 +254,12 @@ impl InferenceProvider for MistralProvider {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some(raw_request),
                         raw_response: None,
                     })
                 })?,
+                ApiType::ChatCompletions,
             )
         }
     }
@@ -291,6 +300,7 @@ impl InferenceProvider for MistralProvider {
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -332,6 +342,7 @@ impl InferenceProvider for MistralProvider {
 fn handle_mistral_error(
     response_code: StatusCode,
     response_body: &str,
+    api_type: ApiType,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::BAD_REQUEST
@@ -341,6 +352,7 @@ fn handle_mistral_error(
             message: response_body.to_string(),
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
             raw_request: None,
             raw_response: None,
         }
@@ -348,6 +360,7 @@ fn handle_mistral_error(
         _ => Err(ErrorDetails::InferenceServer {
             message: response_body.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
             raw_request: None,
             raw_response: None,
         }
@@ -367,7 +380,7 @@ pub fn stream_mistral(
             let mut last_tool_name = None;
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -382,6 +395,7 @@ pub fn stream_mistral(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }.into());
@@ -430,15 +444,6 @@ fn tensorzero_to_mistral_system_message(system: Option<&str>) -> Option<OpenAIRe
             content: Cow::Borrowed(instructions),
         })
     })
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum MistralResponseFormat {
-    JsonObject,
-    #[default]
-    Text,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -635,90 +640,33 @@ impl<'a> MistralRequest<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct MistralUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-}
-
-impl From<MistralUsage> for Usage {
-    fn from(usage: MistralUsage) -> Self {
-        Usage {
-            input_tokens: Some(usage.prompt_tokens),
-            output_tokens: Some(usage.completion_tokens),
-            cost: None,
-        }
+fn mistral_usage_to_tensorzero_usage(usage: MistralUsage) -> Usage {
+    Usage {
+        input_tokens: Some(usage.prompt_tokens),
+        output_tokens: Some(usage.completion_tokens),
+        cost: None,
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct MistralResponseFunctionCall {
-    name: String,
-    arguments: String,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct MistralResponseToolCall {
-    id: String,
-    function: MistralResponseFunctionCall,
-}
-
-impl From<MistralResponseToolCall> for ToolCall {
-    fn from(mistral_tool_call: MistralResponseToolCall) -> Self {
-        ToolCall {
-            id: mistral_tool_call.id,
-            name: mistral_tool_call.function.name,
-            arguments: mistral_tool_call.function.arguments,
-        }
+fn mistral_response_tool_call_to_tensorzero_tool_call(
+    tool_call: MistralResponseToolCall,
+) -> ToolCall {
+    ToolCall {
+        id: tool_call.id,
+        name: tool_call.function.name,
+        arguments: tool_call.function.arguments,
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct MistralResponseMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<MistralResponseToolCall>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-enum MistralFinishReason {
-    Stop,
-    Length,
-    ModelLength,
-    Error,
-    ToolCalls,
-    #[serde(other)]
-    Unknown,
-}
-
-impl From<MistralFinishReason> for FinishReason {
-    fn from(reason: MistralFinishReason) -> Self {
-        match reason {
-            MistralFinishReason::Stop => FinishReason::Stop,
-            MistralFinishReason::Length => FinishReason::Length,
-            MistralFinishReason::ModelLength => FinishReason::Length,
-            MistralFinishReason::Error => FinishReason::Unknown,
-            MistralFinishReason::ToolCalls => FinishReason::ToolCall,
-            MistralFinishReason::Unknown => FinishReason::Unknown,
-        }
+fn mistral_finish_reason_to_tensorzero_finish_reason(reason: MistralFinishReason) -> FinishReason {
+    match reason {
+        MistralFinishReason::Stop => FinishReason::Stop,
+        MistralFinishReason::Length => FinishReason::Length,
+        MistralFinishReason::ModelLength => FinishReason::Length,
+        MistralFinishReason::Error => FinishReason::Unknown,
+        MistralFinishReason::ToolCalls => FinishReason::ToolCall,
+        MistralFinishReason::Unknown => FinishReason::Unknown,
     }
-}
-
-// Leaving out logprobs and finish_reason for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct MistralResponseChoice {
-    index: u8,
-    message: MistralResponseMessage,
-    finish_reason: MistralFinishReason,
-}
-
-// Leaving out id, created, model, service_tier, system_fingerprint, object for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct MistralResponse {
-    choices: Vec<MistralResponseChoice>,
-    usage: MistralUsage,
 }
 
 struct MistralResponseWithMetadata<'a> {
@@ -748,6 +696,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
             }));
@@ -762,6 +711,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
@@ -773,7 +723,9 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    mistral_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
         let raw_usage = mistral_usage_from_raw_response(&raw_response).map(|usage| {
@@ -784,7 +736,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = mistral_usage_to_tensorzero_usage(response.usage);
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -798,50 +750,13 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: Some(finish_reason.into()),
+                finish_reason: Some(mistral_finish_reason_to_tensorzero_finish_reason(
+                    finish_reason,
+                )),
                 id: model_inference_id,
             },
         ))
     }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct MistralFunctionCallChunk {
-    name: String,
-    arguments: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct MistralToolCallChunk {
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    id: String,
-    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
-    // If we were to do this better, we would need to check the `type` field
-    function: MistralFunctionCallChunk,
-}
-
-// This doesn't include role
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct MistralDelta {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<MistralToolCallChunk>>,
-}
-
-// This doesn't include logprobs, finish_reason, and index
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct MistralChatChunkChoice {
-    delta: MistralDelta,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    finish_reason: Option<MistralFinishReason>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct MistralChatChunk {
-    choices: Vec<MistralChatChunkChoice>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<MistralUsage>,
 }
 
 /// Maps a Mistral chunk to a TensorZero chunk for streaming inferences
@@ -857,6 +772,7 @@ fn mistral_to_tensorzero_chunk(
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: Some(raw_message.clone()),
         }
@@ -870,12 +786,14 @@ fn mistral_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(Into::into);
+    let usage = chunk.usage.map(mistral_usage_to_tensorzero_usage);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
         if let Some(choice_finish_reason) = choice.finish_reason {
-            finish_reason = Some(choice_finish_reason.into());
+            finish_reason = Some(mistral_finish_reason_to_tensorzero_finish_reason(
+                choice_finish_reason,
+            ));
         }
         if let Some(text) = choice.delta.content
             && !text.is_empty()
@@ -929,6 +847,9 @@ mod tests {
     use crate::inference::types::{FunctionType, RequestMessage, Role};
     use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::tool::{AllowedTools, ToolCallConfig};
+    use tensorzero_types_providers::mistral::{
+        MistralResponseFunctionCall, MistralResponseMessage,
+    };
     #[tokio::test]
     async fn test_mistral_request_new() {
         let request_with_tools = ModelInferenceRequest {
@@ -1528,7 +1449,11 @@ mod tests {
         use reqwest::StatusCode;
 
         // Test unauthorized error
-        let unauthorized = handle_mistral_error(StatusCode::UNAUTHORIZED, "Unauthorized access");
+        let unauthorized = handle_mistral_error(
+            StatusCode::UNAUTHORIZED,
+            "Unauthorized access",
+            ApiType::ChatCompletions,
+        );
         let error = unauthorized.unwrap_err();
         let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -1538,6 +1463,7 @@ mod tests {
             provider_type: provider,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Unauthorized access");
@@ -1548,7 +1474,11 @@ mod tests {
         }
 
         // Test forbidden error
-        let forbidden = handle_mistral_error(StatusCode::FORBIDDEN, "Forbidden access");
+        let forbidden = handle_mistral_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden access",
+            ApiType::ChatCompletions,
+        );
         let error = forbidden.unwrap_err();
         let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -1558,6 +1488,7 @@ mod tests {
             provider_type: provider,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Forbidden access");
@@ -1568,7 +1499,11 @@ mod tests {
         }
 
         // Test rate limit error
-        let rate_limit = handle_mistral_error(StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded");
+        let rate_limit = handle_mistral_error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Rate limit exceeded",
+            ApiType::ChatCompletions,
+        );
         let error = rate_limit.unwrap_err();
         let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -1578,6 +1513,7 @@ mod tests {
             provider_type: provider,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Rate limit exceeded");
@@ -1588,7 +1524,11 @@ mod tests {
         }
 
         // Test server error
-        let server_error = handle_mistral_error(StatusCode::INTERNAL_SERVER_ERROR, "Server error");
+        let server_error = handle_mistral_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Server error",
+            ApiType::ChatCompletions,
+        );
         let error = server_error.unwrap_err();
         let details = error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
@@ -1597,6 +1537,7 @@ mod tests {
             provider_type: provider,
             raw_request,
             raw_response,
+            ..
         } = details
         {
             assert_eq!(*message, "Server error");

@@ -104,9 +104,7 @@ use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
     RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
 };
-use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, serialize_json_string,
-};
+use crate::serde_util::{deserialize_optional_json_string, serialize_optional_json_string};
 use crate::tool::{
     InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCall, ToolCallConfig,
     ToolCallConfigDatabaseInsert, ToolResult, deserialize_optional_tool_info,
@@ -1490,20 +1488,20 @@ pub struct ChatInferenceDatabaseInsert {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: Vec<ContentBlockChatOutput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub input: Option<StoredInput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(deserialize_with = "deserialize_optional_tool_info")]
     #[serde(flatten)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub inference_params: InferenceParams,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub inference_params: Option<InferenceParams>,
     pub processing_time_ms: Option<u32>,
     pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
-    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
-    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
     #[serde(default)]
     pub snapshot_hash: Option<SnapshotHash>,
 }
@@ -1514,22 +1512,22 @@ pub struct JsonInferenceDatabaseInsert {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: JsonInferenceOutput,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub input: Option<StoredInput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<JsonInferenceOutput>,
     // We at one point wrote empty auxiliary content to the database as "" but now write it as []
     // In either case, we want to deserialize it as [] if empty
-    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
-    pub auxiliary_content: Vec<ContentBlockOutput>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub inference_params: InferenceParams,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub auxiliary_content: Option<Vec<ContentBlockOutput>>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub inference_params: Option<InferenceParams>,
     pub processing_time_ms: Option<u32>,
-    pub output_schema: Value,
+    pub output_schema: Option<Value>,
     pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
-    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
-    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
     #[serde(default)]
     pub snapshot_hash: Option<SnapshotHash>,
 }
@@ -1554,21 +1552,21 @@ pub enum InferenceDatabaseInsert {
 pub struct StoredModelInference {
     pub id: Uuid,
     pub inference_id: Uuid,
-    pub raw_request: String,
-    pub raw_response: String,
+    pub raw_request: Option<String>,
+    pub raw_response: Option<String>,
     pub system: Option<String>,
     /// Input messages - stored as JSON string in ClickHouse
     #[serde(
-        serialize_with = "serialize_json_string",
-        deserialize_with = "deserialize_json_string"
+        serialize_with = "serialize_optional_json_string",
+        deserialize_with = "deserialize_optional_json_string"
     )]
-    pub input_messages: Vec<StoredRequestMessage>,
+    pub input_messages: Option<Vec<StoredRequestMessage>>,
     /// Output content blocks - stored as JSON string in ClickHouse
     #[serde(
-        serialize_with = "serialize_json_string",
-        deserialize_with = "deserialize_json_string"
+        serialize_with = "serialize_optional_json_string",
+        deserialize_with = "deserialize_optional_json_string"
     )]
-    pub output: Vec<ContentBlockOutput>,
+    pub output: Option<Vec<ContentBlockOutput>>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub response_time_ms: Option<u32>,
@@ -1755,10 +1753,10 @@ impl StoredModelInference {
         Ok(Self {
             id: Uuid::now_v7(),
             inference_id,
-            raw_request: result.raw_request,
-            raw_response: result.raw_response,
+            raw_request: Some(result.raw_request),
+            raw_response: Some(result.raw_response),
             system: result.system,
-            output: result.output,
+            output: Some(result.output),
             input_tokens,
             output_tokens,
             response_time_ms: latency_ms,
@@ -1767,7 +1765,7 @@ impl StoredModelInference {
             model_name: result.model_name.to_string(),
             cached: result.cached,
             finish_reason: result.finish_reason,
-            input_messages: stored_input_messages,
+            input_messages: Some(stored_input_messages),
             snapshot_hash: Some(snapshot_hash),
             cost: result.usage.cost,
             // timestamp is a materialized column, not set during insert
@@ -2015,14 +2013,14 @@ impl ChatInferenceDatabaseInsert {
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
-            input,
+            input: Some(input),
             tool_params,
-            inference_params,
-            output: chat_result.content,
+            inference_params: Some(inference_params),
+            output: Some(chat_result.content),
             processing_time_ms,
             tags: metadata.tags,
             ttft_ms: metadata.ttft_ms,
-            extra_body: metadata.extra_body,
+            extra_body: Some(metadata.extra_body),
             snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
@@ -2052,14 +2050,14 @@ impl JsonInferenceDatabaseInsert {
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
-            input,
-            auxiliary_content,
-            inference_params,
-            output,
+            input: Some(input),
+            auxiliary_content: Some(auxiliary_content),
+            inference_params: Some(inference_params),
+            output: Some(output),
             processing_time_ms,
-            output_schema: json_result.output_schema,
+            output_schema: Some(json_result.output_schema),
             tags: metadata.tags,
-            extra_body: metadata.extra_body,
+            extra_body: Some(metadata.extra_body),
             ttft_ms: metadata.ttft_ms,
             snapshot_hash: Some(metadata.snapshot_hash),
         }

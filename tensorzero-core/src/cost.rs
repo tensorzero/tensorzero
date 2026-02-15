@@ -1010,7 +1010,7 @@ cost_per_million = 0.1
                     "0.1 should deserialize to exact Decimal, not 0.1000000000000000055..."
                 );
             }
-            _ => panic!("expected PerMillion"),
+            UninitializedCostRate::PerUnit { .. } => panic!("expected PerMillion"),
         }
 
         let toml_str = r#"
@@ -1027,7 +1027,7 @@ cost_per_million = 0.3
                     "0.3 should deserialize to exact Decimal, not 0.29999999999999998..."
                 );
             }
-            _ => panic!("expected PerMillion"),
+            UninitializedCostRate::PerUnit { .. } => panic!("expected PerMillion"),
         }
     }
 
@@ -1048,7 +1048,7 @@ cost_per_million = "0.1"
                     "string-quoted 0.1 should deserialize to exact Decimal"
                 );
             }
-            _ => panic!("expected PerMillion"),
+            UninitializedCostRate::PerUnit { .. } => panic!("expected PerMillion"),
         }
     }
 
@@ -1056,10 +1056,10 @@ cost_per_million = "0.1"
 
     #[test]
     fn test_deserialization_missing_pointer_from_toml() {
-        let toml_str = r#"
+        let toml_str = r"
 cost_per_million = 1.50
 required = true
-"#;
+";
         let result: Result<UninitializedCostConfigEntry, _> = toml::from_str(toml_str);
         assert!(
             result.is_err(),
@@ -1097,7 +1097,7 @@ cost_per_million = -0.50
                     "negative cost_per_million should parse correctly"
                 );
             }
-            _ => panic!("expected PerMillion"),
+            UninitializedCostRate::PerUnit { .. } => panic!("expected PerMillion"),
         }
     }
 
@@ -1131,7 +1131,7 @@ cost_per_unit = 1.0
             CostPointerConfig::Unified { pointer } => {
                 assert_eq!(pointer.as_str(), "", "empty pointer should be preserved");
             }
-            _ => panic!("expected Unified pointer"),
+            CostPointerConfig::Split { .. } => panic!("expected Unified pointer"),
         }
     }
 

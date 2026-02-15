@@ -342,6 +342,7 @@ impl InferenceProvider for DummyProvider {
                     ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 }
                 .into());
             }
@@ -357,6 +358,7 @@ impl InferenceProvider for DummyProvider {
                 raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -375,6 +377,7 @@ impl InferenceProvider for DummyProvider {
                     raw_response: None,
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 }
                 .into());
             }
@@ -394,6 +397,7 @@ impl InferenceProvider for DummyProvider {
                 raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -578,6 +582,7 @@ impl InferenceProvider for DummyProvider {
                         raw_response: None,
                         status_code: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     }
                     .into());
                 }
@@ -616,6 +621,7 @@ impl InferenceProvider for DummyProvider {
                     raw_response: None,
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 }
                 .into());
             }
@@ -708,6 +714,7 @@ impl InferenceProvider for DummyProvider {
                     ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 }
                 .into());
             }
@@ -744,12 +751,15 @@ impl InferenceProvider for DummyProvider {
                 raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
 
         let err_in_stream = self.model_name == "err_in_stream";
         let fatal_stream_error = self.model_name == "fatal_stream_error";
+        let err_in_stream_with_raw = self.model_name == "err_in_stream_with_raw_response";
+        let fatal_stream_error_with_raw = self.model_name == "fatal_stream_error_with_raw_response";
 
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
             "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
@@ -775,6 +785,7 @@ impl InferenceProvider for DummyProvider {
                     yield Err(Error::new(ErrorDetails::FatalStreamError {
                         message: "Dummy fatal error".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }));
@@ -788,6 +799,29 @@ impl InferenceProvider for DummyProvider {
                         raw_response: None,
                         status_code: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
+                    }));
+                    continue;
+                }
+                if fatal_stream_error_with_raw && i == 2 {
+                    yield Err(Error::new(ErrorDetails::FatalStreamError {
+                        message: "Dummy fatal error with raw response".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: Some("{\"error\": \"dummy fatal raw response\"}".to_string()),
+                    }));
+                    sleep_excluding_latency(Duration::from_secs(5)).await;
+                    continue;
+                }
+                if err_in_stream_with_raw && i == 3 {
+                    yield Err(Error::new(ErrorDetails::InferenceClient {
+                        message: "Dummy error in stream with raw response".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: Some("{\"error\": \"dummy client raw response\"}".to_string()),
+                        status_code: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     }));
                     continue;
                 }
@@ -916,6 +950,7 @@ impl EmbeddingProvider for DummyProvider {
                 raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
             }
             .into());
         }
@@ -937,6 +972,7 @@ impl EmbeddingProvider for DummyProvider {
                 raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
             }
             .into());
         }

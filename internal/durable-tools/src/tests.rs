@@ -644,12 +644,29 @@ mod error_tests {
     #[test]
     fn task_error_from_tool_error_serialization() {
         let json_err = serde_json::from_str::<String>("not valid json").unwrap_err();
-        let tool_err = ToolError::Serialization(json_err);
+        let tool_err = ToolError::NonControl(NonControlToolError::Serialization {
+            message: json_err.to_string(),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::Serialization(_) => {}
-            _ => panic!("Expected Serialization"),
+            TaskError::User {
+                message,
+                error_data,
+            } => {
+                assert_eq!(
+                    message,
+                    "Serialization error: expected ident at line 1 column 2"
+                );
+                assert_eq!(
+                    error_data,
+                    serde_json::json!({
+                        "kind": "serialization",
+                        "message": "expected ident at line 1 column 2",
+                    })
+                );
+            }
+            _ => panic!("Expected User"),
         }
     }
 }

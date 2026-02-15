@@ -39,21 +39,44 @@ BEGIN
             $$
         );
 
-        -- Refresh materialized views every 5 minutes
+        -- Incrementally refresh model provider statistics every 5 minutes, with a 10 minute lookback window
         PERFORM cron.schedule(
-            'tensorzero_refresh_materialized_views',
+            'tensorzero_refresh_model_provider_statistics_incremental',
             '*/5 * * * *',
             $$
-            REFRESH MATERIALIZED VIEW tensorzero.model_provider_statistics;
-            REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles;
-            REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_hour;
-            REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_day;
-            REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_week;
-            REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_month;
+            SELECT tensorzero.refresh_model_provider_statistics_incremental(INTERVAL '10 minutes');
             $$
         );
 
-        RAISE NOTICE 'pg_cron jobs scheduled for partition management and materialized view refresh';
+        -- Ensure legacy materialized view refresh job is removed after migration to incremental histogram refresh.
+        PERFORM cron.unschedule(jobid)
+        FROM cron.job
+        WHERE jobname = 'tensorzero_refresh_materialized_views';
+
+        -- Ensure legacy wrapper histogram refresh job is removed.
+        PERFORM cron.unschedule(jobid)
+        FROM cron.job
+        WHERE jobname = 'tensorzero_refresh_model_latency_histograms_incremental';
+
+        -- Incrementally refresh minute latency histogram rollups every 5 minutes.
+        PERFORM cron.schedule(
+            'tensorzero_refresh_model_latency_histogram_minute_incremental',
+            '*/5 * * * *',
+            $$
+            SELECT tensorzero.refresh_model_latency_histogram_minute_incremental(INTERVAL '10 minutes');
+            $$
+        );
+
+        -- Incrementally refresh hour latency histogram rollups every 5 minutes, offset after minute refresh.
+        PERFORM cron.schedule(
+            'tensorzero_refresh_model_latency_histogram_hour_incremental',
+            '2-59/5 * * * *',
+            $$
+            SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(INTERVAL '2 hours');
+            $$
+        );
+
+        RAISE NOTICE 'pg_cron jobs scheduled for partition management, incremental stats refresh, and separate minute/hour latency histogram refresh';
     ELSE
         RAISE WARNING 'pg_cron extension not available';
     END IF;

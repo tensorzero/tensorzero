@@ -211,15 +211,15 @@ model_name = "good"
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
         // Check the final chunk with usage for cost
-        if let Some(usage) = chunk.get("usage") {
-            if let Some(cost) = usage.get("cost") {
-                found_cost = true;
-                let cost = cost.as_f64().expect("cost should be a number");
-                assert!(
-                    (cost - 0.000035).abs() < 1e-10,
-                    "Expected cost ~0.000035, got {cost}"
-                );
-            }
+        if let Some(usage) = chunk.get("usage")
+            && let Some(cost) = usage.get("cost")
+        {
+            found_cost = true;
+            let cost = cost.as_f64().expect("cost should be a number");
+            assert!(
+                (cost - 0.000035).abs() < 1e-10,
+                "Expected cost ~0.000035, got {cost}"
+            );
         }
     }
 
@@ -431,15 +431,15 @@ model_name = "good"
 
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
-        if let Some(usage) = chunk.get("usage") {
-            if let Some(cost) = usage.get("cost") {
-                found_cost = true;
-                let cost = cost.as_f64().expect("cost should be a number");
-                assert!(
-                    (cost - 0.000035).abs() < 1e-10,
-                    "Expected cost ~0.000035, got {cost}"
-                );
-            }
+        if let Some(usage) = chunk.get("usage")
+            && let Some(cost) = usage.get("cost")
+        {
+            found_cost = true;
+            let cost = cost.as_f64().expect("cost should be a number");
+            assert!(
+                (cost - 0.000035).abs() < 1e-10,
+                "Expected cost ~0.000035, got {cost}"
+            );
         }
     }
 
@@ -874,15 +874,15 @@ cost = [
 
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
-        if let Some(usage) = chunk.get("usage") {
-            if let Some(cost) = usage.get("cost") {
-                found_cost = true;
-                let cost = cost.as_f64().expect("cost should be a number");
-                assert!(
-                    (cost - 0.000035).abs() < 1e-10,
-                    "Streaming cost should reflect downstream's rates (0.000035), not relay's (0.003). Got: {cost}"
-                );
-            }
+        if let Some(usage) = chunk.get("usage")
+            && let Some(cost) = usage.get("cost")
+        {
+            found_cost = true;
+            let cost = cost.as_f64().expect("cost should be a number");
+            assert!(
+                (cost - 0.000035).abs() < 1e-10,
+                "Streaming cost should reflect downstream's rates (0.000035), not relay's (0.003). Got: {cost}"
+            );
         }
     }
 
@@ -1113,15 +1113,15 @@ model_name = "best_of_n_0_with_usage"
 
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
-        if let Some(usage) = chunk.get("usage") {
-            if let Some(cost) = usage.get("cost") {
-                found_cost = true;
-                let cost = cost.as_f64().expect("cost should be a number");
-                assert!(
-                    cost > 0.000035,
-                    "Best-of-n streaming cost should be > single inference cost (0.000035), got {cost}"
-                );
-            }
+        if let Some(usage) = chunk.get("usage")
+            && let Some(cost) = usage.get("cost")
+        {
+            found_cost = true;
+            let cost = cost.as_f64().expect("cost should be a number");
+            assert!(
+                cost > 0.000035,
+                "Best-of-n streaming cost should be > single inference cost (0.000035), got {cost}"
+            );
         }
     }
 
@@ -1348,15 +1348,15 @@ model_name = "good"
 
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
-        if let Some(usage) = chunk.get("usage") {
-            if let Some(cost) = usage.get("cost") {
-                found_cost = true;
-                let cost = cost.as_f64().expect("cost should be a number");
-                assert!(
-                    cost > 0.000035,
-                    "Mixture-of-n streaming cost should be > single inference cost (0.000035), got {cost}"
-                );
-            }
+        if let Some(usage) = chunk.get("usage")
+            && let Some(cost) = usage.get("cost")
+        {
+            found_cost = true;
+            let cost = cost.as_f64().expect("cost should be a number");
+            assert!(
+                cost > 0.000035,
+                "Mixture-of-n streaming cost should be > single inference cost (0.000035), got {cost}"
+            );
         }
     }
 

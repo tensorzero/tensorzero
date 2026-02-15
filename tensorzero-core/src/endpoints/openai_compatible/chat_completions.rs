@@ -29,6 +29,7 @@ pub async fn chat_completions_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         ..
@@ -119,20 +120,27 @@ pub async fn chat_completions_handler(
         .into()),
     }?;
 
-    let response = Box::pin(inference(
+    let inference_result = Box::pin(inference(
         config,
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         params,
         api_key_ext,
     ))
-    .await?
-    .output;
+    .await;
 
-    match response {
+    let output = match inference_result {
+        Ok(data) => data.output,
+        Err(e) => {
+            return Ok(e.into_response_with_raw_entries(true, include_raw_response));
+        }
+    };
+
+    match output {
         InferenceOutput::NonStreaming(response) => {
             let openai_compatible_response = OpenAICompatibleResponse::from((
                 response,
