@@ -547,6 +547,7 @@ model = "test_model_{random_id}"
         Some(CLICKHOUSE_URL.clone()),
         None,
         None,
+        None,
         false,
         Some(Duration::from_secs(60)),
     ))
@@ -681,6 +682,7 @@ model = "test_model_{random_id}"
         Some(CLICKHOUSE_URL.clone()),
         None,
         None,
+        None,
         false,
         Some(Duration::from_secs(60)),
     ))
@@ -805,6 +807,7 @@ model = "test_model_{random_id}"
         retrieved_snapshot,
         &live_config,
         Some(CLICKHOUSE_URL.clone()),
+        None,
         None,
         None,
         false,

@@ -81,7 +81,41 @@ If both `TENSORZERO_VALKEY_URL` and `TENSORZERO_POSTGRES_URL` are set, the gatew
 
 </Warning>
 
+### Dedicated Valkey Instance for Rate Limiting (Optional)
+
+By default, TensorZero uses a single Valkey instance for both **caching** and **rate limiting**.
+If your deployment is under memory pressure, you may want to separate these workloads to prevent cache eviction from disrupting rate limiting state.
+
+Set `TENSORZERO_VALKEY_RATE_LIMITING_URL` to point rate limiting at a dedicated Valkey instance:
+
+```bash title=".env"
+# Shared instance for caching
+TENSORZERO_VALKEY_URL="redis://valkey-cache:6379"
+
+# Dedicated instance for rate limiting
+TENSORZERO_VALKEY_RATE_LIMITING_URL="redis://valkey-ratelimit:6379"
+```
+
+If `TENSORZERO_VALKEY_RATE_LIMITING_URL` is not set, rate limiting uses the `TENSORZERO_VALKEY_URL` instance.
+
+This separation lets you configure different eviction policies per instance:
+
+- **Rate limiting instance**: Use `noeviction` policy to ensure rate limiting keys are never silently evicted.
+- **Caching instance**: Use `allkeys-lru` or `volatile-ttl` policy for efficient cache management.
+
 ## Best Practices
+
+### Eviction Policy
+
+Rate limiting keys and cache entries have different eviction tolerance:
+
+- **Rate limiting** is a correctness concern — silent eviction resets rate limit state and allows clients to exceed their limits.
+- **Caching** is a performance concern — eviction simply causes a cache miss and the next request re-fetches from the provider.
+
+If you use a single Valkey instance for both, we recommend the `volatile-ttl` eviction policy.
+TensorZero sets rate limiting key TTLs to a minimum of 48 hours (compared to the default 24-hour cache TTL), so rate limiting keys are evicted last under memory pressure.
+
+For stronger guarantees, use a [dedicated Valkey instance for rate limiting](#dedicated-valkey-instance-for-rate-limiting-optional) with `noeviction` policy.
 
 ### Durability
 

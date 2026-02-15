@@ -88,6 +88,7 @@ impl Optimizer for GEPAConfig {
             clickhouse_connection_info: clickhouse_connection_info.clone(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_rate_limiting_connection_info: ValkeyConnectionInfo::Disabled,
             http_client: client.clone(),
             timeout: Some(Duration::from_secs(self.timeout)),
         })

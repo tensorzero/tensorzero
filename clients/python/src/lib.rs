@@ -167,13 +167,14 @@ impl LocalHttpGateway {
 }
 
 #[pyfunction]
-#[pyo3(signature = (*, config_file, clickhouse_url, postgres_url, valkey_url, async_setup))]
+#[pyo3(signature = (*, config_file, clickhouse_url, postgres_url, valkey_url, valkey_rate_limiting_url, async_setup))]
 fn _start_http_gateway(
     py: Python<'_>,
     config_file: Option<String>,
     clickhouse_url: Option<String>,
     postgres_url: Option<String>,
     valkey_url: Option<String>,
+    valkey_rate_limiting_url: Option<String>,
     async_setup: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
     warn_no_config(py, config_file.as_deref())?;
@@ -183,6 +184,7 @@ fn _start_http_gateway(
             clickhouse_url,
             postgres_url,
             valkey_url,
+            valkey_rate_limiting_url,
         )
         .await?;
         Ok(LocalHttpGateway {
@@ -700,6 +702,7 @@ impl TensorZeroGateway {
             clickhouse_url,
             postgres_config: postgres_url.map(PostgresConfig::Url),
             valkey_url,
+            valkey_rate_limiting_url: None,
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -1917,6 +1920,7 @@ impl AsyncTensorZeroGateway {
             clickhouse_url,
             postgres_config: postgres_url.map(PostgresConfig::Url),
             valkey_url,
+            valkey_rate_limiting_url: None,
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,

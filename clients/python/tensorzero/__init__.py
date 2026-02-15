@@ -429,6 +429,7 @@ def patch_openai_client(
         clickhouse_url=clickhouse_url,
         postgres_url=None,
         valkey_url=None,
+        valkey_rate_limiting_url=None,
         async_setup=async_setup,
     )
     if async_setup:

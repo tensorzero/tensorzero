@@ -13,6 +13,7 @@ async fn test_embedded_invalid_glob() {
         clickhouse_url: None,
         postgres_config: None,
         valkey_url: None,
+        valkey_rate_limiting_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -55,6 +56,7 @@ async fn test_embedded_duplicate_key() {
         clickhouse_url: None,
         postgres_config: None,
         valkey_url: None,
+        valkey_rate_limiting_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -110,6 +112,7 @@ async fn test_from_components_basic() {
         clickhouse_connection_info,
         postgres_connection_info,
         valkey_connection_info: ValkeyConnectionInfo::Disabled,
+        valkey_rate_limiting_connection_info: ValkeyConnectionInfo::Disabled,
         http_client,
         timeout: Some(Duration::from_secs(60)),
     })

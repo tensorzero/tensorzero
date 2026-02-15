@@ -1615,6 +1615,7 @@ def _start_http_gateway(
     clickhouse_url: Optional[str],
     postgres_url: Optional[str],
     valkey_url: Optional[str],
+    valkey_rate_limiting_url: Optional[str],
     async_setup: bool,
 ) -> Union[Any, Awaitable[Any]]: ...
 @final

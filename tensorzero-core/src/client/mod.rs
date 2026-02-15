@@ -21,7 +21,9 @@ use crate::{
     db::postgres::PostgresConnectionInfo,
     db::valkey::ValkeyConnectionInfo,
     error::{Error, ErrorDetails},
-    utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey},
+    utils::gateway::{
+        GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey, setup_valkey_rate_limiting,
+    },
 };
 use reqwest::header::HeaderMap;
 use reqwest_sse_stream::Event;
@@ -445,6 +447,10 @@ pub enum ClientBuilderMode {
         clickhouse_url: Option<String>,
         postgres_config: Option<PostgresConfig>,
         valkey_url: Option<String>,
+        /// Optional dedicated Valkey URL for rate limiting.
+        /// When set, rate limiting uses a separate Valkey instance from caching,
+        /// allowing different eviction policies per use case.
+        valkey_rate_limiting_url: Option<String>,
         /// A timeout for all TensorZero gateway processing.
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
@@ -470,6 +476,8 @@ pub enum ClientBuilderMode {
         postgres_connection_info: PostgresConnectionInfo,
         /// Already-initialized Valkey connection
         valkey_connection_info: ValkeyConnectionInfo,
+        /// Already-initialized Valkey connection for rate limiting (may be same as `valkey_connection_info`)
+        valkey_rate_limiting_connection_info: ValkeyConnectionInfo,
         /// Pre-configured HTTP client for model inference
         http_client: TensorzeroHttpClient,
         /// A timeout for all TensorZero gateway processing.
@@ -549,6 +557,7 @@ impl ClientBuilder {
                 clickhouse_url,
                 postgres_config,
                 valkey_url,
+                valkey_rate_limiting_url,
                 timeout,
                 verify_credentials,
                 allow_batch_writes,
@@ -613,6 +622,14 @@ impl ClientBuilder {
                         source: e.into(),
                     })
                 })?;
+                let valkey_rate_limiting_connection_info =
+                    setup_valkey_rate_limiting(valkey_rate_limiting_url.as_deref(), &valkey_connection_info)
+                        .await
+                        .map_err(|e| {
+                            ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?;
 
                 let http_client = if self.http_client.is_some() {
                     return Err(ClientBuilderError::HTTPClientBuild(
@@ -634,6 +651,7 @@ impl ClientBuilder {
                                 clickhouse_connection_info,
                                 postgres_connection_info,
                                 valkey_connection_info,
+                                valkey_rate_limiting_connection_info,
                                 http_client,
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
@@ -655,6 +673,7 @@ impl ClientBuilder {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info,
+                valkey_rate_limiting_connection_info,
                 http_client,
                 timeout,
             } => {
@@ -680,6 +699,7 @@ impl ClientBuilder {
                                 })?,
                                 postgres_connection_info.clone(),
                                 valkey_connection_info.clone(),
+                                valkey_rate_limiting_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
@@ -730,12 +750,14 @@ impl ClientBuilder {
     ///
     /// # Returns
     /// A Client configured with historical semantic settings but current runtime parameters
+    #[expect(clippy::too_many_arguments)]
     pub async fn from_config_snapshot(
         snapshot: ConfigSnapshot,
         live_config: &Config,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         valkey_url: Option<String>,
+        valkey_rate_limiting_url: Option<String>,
         verify_credentials: bool,
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
@@ -785,6 +807,14 @@ impl ClientBuilder {
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
             ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
         })?;
+        let valkey_rate_limiting_connection_info = setup_valkey_rate_limiting(
+            valkey_rate_limiting_url.as_deref(),
+            &valkey_connection_info,
+        )
+        .await
+        .map_err(|e| {
+            ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
+        })?;
 
         // Use HTTP client from config (now overlaid from live_config)
         let http_client = config.http_client.clone();
@@ -795,6 +825,7 @@ impl ClientBuilder {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_rate_limiting_connection_info,
             http_client,
             timeout,
         });
@@ -1283,6 +1314,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
+            valkey_rate_limiting_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1312,6 +1344,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
+            valkey_rate_limiting_url: None,
             timeout: None,
             verify_credentials: false, // Skip credential verification
             allow_batch_writes: false,
@@ -1358,6 +1391,7 @@ mod tests {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_rate_limiting_connection_info: ValkeyConnectionInfo::Disabled,
             http_client,
             timeout: None,
         })
@@ -1410,6 +1444,7 @@ mod tests {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_rate_limiting_connection_info: ValkeyConnectionInfo::Disabled,
             http_client,
             timeout: None,
         })
@@ -1439,6 +1474,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
+            valkey_rate_limiting_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1462,6 +1498,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
+            valkey_rate_limiting_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1487,6 +1524,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
+            valkey_rate_limiting_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,

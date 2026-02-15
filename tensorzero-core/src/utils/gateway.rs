@@ -168,6 +168,10 @@ pub struct AppStateData {
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
     pub valkey_connection_info: ValkeyConnectionInfo,
+    /// Separate Valkey connection for rate limiting, allowing isolation from cache entries.
+    /// When `TENSORZERO_VALKEY_RATE_LIMITING_URL` is set, this points to a dedicated instance;
+    /// otherwise, it shares the same connection as `valkey_connection_info`.
+    pub valkey_rate_limiting_connection_info: ValkeyConnectionInfo,
     pub cache_manager: CacheManager,
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
@@ -224,11 +228,13 @@ impl GatewayHandle {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
+        let valkey_rate_limiting_url = std::env::var("TENSORZERO_VALKEY_RATE_LIMITING_URL").ok();
         Box::pin(Self::new_with_databases(
             config,
             clickhouse_url,
             postgres_url,
             valkey_url,
+            valkey_rate_limiting_url,
             available_tools,
         ))
         .await
@@ -239,6 +245,7 @@ impl GatewayHandle {
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         valkey_url: Option<String>,
+        valkey_rate_limiting_url: Option<String>,
         available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
@@ -249,12 +256,18 @@ impl GatewayHandle {
         );
         let config = Arc::new(Box::pin(config.into_config(&db)).await?);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
+        let valkey_rate_limiting_connection_info = setup_valkey_rate_limiting(
+            valkey_rate_limiting_url.as_deref(),
+            &valkey_connection_info,
+        )
+        .await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_rate_limiting_connection_info,
             http_client,
             None,
             available_tools,
@@ -294,6 +307,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info: ValkeyConnectionInfo::Disabled,
+                valkey_rate_limiting_connection_info: ValkeyConnectionInfo::Disabled,
                 cache_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
@@ -309,18 +323,20 @@ impl GatewayHandle {
         }
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub async fn new_with_database_and_http_client(
         config: Arc<Config>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
+        valkey_rate_limiting_connection_info: ValkeyConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
-            &valkey_connection_info,
+            &valkey_rate_limiting_connection_info,
             &postgres_connection_info,
         )?);
 
@@ -391,6 +407,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info,
+                valkey_rate_limiting_connection_info,
                 cache_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
@@ -411,18 +428,20 @@ impl AppStateData {
     /// Create an AppStateData for use with a historical config snapshot.
     /// This version does not include auth_cache, config_snapshot_cache, autopilot_client,
     /// or deployment_id since those are specific to the live gateway.
+    #[expect(clippy::too_many_arguments)]
     pub fn new_for_snapshot(
         config: Arc<Config>,
         http_client: TensorzeroHttpClient,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
+        valkey_rate_limiting_connection_info: ValkeyConnectionInfo,
         deferred_tasks: TaskTracker,
         shutdown_token: CancellationToken,
     ) -> Result<Self, Error> {
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
-            &valkey_connection_info,
+            &valkey_rate_limiting_connection_info,
             &postgres_connection_info,
         )?);
         let cache_manager = CacheManager::new_from_connections(
@@ -436,6 +455,7 @@ impl AppStateData {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_rate_limiting_connection_info,
             cache_manager,
             deferred_tasks,
             auth_cache: None,
@@ -620,6 +640,28 @@ pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionIn
     }
 }
 
+/// Sets up the Valkey connection for rate limiting.
+///
+/// If `valkey_rate_limiting_url` is provided, creates a dedicated connection for rate limiting.
+/// Otherwise, falls back to the shared `valkey_connection_info`.
+///
+/// A dedicated rate limiting Valkey instance allows operators to configure `noeviction` policy
+/// for rate limiting while using a separate eviction policy (e.g. `volatile-ttl`) for caching.
+pub async fn setup_valkey_rate_limiting(
+    valkey_rate_limiting_url: Option<&str>,
+    valkey_connection_info: &ValkeyConnectionInfo,
+) -> Result<ValkeyConnectionInfo, Error> {
+    match valkey_rate_limiting_url {
+        Some(url) => {
+            tracing::info!(
+                "Using dedicated Valkey instance for rate limiting (`TENSORZERO_VALKEY_RATE_LIMITING_URL` is set)."
+            );
+            ValkeyConnectionInfo::new(url).await
+        }
+        None => Ok(valkey_connection_info.clone()),
+    }
+}
+
 /// Sets up the Autopilot API client from the environment.
 /// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
 /// `Ok(None)` if not set, or an error if client construction fails.
@@ -770,6 +812,7 @@ pub async fn start_openai_compatible_gateway(
     clickhouse_url: Option<String>,
     postgres_url: Option<String>,
     valkey_url: Option<String>,
+    valkey_rate_limiting_url: Option<String>,
 ) -> Result<(SocketAddr, ShutdownHandle), Error> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -796,6 +839,7 @@ pub async fn start_openai_compatible_gateway(
         clickhouse_url,
         postgres_url,
         valkey_url,
+        valkey_rate_limiting_url,
         HashSet::new(), // available_tools
     ))
     .await?;
@@ -1152,6 +1196,7 @@ mod tests {
             config_no_rules,
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
