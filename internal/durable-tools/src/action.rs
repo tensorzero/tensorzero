@@ -156,7 +156,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.valkey_connection_info.clone(),
-                app_state.valkey_rate_limiting_connection_info.clone(),
+                app_state.valkey_cache_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.shutdown_token.clone(),
             )?;
@@ -172,7 +172,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.valkey_connection_info.clone(),
-                app_state.valkey_rate_limiting_connection_info.clone(),
+                app_state.valkey_cache_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.shutdown_token.clone(),
             )?;

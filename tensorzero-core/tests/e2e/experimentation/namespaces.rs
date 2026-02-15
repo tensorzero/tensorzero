@@ -44,7 +44,7 @@ async fn make_embedded_gateway_with_clean_clickhouse(
         clickhouse_url: Some(clickhouse_url_string),
         postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url: None,
-        valkey_rate_limiting_url: None,
+        valkey_cache_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

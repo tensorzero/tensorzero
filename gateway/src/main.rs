@@ -379,12 +379,9 @@ async fn run() -> Result<(), ExitCode> {
     let valkey_enabled_pretty =
         get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info);
     tracing::info!("├ Valkey: {valkey_enabled_pretty}");
-    let valkey_rate_limiting_enabled_pretty = get_valkey_status_string(
-        &gateway_handle
-            .app_state
-            .valkey_rate_limiting_connection_info,
-    );
-    tracing::info!("├ Valkey (rate limiting): {valkey_rate_limiting_enabled_pretty}");
+    let valkey_cache_enabled_pretty =
+        get_valkey_status_string(&gateway_handle.app_state.valkey_cache_connection_info);
+    tracing::info!("├ Valkey (cache): {valkey_cache_enabled_pretty}");
 
     if let Some(gateway_url) = config
         .gateway

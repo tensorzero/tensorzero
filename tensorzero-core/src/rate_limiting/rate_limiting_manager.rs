@@ -77,7 +77,7 @@ impl RateLimitingManager {
                 return Ok(Self::new(config, Arc::new(valkey_connection_info.clone())));
             }
             return Err(Error::new(ErrorDetails::Config {
-                message: "Rate limiting is configured to use Valkey, but Valkey is not available. Please check that the environment variable `TENSORZERO_VALKEY_URL` or `TENSORZERO_VALKEY_RATE_LIMITING_URL` is set.".to_string(),
+                message: "Rate limiting is configured to use Valkey, but Valkey is not available. Please check that the environment variable `TENSORZERO_VALKEY_URL` is set.".to_string(),
             }));
         }
 
@@ -114,7 +114,7 @@ impl RateLimitingManager {
         }
 
         Err(Error::new(ErrorDetails::Config {
-            message: "No rate limiting backend is available and rate limiting rules are configured. Please set `TENSORZERO_VALKEY_URL`, `TENSORZERO_VALKEY_RATE_LIMITING_URL`, or `TENSORZERO_POSTGRES_URL` environment variable, or disable rate limiting.".to_string(),
+            message: "No rate limiting backend is available and rate limiting rules are configured. Please set either `TENSORZERO_VALKEY_URL` or `TENSORZERO_POSTGRES_URL` environment variable, or disable rate limiting.".to_string(),
         }))
     }
 

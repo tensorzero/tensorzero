@@ -53,7 +53,7 @@ async fn main() {
                 .ok()
                 .map(PostgresConfig::Url),
             valkey_url: std::env::var("TENSORZERO_VALKEY_URL").ok(),
-            valkey_rate_limiting_url: None,
+            valkey_cache_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: false,
