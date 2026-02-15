@@ -467,22 +467,44 @@ impl Variant for VariantInfo {
         // This future includes a call to `peek_first_chunk`, so applying
         // `streaming_ttft_timeout` is correct.
         let start = tokio::time::Instant::now();
-        let (mut stream, info) = if let Some(timeout) = self.timeouts.streaming.ttft_ms {
-            let timeout = tokio::time::Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, fut)
+
+        // Compute the effective pre-TTFT deadline from both ttft_ms and total_ms.
+        let ttft_timeout = self
+            .timeouts
+            .streaming
+            .ttft_ms
+            .map(tokio::time::Duration::from_millis);
+        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let total_timeout = streaming_total_ms.map(tokio::time::Duration::from_millis);
+        let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
+            (Some(ttft), Some(total)) => {
+                if ttft <= total {
+                    Some((start + ttft, ttft, TimeoutKind::StreamingTtft))
+                } else {
+                    Some((start + total, total, TimeoutKind::StreamingTotal))
+                }
+            }
+            (Some(ttft), None) => Some((start + ttft, ttft, TimeoutKind::StreamingTtft)),
+            (None, Some(total)) => Some((start + total, total, TimeoutKind::StreamingTotal)),
+            (None, None) => None,
+        };
+
+        let (mut stream, info) = if let Some((deadline, timeout, kind)) = pre_ttft_timeout {
+            tokio::time::timeout_at(deadline, fut)
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        kind: TimeoutKind::StreamingTtft,
+                        kind,
                     }))
                 })
         } else {
             fut.await
         }?;
 
-        if let Some(total_ms) = self.timeouts.streaming.total_ms {
+        // Wrap the post-TTFT stream with the remaining total deadline
+        if let Some(total_ms) = streaming_total_ms {
             let total_timeout = tokio::time::Duration::from_millis(total_ms);
             let deadline = start + total_timeout;
             let variant_name = variant_name.to_string();
