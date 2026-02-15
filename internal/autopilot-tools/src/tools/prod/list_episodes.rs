@@ -80,12 +80,12 @@ impl ToolMetadata for ListEpisodesTool {
                 "before": {
                     "type": "string",
                     "format": "uuid",
-                    "description": "Return episodes before this episode_id (exclusive). For paginating to older episodes."
+                    "description": "Return episodes before this episode_id (exclusive). For paginating to older episodes. Cannot be used with `after`."
                 },
                 "after": {
                     "type": "string",
                     "format": "uuid",
-                    "description": "Return episodes after this episode_id (exclusive). For paginating to newer episodes."
+                    "description": "Return episodes after this episode_id (exclusive). For paginating to newer episodes. Cannot be used with `before`."
                 },
                 "function_name": {
                     "type": "string",
