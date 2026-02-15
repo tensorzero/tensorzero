@@ -34,6 +34,10 @@ pub struct ListEpisodesToolParams {
 /// Returns episodes ordered by episode_id in descending order (most recent first).
 /// Each episode includes its inference count, time range, and last inference ID.
 /// Episodes are returned if they contain at least one inference matching the filter criteria.
+///
+/// Note: No special leaf-handling is performed. The response includes
+/// `last_inference_id` (which is a leaf) but does not account for other
+/// leaf inferences in the episode.
 #[derive(Default)]
 pub struct ListEpisodesTool;
 
