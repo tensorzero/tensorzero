@@ -295,6 +295,26 @@ impl From<ErrorDetails> for Error {
     }
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
+#[serde(rename_all = "snake_case")]
+pub enum TimeoutKind {
+    NonStreamingTotal,
+    StreamingTtft,
+    StreamingTotal,
+}
+
+impl TimeoutKind {
+    /// Returns the config field name this timeout corresponds to.
+    pub fn config_name(&self) -> &'static str {
+        match self {
+            TimeoutKind::NonStreamingTotal => "non_streaming.total_ms",
+            TimeoutKind::StreamingTtft => "streaming.ttft_ms",
+            TimeoutKind::StreamingTotal => "streaming.total_ms",
+        }
+    }
+}
+
 #[derive(Debug, Error, Serialize)]
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 pub enum ErrorDetails {
@@ -467,17 +487,17 @@ pub enum ErrorDetails {
     VariantTimeout {
         variant_name: String,
         timeout: Duration,
-        streaming: bool,
+        kind: TimeoutKind,
     },
     ModelTimeout {
         model_name: String,
         timeout: Duration,
-        streaming: bool,
+        kind: TimeoutKind,
     },
     ModelProviderTimeout {
         provider_name: String,
         timeout: Duration,
-        streaming: bool,
+        kind: TimeoutKind,
     },
     InputValidation {
         source: Box<Error>,
@@ -1139,54 +1159,35 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::ModelProviderTimeout {
                 provider_name,
                 timeout,
-                streaming,
+                kind,
             } => {
-                if *streaming {
-                    write!(
-                        f,
-                        "Model provider {provider_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
-                    )
-                } else {
-                    write!(
-                        f,
-                        "Model provider {provider_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
-                    )
-                }
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Model provider {provider_name} timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
             }
             ErrorDetails::ModelTimeout {
                 model_name,
                 timeout,
-                streaming,
+                kind,
             } => {
-                if *streaming {
-                    write!(
-                        f,
-                        "Model {model_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
-                    )
-                } else {
-                    write!(
-                        f,
-                        "Model {model_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
-                    )
-                }
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Model {model_name} timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
             }
             ErrorDetails::VariantTimeout {
                 variant_name,
                 timeout,
-                streaming,
+                kind,
             } => {
-                let variant_description = format!("Variant `{variant_name}`");
-                if *streaming {
-                    write!(
-                        f,
-                        "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
-                    )
-                } else {
-                    write!(
-                        f,
-                        "{variant_description} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
-                    )
-                }
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Variant `{variant_name}` timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
             }
             ErrorDetails::ObjectStoreWrite { message, path } => {
                 write!(

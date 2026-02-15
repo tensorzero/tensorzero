@@ -22,6 +22,7 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::error::TimeoutKind;
 use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::Role;
@@ -34,7 +35,7 @@ use crate::inference::types::extra_headers::{
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage,
+    ModelInferenceResponseWithMetadata, RequestMessage, stream_with_deadline,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -373,7 +374,7 @@ impl Variant for VariantInfo {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -465,7 +466,8 @@ impl Variant for VariantInfo {
 
         // This future includes a call to `peek_first_chunk`, so applying
         // `streaming_ttft_timeout` is correct.
-        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
+        let start = tokio::time::Instant::now();
+        let (mut stream, info) = if let Some(timeout) = self.timeouts.streaming.ttft_ms {
             let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
@@ -473,12 +475,28 @@ impl Variant for VariantInfo {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        streaming: true,
+                        kind: TimeoutKind::StreamingTtft,
                     }))
                 })
         } else {
             fut.await
+        }?;
+
+        if let Some(total_ms) = self.timeouts.streaming.total_ms {
+            let total_timeout = tokio::time::Duration::from_millis(total_ms);
+            let deadline = start + total_timeout;
+            let variant_name = variant_name.to_string();
+            stream = stream_with_deadline(stream, deadline, move || {
+                Error::new(ErrorDetails::VariantTimeout {
+                    variant_name,
+                    timeout: total_timeout,
+                    kind: TimeoutKind::StreamingTotal,
+                })
+            })
+            .peekable();
         }
+
+        Ok((stream, info))
     }
 
     #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.as_ref()).unwrap_or("")))]

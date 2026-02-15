@@ -27,7 +27,7 @@ use crate::rate_limiting::{
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE, TimeoutKind},
     inference::types::{
         Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role, Usage,
         current_timestamp,
@@ -250,7 +250,7 @@ impl EmbeddingModelConfig {
                     Err(Error::new(ErrorDetails::ModelTimeout {
                         model_name: model_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -620,7 +620,7 @@ impl EmbeddingProviderInfo {
                     Err(Error::new(ErrorDetails::ModelProviderTimeout {
                         provider_name: self.provider_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })?
         } else {

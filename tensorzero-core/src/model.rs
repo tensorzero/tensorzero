@@ -46,6 +46,7 @@ use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
+    stream_with_deadline,
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
@@ -62,7 +63,7 @@ use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
 use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, TimeoutKind},
     inference::{
         InferenceProvider,
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
@@ -505,7 +506,7 @@ impl ModelConfig {
                             Err(Error::new(ErrorDetails::ModelProviderTimeout {
                                 provider_name: provider_name.to_string(),
                                 timeout,
-                                streaming: false,
+                                kind: TimeoutKind::NonStreamingTotal,
                             }))
                         })
                 } else {
@@ -564,7 +565,7 @@ impl ModelConfig {
                     Err(Error::new(ErrorDetails::ModelTimeout {
                         model_name: model_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -625,6 +626,7 @@ impl ModelConfig {
 
                 // This future includes a call to `peek_first_chunk`, so applying
                 // `streaming_ttft_timeout` is correct.
+                let start = tokio::time::Instant::now();
                 let response_fut =
                     self.streaming_provider_request(model_provider_request, provider, clients);
                 let response = if let Some(timeout) = provider.streaming_ttft_timeout() {
@@ -634,7 +636,7 @@ impl ModelConfig {
                             Err(Error::new(ErrorDetails::ModelProviderTimeout {
                                 provider_name: provider_name.to_string(),
                                 timeout,
-                                streaming: true,
+                                kind: TimeoutKind::StreamingTtft,
                             }))
                         })
                 } else {
@@ -642,7 +644,23 @@ impl ModelConfig {
                 };
 
                 match response {
-                    Ok(response) => return Ok(response),
+                    Ok(mut response) => {
+                        if let Some(total_timeout) = provider.streaming_total_timeout() {
+                            let deadline = start + total_timeout;
+                            let span = response.response.stream.span().clone();
+                            let inner = response.response.stream.into_inner();
+                            let provider_name = provider_name.to_string();
+                            let wrapped = stream_with_deadline(inner, deadline, move || {
+                                Error::new(ErrorDetails::ModelProviderTimeout {
+                                    provider_name,
+                                    timeout: total_timeout,
+                                    kind: TimeoutKind::StreamingTotal,
+                                })
+                            });
+                            response.response.stream = wrapped.peekable().instrument(span);
+                        }
+                        return Ok(response);
+                    }
                     Err(error) => {
                         provider_errors.insert(provider_name.to_string(), error);
                     }
@@ -654,7 +672,8 @@ impl ModelConfig {
         };
         // See the corresponding `non_streaming.total_ms` timeout in the `infer`
         // method above for more details.
-        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
+        let start = tokio::time::Instant::now();
+        let mut result = if let Some(timeout) = self.timeouts.streaming.ttft_ms {
             let timeout = Duration::from_millis(timeout);
             tokio::time::timeout(timeout, run_all_models)
                 .await
@@ -664,12 +683,30 @@ impl ModelConfig {
                     Err(Error::new(ErrorDetails::ModelTimeout {
                         model_name: model_name.to_string(),
                         timeout,
-                        streaming: true,
+                        kind: TimeoutKind::StreamingTtft,
                     }))
                 })
         } else {
             run_all_models.await
+        }?;
+
+        if let Some(total_ms) = self.timeouts.streaming.total_ms {
+            let total_timeout = Duration::from_millis(total_ms);
+            let deadline = start + total_timeout;
+            let span = result.response.stream.span().clone();
+            let inner = result.response.stream.into_inner();
+            let model_name = model_name.to_string();
+            let wrapped = stream_with_deadline(inner, deadline, move || {
+                Error::new(ErrorDetails::ModelTimeout {
+                    model_name,
+                    timeout: total_timeout,
+                    kind: TimeoutKind::StreamingTotal,
+                })
+            });
+            result.response.stream = wrapped.peekable().instrument(span);
         }
+
+        Ok(result)
     }
 
     pub async fn start_batch_inference<'request>(
@@ -885,6 +922,10 @@ impl ModelProvider {
 
     fn streaming_ttft_timeout(&self) -> Option<Duration> {
         Some(Duration::from_millis(self.timeouts.streaming.ttft_ms?))
+    }
+
+    fn streaming_total_timeout(&self) -> Option<Duration> {
+        Some(Duration::from_millis(self.timeouts.streaming.total_ms?))
     }
 
     /// The name to report in the OTEL `gen_ai.system` attribute

@@ -635,6 +635,28 @@ timeouts = { streaming = { ttft_ms = 500 } }
 type = "dummy"
 model_name = "slow_second_chunk"
 
+# Provider-level streaming.total_ms: first chunk arrives fast, but the 2s delay
+# on the second chunk will exceed the 500ms total timeout.
+[models.slow_second_chunk_provider_total_timeout]
+routing = ["slow"]
+
+[models.slow_second_chunk_provider_total_timeout.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
+[models.slow_second_chunk_provider_total_timeout.providers.slow.timeouts]
+streaming = { total_ms = 500 }
+
+# Model-level streaming.total_ms: first chunk arrives fast, but the 2s delay
+# on the second chunk will exceed the 500ms total timeout.
+[models.slow_second_chunk_model_total_timeout]
+routing = ["slow"]
+timeouts = { streaming = { total_ms = 500 } }
+
+[models.slow_second_chunk_model_total_timeout.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
 [models.slow]
 routing = ["slow"]
 

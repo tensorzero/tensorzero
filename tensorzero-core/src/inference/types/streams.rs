@@ -15,6 +15,7 @@ use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::{ToolCallChunk, ToolCallConfig};
 use futures::Stream;
+use futures::StreamExt;
 use futures::stream::Peekable;
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
@@ -812,6 +813,34 @@ type InferenceResultStreamInner =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
 
 pub type InferenceResultStream = Peekable<InferenceResultStreamInner>;
+
+/// Wraps a stream with a deadline. If the deadline is reached while waiting for
+/// the next item, the stream yields the error produced by `make_error` and terminates.
+///
+/// This is used to enforce `streaming.total_ms` timeouts on streams that have already
+/// started producing chunks (i.e. after TTFT).
+pub fn stream_with_deadline<T: Send + 'static>(
+    stream: impl Stream<Item = Result<T, Error>> + Send + 'static,
+    deadline: tokio::time::Instant,
+    make_error: impl FnOnce() -> Error + Send + 'static,
+) -> Pin<Box<dyn Stream<Item = Result<T, Error>> + Send>> {
+    let mut stream = Box::pin(stream);
+    let mut make_error = Some(make_error);
+    Box::pin(async_stream::stream! {
+        loop {
+            match tokio::time::timeout_at(deadline, stream.next()).await {
+                Ok(Some(item)) => yield item,
+                Ok(None) => break,
+                Err(_elapsed) => {
+                    if let Some(make_error) = make_error.take() {
+                        yield Err(make_error());
+                    }
+                    break;
+                }
+            }
+        }
+    })
+}
 
 /// Handles a textual content block (text or thought)
 /// It checks if there is already a block with the given id, and if so, appends the text to it.
