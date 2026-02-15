@@ -5,8 +5,8 @@ import { cn } from "~/utils/common";
 import { toDatapointUrl, toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
 import { Inferences, Episodes, Dataset } from "~/components/icons/Icons";
 
-const ICON_SIZE = 8;
-const ICON_CLASS = "inline shrink-0 align-[-0.1em]";
+const ICON_SIZE = 12;
+const ICON_CLASS = "shrink-0";
 
 function getUrlForResolvedObject(
   uuid: string,
@@ -64,16 +64,17 @@ export function UuidLink({ uuid }: { uuid: string }) {
   return (
     <code
       className={cn(
-        "relative rounded px-1.5 py-0.5 font-mono text-xs font-medium transition-colors duration-300",
+        "relative inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs font-medium transition-colors duration-300",
         url ? "bg-orange-50 text-orange-500" : "bg-muted",
       )}
     >
+      {obj && <EntityIcon type={obj.type} />}
       {url ? (
         <Link
           to={url}
           className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
         >
-          {obj && <EntityIcon type={obj.type} />} {uuid}
+          {uuid}
         </Link>
       ) : (
         uuid
