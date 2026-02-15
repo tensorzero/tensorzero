@@ -17,6 +17,7 @@ import {
   remarkUuidLinks,
   UUID_LINK_ELEMENT,
 } from "~/components/autopilot/remarkUuidLinks";
+import remarkBreaks from "remark-breaks";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -509,6 +510,7 @@ class EventErrorBoundary extends Component<
 }
 
 const uuidRemarkPlugins = [remarkUuidLinks];
+const userUuidRemarkPlugins = [remarkUuidLinks, remarkBreaks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
 function EventItem({
@@ -580,7 +582,11 @@ function EventItem({
         <>
           {event.payload.type === "message" ? (
             <Markdown
-              remarkPlugins={uuidRemarkPlugins}
+              remarkPlugins={
+                event.payload.role === "user"
+                  ? userUuidRemarkPlugins
+                  : uuidRemarkPlugins
+              }
               components={uuidComponents}
             >
               {summary.description}
@@ -656,7 +662,10 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
-      <Markdown remarkPlugins={uuidRemarkPlugins} components={uuidComponents}>
+      <Markdown
+        remarkPlugins={userUuidRemarkPlugins}
+        components={uuidComponents}
+      >
         {message.text}
       </Markdown>
     </div>
