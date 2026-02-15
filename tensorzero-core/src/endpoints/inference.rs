@@ -1670,37 +1670,29 @@ impl InferenceResponse {
         // Returns Some(entries) if requested (even if empty when all cached), None if not requested
         let raw_response = if include_raw_response {
             let mut entries: Vec<RawResponseEntry> = Vec::new();
-            // Include raw response entries from failed provider attempts (model-level fallback)
             for r in inference_result.model_inference_results() {
+                // Include failed provider attempts (model-level fallback) for this inference
                 entries.extend(r.failed_raw_response.clone());
+                // Include successful provider response
+                if !r.cached {
+                    if let Some(passed_through) = &r.relay_raw_response {
+                        entries.extend(passed_through.clone());
+                    } else {
+                        let api_type = r
+                            .raw_usage
+                            .as_ref()
+                            .and_then(|entries| entries.first())
+                            .map(|entry| entry.api_type)
+                            .unwrap_or(ApiType::ChatCompletions);
+                        entries.push(RawResponseEntry {
+                            model_inference_id: Some(r.id),
+                            provider_type: r.provider_type.to_string(),
+                            api_type,
+                            data: r.raw_response.clone(),
+                        });
+                    }
+                }
             }
-            // Include raw response entries from successful provider responses
-            entries.extend(
-                inference_result
-                    .model_inference_results()
-                    .iter()
-                    .filter(|r| !r.cached) // Exclude TensorZero cache hits
-                    .flat_map(|r| {
-                        // If there are passed-through relay_raw_response (from relay), use them
-                        if let Some(passed_through) = &r.relay_raw_response {
-                            passed_through.clone()
-                        } else {
-                            // Otherwise, generate entries from the model inference result
-                            let api_type = r
-                                .raw_usage
-                                .as_ref()
-                                .and_then(|entries| entries.first())
-                                .map(|entry| entry.api_type)
-                                .unwrap_or(ApiType::ChatCompletions);
-                            vec![RawResponseEntry {
-                                model_inference_id: Some(r.id),
-                                provider_type: r.provider_type.to_string(),
-                                api_type,
-                                data: r.raw_response.clone(),
-                            }]
-                        }
-                    }),
-            );
             Some(entries)
         } else {
             None
@@ -2250,9 +2242,10 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::{
-        ApiType, Base64File, ChatInferenceResultChunk, ContentBlockChunk, ContentBlockOutput, File,
-        InputMessageContent, JsonInferenceResultChunk, Latency, ModelInferenceResponseWithMetadata,
-        ObjectStoragePointer, RequestMessagesOrBatch, Role, Text, TextChunk, ThoughtChunk, UrlFile,
+        ApiType, Base64File, ChatInferenceResult, ChatInferenceResultChunk, ContentBlockChunk,
+        ContentBlockOutput, File, InferenceResult, InputMessageContent, JsonInferenceResultChunk,
+        Latency, ModelInferenceResponseWithMetadata, ObjectStoragePointer, RawResponseEntry,
+        RequestMessagesOrBatch, Role, Text, TextChunk, ThoughtChunk, UrlFile,
         storage::{StorageKind, StoragePath},
         usage::RawUsageEntry,
     };
@@ -3380,6 +3373,118 @@ mod tests {
         assert!(
             should_stream_chunk_in_create_stream(&json_with_raw, false, true, false),
             "JSON chunk with raw_chunk should stream when include_raw_response=true"
+        );
+    }
+
+    /// Tests that raw_response entries maintain per-inference ordering:
+    /// each inference's failed entries appear immediately before its successful entry.
+    #[test]
+    fn test_inference_response_raw_response_per_inference_ordering() {
+        let id_a = Uuid::now_v7();
+        let id_b = Uuid::now_v7();
+
+        let make_model_inference = |id: Uuid, provider: &str, failed: Vec<RawResponseEntry>| {
+            ModelInferenceResponseWithMetadata {
+                id,
+                output: vec![ContentBlockOutput::Text(Text {
+                    text: "output".to_string(),
+                })],
+                system: None,
+                input_messages: RequestMessagesOrBatch::Message(vec![]),
+                raw_request: "{}".to_string(),
+                raw_response: format!("{{\"provider\":\"{provider}\"}}"),
+                usage: Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(5),
+                },
+                latency: Latency::NonStreaming {
+                    response_time: Duration::from_millis(100),
+                },
+                model_provider_name: provider.into(),
+                provider_type: Arc::from(provider),
+                model_name: "test-model".into(),
+                cached: false,
+                finish_reason: None,
+                raw_usage: None,
+                relay_raw_response: None,
+                failed_raw_response: failed,
+            }
+        };
+
+        let fail_a = RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "provider_fail_a".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: "error_a".to_string(),
+        };
+        let fail_b = RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "provider_fail_b".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: "error_b".to_string(),
+        };
+
+        let inference_result = InferenceResult::Chat(ChatInferenceResult {
+            inference_id: Uuid::now_v7(),
+            created: 0,
+            content: vec![],
+            model_inference_results: vec![
+                make_model_inference(id_a, "provider_a", vec![fail_a]),
+                make_model_inference(id_b, "provider_b", vec![fail_b]),
+            ],
+            inference_params: InferenceParams::default(),
+            original_response: None,
+            finish_reason: None,
+        });
+
+        let response = InferenceResponse::new(
+            inference_result,
+            Uuid::now_v7(),
+            "test_variant".to_string(),
+            false,
+            false,
+            true, // include_raw_response
+        );
+
+        let entries = match &response {
+            InferenceResponse::Chat(r) => r.raw_response.as_ref().unwrap(),
+            InferenceResponse::Json(r) => r.raw_response.as_ref().unwrap(),
+        };
+
+        assert_eq!(
+            entries.len(),
+            4,
+            "Expected 4 entries: fail_a, success_a, fail_b, success_b"
+        );
+
+        // Inference A: failed entry then successful entry
+        assert_eq!(
+            entries[0].model_inference_id, None,
+            "First entry should be the failed entry for inference A"
+        );
+        assert_eq!(
+            entries[0].provider_type, "provider_fail_a",
+            "First entry should be from provider_fail_a"
+        );
+        assert_eq!(
+            entries[1].model_inference_id,
+            Some(id_a),
+            "Second entry should be the successful entry for inference A"
+        );
+
+        // Inference B: failed entry then successful entry
+        assert_eq!(
+            entries[2].model_inference_id, None,
+            "Third entry should be the failed entry for inference B"
+        );
+        assert_eq!(
+            entries[2].provider_type, "provider_fail_b",
+            "Third entry should be from provider_fail_b"
+        );
+        assert_eq!(
+            entries[3].model_inference_id,
+            Some(id_b),
+            "Fourth entry should be the successful entry for inference B"
         );
     }
 }
