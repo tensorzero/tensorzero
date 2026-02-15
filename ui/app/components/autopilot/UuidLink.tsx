@@ -5,7 +5,8 @@ import { cn } from "~/utils/common";
 import { toDatapointUrl, toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
 import { Inferences, Episodes, Dataset } from "~/components/icons/Icons";
 
-const ICON_CLASS = "inline h-2 w-2 shrink-0";
+const ICON_SIZE = 8;
+const ICON_CLASS = "inline shrink-0 align-[-0.1em]";
 
 function getUrlForResolvedObject(
   uuid: string,
@@ -35,12 +36,12 @@ function getUrlForResolvedObject(
 function EntityIcon({ type }: { type: ResolvedObject["type"] }) {
   switch (type) {
     case "inference":
-      return <Inferences className={ICON_CLASS} />;
+      return <Inferences className={ICON_CLASS} size={ICON_SIZE} />;
     case "episode":
-      return <Episodes className={ICON_CLASS} />;
+      return <Episodes className={ICON_CLASS} size={ICON_SIZE} />;
     case "chat_datapoint":
     case "json_datapoint":
-      return <Dataset className={ICON_CLASS} />;
+      return <Dataset className={ICON_CLASS} size={ICON_SIZE} />;
     case "model_inference":
     case "boolean_feedback":
     case "float_feedback":
