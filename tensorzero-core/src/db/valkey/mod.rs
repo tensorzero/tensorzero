@@ -1,3 +1,4 @@
+pub mod cache;
 mod rate_limiting;
 
 use std::time::Duration;
@@ -53,7 +54,7 @@ impl ValkeyConnectionInfo {
 
     pub fn get_connection(&self) -> Option<&ConnectionManager> {
         match self {
-            Self::Enabled { connection } => Some(connection),
+            Self::Enabled { connection, .. } => Some(connection),
             Self::Disabled => None,
         }
     }
@@ -105,7 +106,7 @@ impl HealthCheckable for ValkeyConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
-            Self::Enabled { connection } => {
+            Self::Enabled { connection, .. } => {
                 let check = async {
                     let mut conn = connection.clone();
                     let _: String = conn.ping().await.map_err(|e| {

@@ -52,7 +52,12 @@ export async function fetchHasDemonstration(
   return demonstrationFeedback.length > 0;
 }
 
-export async function fetchInput(inference: StoredInference): Promise<Input> {
+export async function fetchInput(
+  inference: StoredInference,
+): Promise<Input | undefined> {
+  if (!inference.input) {
+    return undefined;
+  }
   return loadFileDataForStoredInput(inference.input);
 }
 
