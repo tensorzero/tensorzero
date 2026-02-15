@@ -160,8 +160,6 @@ pub async fn run_evaluation(
     } else {
         debug!("Valkey URL not provided");
     }
-    let valkey_cache_url = std::env::var("TENSORZERO_VALKEY_CACHE_URL").ok();
-
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
@@ -203,7 +201,6 @@ pub async fn run_evaluation(
             postgres_config: postgres_url.map(PostgresConfig::Url),
             clickhouse_url: Some(clickhouse_url.clone()),
             valkey_url,
-            valkey_cache_url,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,

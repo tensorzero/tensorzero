@@ -21,9 +21,7 @@ use crate::{
     db::postgres::PostgresConnectionInfo,
     db::valkey::ValkeyConnectionInfo,
     error::{Error, ErrorDetails},
-    utils::gateway::{
-        GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey, setup_valkey_cache,
-    },
+    utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey},
 };
 use reqwest::header::HeaderMap;
 use reqwest_sse_stream::Event;
@@ -447,10 +445,6 @@ pub enum ClientBuilderMode {
         clickhouse_url: Option<String>,
         postgres_config: Option<PostgresConfig>,
         valkey_url: Option<String>,
-        /// Optional dedicated Valkey URL for model inference caching.
-        /// When set, caching uses a separate Valkey instance from rate limiting,
-        /// allowing different eviction policies per use case.
-        valkey_cache_url: Option<String>,
         /// A timeout for all TensorZero gateway processing.
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
@@ -557,7 +551,6 @@ impl ClientBuilder {
                 clickhouse_url,
                 postgres_config,
                 valkey_url,
-                valkey_cache_url,
                 timeout,
                 verify_credentials,
                 allow_batch_writes,
@@ -616,20 +609,15 @@ impl ClientBuilder {
                     })?
                 };
 
-                // Set up Valkey connection from explicit URL
+                // Set up Valkey connection from explicit URL.
+                // Embedded gateways use the same Valkey instance for both rate limiting and caching.
+                // TODO: support a dedicated cache Valkey URL for embedded gateways.
                 let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
                     ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
                         source: e.into(),
                     })
                 })?;
-                let valkey_cache_connection_info =
-                    setup_valkey_cache(valkey_cache_url.as_deref(), &valkey_connection_info)
-                        .await
-                        .map_err(|e| {
-                            ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
-                                source: e.into(),
-                            })
-                        })?;
+                let valkey_cache_connection_info = valkey_connection_info.clone();
 
                 let http_client = if self.http_client.is_some() {
                     return Err(ClientBuilderError::HTTPClientBuild(
@@ -750,14 +738,12 @@ impl ClientBuilder {
     ///
     /// # Returns
     /// A Client configured with historical semantic settings but current runtime parameters
-    #[expect(clippy::too_many_arguments)]
     pub async fn from_config_snapshot(
         snapshot: ConfigSnapshot,
         live_config: &Config,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         valkey_url: Option<String>,
-        valkey_cache_url: Option<String>,
         verify_credentials: bool,
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
@@ -803,18 +789,12 @@ impl ClientBuilder {
                 ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
             })?;
 
-        // Setup Valkey with runtime URL
+        // Setup Valkey with runtime URL.
+        // Config snapshot clients use the same Valkey instance for both rate limiting and caching.
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
             ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
         })?;
-        let valkey_cache_connection_info =
-            setup_valkey_cache(valkey_cache_url.as_deref(), &valkey_connection_info)
-                .await
-                .map_err(|e| {
-                    ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
-                        source: e.into(),
-                    })
-                })?;
+        let valkey_cache_connection_info = valkey_connection_info.clone();
 
         // Use HTTP client from config (now overlaid from live_config)
         let http_client = config.http_client.clone();
@@ -1314,7 +1294,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-            valkey_cache_url: None,
+
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1344,7 +1324,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-            valkey_cache_url: None,
+
             timeout: None,
             verify_credentials: false, // Skip credential verification
             allow_batch_writes: false,
@@ -1474,7 +1454,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-            valkey_cache_url: None,
+
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1498,7 +1478,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-            valkey_cache_url: None,
+
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1524,7 +1504,7 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-            valkey_cache_url: None,
+
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,

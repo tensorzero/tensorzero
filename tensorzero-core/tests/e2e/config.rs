@@ -13,7 +13,7 @@ async fn test_embedded_invalid_glob() {
         clickhouse_url: None,
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -56,7 +56,7 @@ async fn test_embedded_duplicate_key() {
         clickhouse_url: None,
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

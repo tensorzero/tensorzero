@@ -27,7 +27,7 @@ pub async fn make_embedded_gateway() -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -43,7 +43,7 @@ pub async fn make_embedded_gateway_no_config() -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -61,7 +61,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -82,7 +82,7 @@ pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Cli
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -101,7 +101,6 @@ pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Cli
 pub async fn make_embedded_gateway_with_rate_limiting(config: &str) -> Client {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
     let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
-    let valkey_cache_url = std::env::var("TENSORZERO_VALKEY_CACHE_URL").ok();
 
     let tmp_config = NamedTempFile::new().unwrap();
     std::fs::write(tmp_config.path(), config).unwrap();
@@ -110,7 +109,6 @@ pub async fn make_embedded_gateway_with_rate_limiting(config: &str) -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: postgres_url.map(PostgresConfig::Url),
         valkey_url,
-        valkey_cache_url,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -189,7 +187,7 @@ pub async fn make_embedded_gateway_with_unique_db(config: &str, db_prefix: &str)
         clickhouse_url: Some(clickhouse_url),
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -210,7 +208,7 @@ pub async fn make_embedded_gateway_e2e_with_unique_db(db_prefix: &str) -> Client
         clickhouse_url: Some(clickhouse_url),
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -229,14 +227,12 @@ pub async fn make_embedded_gateway_e2e_with_unique_db_all_backends(db_prefix: &s
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .expect("TENSORZERO_POSTGRES_URL must be set for all-backends tests");
     let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
-    let valkey_cache_url = std::env::var("TENSORZERO_VALKEY_CACHE_URL").ok();
 
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(clickhouse_url),
         postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url,
-        valkey_cache_url,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -260,7 +256,6 @@ pub async fn make_http_gateway_openai_only_with_unique_db(
         Some(clickhouse_url),
         None, // postgres_url
         None, // valkey_url
-        None, // valkey_cache_url
     )
     .await
     .unwrap();

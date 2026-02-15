@@ -654,7 +654,7 @@ pub async fn setup_valkey_cache(
             tracing::info!(
                 "Using dedicated Valkey instance for caching (`TENSORZERO_VALKEY_CACHE_URL` is set)."
             );
-            ValkeyConnectionInfo::new(url).await
+            ValkeyConnectionInfo::new_cache_only(url).await
         }
         None => Ok(valkey_connection_info.clone()),
     }
@@ -810,7 +810,6 @@ pub async fn start_openai_compatible_gateway(
     clickhouse_url: Option<String>,
     postgres_url: Option<String>,
     valkey_url: Option<String>,
-    valkey_cache_url: Option<String>,
 ) -> Result<(SocketAddr, ShutdownHandle), Error> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -837,7 +836,7 @@ pub async fn start_openai_compatible_gateway(
         clickhouse_url,
         postgres_url,
         valkey_url,
-        valkey_cache_url,
+        None, // Embedded gateways use the same Valkey instance for rate limiting and caching
         HashSet::new(), // available_tools
     ))
     .await?;

@@ -1694,7 +1694,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clickhouse_url: None,
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -2711,7 +2711,7 @@ async fn test_evaluation_with_dynamic_variant() {
         clickhouse_url: None,
         postgres_config: None,
         valkey_url: None,
-        valkey_cache_url: None,
+
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
