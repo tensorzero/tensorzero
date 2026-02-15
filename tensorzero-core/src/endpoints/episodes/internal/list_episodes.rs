@@ -4,7 +4,7 @@ use axum::extract::{Query, State};
 use axum::{Json, debug_handler};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tensorzero_derive::export_schema;
+
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -32,7 +32,6 @@ pub struct ListEpisodesParams {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[export_schema]
 pub struct ListEpisodesRequest {
     /// Maximum number of episodes to return (max 100)
     #[schemars(extend("maximum" = 100, "minimum" = 1))]

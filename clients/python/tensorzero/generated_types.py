@@ -2359,35 +2359,6 @@ class ListDatapointsRequest:
 
 
 @dataclass(kw_only=True)
-class ListEpisodesRequest:
-    """
-    Request body for the POST episode table endpoint
-    """
-
-    limit: int
-    """
-    Maximum number of episodes to return (max 100)
-    """
-    after: str | None = None
-    """
-    Return episodes after this episode_id (for pagination)
-    """
-    before: str | None = None
-    """
-    Return episodes before this episode_id (for pagination)
-    """
-    filters: InferenceFilter | None = None
-    """
-    Optional filter to apply when querying episodes.
-    Episodes are returned if they have at least one inference matching the filter.
-    """
-    function_name: str | None = None
-    """
-    Optional function name to filter episodes by
-    """
-
-
-@dataclass(kw_only=True)
 class ListInferencesRequest:
     """
     Request to list inferences with pagination and filters.
