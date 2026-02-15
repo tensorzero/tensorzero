@@ -555,9 +555,11 @@ impl ModelConfig {
                         }
 
                         // Collect raw response entries from failed providers for fallback reporting
-                        for error in provider_errors.values() {
-                            if let Some(entries) = error.extract_raw_response_entries() {
-                                response.failed_raw_response.extend(entries);
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                if let Some(entries) = error.extract_raw_response_entries() {
+                                    response.failed_raw_response.extend(entries);
+                                }
                             }
                         }
 
@@ -668,9 +670,11 @@ impl ModelConfig {
                 match response {
                     Ok(mut response) => {
                         // Collect raw response entries from failed providers for fallback reporting
-                        for error in provider_errors.values() {
-                            if let Some(entries) = error.extract_raw_response_entries() {
-                                response.response.failed_raw_response.extend(entries);
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                if let Some(entries) = error.extract_raw_response_entries() {
+                                    response.response.failed_raw_response.extend(entries);
+                                }
                             }
                         }
                         return Ok(response);
