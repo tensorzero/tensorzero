@@ -554,7 +554,6 @@ async fn test_named_system_template_no_schema() {
         clickhouse_url: None,
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -621,7 +620,6 @@ async fn test_named_system_template_with_schema() {
         clickhouse_url: Some(CLICKHOUSE_URL.to_string()),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

@@ -52,7 +52,6 @@ async fn make_embedded_gateway_with_clean_clickhouse(
         clickhouse_url: Some(clickhouse_url_string),
         postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -88,7 +87,6 @@ async fn make_embedded_gateway_with_existing_clickhouse(
         clickhouse_url: Some(clickhouse_url_string),
         postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -462,7 +460,6 @@ async fn expect_config_error(config: &str) -> String {
         clickhouse_url: Some(tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

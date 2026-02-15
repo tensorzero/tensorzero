@@ -1294,7 +1294,6 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1324,7 +1323,6 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-
             timeout: None,
             verify_credentials: false, // Skip credential verification
             allow_batch_writes: false,
@@ -1454,7 +1452,6 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1478,7 +1475,6 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1504,7 +1500,6 @@ mod tests {
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
-
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,

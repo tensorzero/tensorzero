@@ -700,7 +700,6 @@ impl TensorZeroGateway {
             clickhouse_url,
             postgres_config: postgres_url.map(PostgresConfig::Url),
             valkey_url,
-
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,
@@ -1918,7 +1917,6 @@ impl AsyncTensorZeroGateway {
             clickhouse_url,
             postgres_config: postgres_url.map(PostgresConfig::Url),
             valkey_url,
-
             timeout,
             verify_credentials: true,
             allow_batch_writes: false,

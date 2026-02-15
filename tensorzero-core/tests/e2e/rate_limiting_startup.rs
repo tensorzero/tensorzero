@@ -65,7 +65,6 @@ model = "dummy"
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -122,7 +121,6 @@ model = "dummy"
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: valkey_url(),
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -171,7 +169,6 @@ model = "dummy"
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: postgres_url(),
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -220,7 +217,6 @@ model = "dummy"
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: postgres_url(),
         valkey_url: valkey_url(),
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -270,7 +266,6 @@ model = "dummy"
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: postgres_url(), // Has Postgres but not Valkey
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -326,7 +321,6 @@ model = "dummy"
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: valkey_url(), // Has Valkey but not Postgres
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -374,7 +368,6 @@ model = "dummy"
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None, // No Postgres URL
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -423,7 +416,6 @@ model = "dummy"
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

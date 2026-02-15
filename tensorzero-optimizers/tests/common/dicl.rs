@@ -197,7 +197,6 @@ pub async fn test_dicl_optimization_chat() {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -484,7 +483,6 @@ pub async fn test_dicl_optimization_json() {
         postgres_config: None,
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

@@ -27,7 +27,6 @@ pub async fn make_embedded_gateway() -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -43,7 +42,6 @@ pub async fn make_embedded_gateway_no_config() -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -61,7 +59,6 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -82,7 +79,6 @@ pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Cli
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -187,7 +183,6 @@ pub async fn make_embedded_gateway_with_unique_db(config: &str, db_prefix: &str)
         clickhouse_url: Some(clickhouse_url),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -208,7 +203,6 @@ pub async fn make_embedded_gateway_e2e_with_unique_db(db_prefix: &str) -> Client
         clickhouse_url: Some(clickhouse_url),
         postgres_config: None,
         valkey_url: None,
-
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
