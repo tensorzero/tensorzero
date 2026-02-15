@@ -578,9 +578,7 @@ function EventItem({
       </div>
       {shouldShowDetails && summary.description && (
         <>
-          {event.payload.type === "message" &&
-          (event.payload.role === "assistant" ||
-            event.payload.role === "user") ? (
+          {event.payload.type === "message" ? (
             <Markdown
               remarkPlugins={uuidRemarkPlugins}
               components={uuidComponents}
