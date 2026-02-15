@@ -39,7 +39,7 @@ fn assert_raw_response_entry(entry: &Value) {
     let api_type = entry.get("api_type").unwrap().as_str().unwrap();
     assert!(
         ["chat_completions", "responses", "embeddings"].contains(&api_type),
-        "api_type should be 'chat_completions', 'responses', or 'embeddings', got: {api_type}"
+        "api_type should be `chat_completions`, `responses`, or `embeddings`, got: {api_type}"
     );
 
     // Verify data is a string (raw response from provider)
@@ -108,12 +108,12 @@ async fn test_raw_response_chat_completions_non_streaming() {
     let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
     assert_eq!(
         api_type, "chat_completions",
-        "OpenAI chat completions should have api_type 'chat_completions'"
+        "OpenAI chat completions should have api_type `chat_completions`"
     );
 
     // Provider type should be "openai"
     let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
-    assert_eq!(provider_type, "openai", "Provider type should be 'openai'");
+    assert_eq!(provider_type, "openai", "Provider type should be `openai`");
 
     // The data field should be a non-empty string (raw response from provider)
     let data = first_entry.get("data").unwrap().as_str().unwrap();
@@ -258,12 +258,12 @@ async fn test_raw_response_responses_api_non_streaming() {
     let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
     assert_eq!(
         api_type, "responses",
-        "OpenAI Responses API should have api_type 'responses'"
+        "OpenAI Responses API should have api_type `responses`"
     );
 
     // Provider type should be "openai"
     let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
-    assert_eq!(provider_type, "openai", "Provider type should be 'openai'");
+    assert_eq!(provider_type, "openai", "Provider type should be `openai`");
 }
 
 #[tokio::test]
@@ -486,12 +486,12 @@ async fn test_raw_response_best_of_n_non_streaming() {
         let api_type = entry.get("api_type").unwrap().as_str().unwrap();
         assert_eq!(
             api_type, "chat_completions",
-            "All Best-of-N inferences should have api_type 'chat_completions'"
+            "All Best-of-N inferences should have api_type `chat_completions`"
         );
         let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
         assert_eq!(
             provider_type, "openai",
-            "All Best-of-N inferences should have provider_type 'openai'"
+            "All Best-of-N inferences should have provider_type `openai`"
         );
     }
 }
@@ -556,7 +556,7 @@ async fn test_raw_response_best_of_n_streaming() {
                     let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
                     assert_eq!(
                         provider_type, "openai",
-                        "Best-of-N streaming entries should have provider_type 'openai'"
+                        "Best-of-N streaming entries should have provider_type `openai`"
                     );
                 }
             }
@@ -815,7 +815,7 @@ async fn test_raw_response_dicl_non_streaming() {
         let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
         assert_eq!(
             provider_type, "openai",
-            "DICL entries should have provider_type 'openai'"
+            "DICL entries should have provider_type `openai`"
         );
     }
 
@@ -896,7 +896,7 @@ async fn test_raw_response_dicl_streaming() {
                     let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
                     assert_eq!(
                         provider_type, "openai",
-                        "DICL streaming entries should have provider_type 'openai'"
+                        "DICL streaming entries should have provider_type `openai`"
                     );
                     if let Some(api_type) = entry.get("api_type").and_then(|v| v.as_str()) {
                         api_types.push(api_type.to_string());
@@ -982,7 +982,7 @@ async fn test_raw_response_json_function_non_streaming() {
 
     // Provider type should be "openai"
     let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
-    assert_eq!(provider_type, "openai", "Provider type should be 'openai'");
+    assert_eq!(provider_type, "openai", "Provider type should be `openai`");
 }
 
 #[tokio::test]

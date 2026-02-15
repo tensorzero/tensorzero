@@ -928,27 +928,33 @@ impl ModelProvider {
     /// The provider type string (e.g., "openai", "anthropic")
     pub fn provider_type(&self) -> &'static str {
         match &self.config {
-            ProviderConfig::Anthropic(_) => "anthropic",
-            ProviderConfig::AWSBedrock(_) => "aws_bedrock",
-            ProviderConfig::AWSSagemaker(_) => "aws_sagemaker",
-            ProviderConfig::Azure(_) => "azure",
-            ProviderConfig::Fireworks(_) => "fireworks",
-            ProviderConfig::GCPVertexAnthropic(_) => "gcp_vertex_anthropic",
-            ProviderConfig::GCPVertexGemini(_) => "gcp_vertex_gemini",
-            ProviderConfig::GoogleAIStudioGemini(_) => "google_ai_studio_gemini",
-            ProviderConfig::Groq(_) => "groq",
-            ProviderConfig::Hyperbolic(_) => "hyperbolic",
-            ProviderConfig::Mistral(_) => "mistral",
-            ProviderConfig::OpenAI(_) => "openai",
-            ProviderConfig::OpenRouter(_) => "openrouter",
-            ProviderConfig::Together(_) => "together",
-            ProviderConfig::VLLM(_) => "vllm",
-            ProviderConfig::XAI(_) => "xai",
-            ProviderConfig::TGI(_) => "tgi",
-            ProviderConfig::SGLang(_) => "sglang",
-            ProviderConfig::DeepSeek(_) => "deepseek",
+            ProviderConfig::Anthropic(_) => crate::providers::anthropic::PROVIDER_TYPE,
+            ProviderConfig::AWSBedrock(_) => crate::providers::aws_bedrock::PROVIDER_TYPE,
+            ProviderConfig::AWSSagemaker(_) => crate::providers::aws_sagemaker::PROVIDER_TYPE,
+            ProviderConfig::Azure(_) => crate::providers::azure::PROVIDER_TYPE,
+            ProviderConfig::Fireworks(_) => crate::providers::fireworks::PROVIDER_TYPE,
+            ProviderConfig::GCPVertexAnthropic(_) => {
+                crate::providers::gcp_vertex_anthropic::PROVIDER_TYPE
+            }
+            ProviderConfig::GCPVertexGemini(_) => {
+                crate::providers::gcp_vertex_gemini::PROVIDER_TYPE
+            }
+            ProviderConfig::GoogleAIStudioGemini(_) => {
+                crate::providers::google_ai_studio_gemini::PROVIDER_TYPE
+            }
+            ProviderConfig::Groq(_) => crate::providers::groq::PROVIDER_TYPE,
+            ProviderConfig::Hyperbolic(_) => crate::providers::hyperbolic::PROVIDER_TYPE,
+            ProviderConfig::Mistral(_) => crate::providers::mistral::PROVIDER_TYPE,
+            ProviderConfig::OpenAI(_) => crate::providers::openai::PROVIDER_TYPE,
+            ProviderConfig::OpenRouter(_) => crate::providers::openrouter::PROVIDER_TYPE,
+            ProviderConfig::Together(_) => crate::providers::together::PROVIDER_TYPE,
+            ProviderConfig::VLLM(_) => crate::providers::vllm::PROVIDER_TYPE,
+            ProviderConfig::XAI(_) => crate::providers::xai::PROVIDER_TYPE,
+            ProviderConfig::TGI(_) => crate::providers::tgi::PROVIDER_TYPE,
+            ProviderConfig::SGLang(_) => crate::providers::sglang::PROVIDER_TYPE,
+            ProviderConfig::DeepSeek(_) => crate::providers::deepseek::PROVIDER_TYPE,
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(_) => "dummy",
+            ProviderConfig::Dummy(_) => crate::providers::dummy::PROVIDER_TYPE,
         }
     }
 

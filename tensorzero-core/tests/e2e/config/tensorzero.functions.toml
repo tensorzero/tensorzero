@@ -796,3 +796,28 @@ type = "chat_completion"
 model = "error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+# Combined model+variant fallback:
+# Variant A (candidate): model with 2 providers, both fail with raw response → variant fails
+# Variant B (fallback): model with 2 providers, first fails with raw response, second succeeds → variant succeeds
+# Tests that raw response entries from model-level fallback of BOTH the failed and successful variants are forwarded.
+[functions.raw_response_combined_fallback]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.raw_response_combined_fallback.experimentation]
+type = "uniform"
+candidate_variants = ["error_variant_multi_provider"]
+fallback_variants = ["good_variant_with_fallback"]
+
+[functions.raw_response_combined_fallback.variants.error_variant_multi_provider]
+type = "chat_completion"
+model = "test_both_error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.raw_response_combined_fallback.variants.good_variant_with_fallback]
+type = "chat_completion"
+model = "test_fallback_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100

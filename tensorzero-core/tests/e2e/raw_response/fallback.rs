@@ -69,12 +69,12 @@ async fn test_model_fallback_fail_success_non_streaming() {
     assert_eq!(
         error_entry.get("provider_type").unwrap().as_str().unwrap(),
         "dummy",
-        "Failed provider type should be 'dummy'"
+        "Failed provider type should be `dummy`"
     );
     assert_eq!(
         error_entry.get("data").unwrap().as_str().unwrap(),
         "dummy error raw response",
-        "Failed provider data should be 'dummy error raw response'"
+        "Failed provider data should be `dummy error raw response`"
     );
 
     // Second entry: successful provider (success entry — has model_inference_id)
@@ -135,6 +135,10 @@ async fn test_model_fallback_fail_success_streaming() {
 
         // Check for raw_response entries (from failed provider)
         if let Some(raw_response) = chunk_json.get("raw_response") {
+            assert!(
+                !found_raw_chunk,
+                "Failed provider raw_response should arrive before any raw_chunk from the successful provider"
+            );
             let raw_response_array = raw_response.as_array().unwrap();
             for entry in raw_response_array {
                 assert_error_raw_response_entry(entry);
@@ -146,7 +150,7 @@ async fn test_model_fallback_fail_success_streaming() {
                 assert_eq!(
                     entry.get("data").unwrap().as_str().unwrap(),
                     "dummy error raw response",
-                    "Failed provider data should be 'dummy error raw response'"
+                    "Failed provider data should be `dummy error raw response`"
                 );
             }
             found_failed_raw_response = true;
@@ -221,7 +225,7 @@ async fn test_model_fallback_both_fail_non_streaming() {
         assert_eq!(
             entry.get("data").unwrap().as_str().unwrap(),
             "dummy error raw response",
-            "Failed provider data should be 'dummy error raw response'"
+            "Failed provider data should be `dummy error raw response`"
         );
     }
 }
@@ -278,7 +282,7 @@ async fn test_model_fallback_both_fail_streaming() {
         assert_eq!(
             entry.get("data").unwrap().as_str().unwrap(),
             "dummy error raw response",
-            "Failed provider data should be 'dummy error raw response'"
+            "Failed provider data should be `dummy error raw response`"
         );
     }
 }
@@ -322,10 +326,10 @@ async fn test_variant_fallback_fail_success_non_streaming() {
         .get("raw_response")
         .expect("Response should have raw_response when include_raw_response=true");
     let raw_response_array = raw_response.as_array().unwrap();
-    assert!(
-        raw_response_array.len() >= 2,
-        "raw_response should have at least 2 entries: error variant + successful variant, got {}",
-        raw_response_array.len()
+    assert_eq!(
+        raw_response_array.len(),
+        2,
+        "raw_response should have exactly 2 entries: 1 from failed variant + 1 from successful variant"
     );
 
     // First entry: failed variant (error entry — no model_inference_id)
@@ -339,11 +343,11 @@ async fn test_variant_fallback_fail_success_non_streaming() {
     assert_eq!(
         error_entry.get("data").unwrap().as_str().unwrap(),
         "dummy error raw response",
-        "Failed variant data should be 'dummy error raw response'"
+        "Failed variant data should be `dummy error raw response`"
     );
 
-    // Last entry: successful variant (success entry — has model_inference_id)
-    let success_entry = raw_response_array.last().unwrap();
+    // Second entry: successful variant (success entry — has model_inference_id)
+    let success_entry = &raw_response_array[1];
     assert_raw_response_entry(success_entry);
     assert_eq!(
         success_entry
@@ -399,24 +403,26 @@ async fn test_variant_fallback_fail_success_streaming() {
 
         // Check for raw_response entries (from failed variant)
         if let Some(raw_response) = chunk_json.get("raw_response") {
+            assert!(
+                !found_raw_chunk,
+                "Failed variant raw_response should arrive before any raw_chunk from the successful variant"
+            );
             let raw_response_array = raw_response.as_array().unwrap();
             for entry in raw_response_array {
-                // Error entries from failed variant should not have model_inference_id
-                if entry.get("model_inference_id").is_none() {
-                    assert_error_raw_response_entry(entry);
-                    assert_eq!(
-                        entry.get("provider_type").unwrap().as_str().unwrap(),
-                        "dummy",
-                        "Failed provider_type should be the actual provider type"
-                    );
-                    assert_eq!(
-                        entry.get("data").unwrap().as_str().unwrap(),
-                        "dummy error raw response",
-                        "Failed variant data should be 'dummy error raw response'"
-                    );
-                    found_failed_raw_response = true;
-                }
+                // All entries in the failed-variant chunk should be error entries
+                assert_error_raw_response_entry(entry);
+                assert_eq!(
+                    entry.get("provider_type").unwrap().as_str().unwrap(),
+                    "dummy",
+                    "Failed provider_type should be the actual provider type"
+                );
+                assert_eq!(
+                    entry.get("data").unwrap().as_str().unwrap(),
+                    "dummy error raw response",
+                    "Failed variant data should be `dummy error raw response`"
+                );
             }
+            found_failed_raw_response = true;
         }
 
         // Check for raw_chunk (from successful variant streaming)
@@ -486,7 +492,7 @@ async fn test_variant_fallback_both_fail_non_streaming() {
         assert_eq!(
             entry.get("data").unwrap().as_str().unwrap(),
             "dummy error raw response",
-            "Failed variant data should be 'dummy error raw response'"
+            "Failed variant data should be `dummy error raw response`"
         );
     }
 }
@@ -542,7 +548,171 @@ async fn test_variant_fallback_both_fail_streaming() {
         assert_eq!(
             entry.get("data").unwrap().as_str().unwrap(),
             "dummy error raw response",
-            "Failed variant data should be 'dummy error raw response'"
+            "Failed variant data should be `dummy error raw response`"
         );
     }
+}
+
+// =============================================================================
+// Combined Model + Variant Fallback Tests
+// =============================================================================
+
+/// Combined model+variant fallback, non-streaming.
+///
+/// Variant A (candidate): model with 2 providers, both fail with raw response → variant fails.
+/// Variant B (fallback): model with 2 providers, first fails with raw response, second succeeds → variant succeeds.
+///
+/// Expected `raw_response` entries:
+/// - 2 error entries from variant A's model-level fallback (both providers failed)
+/// - 1 error entry from variant B's model-level fallback (first provider failed)
+/// - 1 success entry from variant B's successful provider
+#[tokio::test]
+async fn test_combined_model_variant_fallback_non_streaming() {
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "raw_response_combined_fallback",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": false,
+        "include_raw_response": true
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Response should be successful (variant B fallback succeeds)"
+    );
+
+    let response_json: Value = response.json().await.unwrap();
+
+    let raw_response = response_json
+        .get("raw_response")
+        .expect("Response should have raw_response when include_raw_response=true");
+    let raw_response_array = raw_response.as_array().unwrap();
+    assert_eq!(
+        raw_response_array.len(),
+        4,
+        "raw_response should have 4 entries: 2 from variant A's failed providers + 1 from variant B's failed provider + 1 from variant B's successful provider"
+    );
+
+    // First 3 entries: all error entries (no model_inference_id)
+    for (i, entry) in raw_response_array[..3].iter().enumerate() {
+        assert_error_raw_response_entry(entry);
+        assert_eq!(
+            entry.get("provider_type").unwrap().as_str().unwrap(),
+            "dummy",
+            "Error entry {i} should have provider_type `dummy`"
+        );
+        assert_eq!(
+            entry.get("data").unwrap().as_str().unwrap(),
+            "dummy error raw response",
+            "Error entry {i} should have data `dummy error raw response`"
+        );
+    }
+
+    // Last entry: successful provider (success entry — has model_inference_id)
+    let success_entry = &raw_response_array[3];
+    assert_raw_response_entry(success_entry);
+    assert_eq!(
+        success_entry
+            .get("provider_type")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "dummy",
+        "Successful provider_type should be `dummy`"
+    );
+}
+
+/// Combined model+variant fallback, streaming.
+///
+/// Same setup as non-streaming: variant A fails (2 providers), variant B falls back (1 fails, 1 succeeds).
+/// Expects failed raw_response entries to arrive before raw_chunk from the successful provider.
+#[tokio::test]
+async fn test_combined_model_variant_fallback_streaming() {
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "raw_response_combined_fallback",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": true,
+        "include_raw_response": true
+    });
+
+    let mut chunks = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .expect("Failed to create eventsource");
+
+    let mut error_entry_count = 0;
+    let mut found_raw_chunk = false;
+    let mut chunk_count = 0;
+
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.expect("Failed to receive chunk");
+        let Event::Message(chunk) = chunk else {
+            continue;
+        };
+
+        if chunk.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value =
+            serde_json::from_str(&chunk.data).expect("Failed to parse chunk JSON");
+        chunk_count += 1;
+
+        // Check for raw_response entries (from failed providers across both variants)
+        if let Some(raw_response) = chunk_json.get("raw_response") {
+            assert!(
+                !found_raw_chunk,
+                "Failed provider raw_response should arrive before any raw_chunk from the successful provider"
+            );
+            let raw_response_array = raw_response.as_array().unwrap();
+            for entry in raw_response_array {
+                assert_error_raw_response_entry(entry);
+                assert_eq!(
+                    entry.get("provider_type").unwrap().as_str().unwrap(),
+                    "dummy",
+                    "Failed provider_type should be `dummy`"
+                );
+                assert_eq!(
+                    entry.get("data").unwrap().as_str().unwrap(),
+                    "dummy error raw response",
+                    "Failed provider data should be `dummy error raw response`"
+                );
+                error_entry_count += 1;
+            }
+        }
+
+        // Check for raw_chunk (from successful provider streaming)
+        if chunk_json.get("raw_chunk").is_some() {
+            found_raw_chunk = true;
+        }
+    }
+
+    assert!(chunk_count > 0, "Should have received at least one chunk");
+    assert_eq!(
+        error_entry_count, 3,
+        "Should have received 3 error entries: 2 from variant A's failed providers + 1 from variant B's failed provider"
+    );
+    assert!(
+        found_raw_chunk,
+        "Should have received raw_chunk from successful provider streaming"
+    );
 }

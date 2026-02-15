@@ -517,7 +517,7 @@ pub async fn poll_batch_inference_handler(
         BatchStatus::Pending => {
             // For now, we don't support dynamic API keys for batch inference
             let credentials = InferenceCredentials::default();
-            let response = poll_batch_inference(
+            let (response, provider_type) = poll_batch_inference(
                 &batch_request,
                 http_client,
                 &config.models,
@@ -525,8 +525,14 @@ pub async fn poll_batch_inference_handler(
                 config.gateway.relay.as_ref(),
             )
             .await?;
-            let response =
-                write_poll_batch_inference(&database, &batch_request, response, &config).await?;
+            let response = write_poll_batch_inference(
+                &database,
+                &batch_request,
+                response,
+                provider_type,
+                &config,
+            )
+            .await?;
             Ok(Json(response.filter_by_query(path_params)).into_response())
         }
         BatchStatus::Completed => {
@@ -629,7 +635,7 @@ async fn poll_batch_inference(
     models: &ModelTable,
     credentials: &InferenceCredentials,
     relay: Option<&TensorzeroRelay>,
-) -> Result<PollBatchInferenceResponse, Error> {
+) -> Result<(PollBatchInferenceResponse, Arc<str>), Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
@@ -649,9 +655,11 @@ async fn poll_batch_inference(
                 provider_name: batch_request.model_provider_name.to_string(),
             })
         })?;
-    model_provider
+    let provider_type = Arc::from(model_provider.provider_type());
+    let response = model_provider
         .poll_batch_inference(batch_request, &http_client, credentials)
-        .await
+        .await?;
+    Ok((response, provider_type))
 }
 
 // Helper struct for writing to the `BatchModelInference` table in ClickHouse
@@ -810,6 +818,7 @@ pub async fn write_poll_batch_inference(
     database: &(impl BatchInferenceQueries + InferenceQueries + ModelInferenceQueries + Sync),
     batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
+    provider_type: Arc<str>,
     config: &Config,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
@@ -830,8 +839,14 @@ pub async fn write_poll_batch_inference(
         PollBatchInferenceResponse::Completed(response) => {
             let raw_request = response.raw_request.clone();
             let raw_response = response.raw_response.clone();
-            let inferences =
-                write_completed_batch_inference(database, batch_request, response, config).await?;
+            let inferences = write_completed_batch_inference(
+                database,
+                batch_request,
+                response,
+                provider_type,
+                config,
+            )
+            .await?;
             // NOTE - in older versions of TensorZero, we were missing this call.
             // As a result, some customers may have databases with duplicate inferences.
             write_batch_request_status_update(
@@ -907,6 +922,7 @@ pub async fn write_completed_batch_inference<'a>(
     database: &(impl BatchInferenceQueries + InferenceQueries + ModelInferenceQueries + Sync),
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
+    provider_type: Arc<str>,
     config: &Config,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
@@ -968,13 +984,7 @@ pub async fn write_completed_batch_inference<'a>(
             latency: Latency::Batch,
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
-            provider_type: config
-                .models
-                .table
-                .get(batch_request.model_name.as_ref())
-                .and_then(|m| m.providers.get(batch_request.model_provider_name.as_ref()))
-                .map(|p| Arc::from(p.provider_type()))
-                .unwrap_or_else(|| batch_request.model_provider_name.clone().into()),
+            provider_type: provider_type.clone(),
             cached: false,
             finish_reason,
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)

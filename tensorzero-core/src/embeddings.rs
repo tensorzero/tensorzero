@@ -573,11 +573,11 @@ pub enum EmbeddingProviderConfig {
 impl EmbeddingProviderConfig {
     pub fn provider_type(&self) -> &'static str {
         match self {
-            EmbeddingProviderConfig::OpenAI(_) => "openai",
-            EmbeddingProviderConfig::Azure(_) => "azure",
-            EmbeddingProviderConfig::OpenRouter(_) => "openrouter",
+            EmbeddingProviderConfig::OpenAI(_) => crate::providers::openai::PROVIDER_TYPE,
+            EmbeddingProviderConfig::Azure(_) => crate::providers::azure::PROVIDER_TYPE,
+            EmbeddingProviderConfig::OpenRouter(_) => crate::providers::openrouter::PROVIDER_TYPE,
             #[cfg(any(test, feature = "e2e_tests"))]
-            EmbeddingProviderConfig::Dummy(_) => "dummy",
+            EmbeddingProviderConfig::Dummy(_) => crate::providers::dummy::PROVIDER_TYPE,
         }
     }
 }

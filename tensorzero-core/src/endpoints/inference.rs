@@ -609,7 +609,7 @@ pub async fn inference(
                 let output = if failed_raw_entries.is_empty() {
                     output
                 } else {
-                    inject_failed_variant_raw_response(output, failed_raw_entries, &function)
+                    inject_failed_variant_raw_response(output, failed_raw_entries)
                 };
                 return Ok(InferenceOutputData {
                     output,
@@ -647,7 +647,6 @@ pub async fn inference(
 fn inject_failed_variant_raw_response(
     output: InferenceOutput,
     failed_raw_entries: Vec<RawResponseEntry>,
-    function: &FunctionConfig,
 ) -> InferenceOutput {
     match output {
         InferenceOutput::NonStreaming(mut response) => {
@@ -669,7 +668,6 @@ fn inject_failed_variant_raw_response(
             InferenceOutput::NonStreaming(response)
         }
         InferenceOutput::Streaming(mut stream) => {
-            let is_chat = matches!(function, FunctionConfig::Chat(_));
             let wrapped = async_stream::stream! {
                 // Read the first chunk to get its metadata (inference_id, episode_id, variant_name)
                 if let Some(first_result) = stream.next().await {
@@ -722,7 +720,6 @@ fn inject_failed_variant_raw_response(
                     yield chunk;
                 }
             };
-            let _ = is_chat; // suppress unused warning
             InferenceOutput::Streaming(Box::pin(wrapped))
         }
     }

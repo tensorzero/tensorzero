@@ -30,7 +30,7 @@ use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Sagemaker";
-const PROVIDER_TYPE: &str = "aws_sagemaker";
+pub const PROVIDER_TYPE: &str = "aws_sagemaker";
 
 /// AWS SageMaker provider using direct HTTP calls.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
