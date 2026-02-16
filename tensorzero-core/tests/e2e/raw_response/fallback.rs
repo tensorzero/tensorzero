@@ -634,6 +634,133 @@ async fn test_combined_model_variant_fallback_non_streaming() {
     );
 }
 
+/// Variant fallback: error variant -> mid-stream-error variant, streaming.
+///
+/// The error variant fails pre-stream (with raw response data).
+/// The fallback variant succeeds initially but errors mid-stream (with raw_chunk).
+/// Expects:
+/// - raw_response entries from the failed variant appear (before any raw_chunk)
+/// - At least some successful content chunks from the fallback variant
+/// - A mid-stream error chunk with raw_chunk and error field
+#[tokio::test]
+async fn test_variant_fallback_mid_stream_error_streaming() {
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "raw_response_variant_fallback_mid_stream_error",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": true,
+        "include_raw_response": true
+    });
+
+    let mut chunks = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .expect("Failed to create eventsource");
+
+    let mut found_failed_raw_response = false;
+    let mut found_raw_chunk = false;
+    let mut found_error_chunk = false;
+    let mut good_content_chunks = 0;
+    let mut chunk_count = 0;
+
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.expect("Failed to receive chunk");
+        let Event::Message(chunk) = chunk else {
+            continue;
+        };
+
+        if chunk.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value =
+            serde_json::from_str(&chunk.data).expect("Failed to parse chunk JSON");
+        chunk_count += 1;
+
+        // Check for raw_response entries (from failed variant)
+        if let Some(raw_response) = chunk_json.get("raw_response") {
+            let raw_response_array = raw_response.as_array().unwrap();
+            for entry in raw_response_array {
+                assert_error_raw_response_entry(entry);
+                assert_eq!(
+                    entry.get("provider_type").unwrap().as_str().unwrap(),
+                    "dummy",
+                    "Failed provider_type should be `dummy`"
+                );
+                assert_eq!(
+                    entry.get("data").unwrap().as_str().unwrap(),
+                    "dummy error raw response",
+                    "Failed variant data should be `dummy error raw response`"
+                );
+            }
+            found_failed_raw_response = true;
+        }
+
+        // Check for mid-stream error chunk
+        if let Some(error) = chunk_json.get("error") {
+            let error_str = error
+                .as_str()
+                .expect("Error field should be a string in mid-stream error event");
+            assert!(
+                error_str.contains("Dummy error in stream with raw response"),
+                "Unexpected error: {error_str}"
+            );
+            found_error_chunk = true;
+
+            // Should have raw_chunk on the error chunk
+            let raw_chunk = chunk_json
+                .get("raw_chunk")
+                .expect(
+                    "Mid-stream error event should have `raw_chunk` when include_raw_response=true",
+                )
+                .as_str()
+                .expect("raw_chunk should be a string");
+            assert!(
+                raw_chunk.contains("dummy client raw response"),
+                "raw_chunk should contain the dummy raw response"
+            );
+        }
+
+        // Check for raw_chunk from successful streaming (non-error chunks)
+        if chunk_json.get("raw_chunk").is_some() {
+            found_raw_chunk = true;
+        }
+
+        // Count content chunks (non-error, has content field with non-empty array)
+        if chunk_json.get("error").is_none()
+            && let Some(content) = chunk_json.get("content")
+            && let Some(arr) = content.as_array()
+            && !arr.is_empty()
+        {
+            good_content_chunks += 1;
+        }
+    }
+
+    assert!(chunk_count > 0, "Should have received at least one chunk");
+    assert!(
+        found_failed_raw_response,
+        "Should have received raw_response entries from failed variant in a streaming chunk"
+    );
+    assert!(
+        good_content_chunks >= 3,
+        "Should have received at least 3 good content chunks before mid-stream error, got {good_content_chunks}"
+    );
+    assert!(
+        found_error_chunk,
+        "Should have received a mid-stream error chunk with error field"
+    );
+    assert!(
+        found_raw_chunk,
+        "Should have received raw_chunk from the fallback variant streaming"
+    );
+}
+
 /// Combined model+variant fallback, streaming.
 ///
 /// Same setup as non-streaming: variant A fails (2 providers), variant B falls back (1 fails, 1 succeeds).

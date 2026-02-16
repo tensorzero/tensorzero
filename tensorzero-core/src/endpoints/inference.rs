@@ -38,7 +38,9 @@ use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfigWithNamespaces;
-use crate::function::{DEFAULT_FUNCTION_NAME, FunctionConfig, FunctionConfigChat};
+use crate::function::{
+    DEFAULT_FUNCTION_NAME, FunctionConfig, FunctionConfigChat, FunctionConfigType,
+};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier,
@@ -606,7 +608,14 @@ pub async fn inference(
                     if failed_raw_response.is_empty() {
                         output
                     } else {
-                        inject_failed_variant_raw_response(output, failed_raw_response)
+                        inject_failed_variant_raw_response(
+                            output,
+                            failed_raw_response,
+                            inference_id,
+                            episode_id,
+                            variant_name.clone(),
+                            function.config_type(),
+                        )
                     }
                 } else {
                     output
@@ -642,11 +651,14 @@ pub async fn inference(
 
 /// Injects raw response entries from failed variant attempts into a successful inference output.
 /// For non-streaming, prepends the entries to the `raw_response` array.
-/// For streaming, wraps the stream to inject a synthetic chunk after reading the first real chunk
-/// (to copy its metadata: inference_id, episode_id, variant_name).
+/// For streaming, wraps the stream to inject a synthetic chunk before forwarding the real stream.
 fn inject_failed_variant_raw_response(
     output: InferenceOutput,
     failed_raw_response: Vec<RawResponseEntry>,
+    inference_id: Uuid,
+    episode_id: Uuid,
+    variant_name: String,
+    function_config_type: FunctionConfigType,
 ) -> InferenceOutput {
     match output {
         InferenceOutput::NonStreaming(mut response) => {
@@ -669,53 +681,40 @@ fn inject_failed_variant_raw_response(
         }
         InferenceOutput::Streaming(mut stream) => {
             let wrapped = async_stream::stream! {
-                // Read the first chunk to get its metadata (inference_id, episode_id, variant_name)
-                if let Some(first_result) = stream.next().await {
-                    match &first_result {
-                        Ok(first_chunk) => {
-                            // Build a synthetic chunk with the failed entries using the first chunk's metadata
-                            let raw_response = Some(failed_raw_response);
-                            let failed_chunk = match first_chunk {
-                                InferenceResponseChunk::Chat(c) => {
-                                    InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
-                                        inference_id: c.inference_id,
-                                        episode_id: c.episode_id,
-                                        variant_name: c.variant_name.clone(),
-                                        content: vec![],
-                                        usage: None,
-                                        raw_usage: None,
-                                        raw_response,
-                                        finish_reason: None,
-                                        original_chunk: None,
-                                        raw_chunk: None,
-                                    })
-                                }
-                                InferenceResponseChunk::Json(j) => {
-                                    InferenceResponseChunk::Json(JsonInferenceResponseChunk {
-                                        inference_id: j.inference_id,
-                                        episode_id: j.episode_id,
-                                        variant_name: j.variant_name.clone(),
-                                        raw: String::new(),
-                                        usage: None,
-                                        raw_usage: None,
-                                        raw_response,
-                                        finish_reason: None,
-                                        original_chunk: None,
-                                        raw_chunk: None,
-                                    })
-                                }
-                            };
-                            // Emit the failed entries chunk first, then the original first chunk
-                            yield Ok(failed_chunk);
-                            yield first_result;
-                        }
-                        Err(_) => {
-                            // If the first chunk is an error, just pass it through
-                            yield first_result;
-                        }
+                // Build a synthetic chunk with the failed entries using the metadata passed in
+                let raw_response = Some(failed_raw_response);
+                let failed_chunk = match function_config_type {
+                    FunctionConfigType::Chat => {
+                        InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
+                            inference_id,
+                            episode_id,
+                            variant_name,
+                            content: vec![],
+                            usage: None,
+                            raw_usage: None,
+                            raw_response,
+                            finish_reason: None,
+                            original_chunk: None,
+                            raw_chunk: None,
+                        })
                     }
-                }
-                // Forward remaining chunks
+                    FunctionConfigType::Json => {
+                        InferenceResponseChunk::Json(JsonInferenceResponseChunk {
+                            inference_id,
+                            episode_id,
+                            variant_name,
+                            raw: String::new(),
+                            usage: None,
+                            raw_usage: None,
+                            raw_response,
+                            finish_reason: None,
+                            original_chunk: None,
+                            raw_chunk: None,
+                        })
+                    }
+                };
+                // Emit the failed entries chunk first, then forward the real stream
+                yield Ok(failed_chunk);
                 while let Some(chunk) = stream.next().await {
                     yield chunk;
                 }
@@ -3505,6 +3504,94 @@ mod tests {
             entries[3].model_inference_id,
             Some(id_b),
             "Fourth entry should be the successful entry for inference B"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_inject_failed_variant_raw_response_streaming_first_chunk_err() {
+        // Verify that `inject_failed_variant_raw_response` emits the synthetic
+        // failed-entries chunk even when the underlying stream's first item is Err.
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let variant_name = "test_variant".to_string();
+
+        let failed_entries = vec![RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "dummy".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: "failed provider raw response".to_string(),
+        }];
+
+        // Build a stream whose only item is an Err
+        let error = Error::new(ErrorDetails::Config {
+            message: "stream error".to_string(),
+        });
+        let error_stream: InferenceStream = Box::pin(async_stream::stream! {
+            yield Err(error);
+        });
+
+        let output = InferenceOutput::Streaming(error_stream);
+        let result = inject_failed_variant_raw_response(
+            output,
+            failed_entries,
+            inference_id,
+            episode_id,
+            variant_name.clone(),
+            FunctionConfigType::Chat,
+        );
+
+        let InferenceOutput::Streaming(mut stream) = result else {
+            panic!("Expected streaming output");
+        };
+
+        // First chunk should be the synthetic chunk with failed raw_response entries
+        let first = stream
+            .next()
+            .await
+            .expect("Stream should have a first chunk");
+        let first_chunk = first.expect("First chunk should be Ok (synthetic failed entries chunk)");
+        let InferenceResponseChunk::Chat(chat_chunk) = first_chunk else {
+            panic!("Expected Chat chunk");
+        };
+        assert_eq!(
+            chat_chunk.inference_id, inference_id,
+            "Synthetic chunk should carry the correct inference_id"
+        );
+        assert_eq!(
+            chat_chunk.episode_id, episode_id,
+            "Synthetic chunk should carry the correct episode_id"
+        );
+        assert_eq!(
+            chat_chunk.variant_name, variant_name,
+            "Synthetic chunk should carry the correct variant_name"
+        );
+        let raw_response = chat_chunk
+            .raw_response
+            .expect("Synthetic chunk should contain raw_response");
+        assert_eq!(
+            raw_response.len(),
+            1,
+            "Should have exactly one failed raw_response entry"
+        );
+        assert_eq!(
+            raw_response[0].data, "failed provider raw response",
+            "raw_response entry data should match"
+        );
+
+        // Second chunk should be the original Err from the stream
+        let second = stream
+            .next()
+            .await
+            .expect("Stream should have a second chunk");
+        assert!(
+            second.is_err(),
+            "Second chunk should be the original error from the stream"
+        );
+
+        // Stream should be exhausted
+        assert!(
+            stream.next().await.is_none(),
+            "Stream should be exhausted after the error chunk"
         );
     }
 }

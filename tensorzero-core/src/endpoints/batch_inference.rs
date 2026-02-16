@@ -627,8 +627,9 @@ pub async fn get_batch_request(
 /// Polls a batch inference request from the model provider that
 /// the original request was sent to
 ///
-/// Returns: a `PollBatchInferenceResponse` which is the current status of the batch
-/// and if it's newly completed, the response.
+/// Returns: a `(PollBatchInferenceResponse, Arc<str>)` tuple where the first element
+/// is the current status of the batch (and if it's newly completed, the response),
+/// and the second element is the provider type (e.g. "openai", "anthropic").
 async fn poll_batch_inference(
     batch_request: &BatchRequestRow<'static>,
     http_client: TensorzeroHttpClient,

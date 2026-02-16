@@ -836,3 +836,25 @@ type = "chat_completion"
 model = "test_fallback_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+# Variant fallback: error variant fails, fallback variant succeeds initially but errors mid-stream
+[functions.raw_response_variant_fallback_mid_stream_error]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.raw_response_variant_fallback_mid_stream_error.experimentation]
+type = "uniform"
+candidate_variants = ["error_variant"]
+fallback_variants = ["mid_stream_error_variant"]
+
+[functions.raw_response_variant_fallback_mid_stream_error.variants.error_variant]
+type = "chat_completion"
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.raw_response_variant_fallback_mid_stream_error.variants.mid_stream_error_variant]
+type = "chat_completion"
+model = "err_in_stream_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
