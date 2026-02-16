@@ -325,6 +325,9 @@ pub enum ErrorDetails {
         // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
         errors: IndexMap<String, Error>,
     },
+    AllCandidatesFailed {
+        candidate_errors: IndexMap<String, Error>,
+    },
     TensorZeroAuth {
         message: String,
     },
@@ -754,6 +757,7 @@ impl ErrorDetails {
         match self {
             ErrorDetails::AllRetriesFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::AllCandidatesFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::TensorZeroAuth { .. } => tracing::Level::WARN,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
@@ -899,6 +903,10 @@ impl ErrorDetails {
                 .values()
                 .last()
                 .and_then(|error| error.underlying_status_code()),
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => candidate_errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
             ErrorDetails::InferenceClient { status_code, .. } => *status_code,
             ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
                 .values()
@@ -916,6 +924,7 @@ impl ErrorDetails {
                 .map(|e| e.status_code())
                 .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::AllCandidatesFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::TensorZeroAuth { .. } => StatusCode::UNAUTHORIZED,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1077,6 +1086,7 @@ impl ErrorDetails {
     pub fn is_retryable(&self) -> bool {
         match &self {
             ErrorDetails::AllRetriesFailed { .. } => false,
+            ErrorDetails::AllCandidatesFailed { .. } => false,
             ErrorDetails::RateLimitExceeded { .. } => false,
             // For AllModelProvidersFailed we will retry if any provider error is retryable
             ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
@@ -1096,6 +1106,11 @@ impl ErrorDetails {
             }
             ErrorDetails::AllVariantsFailed { errors } => {
                 for error in errors.values() {
+                    error.0.collect_raw_response_entries(entries);
+                }
+            }
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => {
+                for error in candidate_errors.values() {
                     error.0.collect_raw_response_entries(entries);
                 }
             }
@@ -1177,6 +1192,17 @@ impl std::fmt::Display for ErrorDetails {
                     errors
                         .iter()
                         .map(|(variant_name, error)| format!("{variant_name}: {error}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            }
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => {
+                write!(
+                    f,
+                    "All best-of-n candidates failed with errors: {}",
+                    candidate_errors
+                        .iter()
+                        .map(|(candidate_name, error)| format!("{candidate_name}: {error}"))
                         .collect::<Vec<_>>()
                         .join("\n")
                 )

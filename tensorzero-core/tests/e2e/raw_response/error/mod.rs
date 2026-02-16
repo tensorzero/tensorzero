@@ -5,6 +5,7 @@
 //! - `streaming_pre_stream`: Streaming requests where all providers fail before any SSE chunk is sent
 //! - `streaming_mid_stream`: Streaming requests where a provider error occurs after chunks have been sent
 
+mod best_of_n_sampling;
 mod non_streaming;
 mod streaming_mid_stream;
 mod streaming_pre_stream;
