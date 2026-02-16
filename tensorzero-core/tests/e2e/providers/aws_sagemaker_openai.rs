@@ -43,8 +43,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         reasoning_inference: vec![],
         reasoning_usage_inference: vec![],
-        // TODO (#5745): Ollama does not return correct usage numbers
-        cache_input_tokens_inference: vec![],
+        cache_input_tokens_inference: vec![], // too slow to SageMaker x Ollama on CPU
         embeddings: vec![],
         inference_params_inference: vec![],
         inference_params_dynamic_credentials: vec![],
