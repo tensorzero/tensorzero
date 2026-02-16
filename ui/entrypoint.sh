@@ -9,6 +9,10 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --config-file)
+      if [[ -z "${2:-}" || "$2" == --* ]]; then
+        echo "Error: --config-file requires a path argument"
+        exit 1
+      fi
       export TENSORZERO_UI_CONFIG_FILE="$2"
       shift 2
       ;;
