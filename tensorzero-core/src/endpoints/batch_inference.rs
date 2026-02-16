@@ -742,18 +742,20 @@ async fn write_start_batch_inference<'a>(
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[i],
-            input: resolved_input.into_stored_input(),
-            input_messages: try_join_all(
-                row.input_messages
-                    .into_iter()
-                    .map(RequestMessage::into_stored_message),
-            )
-            .await?,
+            input: Some(resolved_input.into_stored_input()),
+            input_messages: Some(
+                try_join_all(
+                    row.input_messages
+                        .into_iter()
+                        .map(RequestMessage::into_stored_message),
+                )
+                .await?,
+            ),
             system: row.system.map(Cow::Borrowed),
             tool_params,
-            inference_params: Cow::Borrowed(row.inference_params),
+            inference_params: Some(Cow::Borrowed(row.inference_params)),
             output_schema: row.output_schema.map(Value::to_string),
-            raw_request: Cow::Borrowed(row.raw_request),
+            raw_request: Some(Cow::Borrowed(row.raw_request)),
             model_name: Cow::Borrowed(model_name),
             model_provider_name: Cow::Borrowed(model_provider_name),
             tags: row.tags.unwrap_or_default(),
@@ -978,8 +980,8 @@ pub async fn write_completed_batch_inference<'a>(
             id: Uuid::now_v7(),
             output: output.clone(),
             system: system.map(Cow::into_owned),
-            input_messages: RequestMessagesOrBatch::BatchInput(input_messages),
-            raw_request: raw_request.into_owned(),
+            input_messages: RequestMessagesOrBatch::BatchInput(input_messages.unwrap_or_default()),
+            raw_request: raw_request.map(Cow::into_owned).unwrap_or_default(),
             raw_response,
             usage,
             latency: Latency::Batch,
@@ -1030,13 +1032,14 @@ pub async fn write_completed_batch_inference<'a>(
             extra_headers,
             extra_cache_key: None,
         };
+        let inference_params_owned = inference_params.map(Cow::into_owned).unwrap_or_default();
         let inference_result = function
             .prepare_response(
                 inference_id,
                 output,
                 vec![model_inference_response],
                 &inference_config,
-                inference_params.into_owned(),
+                inference_params_owned,
                 None,
             )
             .await?;

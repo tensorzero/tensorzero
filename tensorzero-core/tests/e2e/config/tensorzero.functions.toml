@@ -873,7 +873,6 @@ model = "test_fallback_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 retries = { num_retries = 3, max_delay_s = 0.01 }
-
 [functions.raw_response_variant_fallback_mid_stream_error]
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
