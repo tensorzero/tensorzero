@@ -74,6 +74,18 @@ pub fn ensure_table<'a>(
         if !current.contains_key(key) {
             current.insert(key, Item::Table(Table::new()));
         }
+
+        // If the existing entry is an inline table, promote it to a regular table
+        // so we can traverse into it. This handles the case where a previous
+        // `clean_serialized_item` call converted sub-tables to inline tables.
+        if let Some(Item::Value(Value::InlineTable(inline))) = current.get(key) {
+            let mut table = Table::new();
+            for (k, v) in inline {
+                table.insert(k, Item::Value(v.clone()));
+            }
+            current.insert(key, Item::Table(table));
+        }
+
         current = current[key].as_table_mut().ok_or_else(|| {
             ConfigApplierError::InvalidConfigStructure {
                 path: path.join("."),

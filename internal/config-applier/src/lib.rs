@@ -330,8 +330,8 @@ mod tests {
     use tensorzero_core::config::path::ResolvedTomlPathData;
     use tensorzero_core::config::{UninitializedVariantConfig, UninitializedVariantInfo};
     use tensorzero_core::evaluations::{
-        LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize, LLMJudgeOutputType,
-        UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
+        ExactMatchConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize,
+        LLMJudgeOutputType, UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
         UninitializedInferenceEvaluationConfig, UninitializedLLMJudgeChatCompletionVariantConfig,
         UninitializedLLMJudgeConfig, UninitializedLLMJudgeVariantConfig,
         UninitializedLLMJudgeVariantInfo,
@@ -588,6 +588,112 @@ type = "exact_match"
             system_instructions,
             "evaluations/my_evaluation/evaluators/judge/variants/v1/system_instructions.txt",
             "expected TOML to reference the extracted system_instructions path"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_evaluation_with_empty_evaluators() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        let evaluation =
+            UninitializedEvaluationConfig::Inference(UninitializedInferenceEvaluationConfig {
+                evaluators: HashMap::new(),
+                function_name: "my_function".to_string(),
+                description: None,
+            });
+
+        let edit = EditPayload::UpsertEvaluation(UpsertEvaluationPayload {
+            evaluation_name: "empty_eval".to_string(),
+            evaluation,
+        });
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("failed to apply evaluation edit");
+
+        let toml_contents =
+            fs::read_to_string(tmp.path().join("tensorzero.toml")).expect("failed to read config");
+
+        // Verify the TOML round-trips: deserializing should succeed even though
+        // `clean_serialized_item` strips the empty `evaluators` table.
+        // Re-parse the full config as a toml::Value and extract the evaluation section.
+        let full: toml::Value =
+            toml::from_str(&toml_contents).expect("failed to parse updated TOML");
+        let eval_value = full
+            .get("evaluations")
+            .and_then(|v| v.get("empty_eval"))
+            .expect("expected evaluation to exist in TOML");
+
+        let eval_toml = toml::to_string(eval_value).expect("failed to serialize evaluation");
+        let _parsed: UninitializedEvaluationConfig =
+            toml::from_str(&eval_toml).expect("empty evaluators should deserialize successfully");
+    }
+
+    #[tokio::test]
+    async fn test_upsert_evaluator_after_upsert_evaluation() {
+        // Regression test: upsert_evaluation converts evaluator sub-tables to inline tables.
+        // A subsequent upsert_evaluator must still be able to traverse the evaluators path
+        // even though it was stored as an inline table.
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        // First: upsert an evaluation with an exact_match evaluator
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "exact_match".to_string(),
+            UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let evaluation =
+            UninitializedEvaluationConfig::Inference(UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: "my_function".to_string(),
+                description: None,
+            });
+
+        let edit = EditPayload::UpsertEvaluation(UpsertEvaluationPayload {
+            evaluation_name: "my_eval".to_string(),
+            evaluation,
+        });
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("failed to apply evaluation edit");
+
+        // Second: upsert another evaluator into the same evaluation.
+        // This should succeed even though the evaluators table was inlined.
+        let new_evaluator =
+            UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.5) });
+
+        let edit = EditPayload::UpsertEvaluator(UpsertEvaluatorPayload {
+            evaluation_name: "my_eval".to_string(),
+            evaluator_name: "second_match".to_string(),
+            evaluator: new_evaluator,
+        });
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("upsert_evaluator should succeed after upsert_evaluation");
+
+        let toml_contents =
+            fs::read_to_string(tmp.path().join("tensorzero.toml")).expect("failed to read config");
+        assert!(
+            toml_contents.contains("second_match"),
+            "expected new evaluator to appear in TOML, got:\n{toml_contents}"
         );
     }
 
