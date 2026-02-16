@@ -27,7 +27,8 @@ use crate::config::{
     OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
 use crate::cost::{
-    CostConfig, ResponseMode, UninitializedCostConfig, compute_cost_from_response, load_cost_config,
+    CostConfig, ResponseMode, UninitializedCostConfig, compute_cost_from_response,
+    compute_relay_non_streaming_cost, load_cost_config,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -268,6 +269,15 @@ impl ModelConfig {
         false
     }
 
+    /// Returns the first provider's cost config (in routing order) for use in relay mode.
+    /// This lets the edge gateway compute cost locally from the downstream gateway's raw response.
+    fn relay_cost_config(&self) -> Option<&CostConfig> {
+        self.routing
+            .iter()
+            .filter_map(|name| self.providers.get(name))
+            .find_map(|p| p.cost.as_ref())
+    }
+
     fn filter_content_blocks<'a>(
         request: &'a ModelInferenceRequest<'a>,
         model_name: &str,
@@ -492,14 +502,25 @@ impl ModelConfig {
             if let Some(relay) = &clients.relay
                 && !self.skip_relay
             {
-                let response = relay
-                    .relay_non_streaming(model_name, request, clients)
+                let cost_config = self.relay_cost_config();
+                let force_raw = cost_config.is_some();
+                let mut response = relay
+                    .relay_non_streaming(model_name, request, clients, force_raw)
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::Relay {
                             message: e.to_string(),
                         })
                     })?;
+                if let Some(cost_config) = cost_config {
+                    response.usage.cost =
+                        compute_relay_non_streaming_cost(&response.relay_raw_response, cost_config);
+                }
+                // If we forced raw response for cost computation but the caller
+                // didn't request it, clear it to avoid leaking it in the response.
+                if force_raw && !clients.include_raw_response {
+                    response.relay_raw_response = None;
+                }
                 return Ok(ModelInferenceResponse::new(
                     response,
                     "tensorzero::relay".into(),
@@ -627,14 +648,40 @@ impl ModelConfig {
             {
                 // Note - we do *not* call wrap_provider_stream,
                 // since we don't want caching or (model provider) OTEL attributes
+                let cost_config = self.relay_cost_config().cloned();
+                let force_raw = cost_config.is_some();
+                let caller_wants_raw = clients.include_raw_response;
                 let (stream, raw_request) = relay
-                    .relay_streaming(model_name, request, clients)
+                    .relay_streaming(model_name, request, clients, force_raw)
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::Relay {
                             message: e.to_string(),
                         })
                     })?;
+                let stream = if let Some(cost_config) = cost_config {
+                    stream
+                        .map(move |chunk_result| {
+                            chunk_result.map(|mut chunk| {
+                                chunk.usage = chunk.usage.map(|mut usage| {
+                                    usage.cost = compute_cost_from_response(
+                                        &chunk.raw_response,
+                                        &cost_config,
+                                        ResponseMode::Streaming,
+                                    );
+                                    usage
+                                });
+                                if !caller_wants_raw {
+                                    chunk.raw_response = String::new();
+                                }
+                                chunk
+                            })
+                        })
+                        .boxed()
+                        .peekable()
+                } else {
+                    stream
+                };
                 return Ok(StreamResponseAndMessages {
                     response: StreamResponse {
                         stream: stream.instrument(Span::current()),

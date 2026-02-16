@@ -46,6 +46,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::usage::RawResponseEntry;
 
 /// Whether the response was obtained via streaming or non-streaming inference.
 ///
@@ -410,6 +411,35 @@ pub fn compute_cost_from_json(
     }
 
     Some(total_cost)
+}
+
+/// Compute cost from relay raw response entries (non-streaming).
+///
+/// Used by the edge gateway to compute cost locally from the downstream gateway's
+/// raw provider responses. Returns `None` if `cost_config` is empty or no entries are present.
+/// Uses poison semantics: if any entry yields `None` cost, the total is `None`.
+pub fn compute_relay_non_streaming_cost(
+    relay_raw_response: &Option<Vec<RawResponseEntry>>,
+    cost_config: &[CostConfigEntry],
+) -> Option<Cost> {
+    if cost_config.is_empty() {
+        return None;
+    }
+    let entries = relay_raw_response.as_ref()?;
+    if entries.is_empty() {
+        return None;
+    }
+    let mut total = Decimal::ZERO;
+    for entry in entries {
+        let contribution =
+            compute_cost_from_response(&entry.data, cost_config, ResponseMode::NonStreaming)?;
+        total += contribution;
+    }
+    if total < Decimal::ZERO {
+        tracing::warn!("Computed relay cost is negative ({total}). Cost will be unavailable.");
+        return None;
+    }
+    Some(total)
 }
 
 /// Convert a JSON value to a Decimal, handling integer, float, and string representations.

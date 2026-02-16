@@ -210,11 +210,18 @@ impl TensorzeroRelay {
         model_name: &str,
         request: &ModelInferenceRequest<'a>,
         clients: &InferenceClients,
+        force_include_raw_response: bool,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let start_time = Instant::now();
 
         let client_inference_params = self
-            .build_client_inference_params(model_name, request, clients, true)
+            .build_client_inference_params(
+                model_name,
+                request,
+                clients,
+                true,
+                force_include_raw_response,
+            )
             .await?;
         let res = self
             .client
@@ -236,36 +243,33 @@ impl TensorzeroRelay {
 
         let stream = streaming
             .map(move |chunk| match chunk {
-                Ok(chunk) => {
-                    let raw_chunk = serde_json::to_string(&chunk).unwrap_or_default();
-                    match chunk {
-                        InferenceResponseChunk::Chat(c) => {
-                            Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
-                                c.content,
-                                c.usage,
-                                // TODO - get the original chunk as a string
-                                raw_chunk,
-                                start_time.elapsed(),
-                                c.finish_reason,
-                                c.raw_usage,
-                            ))
-                        }
-                        InferenceResponseChunk::Json(c) => {
-                            Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
-                                vec![ContentBlockChunk::Text(TextChunk {
-                                    id: "0".to_string(),
-                                    text: c.raw,
-                                })],
-                                c.usage,
-                                // TODO - get the original chunk as a string
-                                raw_chunk,
-                                start_time.elapsed(),
-                                c.finish_reason,
-                                c.raw_usage,
-                            ))
-                        }
+                Ok(chunk) => match chunk {
+                    InferenceResponseChunk::Chat(c) => {
+                        let raw_response = c.raw_chunk.unwrap_or_default();
+                        Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
+                            c.content,
+                            c.usage,
+                            raw_response,
+                            start_time.elapsed(),
+                            c.finish_reason,
+                            c.raw_usage,
+                        ))
                     }
-                }
+                    InferenceResponseChunk::Json(c) => {
+                        let raw_response = c.raw_chunk.unwrap_or_default();
+                        Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
+                            vec![ContentBlockChunk::Text(TextChunk {
+                                id: "0".to_string(),
+                                text: c.raw,
+                            })],
+                            c.usage,
+                            raw_response,
+                            start_time.elapsed(),
+                            c.finish_reason,
+                            c.raw_usage,
+                        ))
+                    }
+                },
                 Err(e) => Err(e),
             })
             .boxed()
@@ -278,11 +282,18 @@ impl TensorzeroRelay {
         model_name: &str,
         request: &ModelInferenceRequest<'a>,
         clients: &InferenceClients,
+        force_include_raw_response: bool,
     ) -> Result<ProviderInferenceResponse, Error> {
         let start_time = Instant::now();
 
         let client_inference_params = self
-            .build_client_inference_params(model_name, request, clients, false)
+            .build_client_inference_params(
+                model_name,
+                request,
+                clients,
+                false,
+                force_include_raw_response,
+            )
             .await?;
 
         let http_data = self
@@ -367,6 +378,7 @@ impl TensorzeroRelay {
         request: &ModelInferenceRequest<'_>,
         clients: &InferenceClients,
         stream: bool,
+        force_include_raw_response: bool,
     ) -> Result<ClientInferenceParams, Error> {
         let input = Input {
             messages: try_join_all(request.messages.clone().into_iter().map(async |m| {
@@ -540,7 +552,7 @@ impl TensorzeroRelay {
             otlp_traces_extra_attributes: HashMap::new(),
             otlp_traces_extra_resources: HashMap::new(),
             include_original_response: false,
-            include_raw_response: clients.include_raw_response,
+            include_raw_response: clients.include_raw_response || force_include_raw_response,
             include_raw_usage: clients.include_raw_usage,
             api_key,
         };
