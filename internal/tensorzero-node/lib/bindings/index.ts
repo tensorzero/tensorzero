@@ -320,7 +320,6 @@ export * from "./SearchEvaluationRunsResponse";
 export * from "./SearchWorkflowEvaluationRunsResponse";
 export * from "./ServiceTier";
 export * from "./Session";
-export * from "./StaleDatasetResponse";
 export * from "./StaticToolConfig";
 export * from "./StaticWeightsConfig";
 export * from "./StatusResponse";

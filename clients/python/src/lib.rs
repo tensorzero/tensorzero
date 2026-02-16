@@ -56,10 +56,7 @@ use tensorzero_core::{
     },
 };
 use tensorzero_core::{
-    endpoints::{
-        datasets::InsertDatapointParams,
-        workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
-    },
+    endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
     },
@@ -67,10 +64,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
-    ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    InferenceStream, Input, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
+    PostgresConfig, RenderedSample, StoredInference, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -114,7 +111,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<UninitializedGEPAConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
-    m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
     m.add_class::<ConfigPyClass>()?;
@@ -1006,149 +1002,6 @@ impl TensorZeroGateway {
         Self::workflow_evaluation_run_episode(this, run_id, task_name, tags)
     }
 
-    ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to insert the datapoints into.
-    /// :param datapoints: A list of datapoints to insert.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    #[pyo3(warn(message = "Please use `create_datapoints` instead of `create_datapoints_legacy`. In a future release, `create_datapoints_legacy` will be removed.", category = PyDeprecationWarning))]
-    fn create_datapoints_legacy(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        #[expect(deprecated)]
-        let fut =
-            client.create_datapoints_legacy(dataset_name, InsertDatapointParams { datapoints });
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let uuids = res
-            .iter()
-            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
-            .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(Bound::unbind)
-    }
-
-    /// DEPRECATED: Use `create_datapoints` instead.
-    ///
-    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to insert the datapoints into.
-    /// :param datapoints: A list of datapoints to insert.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    #[pyo3(warn(message = "Please use `create_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.", category = PyDeprecationWarning))]
-    fn bulk_insert_datapoints(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        #[expect(deprecated)]
-        let fut = client.bulk_insert_datapoints(dataset_name, params);
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let uuids = res
-            .iter()
-            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
-            .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(Bound::unbind)
-    }
-
-    /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to delete the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to delete.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    #[pyo3(warn(message = "Please use `delete_datapoints` instead of `delete_datapoint`. In a future release, `delete_datapoint` will be removed.", category = PyDeprecationWarning))]
-    fn delete_datapoint(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        let client = this.as_super().client.clone();
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        #[expect(deprecated)]
-        let fut = client.delete_datapoint(dataset_name, datapoint_id);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
-    }
-
-    /// Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to get the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `Datapoint` object.
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    #[pyo3(warn(message = "Please use `get_datapoints` instead of `get_datapoint`. In a future release, `get_datapoint` will be removed.", category = PyDeprecationWarning))]
-    fn get_datapoint<'py>(
-        this: PyRef<'py, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, Datapoint>> {
-        let client = this.as_super().client.clone();
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        #[expect(deprecated)]
-        let fut = client.get_datapoint(dataset_name, datapoint_id);
-        let wire: Datapoint =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        wire.into_pyobject(this.py())
-    }
-
-    /// DEPRECATED: Use `list_datapoints` instead.
-    ///
-    /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to get the datapoints from.
-    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
-    #[pyo3(warn(message = "Please use `list_datapoints` instead of `list_datapoints_legacy`. In a future release, `list_datapoints_legacy` will be removed.", category = PyDeprecationWarning))]
-    fn list_datapoints_legacy(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        function_name: Option<String>,
-        limit: Option<u32>,
-        offset: Option<u32>,
-    ) -> PyResult<Bound<'_, PyList>> {
-        let client = this.as_super().client.clone();
-
-        let request = ListDatapointsRequest {
-            function_name,
-            limit,
-            offset,
-            ..Default::default()
-        };
-
-        let fut = client.list_datapoints(dataset_name, request);
-        let resp = tokio_block_on_without_gil(this.py(), fut);
-        match resp {
-            Ok(datapoints) => {
-                let py_datapoints = datapoints
-                    .datapoints
-                    .into_iter()
-                    .map(|x| x.into_pyobject(this.py()))
-                    .collect::<Result<Vec<_>, _>>()?;
-                PyList::new(this.py(), py_datapoints)
-            }
-            Err(e) => Err(convert_error(this.py(), e)),
-        }
-    }
-
     /// Create one or more datapoints in a dataset.
     ///
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
@@ -1242,6 +1095,40 @@ impl TensorZeroGateway {
             "tensorzero",
             "GetDatapointsResponse",
         )
+    }
+
+    /// Get a single datapoint by its ID.
+    ///
+    /// :param dataset_name: The name of the dataset to get the datapoint from.
+    /// :param datapoint_id: The ID of the datapoint to get.
+    /// :return: A `Datapoint` object (`DatapointChat` or `DatapointJson`).
+    #[pyo3(signature = (*, dataset_name, datapoint_id))]
+    fn get_datapoint(
+        this: PyRef<'_, Self>,
+        dataset_name: String,
+        datapoint_id: Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        let fut = client.get_datapoints(Some(dataset_name), vec![datapoint_id]);
+        let response =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        let py_response = convert_response_to_python_dataclass(
+            this.py(),
+            &response,
+            "tensorzero",
+            "GetDatapointsResponse",
+        )?;
+        let mut datapoints = py_response
+            .getattr(this.py(), "datapoints")?
+            .extract::<Vec<Py<PyAny>>>(this.py())?;
+        if datapoints.len() != 1 {
+            return Err(PyErr::new::<PyValueError, _>(format!(
+                "Expected exactly one datapoint, got {}",
+                datapoints.len()
+            )));
+        }
+        Ok(datapoints.swap_remove(0))
     }
 
     /// Update metadata for one or more datapoints.
@@ -2242,156 +2129,6 @@ impl AsyncTensorZeroGateway {
         Self::workflow_evaluation_run_episode(this, run_id, task_name, tags)
     }
 
-    ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to insert the datapoints into.
-    /// :param datapoints: A list of datapoints to insert.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    #[pyo3(warn(message = "Please use `create_datapoints` instead of `create_datapoints_legacy`. In a future release, `create_datapoints_legacy` will be removed.", category = PyDeprecationWarning))]
-    fn create_datapoints_legacy<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            #[expect(deprecated)]
-            let res = client.create_datapoints_legacy(dataset_name, params).await;
-            Python::attach(|py| match res {
-                Ok(uuids) => Ok(PyList::new(
-                    py,
-                    uuids
-                        .iter()
-                        .map(|id| uuid.call(py, (id.to_string(),), None))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )?
-                .unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// DEPRECATED: Use `create_datapoints` instead.
-    ///
-    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to insert the datapoints into.
-    /// :param datapoints: A list of datapoints to insert.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    #[pyo3(warn(message = "Please use `create_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.", category = PyDeprecationWarning))]
-    fn bulk_insert_datapoints<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            #[expect(deprecated)]
-            let res = client.bulk_insert_datapoints(dataset_name, params).await;
-            Python::attach(|py| match res {
-                Ok(uuids) => Ok(PyList::new(
-                    py,
-                    uuids
-                        .iter()
-                        .map(|id| uuid.call(py, (id.to_string(),), None))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )?
-                .unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to delete the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to delete.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    #[pyo3(warn(message = "Please use `delete_datapoints` instead of `delete_datapoint`. In a future release, `delete_datapoint` will be removed.", category = PyDeprecationWarning))]
-    fn delete_datapoint<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'a, PyAny>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            #[expect(deprecated)]
-            let res = client.delete_datapoint(dataset_name, datapoint_id).await;
-            Python::attach(|py| match res {
-                Ok(()) => Ok(()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to get the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `Datapoint` object.
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    #[pyo3(warn(message = "Please use `get_datapoints` instead of `get_datapoint`. In a future release, `get_datapoint` will be removed.", category = PyDeprecationWarning))]
-    fn get_datapoint<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'_, PyAny>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        let client = this.as_super().client.clone();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            #[expect(deprecated)]
-            let res = client.get_datapoint(dataset_name, datapoint_id).await;
-            Python::attach(|py| match res {
-                Ok(wire) => Ok(wire.into_py_any(py)?),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// DEPRECATED: Use `list_datapoints` instead.
-    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
-    #[pyo3(warn(message = "Please use `list_datapoints` instead of `list_datapoints_legacy`. In a future release, `list_datapoints_legacy` will be removed.", category = PyDeprecationWarning))]
-    fn list_datapoints_legacy<'py>(
-        this: PyRef<'py, Self>,
-        dataset_name: String,
-        function_name: Option<String>,
-        limit: Option<u32>,
-        offset: Option<u32>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let client = this.as_super().client.clone();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let request = ListDatapointsRequest {
-                function_name,
-                limit,
-                offset,
-                ..Default::default()
-            };
-            let res = client.list_datapoints(dataset_name, request).await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
     /// Create one or more datapoints in a dataset.
     ///
     /// :param dataset_name: The name of the dataset to create the datapoints in.
@@ -2488,6 +2225,47 @@ impl AsyncTensorZeroGateway {
                     "tensorzero",
                     "GetDatapointsResponse",
                 ),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Get a single datapoint by its ID.
+    ///
+    /// :param dataset_name: The name of the dataset to get the datapoint from.
+    /// :param datapoint_id: The ID of the datapoint to get.
+    /// :return: A `Datapoint` object (`DatapointChat` or `DatapointJson`).
+    #[pyo3(signature = (*, dataset_name, datapoint_id))]
+    fn get_datapoint<'a>(
+        this: PyRef<'a, Self>,
+        dataset_name: String,
+        datapoint_id: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .get_datapoints(Some(dataset_name), vec![datapoint_id])
+                .await;
+            Python::attach(|py| match res {
+                Ok(response) => {
+                    let py_response = convert_response_to_python_dataclass(
+                        py,
+                        &response,
+                        "tensorzero",
+                        "GetDatapointsResponse",
+                    )?;
+                    let mut datapoints = py_response
+                        .getattr(py, "datapoints")?
+                        .extract::<Vec<Py<PyAny>>>(py)?;
+                    if datapoints.len() != 1 {
+                        return Err(PyErr::new::<PyValueError, _>(format!(
+                            "Expected exactly one datapoint, got {}",
+                            datapoints.len()
+                        )));
+                    }
+                    Ok(datapoints.swap_remove(0))
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
