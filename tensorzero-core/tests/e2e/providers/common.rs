@@ -2493,17 +2493,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "openrouter" => {
             assert!(
-                res["error"].as_str().unwrap().contains("400 Bad Request")
-                    || res["error"].as_str().unwrap().contains("Invalid API Key")
-                    || res["error"]
-                        .as_str()
-                        .unwrap()
-                        .contains("No auth credentials found")
-                    || res["error"]
-                        .as_str()
-                        .unwrap()
-                        .to_lowercase()
-                        .contains("no cookie auth"),
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .to_lowercase()
+                    .contains("auth"),
                 "Unexpected error: {res}"
             );
         }
