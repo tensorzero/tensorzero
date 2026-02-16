@@ -168,6 +168,10 @@ pub struct AppStateData {
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
     pub valkey_connection_info: ValkeyConnectionInfo,
+    /// Separate Valkey connection for model inference caching, allowing isolation from rate limiting keys.
+    /// When `TENSORZERO_VALKEY_CACHE_URL` is set, this points to a dedicated instance;
+    /// otherwise, it shares the same connection as `valkey_connection_info`.
+    pub valkey_cache_connection_info: ValkeyConnectionInfo,
     pub cache_manager: CacheManager,
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
@@ -224,11 +228,13 @@ impl GatewayHandle {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
+        let valkey_cache_url = std::env::var("TENSORZERO_VALKEY_CACHE_URL").ok();
         Box::pin(Self::new_with_databases(
             config,
             clickhouse_url,
             postgres_url,
             valkey_url,
+            valkey_cache_url,
             available_tools,
         ))
         .await
@@ -239,6 +245,7 @@ impl GatewayHandle {
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         valkey_url: Option<String>,
+        valkey_cache_url: Option<String>,
         available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
@@ -249,12 +256,15 @@ impl GatewayHandle {
         );
         let config = Arc::new(Box::pin(config.into_config(&db)).await?);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
+        let valkey_cache_connection_info =
+            setup_valkey_cache(valkey_cache_url.as_deref(), &valkey_connection_info).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_cache_connection_info,
             http_client,
             None,
             available_tools,
@@ -294,6 +304,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info: ValkeyConnectionInfo::Disabled,
+                valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
                 cache_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
@@ -309,11 +320,13 @@ impl GatewayHandle {
         }
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub async fn new_with_database_and_http_client(
         config: Arc<Config>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
+        valkey_cache_connection_info: ValkeyConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
@@ -380,7 +393,7 @@ impl GatewayHandle {
         .await?;
 
         let cache_manager = CacheManager::new_from_connections(
-            &valkey_connection_info,
+            &valkey_cache_connection_info,
             &clickhouse_connection_info,
             &config.gateway.cache,
         );
@@ -391,6 +404,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info,
+                valkey_cache_connection_info,
                 cache_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
@@ -411,12 +425,14 @@ impl AppStateData {
     /// Create an AppStateData for use with a historical config snapshot.
     /// This version does not include auth_cache, config_snapshot_cache, autopilot_client,
     /// or deployment_id since those are specific to the live gateway.
+    #[expect(clippy::too_many_arguments)]
     pub fn new_for_snapshot(
         config: Arc<Config>,
         http_client: TensorzeroHttpClient,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
+        valkey_cache_connection_info: ValkeyConnectionInfo,
         deferred_tasks: TaskTracker,
         shutdown_token: CancellationToken,
     ) -> Result<Self, Error> {
@@ -426,7 +442,7 @@ impl AppStateData {
             &postgres_connection_info,
         )?);
         let cache_manager = CacheManager::new_from_connections(
-            &valkey_connection_info,
+            &valkey_cache_connection_info,
             &clickhouse_connection_info,
             &config.gateway.cache,
         );
@@ -436,6 +452,7 @@ impl AppStateData {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_cache_connection_info,
             cache_manager,
             deferred_tasks,
             auth_cache: None,
@@ -620,6 +637,29 @@ pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionIn
     }
 }
 
+/// Sets up the Valkey connection for model inference caching.
+///
+/// If `valkey_cache_url` is provided, creates a dedicated connection for caching.
+/// Otherwise, falls back to the shared `valkey_connection_info`.
+///
+/// A dedicated caching Valkey instance allows operators to use eviction policies like
+/// `allkeys-lru` or `volatile-ttl` for cache entries while keeping the main instance
+/// configured with `noeviction` to protect rate limiting keys.
+pub async fn setup_valkey_cache(
+    valkey_cache_url: Option<&str>,
+    valkey_connection_info: &ValkeyConnectionInfo,
+) -> Result<ValkeyConnectionInfo, Error> {
+    match valkey_cache_url {
+        Some(url) => {
+            tracing::info!(
+                "Using dedicated Valkey instance for caching (`TENSORZERO_VALKEY_CACHE_URL` is set)."
+            );
+            ValkeyConnectionInfo::new_cache_only(url).await
+        }
+        None => Ok(valkey_connection_info.clone()),
+    }
+}
+
 /// Sets up the Autopilot API client from the environment.
 /// Returns `Ok(Some(client))` if TENSORZERO_AUTOPILOT_API_KEY is set,
 /// `Ok(None)` if not set, or an error if client construction fails.
@@ -796,6 +836,7 @@ pub async fn start_openai_compatible_gateway(
         clickhouse_url,
         postgres_url,
         valkey_url,
+        None, // Embedded gateways use the same Valkey instance for rate limiting and caching
         HashSet::new(), // available_tools
     ))
     .await?;
@@ -1152,6 +1193,7 @@ mod tests {
             config_no_rules,
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,

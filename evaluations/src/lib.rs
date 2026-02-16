@@ -160,7 +160,6 @@ pub async fn run_evaluation(
     } else {
         debug!("Valkey URL not provided");
     }
-
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
