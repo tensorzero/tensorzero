@@ -366,7 +366,7 @@ function MainContent({
       inferenceId: result.inference_id,
       episodeId: result.episode_id,
       variant_name: result.variant_name,
-      output: result.generated_output ?? [],
+      output: result.generated_output,
       metrics: result.metrics,
     })),
   ];
@@ -674,7 +674,7 @@ type OutputsSectionProps = {
   outputsToDisplay: Array<{
     id: string;
     variant_name: string;
-    output: ContentBlockChatOutput[] | JsonInferenceOutput;
+    output?: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
     episodeId: string | null;
@@ -744,7 +744,9 @@ function OutputsSection({
             </div>
 
             <section className="row-start-2">
-              {Array.isArray(result.output) ? (
+              {result.output === undefined ? (
+                <EmptyMessage message="No output" />
+              ) : Array.isArray(result.output) ? (
                 <ChatOutputElement output={result.output} />
               ) : (
                 <JsonOutputElement output={result.output} />
