@@ -84,7 +84,12 @@ export type UninitializedModelProvider = {
       model_name: string;
       api_key_location: string | null;
     }
-  | { type: "groq"; model_name: string; api_key_location: string | null }
+  | {
+      type: "groq";
+      model_name: string;
+      api_key_location: string | null;
+      reasoning_format?: string;
+    }
   | { type: "hyperbolic"; model_name: string; api_key_location: string | null }
   | {
       type: "fireworks";

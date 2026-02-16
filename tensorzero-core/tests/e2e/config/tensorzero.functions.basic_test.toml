@@ -378,6 +378,18 @@ model = "groq-qwen-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.groq-reasoning]
+type = "chat_completion"
+model = "groq-qwen3-32b"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.groq-reasoning-usage]
+type = "chat_completion"
+model = "groq-gpt-oss-20b"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
