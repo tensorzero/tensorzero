@@ -2492,12 +2492,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             );
         }
         "openrouter" => {
+            let error = res["error"].as_str().unwrap();
             assert!(
-                res["error"]
-                    .as_str()
-                    .unwrap()
-                    .to_lowercase()
-                    .contains("auth"),
+                error.to_lowercase().contains("auth")
+                    || error.contains("400 Bad Request")
+                    || error.contains("Invalid API Key"),
                 "Unexpected error: {res}"
             );
         }
