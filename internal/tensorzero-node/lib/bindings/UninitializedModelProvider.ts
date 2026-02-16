@@ -97,7 +97,12 @@ export type UninitializedModelProvider = {
       api_key_location: string | null;
       parse_think_blocks: boolean;
     }
-  | { type: "mistral"; model_name: string; api_key_location: string | null }
+  | {
+      type: "mistral";
+      model_name: string;
+      api_key_location: string | null;
+      prompt_mode?: string;
+    }
   | {
       type: "openai";
       model_name: string;

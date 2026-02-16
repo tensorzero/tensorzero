@@ -455,6 +455,14 @@ type = "mistral"
 model_name = "open-mistral-nemo-2407"
 api_key_location = "dynamic::mistral_api_key"
 
+[models."magistral-small-latest"]
+routing = ["mistral"]
+
+[models."magistral-small-latest".providers.mistral]
+type = "mistral"
+model_name = "magistral-small-latest"
+prompt_mode = "reasoning"
+
 [models.o4-mini]
 routing = ["openai"]
 

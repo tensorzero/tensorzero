@@ -258,6 +258,12 @@ model = "grok_4_1_fast_non_reasoning"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper.variants.mistral-reasoning]
+type = "chat_completion"
+model = "magistral-small-latest"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.weather_helper.variants.xai-reasoning]
 type = "chat_completion"
 model = "grok-code-fast-1"

@@ -422,6 +422,12 @@ model = "mistral::open-mistral-nemo-2407"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.mistral-reasoning]
+type = "chat_completion"
+model = "magistral-small-latest"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.openai]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
