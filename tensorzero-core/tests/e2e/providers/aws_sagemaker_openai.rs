@@ -58,7 +58,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
         pdf_inference: vec![],
         input_audio: vec![],
-
         shorthand_inference: vec![],
         // AWS SageMaker only works with SDK credentials
         credential_fallbacks: vec![],
