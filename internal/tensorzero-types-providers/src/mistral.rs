@@ -5,6 +5,36 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Sub-chunks inside a `Thinking` content chunk.
+/// The `thinking` field in Magistral responses is an array of these.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MistralThinkingSubChunk {
+    Text { text: String },
+}
+
+/// Represents a typed content chunk in Mistral reasoning responses.
+/// Magistral models return content as an array of these chunks instead of a plain string.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MistralContentChunk {
+    Text {
+        text: String,
+    },
+    Thinking {
+        thinking: Vec<MistralThinkingSubChunk>,
+    },
+}
+
+/// Mistral's `content` field can be either a plain string (non-reasoning models)
+/// or an array of typed chunks (Magistral reasoning models).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum MistralContent {
+    String(String),
+    Chunks(Vec<MistralContentChunk>),
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
@@ -35,7 +65,7 @@ pub struct MistralResponseToolCall {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct MistralResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
+    pub content: Option<MistralContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<MistralResponseToolCall>>,
 }
@@ -85,7 +115,7 @@ pub struct MistralToolCallChunk {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct MistralDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
+    pub content: Option<MistralContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<MistralToolCallChunk>>,
 }

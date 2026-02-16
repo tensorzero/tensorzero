@@ -4,7 +4,7 @@ use crate::{
     http::{TensorZeroEventSource, TensorzeroHttpClient},
     providers::openai::OpenAIMessagesConfig,
 };
-use futures::{StreamExt, future::try_join_all};
+use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_sse_stream::Event;
@@ -12,8 +12,9 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
 use tensorzero_types_providers::mistral::{
-    MistralChatChunk, MistralFinishReason, MistralResponse, MistralResponseChoice,
-    MistralResponseFormat, MistralResponseToolCall, MistralUsage,
+    MistralChatChunk, MistralContent, MistralContentChunk, MistralFinishReason, MistralResponse,
+    MistralResponseChoice, MistralResponseFormat, MistralResponseToolCall, MistralThinkingSubChunk,
+    MistralUsage,
 };
 use tokio::time::Instant;
 use url::Url;
@@ -26,11 +27,12 @@ use crate::{
     inference::{
         InferenceProvider,
         types::{
-            ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
+            ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
             ModelInferenceRequest, ModelInferenceRequestJsonMode,
             PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
             ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStreamInner, TextChunk, Usage,
+            ProviderInferenceResponseStreamInner, RequestMessage, Role, TextChunk, Thought,
+            ThoughtChunk, Usage,
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
@@ -49,8 +51,8 @@ use crate::{
 use uuid::Uuid;
 
 use super::openai::{
-    OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolType, get_chat_url,
-    tensorzero_to_openai_messages,
+    OpenAIFunction, OpenAIRequestFunctionCall, OpenAIRequestMessage, OpenAIRequestToolCall,
+    OpenAISystemRequestMessage, OpenAIToolType, get_chat_url, tensorzero_to_openai_messages,
 };
 
 lazy_static! {
@@ -76,13 +78,20 @@ pub struct MistralProvider {
     model_name: String,
     #[serde(skip)]
     credentials: MistralCredentials,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt_mode: Option<String>,
 }
 
 impl MistralProvider {
-    pub fn new(model_name: String, credentials: MistralCredentials) -> Self {
+    pub fn new(
+        model_name: String,
+        credentials: MistralCredentials,
+        prompt_mode: Option<String>,
+    ) -> Self {
         MistralProvider {
             model_name,
             credentials,
+            prompt_mode,
         }
     }
 
@@ -174,7 +183,7 @@ impl InferenceProvider for MistralProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
-            MistralRequest::new(&self.model_name, request).await?,
+            MistralRequest::new(&self.model_name, request, self.prompt_mode.as_deref()).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -278,7 +287,7 @@ impl InferenceProvider for MistralProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            MistralRequest::new(&self.model_name, request).await?,
+            MistralRequest::new(&self.model_name, request, self.prompt_mode.as_deref()).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -418,24 +427,151 @@ pub fn stream_mistral(
     })
 }
 
+/// A request-side thinking sub-chunk. Mirrors the response format: `[{"type":"text","text":"..."}]`.
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(super) enum MistralRequestThinkingSubChunk<'a> {
+    Text { text: Cow<'a, str> },
+}
+
+/// A request-side content chunk for Mistral assistant messages.
+/// When reasoning is enabled, thinking chunks are placed alongside text chunks in the content array.
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(super) enum MistralRequestContentChunk<'a> {
+    Text {
+        text: Cow<'a, str>,
+    },
+    Thinking {
+        thinking: Vec<MistralRequestThinkingSubChunk<'a>>,
+    },
+}
+
+/// A Mistral-specific assistant message that puts thinking in the content array.
+#[derive(Debug, Serialize, PartialEq)]
+pub(super) struct MistralAssistantRequestMessage<'a> {
+    role: &'static str,
+    #[serde(serialize_with = "serialize_mistral_assistant_content")]
+    content: Vec<MistralRequestContentChunk<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+}
+
+/// Custom serializer: when there's only a single Text chunk, serialize as a plain string
+/// for compatibility with non-reasoning paths. When there are thinking chunks, serialize as array.
+fn serialize_mistral_assistant_content<S>(
+    content: &Vec<MistralRequestContentChunk<'_>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    if let [MistralRequestContentChunk::Text { text }] = content.as_slice() {
+        text.serialize(serializer)
+    } else {
+        content.serialize(serializer)
+    }
+}
+
+/// Wraps OpenAI messages for system/user/tool roles, but uses a custom type for assistant.
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(untagged)]
+pub(super) enum MistralRequestMessage<'a> {
+    OpenAI(OpenAIRequestMessage<'a>),
+    MistralAssistant(MistralAssistantRequestMessage<'a>),
+}
+
 pub(super) async fn prepare_mistral_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
     config: OpenAIMessagesConfig<'a>,
-) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut messages: Vec<_> = try_join_all(
-        request
-            .messages
-            .iter()
-            .map(|msg| tensorzero_to_openai_messages(msg, config)),
-    )
-    .await?
-    .into_iter()
-    .flatten()
-    .collect();
+    supports_reasoning: bool,
+) -> Result<Vec<MistralRequestMessage<'a>>, Error> {
+    let mut messages: Vec<MistralRequestMessage<'a>> = Vec::new();
+
     if let Some(system_msg) = tensorzero_to_mistral_system_message(request.system.as_deref()) {
-        messages.insert(0, system_msg);
+        messages.push(MistralRequestMessage::OpenAI(system_msg));
     }
+
+    for msg in &request.messages {
+        match msg.role {
+            Role::Assistant if supports_reasoning => {
+                if let Some(assistant_msg) = tensorzero_to_mistral_assistant_message(msg)? {
+                    messages.push(MistralRequestMessage::MistralAssistant(assistant_msg));
+                }
+            }
+            _ => {
+                let openai_msgs = tensorzero_to_openai_messages(msg, config).await?;
+                for m in openai_msgs {
+                    if !m.no_content() {
+                        messages.push(MistralRequestMessage::OpenAI(m));
+                    }
+                }
+            }
+        }
+    }
+
     Ok(messages)
+}
+
+/// Convert a TensorZero assistant message to a Mistral assistant message with typed content chunks.
+fn tensorzero_to_mistral_assistant_message<'a>(
+    message: &'a RequestMessage,
+) -> Result<Option<MistralAssistantRequestMessage<'a>>, Error> {
+    let mut content_chunks: Vec<MistralRequestContentChunk<'a>> = Vec::new();
+    let mut tool_calls: Vec<OpenAIRequestToolCall<'a>> = Vec::new();
+
+    for block in &message.content {
+        match block {
+            ContentBlock::Text(text) => {
+                content_chunks.push(MistralRequestContentChunk::Text {
+                    text: Cow::Borrowed(&text.text),
+                });
+            }
+            ContentBlock::ToolCall(tool_call) => {
+                tool_calls.push(OpenAIRequestToolCall {
+                    id: Cow::Borrowed(&tool_call.id),
+                    r#type: OpenAIToolType::Function,
+                    function: OpenAIRequestFunctionCall {
+                        name: Cow::Borrowed(&tool_call.name),
+                        arguments: Cow::Borrowed(&tool_call.arguments),
+                    },
+                });
+            }
+            ContentBlock::Thought(thought) => {
+                if let Some(text) = &thought.text {
+                    content_chunks.push(MistralRequestContentChunk::Thinking {
+                        thinking: vec![MistralRequestThinkingSubChunk::Text {
+                            text: Cow::Borrowed(text),
+                        }],
+                    });
+                }
+            }
+            ContentBlock::ToolResult(_) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Tool results are not supported in assistant messages".to_string(),
+                }));
+            }
+            _ => {
+                // Ignore other block types (e.g. File, Unknown) in assistant messages
+            }
+        }
+    }
+
+    if content_chunks.is_empty() && tool_calls.is_empty() {
+        return Ok(None);
+    }
+
+    let tool_calls = if tool_calls.is_empty() {
+        None
+    } else {
+        Some(tool_calls)
+    };
+
+    Ok(Some(MistralAssistantRequestMessage {
+        role: "assistant",
+        content: content_chunks,
+        tool_calls,
+    }))
 }
 
 fn tensorzero_to_mistral_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
@@ -542,7 +678,7 @@ pub(super) fn prepare_mistral_tools<'a>(
 /// NOTE: Mistral does not support seed.
 #[derive(Debug, Serialize)]
 struct MistralRequest<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
+    messages: Vec<MistralRequestMessage<'a>>,
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -565,6 +701,8 @@ struct MistralRequest<'a> {
     tool_choice: Option<MistralToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt_mode: Option<&'a str>,
 }
 
 fn apply_inference_params(
@@ -599,6 +737,7 @@ impl<'a> MistralRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        prompt_mode: Option<&'a str>,
     ) -> Result<MistralRequest<'a>, Error> {
         let response_format = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
@@ -614,6 +753,7 @@ impl<'a> MistralRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
             },
+            prompt_mode.is_some(),
         )
         .await?;
         let (tools, tool_choice, _) = prepare_mistral_tools(request)?;
@@ -632,6 +772,7 @@ impl<'a> MistralRequest<'a> {
             tools,
             tool_choice,
             stop: request.borrow_stop_sequences(),
+            prompt_mode,
         };
 
         apply_inference_params(&mut mistral_request, &request.inference_params_v2);
@@ -715,10 +856,34 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
-        if let Some(text) = message.content
-            && !text.is_empty()
-        {
-            content.push(text.into());
+        match message.content {
+            Some(MistralContent::String(text)) if !text.is_empty() => {
+                content.push(text.into());
+            }
+            Some(MistralContent::Chunks(chunks)) => {
+                for chunk in chunks {
+                    match chunk {
+                        MistralContentChunk::Thinking { thinking } => {
+                            let text = extract_thinking_text(&thinking);
+                            if !text.is_empty() {
+                                content.push(ContentBlockOutput::Thought(Thought {
+                                    text: Some(text),
+                                    signature: None,
+                                    summary: None,
+                                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                                    extra_data: None,
+                                }));
+                            }
+                        }
+                        MistralContentChunk::Text { text } if !text.is_empty() => {
+                            content.push(text.into());
+                        }
+                        MistralContentChunk::Text { .. } => {}
+                    }
+                }
+            }
+            Some(MistralContent::String(_)) => {}
+            None => {}
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
@@ -794,13 +959,42 @@ fn mistral_to_tensorzero_chunk(
                 choice_finish_reason,
             ));
         }
-        if let Some(text) = choice.delta.content
-            && !text.is_empty()
-        {
-            content.push(ContentBlockChunk::Text(TextChunk {
-                text,
-                id: "0".to_string(),
-            }));
+        match choice.delta.content {
+            Some(MistralContent::String(text)) if !text.is_empty() => {
+                content.push(ContentBlockChunk::Text(TextChunk {
+                    text,
+                    id: "0".to_string(),
+                }));
+            }
+            Some(MistralContent::Chunks(chunks)) => {
+                for chunk in chunks {
+                    match chunk {
+                        MistralContentChunk::Thinking { thinking } => {
+                            let text = extract_thinking_text(&thinking);
+                            if !text.is_empty() {
+                                content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                                    text: Some(text),
+                                    signature: None,
+                                    id: "thinking".to_string(),
+                                    summary_id: None,
+                                    summary_text: None,
+                                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                                    extra_data: None,
+                                }));
+                            }
+                        }
+                        MistralContentChunk::Text { text } if !text.is_empty() => {
+                            content.push(ContentBlockChunk::Text(TextChunk {
+                                text,
+                                id: "0".to_string(),
+                            }));
+                        }
+                        MistralContentChunk::Text { .. } => {}
+                    }
+                }
+            }
+            Some(MistralContent::String(_)) => {}
+            None => {}
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
             for tool_call in tool_calls {
@@ -828,6 +1022,18 @@ fn mistral_to_tensorzero_chunk(
     })
 }
 
+/// Extracts and concatenates text from Mistral thinking sub-chunks.
+/// The `thinking` field in a Thinking content chunk is an array of `{type: "text", text: "..."}`.
+fn extract_thinking_text(sub_chunks: &[MistralThinkingSubChunk]) -> String {
+    sub_chunks
+        .iter()
+        .map(|sub| match sub {
+            MistralThinkingSubChunk::Text { text } => text.as_str(),
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
 fn mistral_usage_from_raw_response(raw_response: &str) -> Option<Value> {
     serde_json::from_str::<Value>(raw_response)
         .ok()
@@ -847,7 +1053,8 @@ mod tests {
     use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::tool::{AllowedTools, ToolCallConfig};
     use tensorzero_types_providers::mistral::{
-        MistralResponseFunctionCall, MistralResponseMessage,
+        MistralChatChunkChoice, MistralDelta, MistralResponseFunctionCall, MistralResponseMessage,
+        MistralThinkingSubChunk,
     };
     #[tokio::test]
     async fn test_mistral_request_new() {
@@ -873,9 +1080,10 @@ mod tests {
             ..Default::default()
         };
 
-        let mistral_request = MistralRequest::new("mistral-small-latest", &request_with_tools)
-            .await
-            .unwrap();
+        let mistral_request =
+            MistralRequest::new("mistral-small-latest", &request_with_tools, None)
+                .await
+                .unwrap();
 
         assert_eq!(mistral_request.model, "mistral-small-latest");
         assert_eq!(mistral_request.messages.len(), 1);
@@ -1170,7 +1378,7 @@ mod tests {
             choices: vec![MistralResponseChoice {
                 index: 0,
                 message: MistralResponseMessage {
-                    content: Some("Hello, world!".to_string()),
+                    content: Some(MistralContent::String("Hello, world!".to_string())),
                     tool_calls: None,
                 },
                 finish_reason: MistralFinishReason::Stop,
@@ -1217,6 +1425,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             stop: None,
+            prompt_mode: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1312,6 +1521,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             stop: None,
+            prompt_mode: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
@@ -1374,6 +1584,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             stop: None,
+            prompt_mode: None,
         };
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -1394,7 +1605,7 @@ mod tests {
                 MistralResponseChoice {
                     index: 0,
                     message: MistralResponseMessage {
-                        content: Some("Choice 1".to_string()),
+                        content: Some(MistralContent::String("Choice 1".to_string())),
                         tool_calls: None,
                     },
                     finish_reason: MistralFinishReason::Stop,
@@ -1402,7 +1613,7 @@ mod tests {
                 MistralResponseChoice {
                     index: 1,
                     message: MistralResponseMessage {
-                        content: Some("Choice 2".to_string()),
+                        content: Some(MistralContent::String("Choice 2".to_string())),
                         tool_calls: None,
                     },
                     finish_reason: MistralFinishReason::Stop,
@@ -1427,6 +1638,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             stop: None,
+            prompt_mode: None,
         };
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: invalid_response_multiple_choices,
@@ -1601,6 +1813,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             stop: None,
+            prompt_mode: None,
         };
 
         apply_inference_params(&mut request, &inference_params);
@@ -1619,5 +1832,325 @@ mod tests {
         assert!(logs_contain(
             "Mistral does not support the inference parameter `verbosity`"
         ));
+    }
+
+    #[test]
+    fn test_try_from_mistral_response_with_reasoning() {
+        let response_with_reasoning = MistralResponse {
+            choices: vec![MistralResponseChoice {
+                index: 0,
+                message: MistralResponseMessage {
+                    content: Some(MistralContent::Chunks(vec![
+                        MistralContentChunk::Thinking {
+                            thinking: vec![MistralThinkingSubChunk::Text {
+                                text: "Let me think about this...".to_string(),
+                            }],
+                        },
+                        MistralContentChunk::Text {
+                            text: "The answer is 42.".to_string(),
+                        },
+                    ])),
+                    tool_calls: None,
+                },
+                finish_reason: MistralFinishReason::Stop,
+            }],
+            usage: MistralUsage {
+                prompt_tokens: 10,
+                completion_tokens: 30,
+            },
+        };
+
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What is the meaning of life?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: Some(800),
+            seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let request_body = MistralRequest {
+            messages: vec![],
+            model: "magistral-small-latest",
+            temperature: None,
+            max_tokens: Some(800),
+            random_seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            stream: false,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            stop: None,
+            prompt_mode: Some("reasoning"),
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
+            response: response_with_reasoning,
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(200),
+            },
+            raw_request,
+            generic_request: &generic_request,
+            raw_response: "test_response".to_string(),
+            model_inference_id: Uuid::now_v7(),
+        });
+
+        let response = result.expect("should parse reasoning response");
+        assert_eq!(
+            response.output.len(),
+            2,
+            "should have a Thought block and a Text block"
+        );
+        assert!(
+            matches!(&response.output[0], ContentBlockOutput::Thought(thought) if thought.text.as_deref() == Some("Let me think about this...")),
+            "first block should be a Thought"
+        );
+        assert!(
+            matches!(&response.output[1], ContentBlockOutput::Text(text) if text.text == "The answer is 42."),
+            "second block should be Text"
+        );
+        assert_eq!(response.usage.input_tokens, Some(10));
+        assert_eq!(response.usage.output_tokens, Some(30));
+    }
+
+    #[test]
+    fn test_mistral_streaming_chunk_with_reasoning() {
+        let chunk = MistralChatChunk {
+            choices: vec![MistralChatChunkChoice {
+                delta: MistralDelta {
+                    content: Some(MistralContent::Chunks(vec![
+                        MistralContentChunk::Thinking {
+                            thinking: vec![MistralThinkingSubChunk::Text {
+                                text: "reasoning step".to_string(),
+                            }],
+                        },
+                    ])),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+
+        let result = mistral_to_tensorzero_chunk(
+            "test_raw".to_string(),
+            chunk,
+            Duration::from_millis(50),
+            &mut None,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
+        );
+
+        let response_chunk = result.expect("should parse streaming reasoning chunk");
+        assert_eq!(
+            response_chunk.content.len(),
+            1,
+            "should have one content block"
+        );
+        assert!(
+            matches!(&response_chunk.content[0], ContentBlockChunk::Thought(thought) if thought.text.as_deref() == Some("reasoning step")),
+            "content block should be a ThoughtChunk"
+        );
+
+        // Also test a chunk with a text block after reasoning
+        let text_chunk = MistralChatChunk {
+            choices: vec![MistralChatChunkChoice {
+                delta: MistralDelta {
+                    content: Some(MistralContent::Chunks(vec![MistralContentChunk::Text {
+                        text: "hello".to_string(),
+                    }])),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+
+        let result = mistral_to_tensorzero_chunk(
+            "test_raw".to_string(),
+            text_chunk,
+            Duration::from_millis(60),
+            &mut None,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
+        );
+
+        let response_chunk = result.expect("should parse streaming text chunk");
+        assert_eq!(
+            response_chunk.content.len(),
+            1,
+            "should have one content block"
+        );
+        assert!(
+            matches!(&response_chunk.content[0], ContentBlockChunk::Text(text) if text.text == "hello"),
+            "content block should be a TextChunk"
+        );
+    }
+
+    #[test]
+    fn test_mistral_assistant_message_with_thought_blocks() {
+        use crate::inference::types::{ContentBlock, Text, Thought};
+
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![
+                ContentBlock::Thought(Thought {
+                    text: Some("Let me reason...".to_string()),
+                    signature: None,
+                    summary: None,
+                    provider_type: Some("mistral".to_string()),
+                    extra_data: None,
+                }),
+                ContentBlock::Text(Text {
+                    text: "Here's the answer.".to_string(),
+                }),
+            ],
+        };
+
+        let result = tensorzero_to_mistral_assistant_message(&message)
+            .expect("should convert assistant message");
+        let msg = result.expect("should produce a message");
+
+        assert_eq!(msg.role, "assistant");
+        assert_eq!(msg.content.len(), 2, "should have thinking and text chunks");
+        assert_eq!(
+            msg.content[0],
+            MistralRequestContentChunk::Thinking {
+                thinking: vec![MistralRequestThinkingSubChunk::Text {
+                    text: Cow::Borrowed("Let me reason...")
+                }]
+            },
+            "first chunk should be thinking"
+        );
+        assert_eq!(
+            msg.content[1],
+            MistralRequestContentChunk::Text {
+                text: Cow::Borrowed("Here's the answer.")
+            },
+            "second chunk should be text"
+        );
+        assert!(msg.tool_calls.is_none());
+
+        // Test serialization: single text-only content becomes a string
+        let text_only_msg = MistralAssistantRequestMessage {
+            role: "assistant",
+            content: vec![MistralRequestContentChunk::Text {
+                text: Cow::Borrowed("Just text"),
+            }],
+            tool_calls: None,
+        };
+        let serialized = serde_json::to_string(&text_only_msg).unwrap();
+        assert!(
+            serialized.contains(r#""content":"Just text""#),
+            "single text content should serialize as a plain string, got: {serialized}"
+        );
+
+        // Test serialization: mixed content becomes an array
+        let serialized = serde_json::to_string(&msg).unwrap();
+        assert!(
+            serialized.contains(r#""content":[{"type":"thinking"#),
+            "mixed content should serialize as an array, got: {serialized}"
+        );
+    }
+
+    #[test]
+    fn test_mistral_request_with_prompt_mode() {
+        let request = MistralRequest {
+            messages: vec![],
+            model: "magistral-small-latest",
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(800),
+            random_seed: None,
+            stream: false,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            stop: None,
+            prompt_mode: Some("reasoning"),
+        };
+
+        let serialized = serde_json::to_string(&request).unwrap();
+        assert!(
+            serialized.contains(r#""prompt_mode":"reasoning""#),
+            "serialized request should contain prompt_mode field, got: {serialized}"
+        );
+
+        // Test that None prompt_mode is omitted
+        let request_no_reasoning = MistralRequest {
+            messages: vec![],
+            model: "mistral-small-latest",
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            random_seed: None,
+            stream: false,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            stop: None,
+            prompt_mode: None,
+        };
+
+        let serialized = serde_json::to_string(&request_no_reasoning).unwrap();
+        assert!(
+            !serialized.contains("prompt_mode"),
+            "serialized request should not contain prompt_mode when None, got: {serialized}"
+        );
+    }
+
+    #[test]
+    fn test_mistral_content_deserialization() {
+        // Test string content (non-reasoning)
+        let json = r#"{"content": "Hello, world!", "tool_calls": null}"#;
+        let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            msg.content,
+            Some(MistralContent::String("Hello, world!".to_string())),
+            "string content should deserialize as MistralContent::String"
+        );
+
+        // Test chunked content (reasoning)
+        let json = r#"{"content": [{"type": "thinking", "thinking": [{"type": "text", "text": "Let me think..."}]}, {"type": "text", "text": "The answer"}]}"#;
+        let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            msg.content,
+            Some(MistralContent::Chunks(vec![
+                MistralContentChunk::Thinking {
+                    thinking: vec![MistralThinkingSubChunk::Text {
+                        text: "Let me think...".to_string()
+                    }]
+                },
+                MistralContentChunk::Text {
+                    text: "The answer".to_string()
+                },
+            ])),
+            "chunked content should deserialize as MistralContent::Chunks"
+        );
+
+        // Test null content
+        let json = r#"{"content": null}"#;
+        let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, None, "null content should deserialize as None");
     }
 }

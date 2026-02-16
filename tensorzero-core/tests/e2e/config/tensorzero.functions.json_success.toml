@@ -777,6 +777,14 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "off"
 max_tokens = 100
 
+[functions.json_success.variants.mistral-reasoning]
+type = "chat_completion"
+model = "magistral-small-latest"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
+max_tokens = 800
+
 [functions.json_success.variants.xai-reasoning]
 type = "chat_completion"
 model = "grok-code-fast-1"
