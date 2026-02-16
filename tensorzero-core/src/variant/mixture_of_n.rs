@@ -557,14 +557,16 @@ impl MixtureOfNConfig {
         )
         .await;
 
-        // Collect the successful results and errors
+        // Collect the successful results and errors.
+        // Use an enumerated key to avoid overwriting errors when the same
+        // candidate variant appears more than once in the candidates list.
         let mut successful_results = Vec::new();
         let mut candidate_errors = IndexMap::new();
-        for (candidate_name, result) in inference_results {
+        for (i, (candidate_name, result)) in inference_results.into_iter().enumerate() {
             match result {
                 Ok(res) => successful_results.push(res),
                 Err(e) => {
-                    candidate_errors.insert(candidate_name, e);
+                    candidate_errors.insert(format!("candidates[{i}] ({candidate_name})"), e);
                 }
             }
         }
@@ -652,7 +654,7 @@ impl MixtureOfNConfig {
                         message: "Failed to get random candidate (should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                     }));
                 }
-                // If the fuser fails, don't provide any 'original_response' to the user
+                // If the fuser fails, don't provide any `original_response` to the user
                 let mut candidate = candidates.swap_remove(random_index);
                 candidate.set_original_response(None);
                 InferenceOrStreamResult::NonStream(candidate)
@@ -691,7 +693,14 @@ impl MixtureOfNConfig {
                 }
             }
             InferenceOrStreamResult::Stream(_stream, model_used_info) => {
-                // Inject failed candidate raw_responses into the first previous_model_inference_result
+                for candidate in candidates {
+                    model_used_info
+                        .previous_model_inference_results
+                        .extend(candidate.owned_model_inference_results());
+                }
+                // Inject failed candidate raw_responses into the first previous_model_inference_result.
+                // This must happen after candidate results are appended above, so that
+                // `first_mut()` has an entry to attach the failed entries to.
                 if include_raw_response {
                     let failed_entries: Vec<_> = candidate_errors
                         .values()
@@ -705,11 +714,6 @@ impl MixtureOfNConfig {
                         new_failed.append(&mut first.failed_raw_response);
                         first.failed_raw_response = new_failed;
                     }
-                }
-                for candidate in candidates {
-                    model_used_info
-                        .previous_model_inference_results
-                        .extend(candidate.owned_model_inference_results());
                 }
                 // Note: fuser error is not possible in the Stream branch,
                 // because fuser failure always falls back to NonStream

@@ -396,14 +396,16 @@ impl BestOfNSamplingConfig {
         )
         .await;
 
-        // Collect the successful results and errors
+        // Collect the successful results and errors.
+        // Use an enumerated key to avoid overwriting errors when the same
+        // candidate variant appears more than once in the candidates list.
         let mut successful_results = Vec::new();
         let mut candidate_errors = IndexMap::new();
-        for (candidate_name, result) in inference_results {
+        for (i, (candidate_name, result)) in inference_results.into_iter().enumerate() {
             match result {
                 Ok(res) => successful_results.push(res),
                 Err(e) => {
-                    candidate_errors.insert(candidate_name, e);
+                    candidate_errors.insert(format!("candidates[{i}] ({candidate_name})"), e);
                 }
             }
         }
@@ -484,10 +486,10 @@ impl BestOfNSamplingConfig {
             .into());
         };
         if let Some(inference_result) = &inference_result {
-            // Pass the evaluator response back to the user as 'original_response'
+            // Pass the evaluator response back to the user as `original_response`
             selected_candidate.set_original_response(Some(inference_result.raw_response.clone()));
         } else {
-            // If the evaluator failed, don't provide an 'original_response' to the uesr
+            // If the evaluator failed, don't provide an `original_response` to the user
             selected_candidate.set_original_response(None);
         }
         // Inject failed candidate raw_responses
