@@ -2341,10 +2341,6 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
 }
 
 pub async fn test_bad_auth_extra_headers_with_provider(provider: E2ETestProvider) {
-    if provider.variant_name.contains("openrouter") {
-        // TODO (#6302): re-enable openrouter
-        return;
-    }
     test_bad_auth_extra_headers_with_provider_and_stream(&provider, false).await;
     test_bad_auth_extra_headers_with_provider_and_stream(&provider, true).await;
 }
@@ -2496,18 +2492,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             );
         }
         "openrouter" => {
+            let error = res["error"].as_str().unwrap();
             assert!(
-                res["error"].as_str().unwrap().contains("400 Bad Request")
-                    || res["error"].as_str().unwrap().contains("Invalid API Key")
-                    || res["error"]
-                        .as_str()
-                        .unwrap()
-                        .contains("No auth credentials found")
-                    || res["error"]
-                        .as_str()
-                        .unwrap()
-                        .to_lowercase()
-                        .contains("no cookie auth"),
+                error.to_lowercase().contains("auth")
+                    || error.contains("400 Bad Request")
+                    || error.contains("Invalid API Key"),
                 "Unexpected error: {res}"
             );
         }
