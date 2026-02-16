@@ -325,9 +325,14 @@ impl InferenceProvider for DummyProvider {
                     }
                     .into());
                 }
+                let raw_response = if self.model_name.contains("raw_response") {
+                    Some("dummy flaky error raw response".to_string())
+                } else {
+                    None
+                };
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
-                    raw_response: None,
+                    raw_response,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
@@ -705,9 +710,14 @@ impl InferenceProvider for DummyProvider {
 
             // Fail on even-numbered calls
             if counter.is_multiple_of(2) {
+                let raw_response = if self.model_name.contains("raw_response") {
+                    Some("dummy flaky error raw response".to_string())
+                } else {
+                    None
+                };
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
-                    raw_response: None,
+                    raw_response,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter

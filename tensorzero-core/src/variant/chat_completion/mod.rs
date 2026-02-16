@@ -1622,7 +1622,7 @@ mod tests {
         let details = err.get_details();
         assert_eq!(
             *details,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "error".to_string(),
                     Error::new(ErrorDetails::InferenceClient {
@@ -2496,7 +2496,7 @@ mod tests {
             Err(e) => e,
         };
         match err.get_details() {
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors, ..
             } => {
                 assert_eq!(provider_errors.len(), 1);
@@ -2505,7 +2505,7 @@ mod tests {
                     ErrorDetails::InferenceClient { .. }
                 ));
             }
-            _ => panic!("Expected ModelProvidersExhausted error, got {err:?}"),
+            _ => panic!("Expected AllModelProvidersFailed error, got {err:?}"),
         }
 
         // Test case 2: Model inference succeeds

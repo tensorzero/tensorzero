@@ -570,7 +570,7 @@ impl ModelConfig {
                     }
                 }
             }
-            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            Err(Error::new(ErrorDetails::AllModelProvidersFailed {
                 provider_errors,
             }))
         };
@@ -721,7 +721,7 @@ impl ModelConfig {
                     }
                 }
             }
-            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            Err(Error::new(ErrorDetails::AllModelProvidersFailed {
                 provider_errors,
             }))
         };
@@ -814,7 +814,7 @@ impl ModelConfig {
                 }
             }
         }
-        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+        Err(Error::new(ErrorDetails::AllModelProvidersFailed {
             provider_errors,
         }))
     }
@@ -3027,7 +3027,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
@@ -3419,7 +3419,7 @@ mod tests {
         };
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
@@ -3649,7 +3649,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
@@ -3694,7 +3694,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::InferenceClient {
@@ -3782,7 +3782,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
