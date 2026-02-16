@@ -9,7 +9,8 @@ use tokio::time::timeout;
 
 use crate::error::{Error, ErrorDetails};
 
-use self::batching::{PostgresBatchSender, PostgresBatchWriterHandle};
+use self::batching::PostgresBatchSender;
+use super::BatchWriterHandle;
 use super::HealthCheckable;
 
 pub mod batch_inference;
@@ -105,7 +106,7 @@ impl PostgresConnectionInfo {
         }
     }
 
-    pub fn batcher_join_handle(&self) -> Option<PostgresBatchWriterHandle> {
+    pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
         match self {
             Self::Enabled { batch_sender, .. } => {
                 batch_sender.as_ref().map(|s| s.writer_handle.clone())

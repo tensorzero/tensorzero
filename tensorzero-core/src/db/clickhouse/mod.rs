@@ -17,8 +17,8 @@ use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
 use crate::error::DelayedError;
 use crate::error::{Error, ErrorDetails};
 
-// Export this so evaluations crate can wait for it.
-pub use crate::db::clickhouse::batching::BatchWriterHandle;
+// Re-export for backwards compatibility.
+pub use crate::db::BatchWriterHandle;
 
 pub use clickhouse_client::ClickHouseClient;
 pub use table_name::TableName;

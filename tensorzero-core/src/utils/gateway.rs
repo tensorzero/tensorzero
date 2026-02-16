@@ -24,7 +24,6 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
-use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::postgres::batching::PostgresBatchSender;
 use crate::db::valkey::ValkeyConnectionInfo;
@@ -249,7 +248,7 @@ impl GatewayHandle {
         available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
+        let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
         let db = DelegatingDatabaseConnection::new(
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
@@ -351,13 +350,16 @@ impl GatewayHandle {
                 .await
                 .ok();
 
+        let db = Arc::new(DelegatingDatabaseConnection::new(
+            clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
+        ));
         for (function_name, function_config) in &config.functions {
             let experimentation = function_config.experimentation_with_namespaces();
             experimentation
                 .base
                 .setup(
-                    Arc::new(clickhouse_connection_info.clone())
-                        as Arc<dyn FeedbackQueries + Send + Sync>,
+                    db.clone(),
                     function_name,
                     &postgres_connection_info,
                     cancel_token.clone(),
@@ -366,8 +368,7 @@ impl GatewayHandle {
             for (namespace, namespace_config) in &experimentation.namespaces {
                 namespace_config
                     .setup(
-                        Arc::new(clickhouse_connection_info.clone())
-                            as Arc<dyn FeedbackQueries + Send + Sync>,
+                        db.clone(),
                         &format!("{function_name} (namespace: {namespace})"),
                         &postgres_connection_info,
                         cancel_token.clone(),
@@ -422,6 +423,13 @@ impl GatewayHandle {
 }
 
 impl AppStateData {
+    pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
+        DelegatingDatabaseConnection::new(
+            self.clickhouse_connection_info.clone(),
+            self.postgres_connection_info.clone(),
+        )
+    }
+
     /// Create an AppStateData for use with a historical config snapshot.
     /// This version does not include auth_cache, config_snapshot_cache, autopilot_client,
     /// or deployment_id since those are specific to the live gateway.
@@ -571,9 +579,9 @@ async fn create_postgres_connection(
 // but this is currently structured that's difficult to swap in a Mock.
 pub async fn setup_postgres(
     config: &Config,
-    postgres_url: Option<String>,
+    postgres_url: Option<&str>,
 ) -> Result<PostgresConnectionInfo, Error> {
-    let postgres_connection_info = match (config.postgres.enabled, postgres_url.as_deref()) {
+    let postgres_connection_info = match (config.postgres.enabled, postgres_url) {
         // Postgres disabled by config
         (Some(false), _) => {
             tracing::info!("Disabling Postgres: `postgres.enabled` is set to false in config.");
@@ -1110,12 +1118,10 @@ mod tests {
             ..Default::default()
         }));
 
-        let postgres_connection_info = setup_postgres(
-            config,
-            Some("postgresql://user:pass@localhost:5432/db".to_string()),
-        )
-        .await
-        .unwrap();
+        let postgres_connection_info =
+            setup_postgres(config, Some("postgresql://user:pass@localhost:5432/db"))
+                .await
+                .unwrap();
         assert!(matches!(
             postgres_connection_info,
             PostgresConnectionInfo::Disabled
@@ -1169,7 +1175,7 @@ mod tests {
             ..Default::default()
         }));
 
-        setup_postgres(config, Some("bad_url".to_string()))
+        setup_postgres(config, Some("bad_url"))
             .await
             .expect_err("Postgres setup should fail given a bad URL");
     }
