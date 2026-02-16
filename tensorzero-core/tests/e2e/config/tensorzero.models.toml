@@ -416,13 +416,13 @@ routing = ["together"]
 type = "together"
 model_name = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
 
-[models."Qwen/Qwen2.5-1.5B-Instruct"]
+[models."Qwen/Qwen3-1.7B"]
 routing = ["sglang"]
 
-[models."Qwen/Qwen2.5-1.5B-Instruct".providers.sglang]
+[models."Qwen/Qwen3-1.7B".providers.sglang]
 type = "sglang"
-model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-api_base = "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
+model_name = "Qwen/Qwen3-1.7B"
+api_base = "https://tensorzero--sglang-qwen3-inference-sglang-inference.modal.run/v1/"
 
 [models."qwen3-1.7b-vllm"]
 routing = ["vllm"]

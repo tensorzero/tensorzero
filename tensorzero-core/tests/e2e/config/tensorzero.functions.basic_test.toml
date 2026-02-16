@@ -616,16 +616,27 @@ max_tokens = 100
 
 [functions.basic_test.variants.sglang]
 type = "chat_completion"
-model = "Qwen/Qwen2.5-1.5B-Instruct"
+model = "Qwen/Qwen3-1.7B"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.basic_test.variants.sglang-extra-body]
 type = "chat_completion"
-model = "Qwen/Qwen2.5-1.5B-Instruct"
+model = "Qwen/Qwen3-1.7B"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+extra_body = [
+    { pointer = "/temperature", value = 0.123 },
+    { pointer = "/chat_template_kwargs/enable_thinking", value = false },
+]
+
+[functions.basic_test.variants.sglang-reasoning]
+type = "chat_completion"
+model = "Qwen/Qwen3-1.7B"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true }]
 
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
