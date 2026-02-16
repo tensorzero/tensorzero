@@ -33,7 +33,7 @@ pub async fn check_pgcron_configured_correctly(pool: &PgPool) -> Result<(), Dela
 
     if !extension_exists {
         return Err(DelayedError::new(ErrorDetails::PostgresMigration {
-            message: "pg_cron extension is not installed.".to_string(),
+            message: "pg_cron extension is not installed".to_string(),
         }));
     }
 
