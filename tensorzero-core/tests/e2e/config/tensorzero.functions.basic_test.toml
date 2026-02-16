@@ -197,29 +197,29 @@ max_tokens = 100
 
 [functions.basic_test.variants.fireworks]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 500
+max_tokens = 1500
 
 [functions.basic_test.variants.fireworks-extra-body]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.fireworks-extra-headers]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-r1-0528"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 extra_headers = [{ name = "Authorization", value = "invalid_fireworks_auth" }]
 
 [functions.basic_test.variants.fireworks-dynamic]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.basic_test.variants.fireworks-shorthand]
 type = "chat_completion"
@@ -769,15 +769,15 @@ model = "deepseek::deepseek-chat"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.fireworks-deepseek]
+[functions.basic_test.variants.fireworks-kimi-k2p5-reasoning]
 type = "chat_completion"
-model = "deepseek-r1"
+model = "kimi-k2p5-fireworks-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
-[functions.basic_test.variants.fireworks-gpt-oss-20b]
+[functions.basic_test.variants.fireworks-kimi-k2p5]
 type = "chat_completion"
-model = "gpt-oss-20b-fireworks"
+model = "kimi-k2p5-fireworks"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 

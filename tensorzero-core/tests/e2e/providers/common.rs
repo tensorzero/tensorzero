@@ -2655,12 +2655,14 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
     // * Azure AI foundry seems to ignore trailing assistant messages
     // * xAI seems to also ignore them
     // * Hyperbolic seems to ignore these params
+    // * Fireworks kimi-k2p5 ignores trailing assistant messages
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name == "aws_sagemaker"
         || provider.model_provider_name == "aws_bedrock"
         || provider.variant_name == "azure-ai-foundry"
         || provider.variant_name == "hyperbolic"
         || provider.variant_name == "xai"
+        || provider.variant_name == "fireworks"
     {
         return;
     }
@@ -3617,11 +3619,13 @@ pub async fn check_simple_image_inference_response(
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    // Filter out thought blocks from reasoning models
+    let text_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|b| b.get("type").unwrap().as_str().unwrap() == "text")
+        .collect();
+    assert_eq!(text_blocks.len(), 1);
+    let clickhouse_content = text_blocks[0].get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
@@ -4143,11 +4147,17 @@ pub async fn test_inference_params_dynamic_credentials_inference_request_with_pr
     };
     // Note: Claude models don't allow both `temperature` and `top_p` to be specified
     let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    // kimi-k2p5 is a reasoning model that uses tokens for thinking, so it needs more max_tokens
+    let dynamic_max_tokens: u64 = if provider.model_name.contains("kimi-k2p5") {
+        1500
+    } else {
+        120
+    };
     let chat_completion_params = if is_claude_model {
         json!({
             "temperature": 0.9,
             "seed": 1337,
-            "max_tokens": 120,
+            "max_tokens": dynamic_max_tokens,
             "presence_penalty": 0.1,
             "frequency_penalty": 0.2,
         })
@@ -4155,7 +4165,7 @@ pub async fn test_inference_params_dynamic_credentials_inference_request_with_pr
         json!({
             "temperature": 0.9,
             "seed": 1337,
-            "max_tokens": 120,
+            "max_tokens": dynamic_max_tokens,
             "top_p": 0.9,
             "presence_penalty": 0.1,
             "frequency_penalty": 0.2,
@@ -4289,11 +4299,13 @@ pub async fn check_inference_params_response(
 
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    // Filter out thought blocks from reasoning models
+    let text_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|b| b.get("type").unwrap().as_str().unwrap() == "text")
+        .collect();
+    assert_eq!(text_blocks.len(), 1);
+    let clickhouse_content = text_blocks[0].get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
@@ -4315,7 +4327,12 @@ pub async fn check_inference_params_response(
         .unwrap()
         .as_u64()
         .unwrap();
-    assert_eq!(max_tokens, 120);
+    let expected_max_tokens: u64 = if provider.model_name.contains("kimi-k2p5") {
+        1500
+    } else {
+        120
+    };
+    assert_eq!(max_tokens, expected_max_tokens);
     // Skip top_p check for Claude models since they don't allow both temperature and top_p
     let is_claude_model = provider.model_name.to_lowercase().contains("claude");
     if !is_claude_model {
@@ -4400,7 +4417,11 @@ pub async fn check_inference_params_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    let text_count = output
+        .iter()
+        .filter(|b| matches!(b, StoredContentBlock::Text(_)))
+        .count();
+    assert_eq!(text_count, 1, "Expected exactly one text block in output");
 }
 
 pub async fn test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(
@@ -4418,11 +4439,17 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
     };
     // Note: Claude models don't allow both `temperature` and `top_p` to be specified
     let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+    // kimi-k2p5 is a reasoning model that uses tokens for thinking, so it needs more max_tokens
+    let dynamic_max_tokens: u64 = if provider.model_name.contains("kimi-k2p5") {
+        1500
+    } else {
+        120
+    };
     let chat_completion_params = if is_claude_model {
         json!({
             "temperature": 0.9,
             "seed": 1337,
-            "max_tokens": 120,
+            "max_tokens": dynamic_max_tokens,
             "presence_penalty": 0.1,
             "frequency_penalty": 0.2,
         })
@@ -4430,7 +4457,7 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
         json!({
             "temperature": 0.9,
             "seed": 1337,
-            "max_tokens": 120,
+            "max_tokens": dynamic_max_tokens,
             "top_p": 0.9,
             "presence_penalty": 0.1,
             "frequency_penalty": 0.2,
@@ -4595,7 +4622,12 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
         .unwrap()
         .as_u64()
         .unwrap();
-    assert_eq!(max_tokens, 120);
+    let expected_max_tokens: u64 = if provider.model_name.contains("kimi-k2p5") {
+        1500
+    } else {
+        120
+    };
+    assert_eq!(max_tokens, expected_max_tokens);
     // Skip top_p check for Claude models since they don't allow both temperature and top_p
     let is_claude_model = provider.model_name.to_lowercase().contains("claude");
     if !is_claude_model {
@@ -6653,6 +6685,11 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
         return;
     }
 
+    // kimi-k2p5 ignores tool_choice=none and still makes tool calls
+    if provider.model_provider_name == "fireworks" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -6888,13 +6925,16 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    let first = output.first().unwrap();
-    match first {
-        StoredContentBlock::Text(_) | StoredContentBlock::Unknown(_) => {}
-        _ => {
-            panic!("Expected a text or unknown block, got {first:?}");
-        }
-    }
+    let has_text_or_unknown = output.iter().any(|block| {
+        matches!(
+            block,
+            StoredContentBlock::Text(_) | StoredContentBlock::Unknown(_)
+        )
+    });
+    assert!(
+        has_text_or_unknown,
+        "Expected at least one text or unknown block in output, got {output:?}"
+    );
 }
 
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
@@ -6914,6 +6954,12 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     if provider.model_provider_name == "xai" {
         return;
     }
+
+    // kimi-k2p5 ignores tool_choice=none and still makes tool calls
+    if provider.model_provider_name == "fireworks" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -7066,10 +7112,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
             .any(|block| block["type"] == "tool_call")
     );
 
-    let content_block = output_clickhouse.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    assert!(content_block.get("text").unwrap().as_str().is_some());
+    let text_block = output_clickhouse
+        .iter()
+        .find(|block| block["type"] == "text")
+        .expect("Expected at least one text block in output");
+    assert!(text_block.get("text").unwrap().as_str().is_some());
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -7187,19 +7234,19 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    let first = output.first().unwrap();
-    match first {
-        StoredContentBlock::Text(_text) => {}
-        _ => {
-            panic!("Expected a text block, got {first:?}");
-        }
-    }
+    let has_text_block = output
+        .iter()
+        .any(|block| matches!(block, StoredContentBlock::Text(_)));
+    assert!(
+        has_text_block,
+        "Expected at least one text block in output, got {output:?}"
+    );
 }
 
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex AI, Groq, Mistral, and Together don't support ToolChoice::Specific.
+    // GCP Vertex AI, Groq, Mistral, Together, and Fireworks don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
@@ -7207,6 +7254,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         || provider.model_provider_name == "groq"
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
+        || provider.model_provider_name == "fireworks"
     {
         return;
     }
@@ -7543,7 +7591,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // - GCP Vertex AI, Mistral, Together and Groq don't support ToolChoice::Specific.
+    // - GCP Vertex AI, Mistral, Together, Groq, and Fireworks don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
@@ -7551,6 +7599,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         || provider.model_provider_name == "mistral"
         || provider.model_provider_name == "together"
         || provider.model_provider_name == "groq"
+        || provider.model_provider_name == "fireworks"
     {
         return;
     }
@@ -11503,6 +11552,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         500
     } else if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name.contains("kimi-k2p5") {
+        1500
     } else {
         100
     };
@@ -12762,7 +12813,7 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
 
     // TODO: https://github.com/tensorzero/tensorzero/issues/5270
     // This currently produces 'Mismatched thinking tags' on Fireworks
-    if provider.variant_name == "fireworks-deepseek" {
+    if provider.variant_name == "fireworks-kimi-k2p5-reasoning" {
         // This either times out or returns "Internal Server Error"
         return;
     }
@@ -12915,7 +12966,7 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
 }
 
 pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
-    if provider.variant_name == "fireworks-deepseek" {
+    if provider.variant_name == "fireworks-kimi-k2p5-reasoning" {
         // This either times out or returns "Internal Server Error"
         return;
     }
