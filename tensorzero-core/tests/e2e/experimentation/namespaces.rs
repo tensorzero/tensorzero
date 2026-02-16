@@ -11,6 +11,7 @@ use tensorzero_core::config::Namespace;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use tensorzero_core::db::feedback::FeedbackQueries;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::inference::types::Text;
 use tokio::time::Duration;
@@ -26,7 +27,12 @@ use crate::experimentation::track_and_stop::BernoulliBandit;
 
 async fn make_embedded_gateway_with_clean_clickhouse(
     config: &str,
-) -> (Client, ClickHouseConnectionInfo, DeleteDbOnDrop) {
+) -> (
+    Client,
+    ClickHouseConnectionInfo,
+    PostgresConnectionInfo,
+    DeleteDbOnDrop,
+) {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
 
@@ -48,7 +54,7 @@ async fn make_embedded_gateway_with_clean_clickhouse(
     let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(clickhouse_url_string),
-        postgres_config: Some(PostgresConfig::Url(postgres_url)),
+        postgres_config: Some(PostgresConfig::Url(postgres_url.clone())),
         valkey_url: None,
         timeout: None,
         verify_credentials: true,
@@ -58,7 +64,9 @@ async fn make_embedded_gateway_with_clean_clickhouse(
     .await
     .unwrap();
 
-    (client, clickhouse, guard)
+    let postgres = crate::db::get_test_postgres().await;
+
+    (client, clickhouse, postgres, guard)
 }
 
 fn make_namespace_test_config() -> String {
@@ -132,7 +140,8 @@ async fn do_inference(client: &Client, namespace: Option<&str>) -> (uuid::Uuid, 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_base_config_used_without_namespace() {
     let config = make_namespace_test_config();
-    let (client, _clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, _clickhouse, _postgres, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config).await;
 
     let sample_size = 100;
     let mut counts: HashMap<String, usize> = HashMap::new();
@@ -151,7 +160,8 @@ async fn test_namespace_base_config_used_without_namespace() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_specific_config_used() {
     let config = make_namespace_test_config();
-    let (client, _clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, _clickhouse, _postgres, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config).await;
 
     let sample_size = 20;
     for _ in 0..sample_size {
@@ -166,7 +176,8 @@ async fn test_namespace_specific_config_used() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_different_configs() {
     let config = make_namespace_test_config();
-    let (client, _clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, _clickhouse, _postgres, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config).await;
 
     let sample_size = 20;
     for _ in 0..sample_size {
@@ -181,7 +192,8 @@ async fn test_namespace_different_configs() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_unknown_falls_back_to_base() {
     let config = make_namespace_test_config();
-    let (client, _clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, _clickhouse, _postgres, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config).await;
 
     let sample_size = 100;
     let mut counts: HashMap<String, usize> = HashMap::new();
@@ -200,7 +212,8 @@ async fn test_namespace_unknown_falls_back_to_base() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_stored_as_tag() {
     let config = make_namespace_test_config();
-    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let (client, clickhouse, _postgres, _guard) =
+        make_embedded_gateway_with_clean_clickhouse(&config).await;
 
     let (inference_id, _) = do_inference(&client, Some("mobile")).await;
 
@@ -333,7 +346,7 @@ async fn send_namespace_feedback(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_track_and_stop_convergence() {
     let config = make_namespace_track_and_stop_config();
-    let (client, clickhouse, _guard) =
+    let (client, clickhouse, _postgres, _guard) =
         Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
     let client = Arc::new(client);
 
@@ -386,12 +399,53 @@ async fn test_namespace_track_and_stop_convergence() {
     );
 }
 
+/// Verify that namespace-filtered `get_feedback_by_variant` returns the correct counts.
+///
+/// This is extracted so it can be run against both ClickHouse and Postgres connections.
+async fn verify_namespace_feedback_filtering(
+    conn: &impl FeedbackQueries,
+    db_name: &str,
+    expected_mobile_count: u64,
+    expected_total_count: u64,
+) {
+    // Query feedback filtered by namespace="mobile"
+    let mobile_feedback = conn
+        .get_feedback_by_variant("test_metric", "test_function", None, Some("mobile"), None)
+        .await
+        .unwrap_or_else(|e| {
+            panic!("[{db_name}] Namespace-filtered feedback query should succeed: {e}")
+        });
+
+    // We should only get feedback from mobile-tagged inferences
+    let total_mobile_count: u64 = mobile_feedback.iter().map(|f| f.count).sum();
+    assert_eq!(
+        total_mobile_count, expected_mobile_count,
+        "[{db_name}] Namespace-filtered query should return exactly {expected_mobile_count} mobile inferences, \
+         but got {total_mobile_count}. Feedback: {mobile_feedback:?}"
+    );
+
+    // Query feedback WITHOUT namespace filter (should include all inferences)
+    let all_feedback = conn
+        .get_feedback_by_variant("test_metric", "test_function", None, None, None)
+        .await
+        .unwrap_or_else(|e| panic!("[{db_name}] Unfiltered feedback query should succeed: {e}"));
+
+    let total_all_count: u64 = all_feedback.iter().map(|f| f.count).sum();
+    assert_eq!(
+        total_all_count, expected_total_count,
+        "[{db_name}] Unfiltered query should return all {expected_total_count} inferences, \
+         but got {total_all_count}. Feedback: {all_feedback:?}"
+    );
+}
+
 /// Test that the namespace-filtered `get_feedback_by_variant` query correctly
 /// returns only feedback for inferences tagged with the specified namespace.
+///
+/// Verifies both ClickHouse and Postgres implementations.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_feedback_query_filters_correctly() {
     let config = make_namespace_track_and_stop_config();
-    let (client, clickhouse, _guard) =
+    let (client, clickhouse, postgres, _guard) =
         Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
     let client = Arc::new(client);
 
@@ -439,32 +493,14 @@ async fn test_namespace_feedback_query_filters_correctly() {
     clickhouse.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
-    // Query feedback filtered by namespace="mobile"
-    let mobile_feedback = clickhouse
-        .get_feedback_by_variant("test_metric", "test_function", None, Some("mobile"), None)
-        .await
-        .expect("Namespace-filtered feedback query should succeed");
+    let expected_mobile = mobile_results.len() as u64;
+    let expected_total = (mobile_results.len() + base_results.len()) as u64;
 
-    // We should only get feedback from mobile-tagged inferences
-    let total_mobile_count: u64 = mobile_feedback.iter().map(|f| f.count).sum();
-    let total_mobile_inferences = mobile_results.len() as u64;
-    assert_eq!(
-        total_mobile_count, total_mobile_inferences,
-        "Namespace-filtered query should return exactly the count of mobile inferences ({total_mobile_inferences}), \
-         but got {total_mobile_count}. Feedback: {mobile_feedback:?}"
-    );
+    // Verify ClickHouse
+    verify_namespace_feedback_filtering(&clickhouse, "ClickHouse", expected_mobile, expected_total)
+        .await;
 
-    // Query feedback WITHOUT namespace filter (should include all inferences)
-    let all_feedback = clickhouse
-        .get_feedback_by_variant("test_metric", "test_function", None, None, None)
-        .await
-        .expect("Unfiltered feedback query should succeed");
-
-    let total_all_count: u64 = all_feedback.iter().map(|f| f.count).sum();
-    let total_all_inferences = (mobile_results.len() + base_results.len()) as u64;
-    assert_eq!(
-        total_all_count, total_all_inferences,
-        "Unfiltered query should return all inferences ({total_all_inferences}), \
-         but got {total_all_count}. Feedback: {all_feedback:?}"
-    );
+    // Verify Postgres
+    verify_namespace_feedback_filtering(&postgres, "Postgres", expected_mobile, expected_total)
+        .await;
 }
