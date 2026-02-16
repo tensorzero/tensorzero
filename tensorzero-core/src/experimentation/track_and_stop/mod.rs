@@ -3031,4 +3031,152 @@ mod tests {
         assert!(err_msg.contains("B"));
         assert!(err_msg.contains("C"));
     }
+
+    #[test]
+    fn test_load_carries_namespace() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+            max_samples_per_variant: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B"]).into_iter().collect();
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Boolean,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+                description: None,
+            },
+        );
+
+        let loaded = config
+            .load(&variants, &metrics, Some("mobile".to_string()))
+            .expect("Config should load successfully with a namespace");
+        assert_eq!(
+            loaded.namespace.as_deref(),
+            Some("mobile"),
+            "Loaded config should carry the namespace"
+        );
+    }
+
+    #[test]
+    fn test_load_carries_none_namespace() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+            max_samples_per_variant: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Boolean,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+                description: None,
+            },
+        );
+
+        let loaded = config
+            .load(&variants, &metrics, None)
+            .expect("Config should load successfully without a namespace");
+        assert!(
+            loaded.namespace.is_none(),
+            "Loaded config should have no namespace when None is passed"
+        );
+    }
+
+    #[test]
+    fn test_load_carries_max_samples_per_variant() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+            max_samples_per_variant: Some(5_000),
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+                description: None,
+            },
+        );
+
+        let loaded = config
+            .load(&variants, &metrics, None)
+            .expect("Config should load successfully");
+        assert_eq!(
+            loaded.max_samples_per_variant,
+            Some(5_000),
+            "Loaded config should carry max_samples_per_variant"
+        );
+    }
+
+    #[test]
+    fn test_default_max_samples_per_variant_deserialization() {
+        let toml_str = r#"
+            metric = "test_metric"
+            candidate_variants = ["A"]
+            min_samples_per_variant = 10
+            delta = 0.05
+            epsilon = 0.0
+            update_period_s = 60
+        "#;
+
+        let config: UninitializedTrackAndStopConfig =
+            toml::from_str(toml_str).expect("Should deserialize with default max_samples");
+        assert_eq!(
+            config.max_samples_per_variant,
+            Some(10_000),
+            "`max_samples_per_variant` should default to Some(10_000)"
+        );
+    }
+
+    #[test]
+    fn test_explicit_max_samples_per_variant_deserialization() {
+        let toml_str = r#"
+            metric = "test_metric"
+            candidate_variants = ["A"]
+            min_samples_per_variant = 10
+            delta = 0.05
+            epsilon = 0.0
+            update_period_s = 60
+            max_samples_per_variant = 500
+        "#;
+
+        let config: UninitializedTrackAndStopConfig =
+            toml::from_str(toml_str).expect("Should deserialize with explicit max_samples");
+        assert_eq!(
+            config.max_samples_per_variant,
+            Some(500),
+            "`max_samples_per_variant` should be 500 when explicitly set"
+        );
+    }
 }
