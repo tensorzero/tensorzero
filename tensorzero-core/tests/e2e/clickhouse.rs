@@ -845,7 +845,7 @@ async fn test_clickhouse_migration_manager() {
 
     // Check that the FeedbackByVariantStatistics migration worked
     let response = clickhouse
-        .get_feedback_by_variant("exact_match", "dummy_function", None)
+        .get_feedback_by_variant("exact_match", "dummy_function", None, None, None)
         .await
         .unwrap();
     assert_eq!(response.len(), 1);

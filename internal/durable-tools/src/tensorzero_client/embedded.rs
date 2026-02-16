@@ -442,7 +442,13 @@ impl TensorZeroClient for EmbeddedClient {
     ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
         self.app_state
             .clickhouse_connection_info
-            .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
+            .get_feedback_by_variant(
+                &metric_name,
+                &function_name,
+                variant_names.as_ref(),
+                None,
+                None,
+            )
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })

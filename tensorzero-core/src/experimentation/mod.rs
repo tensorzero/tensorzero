@@ -185,25 +185,15 @@ impl UninitializedExperimentationConfigWithNamespaces {
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
-        function_name: &str,
+        _function_name: &str,
     ) -> Result<ExperimentationConfigWithNamespaces, Error> {
-        // Load the base config
-        let base = self.base.load(variants, metrics)?;
+        // Load the base config (no namespace)
+        let base = self.base.load(variants, metrics, None)?;
 
         // Load namespace-specific configs
         let mut loaded_namespaces = HashMap::new();
         for (namespace, config) in self.namespaces {
-            // Check that namespace configs don't use track_and_stop
-            if matches!(config, UninitializedExperimentationConfig::TrackAndStop(_)) {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "Namespace-specific experimentation config `functions.{function_name}.experimentation.namespaces.{namespace}` \
-                        cannot use `track_and_stop` type. Only `uniform` and `static_weights` are supported for namespace configs."
-                    ),
-                }));
-            }
-
-            let loaded_config = config.load(variants, metrics)?;
+            let loaded_config = config.load(variants, metrics, Some(namespace.clone()))?;
             loaded_namespaces.insert(namespace, loaded_config);
         }
 
@@ -219,6 +209,7 @@ impl UninitializedExperimentationConfig {
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
+        namespace: Option<String>,
     ) -> Result<ExperimentationConfig, Error> {
         // Check if any variant has a weight specified
         let variants_with_weights: Vec<&str> = variants
@@ -246,7 +237,7 @@ impl UninitializedExperimentationConfig {
                 Ok(ExperimentationConfig::Uniform(config.load(variants)?))
             }
             UninitializedExperimentationConfig::TrackAndStop(config) => Ok(
-                ExperimentationConfig::TrackAndStop(config.load(variants, metrics)?),
+                ExperimentationConfig::TrackAndStop(config.load(variants, metrics, namespace)?),
             ),
         }
     }
@@ -952,7 +943,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_namespace_config_track_and_stop_rejected() {
+    fn test_load_namespace_config_track_and_stop_succeeds() {
         let variants = make_variants_map(&["variant_a", "variant_b"]);
         let mut metrics = HashMap::new();
         metrics.insert(
@@ -985,17 +976,21 @@ mod tests {
 
         let result = uninitialized.load(&variants, &metrics, "test_fn");
         assert!(
-            result.is_err(),
-            "Namespace with `track_and_stop` type should be rejected"
+            result.is_ok(),
+            "Namespace with `track_and_stop` type should load successfully"
         );
-        let err_msg = result.unwrap_err().to_string();
+
+        let loaded = result.unwrap();
         assert!(
-            err_msg.contains("track_and_stop"),
-            "Error should mention `track_and_stop`: {err_msg}"
+            loaded.has_namespace_config("mobile"),
+            "Should have a `mobile` namespace config"
         );
         assert!(
-            err_msg.contains("mobile"),
-            "Error should mention the namespace name: {err_msg}"
+            matches!(
+                loaded.get_for_namespace(Some("mobile")),
+                ExperimentationConfig::TrackAndStop(_)
+            ),
+            "The `mobile` namespace config should be TrackAndStop"
         );
     }
 }

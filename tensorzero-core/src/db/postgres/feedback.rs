@@ -374,7 +374,15 @@ impl FeedbackQueries for PostgresConnectionInfo {
         metric_name: &str,
         function_name: &str,
         variant_names: Option<&Vec<String>>,
+        namespace: Option<&str>,
+        _max_samples_per_variant: Option<u64>,
     ) -> Result<Vec<FeedbackByVariant>, Error> {
+        if namespace.is_some() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Namespace-filtered feedback queries are not supported on Postgres"
+                    .to_string(),
+            }));
+        }
         let pool = self.get_pool_result()?;
         // Handle empty variant_names - return early to avoid unnecessary query
         if let Some(names) = variant_names

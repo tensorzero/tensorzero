@@ -669,6 +669,8 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         metric_name: &str,
         function_name: &str,
         variant_names: Option<&Vec<String>>,
+        namespace: Option<&str>,
+        max_samples_per_variant: Option<u64>,
     ) -> Result<Vec<FeedbackByVariant>, Error> {
         // If None we don't filter at all;
         // If empty, we'll return an empty vector for consistency
@@ -687,8 +689,63 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
             }
         };
 
-        let query = format!(
-            r"
+        let query = if let Some(ns) = namespace {
+            // Namespace-filtered query: join raw feedback tables with InferenceTag
+            let escaped_namespace = escape_string_for_clickhouse_literal(ns);
+            let limit_clause = match max_samples_per_variant {
+                Some(limit) => {
+                    format!("\n    ORDER BY id_uint DESC\n    LIMIT {limit} BY variant_name")
+                }
+                None => String::new(),
+            };
+
+            format!(
+                r"
+SELECT variant_name, avg(value) as mean, varSampStable(value) as variance, count() as count
+FROM (
+    SELECT variant_name, value, id_uint
+    FROM FloatMetricFeedbackByVariant
+    WHERE function_name = {{function_name:String}}
+      AND metric_name = {{metric_name:String}}{variant_filter}
+      AND target_id_uint IN (
+          SELECT toUInt128(inference_id) FROM InferenceTag
+          WHERE function_name = {{function_name:String}}
+            AND key = 'tensorzero::namespace' AND value = '{escaped_namespace}'
+          UNION ALL
+          SELECT DISTINCT episode_id_uint FROM InferenceByEpisodeId
+          WHERE id_uint IN (
+              SELECT toUInt128(inference_id) FROM InferenceTag
+              WHERE function_name = {{function_name:String}}
+                AND key = 'tensorzero::namespace' AND value = '{escaped_namespace}'
+          )
+      ){limit_clause}
+
+    UNION ALL
+
+    SELECT variant_name, toFloat32(value) as value, id_uint
+    FROM BooleanMetricFeedbackByVariant
+    WHERE function_name = {{function_name:String}}
+      AND metric_name = {{metric_name:String}}{variant_filter}
+      AND target_id_uint IN (
+          SELECT toUInt128(inference_id) FROM InferenceTag
+          WHERE function_name = {{function_name:String}}
+            AND key = 'tensorzero::namespace' AND value = '{escaped_namespace}'
+          UNION ALL
+          SELECT DISTINCT episode_id_uint FROM InferenceByEpisodeId
+          WHERE id_uint IN (
+              SELECT toUInt128(inference_id) FROM InferenceTag
+              WHERE function_name = {{function_name:String}}
+                AND key = 'tensorzero::namespace' AND value = '{escaped_namespace}'
+          )
+      ){limit_clause}
+)
+GROUP BY variant_name
+FORMAT JSONEachRow"
+            )
+        } else {
+            // Non-namespace query: use pre-aggregated FeedbackByVariantStatistics table
+            format!(
+                r"
             SELECT
                 variant_name,
                 avgMerge(feedback_mean) as mean,
@@ -698,7 +755,8 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
             WHERE function_name = {{function_name:String}} and metric_name = {{metric_name:String}}{variant_filter}
             GROUP BY variant_name
             FORMAT JSONEachRow"
-        );
+            )
+        };
 
         let mut params_map = HashMap::new();
         params_map.insert("function_name".to_string(), function_name.to_string());
@@ -2107,7 +2165,7 @@ mod tests {
 
         // Empty variant list should return empty result immediately without querying
         let result = conn
-            .get_feedback_by_variant("test_metric", "test_function", Some(&vec![]))
+            .get_feedback_by_variant("test_metric", "test_function", Some(&vec![]), None, None)
             .await
             .unwrap();
 
@@ -2144,7 +2202,7 @@ mod tests {
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
         let variants = vec!["variant1".to_string(), "variant2".to_string()];
         let result = conn
-            .get_feedback_by_variant("test_metric", "test_function", Some(&variants))
+            .get_feedback_by_variant("test_metric", "test_function", Some(&variants), None, None)
             .await
             .unwrap();
 

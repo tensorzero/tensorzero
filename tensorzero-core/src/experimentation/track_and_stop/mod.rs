@@ -93,6 +93,12 @@ pub struct TrackAndStopConfig {
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     update_period: Duration,
     min_prob: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    max_samples_per_variant: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    namespace: Option<String>,
     #[serde(skip)]
     metric_optimize: MetricConfigOptimize,
     #[serde(skip)]
@@ -277,6 +283,12 @@ pub struct UninitializedTrackAndStopConfig {
     #[serde(default = "default_min_prob", skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     min_prob: Option<f64>,
+    #[serde(
+        default = "default_max_samples_per_variant",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    max_samples_per_variant: Option<u64>,
 }
 
 fn default_min_samples_per_variant() -> u64 {
@@ -298,11 +310,17 @@ fn default_min_prob() -> Option<f64> {
     Some(0.0)
 }
 
+#[expect(clippy::unnecessary_wraps)]
+fn default_max_samples_per_variant() -> Option<u64> {
+    Some(10_000)
+}
+
 impl UninitializedTrackAndStopConfig {
     pub fn load(
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, MetricConfig>,
+        namespace: Option<String>,
     ) -> Result<TrackAndStopConfig, Error> {
         // Validate metric exists
         if !metrics.contains_key(&self.metric) {
@@ -437,6 +455,8 @@ impl UninitializedTrackAndStopConfig {
             epsilon: self.epsilon,
             update_period: Duration::from_secs(self.update_period_s),
             min_prob: self.min_prob,
+            max_samples_per_variant: self.max_samples_per_variant,
+            namespace,
             metric_optimize: metric_config.optimize,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(keep_variants),
@@ -516,6 +536,8 @@ impl VariantSampler for TrackAndStopConfig {
             delta: self.delta,
             min_prob: self.min_prob,
             metric_optimize: self.metric_optimize,
+            namespace: self.namespace.clone(),
+            max_samples_per_variant: self.max_samples_per_variant,
             cancel_token,
         }));
         Ok(())
@@ -736,6 +758,8 @@ struct ProbabilityUpdateTaskArgs {
     delta: f64,
     min_prob: Option<f64>,
     metric_optimize: MetricConfigOptimize,
+    namespace: Option<String>,
+    max_samples_per_variant: Option<u64>,
     cancel_token: CancellationToken,
 }
 
@@ -762,8 +786,15 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
         delta,
         min_prob,
         metric_optimize,
+        namespace,
+        max_samples_per_variant,
         cancel_token,
     } = args;
+
+    let log_name = match &namespace {
+        Some(ns) => format!("{function_name} (namespace: {ns})"),
+        None => function_name.clone(),
+    };
 
     let mut interval = tokio::time::interval(update_period);
     loop {
@@ -785,13 +816,15 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
             delta,
             min_prob,
             metric_optimize,
+            namespace: namespace.as_deref(),
+            max_samples_per_variant,
         })
         .await;
 
         match result {
             Ok(()) => {}
             Err(e) => {
-                tracing::warn!("Failed to update probabilities for {function_name}: {e}");
+                tracing::warn!("Failed to update probabilities for {log_name}: {e}");
             }
         }
     }
@@ -808,6 +841,8 @@ struct UpdateProbabilitiesArgs<'a> {
     delta: f64,
     min_prob: Option<f64>,
     metric_optimize: MetricConfigOptimize,
+    namespace: Option<&'a str>,
+    max_samples_per_variant: Option<u64>,
 }
 
 async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), TrackAndStopError> {
@@ -822,11 +857,19 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
         delta,
         min_prob,
         metric_optimize,
+        namespace,
+        max_samples_per_variant,
     } = args;
 
     // Fetch feedback from database
     let variant_performances = db
-        .get_feedback_by_variant(metric_name, function_name, Some(candidate_variants))
+        .get_feedback_by_variant(
+            metric_name,
+            function_name,
+            Some(candidate_variants),
+            namespace,
+            max_samples_per_variant,
+        )
         .await?;
 
     // Compute new state in blocking task (CPU-bound work)
@@ -2098,6 +2141,8 @@ mod tests {
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
             min_prob: Some(0.001),
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Min,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
@@ -2149,6 +2194,8 @@ mod tests {
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
             min_prob: Some(0.001),
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
@@ -2376,6 +2423,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::Stopped {
                 winner_variant_name: "A".to_string(),
@@ -2407,6 +2456,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::NurseryOnly(
                 Nursery::new(vec!["A".to_string(), "B".to_string(), "C".to_string()]),
@@ -2448,6 +2499,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
                 sampling_probabilities: sampling_probs,
@@ -2487,6 +2540,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::NurseryAndBandits {
@@ -2554,6 +2609,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::NurseryAndStopped {
@@ -2600,6 +2657,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
                 sampling_probabilities: sampling_probs,
@@ -2642,6 +2701,8 @@ mod tests {
                 epsilon: 0.0,
                 update_period: Duration::from_secs(60),
                 min_prob: None,
+                max_samples_per_variant: None,
+                namespace: None,
                 metric_optimize: MetricConfigOptimize::Max,
                 state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::NurseryOnly(
                     nursery,
@@ -2672,6 +2733,8 @@ mod tests {
                 epsilon: 0.0,
                 update_period: Duration::from_secs(60),
                 min_prob: None,
+                max_samples_per_variant: None,
+                namespace: None,
                 metric_optimize: MetricConfigOptimize::Max,
                 state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
                     sampling_probabilities: sampling_probs,
@@ -2710,6 +2773,8 @@ mod tests {
                 epsilon: 0.0,
                 update_period: Duration::from_secs(60),
                 min_prob: None,
+                max_samples_per_variant: None,
+                namespace: None,
                 metric_optimize: MetricConfigOptimize::Max,
                 state: Arc::new(ArcSwap::new(Arc::new(
                     TrackAndStopState::NurseryAndBandits {
@@ -2749,6 +2814,8 @@ mod tests {
                 epsilon: 0.0,
                 update_period: Duration::from_secs(60),
                 min_prob: None,
+                max_samples_per_variant: None,
+                namespace: None,
                 metric_optimize: MetricConfigOptimize::Max,
                 state: Arc::new(ArcSwap::new(Arc::new(
                     TrackAndStopState::NurseryAndStopped {
@@ -2780,6 +2847,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let mut variants = HashMap::new();
@@ -2810,7 +2878,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -2830,6 +2898,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
@@ -2845,7 +2914,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("candidate_variants"));
@@ -2864,6 +2933,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
@@ -2879,7 +2949,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("fallback_variants"));
@@ -2898,6 +2968,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
@@ -2913,7 +2984,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(
@@ -2933,6 +3004,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C", "D"])
@@ -2950,7 +3022,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(
