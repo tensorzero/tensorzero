@@ -457,8 +457,11 @@ pub(super) struct MistralAssistantRequestMessage<'a> {
     tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
 }
 
-/// Custom serializer: when there's only a single Text chunk, serialize as a plain string
-/// for compatibility with non-reasoning paths. When there are thinking chunks, serialize as array.
+/// Custom serializer for assistant content:
+/// - Empty: serialize as `null` (omitted via skip_serializing_if on the field would also work,
+///   but Mistral expects the field to be present for assistant messages)
+/// - Single Text chunk: serialize as a plain string for non-reasoning compatibility
+/// - Otherwise: serialize as an array of typed chunks
 fn serialize_mistral_assistant_content<S>(
     content: &Vec<MistralRequestContentChunk<'_>>,
     serializer: S,
@@ -466,10 +469,10 @@ fn serialize_mistral_assistant_content<S>(
 where
     S: serde::Serializer,
 {
-    if let [MistralRequestContentChunk::Text { text }] = content.as_slice() {
-        text.serialize(serializer)
-    } else {
-        content.serialize(serializer)
+    match content.as_slice() {
+        [] => serializer.serialize_none(),
+        [MistralRequestContentChunk::Text { text }] => text.serialize(serializer),
+        _ => content.serialize(serializer),
     }
 }
 
@@ -2066,6 +2069,25 @@ mod tests {
         assert!(
             serialized.contains(r#""content":[{"type":"thinking"#),
             "mixed content should serialize as an array, got: {serialized}"
+        );
+
+        // Test serialization: empty content with tool calls serializes content as null
+        let tool_only_msg = MistralAssistantRequestMessage {
+            role: "assistant",
+            content: vec![],
+            tool_calls: Some(vec![OpenAIRequestToolCall {
+                id: Cow::Borrowed("call_123"),
+                r#type: OpenAIToolType::Function,
+                function: OpenAIRequestFunctionCall {
+                    name: Cow::Borrowed("get_weather"),
+                    arguments: Cow::Borrowed(r#"{"city":"Tokyo"}"#),
+                },
+            }]),
+        };
+        let serialized = serde_json::to_string(&tool_only_msg).unwrap();
+        assert!(
+            serialized.contains(r#""content":null"#),
+            "empty content should serialize as null, got: {serialized}"
         );
     }
 
