@@ -4,19 +4,22 @@
 //! non-streaming and streaming responses.
 
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 
 /// Sub-chunks inside a `Thinking` content chunk.
 /// The `thinking` field in Magistral responses is an array of these.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum MistralThinkingSubChunk {
     Text { text: String },
 }
 
 /// Represents a typed content chunk in Mistral reasoning responses.
 /// Magistral models return content as an array of these chunks instead of a plain string.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum MistralContentChunk {
     Text {
         text: String,

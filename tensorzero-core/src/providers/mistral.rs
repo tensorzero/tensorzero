@@ -489,27 +489,49 @@ pub(super) async fn prepare_mistral_messages<'a>(
     config: OpenAIMessagesConfig<'a>,
     supports_reasoning: bool,
 ) -> Result<Vec<MistralRequestMessage<'a>>, Error> {
+    // Convert all messages concurrently, then assemble in order.
+    // Each slot holds either converted OpenAI messages or a Mistral reasoning assistant message.
+    enum ConvertedMessage<'a> {
+        OpenAI(Vec<OpenAIRequestMessage<'a>>),
+        MistralAssistant(Option<MistralAssistantRequestMessage<'a>>),
+    }
+
+    let conversion_futures: Vec<_> = request
+        .messages
+        .iter()
+        .map(|msg| async move {
+            if supports_reasoning && msg.role == Role::Assistant {
+                let assistant_msg = tensorzero_to_mistral_assistant_message(msg)?;
+                Ok(ConvertedMessage::MistralAssistant(assistant_msg))
+            } else {
+                let openai_msgs = tensorzero_to_openai_messages(msg, config).await?;
+                Ok(ConvertedMessage::OpenAI(openai_msgs))
+            }
+        })
+        .collect();
+
+    let converted: Vec<Result<ConvertedMessage<'a>, Error>> =
+        futures::future::join_all(conversion_futures).await;
+
     let mut messages: Vec<MistralRequestMessage<'a>> = Vec::new();
 
     if let Some(system_msg) = tensorzero_to_mistral_system_message(request.system.as_deref()) {
         messages.push(MistralRequestMessage::OpenAI(system_msg));
     }
 
-    for msg in &request.messages {
-        match msg.role {
-            Role::Assistant if supports_reasoning => {
-                if let Some(assistant_msg) = tensorzero_to_mistral_assistant_message(msg)? {
-                    messages.push(MistralRequestMessage::MistralAssistant(assistant_msg));
-                }
-            }
-            _ => {
-                let openai_msgs = tensorzero_to_openai_messages(msg, config).await?;
+    for result in converted {
+        match result? {
+            ConvertedMessage::OpenAI(openai_msgs) => {
                 for m in openai_msgs {
                     if !m.no_content() {
                         messages.push(MistralRequestMessage::OpenAI(m));
                     }
                 }
             }
+            ConvertedMessage::MistralAssistant(Some(assistant_msg)) => {
+                messages.push(MistralRequestMessage::MistralAssistant(assistant_msg));
+            }
+            ConvertedMessage::MistralAssistant(None) => {}
         }
     }
 
