@@ -114,7 +114,7 @@ pub async fn embeddings(
     let tensorzero_raw_response = if params.include_raw_response && !response.cached {
         Some(vec![RawResponseEntry {
             model_inference_id: Some(response.id),
-            provider_type: response.embedding_provider_name.to_string(),
+            provider_type: response.provider_type.to_string(),
             api_type: ApiType::Embeddings,
             data: response.raw_response.clone(),
         }])

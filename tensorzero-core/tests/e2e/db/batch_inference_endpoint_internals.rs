@@ -63,13 +63,13 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone(),
-        input_messages: vec![],
+        input: Some(input.clone()),
+        input_messages: Some(vec![]),
         system: None,
         tool_params: None,
-        inference_params: Cow::Owned(InferenceParams::default()),
+        inference_params: Some(Cow::Owned(InferenceParams::default())),
         output_schema: None,
-        raw_request: Cow::Borrowed(""),
+        raw_request: Some(Cow::Borrowed("")),
         model_name: Cow::Borrowed(model_name),
         model_provider_name: Cow::Borrowed(model_provider_name),
         tags: HashMap::new(),
@@ -82,13 +82,13 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input,
-        input_messages: vec![],
+        input: Some(input),
+        input_messages: Some(vec![]),
         system: None,
         tool_params: None,
-        inference_params: Cow::Owned(InferenceParams::default()),
+        inference_params: Some(Cow::Owned(InferenceParams::default())),
         output_schema: None,
-        raw_request: Cow::Borrowed(""),
+        raw_request: Some(Cow::Borrowed("")),
         model_name: Cow::Borrowed(model_name),
         model_provider_name: Cow::Borrowed(model_provider_name),
         tags: HashMap::new(),
@@ -186,13 +186,13 @@ async fn test_get_batch_request_endpoint(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input,
-        input_messages: vec![],
+        input: Some(input),
+        input_messages: Some(vec![]),
         system: None,
         tool_params: None,
-        inference_params: Cow::Owned(InferenceParams::default()),
+        inference_params: Some(Cow::Owned(InferenceParams::default())),
         output_schema: None,
-        raw_request: Cow::Borrowed(""),
+        raw_request: Some(Cow::Borrowed("")),
         model_name: Cow::Borrowed(model_name),
         model_provider_name: Cow::Borrowed(model_provider_name),
         tags: HashMap::new(),
@@ -269,6 +269,7 @@ async fn test_write_poll_batch_inference_endpoint(
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         },
+        Arc::from("dummy"),
         &config,
     )
     .await
@@ -317,6 +318,7 @@ async fn test_write_poll_batch_inference_endpoint(
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         },
+        Arc::from("dummy"),
         &config,
     )
     .await
@@ -379,6 +381,7 @@ async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionIn
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         },
+        Arc::from("dummy"),
         &config,
     )
     .await
@@ -514,10 +517,15 @@ async fn test_write_read_completed_batch_inference_chat(
         raw_request: raw_request.clone(),
         raw_response: raw_response.clone(),
     };
-    let mut inference_responses =
-        write_completed_batch_inference(&database, &batch_request, response, &config)
-            .await
-            .unwrap();
+    let mut inference_responses = write_completed_batch_inference(
+        &database,
+        &batch_request,
+        response,
+        Arc::from("dummy"),
+        &config,
+    )
+    .await
+    .unwrap();
 
     // Sort inferences by inference_id to ensure consistent ordering
     inference_responses.sort_by_key(tensorzero::InferenceResponse::inference_id);
@@ -816,10 +824,15 @@ async fn test_write_read_completed_batch_inference_json(
         raw_request: raw_request.clone(),
         raw_response: raw_response.clone(),
     };
-    let inference_responses =
-        write_completed_batch_inference(&database, &batch_request, response, &config)
-            .await
-            .unwrap();
+    let inference_responses = write_completed_batch_inference(
+        &database,
+        &batch_request,
+        response,
+        Arc::from("dummy"),
+        &config,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(
         inference_responses.len(),

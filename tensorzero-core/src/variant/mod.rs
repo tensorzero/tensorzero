@@ -22,6 +22,7 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::error::TimeoutKind;
 use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::Role;
@@ -34,7 +35,7 @@ use crate::inference::types::extra_headers::{
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage,
+    ModelInferenceResponseWithMetadata, RawResponseEntry, RequestMessage, stream_with_deadline,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -197,6 +198,7 @@ impl BatchInferenceConfig {
 pub struct ModelUsedInfo {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
@@ -206,6 +208,8 @@ pub struct ModelUsedInfo {
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts during model-level fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 pub trait Variant {
@@ -373,7 +377,7 @@ impl Variant for VariantInfo {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -465,20 +469,59 @@ impl Variant for VariantInfo {
 
         // This future includes a call to `peek_first_chunk`, so applying
         // `streaming_ttft_timeout` is correct.
-        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
-            let timeout = tokio::time::Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, fut)
+        let start = tokio::time::Instant::now();
+
+        // Compute the effective pre-TTFT deadline from both ttft_ms and total_ms.
+        let ttft_timeout = self
+            .timeouts
+            .streaming
+            .ttft_ms
+            .map(tokio::time::Duration::from_millis);
+        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let total_timeout = streaming_total_ms.map(tokio::time::Duration::from_millis);
+        let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
+            (Some(ttft), Some(total)) => {
+                if ttft <= total {
+                    Some((start + ttft, ttft, TimeoutKind::StreamingTtft))
+                } else {
+                    Some((start + total, total, TimeoutKind::StreamingTotal))
+                }
+            }
+            (Some(ttft), None) => Some((start + ttft, ttft, TimeoutKind::StreamingTtft)),
+            (None, Some(total)) => Some((start + total, total, TimeoutKind::StreamingTotal)),
+            (None, None) => None,
+        };
+
+        let (mut stream, info) = if let Some((deadline, timeout, kind)) = pre_ttft_timeout {
+            tokio::time::timeout_at(deadline, fut)
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        streaming: true,
+                        kind,
                     }))
                 })
         } else {
             fut.await
+        }?;
+
+        // Wrap the post-TTFT stream with the remaining total deadline
+        if let Some(total_ms) = streaming_total_ms {
+            let total_timeout = tokio::time::Duration::from_millis(total_ms);
+            let deadline = start + total_timeout;
+            let variant_name = variant_name.to_string();
+            stream = stream_with_deadline(stream, deadline, move || {
+                Error::new(ErrorDetails::VariantTimeout {
+                    variant_name,
+                    timeout: total_timeout,
+                    kind: TimeoutKind::StreamingTotal,
+                })
+            })
+            .peekable();
         }
+
+        Ok((stream, info))
     }
 
     #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.as_ref()).unwrap_or("")))]
@@ -767,14 +810,41 @@ async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
     let clients = args.clients.clone();
-    let model_inference_response = args
+    let include_raw_response = clients.include_raw_response;
+    let (result, retry_errors) = args
         .retry_config
-        .retry(|| async {
+        .retry_collecting_errors(|| async {
             args.model_config
                 .infer(&args.request, &clients, &args.model_name)
                 .await
         })
-        .await?;
+        .await;
+
+    let mut model_inference_response = match result {
+        Ok(response) => response,
+        Err(final_err) => {
+            if retry_errors.is_empty() {
+                return Err(final_err);
+            }
+            let mut all_errors = retry_errors;
+            all_errors.push(final_err);
+            return Err(Error::new(ErrorDetails::AllRetriesFailed {
+                errors: all_errors,
+            }));
+        }
+    };
+
+    if include_raw_response && !retry_errors.is_empty() {
+        let mut retry_entries = Vec::new();
+        for err in &retry_errors {
+            if let Some(entries) = err.extract_raw_response_entries() {
+                retry_entries.extend(entries);
+            }
+        }
+        // Prepend retry error entries before the provider-level fallback entries
+        retry_entries.append(&mut model_inference_response.failed_raw_response);
+        model_inference_response.failed_raw_response = retry_entries;
+    }
 
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
@@ -807,27 +877,58 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+    let include_raw_response = clients.include_raw_response;
+    let (result, retry_errors) = retry_config
+        .retry_collecting_errors(|| async {
+            model_config
+                .infer_stream(&request, &clients, &model_name)
+                .await
+        })
+        .await;
+
     let StreamResponseAndMessages {
         response:
             StreamResponse {
                 stream,
                 raw_request,
                 model_provider_name,
+                provider_type,
                 cached,
                 model_inference_id,
+                mut failed_raw_response,
             },
         messages: input_messages,
-    } = retry_config
-        .retry(|| async {
-            model_config
-                .infer_stream(&request, &clients, &model_name)
-                .await
-        })
-        .await?;
+    } = match result {
+        Ok(response) => response,
+        Err(final_err) => {
+            if retry_errors.is_empty() {
+                return Err(final_err);
+            }
+            let mut all_errors = retry_errors;
+            all_errors.push(final_err);
+            return Err(Error::new(ErrorDetails::AllRetriesFailed {
+                errors: all_errors,
+            }));
+        }
+    };
+
+    if include_raw_response && !retry_errors.is_empty() {
+        let mut retry_entries = Vec::new();
+        for err in &retry_errors {
+            if let Some(entries) = err.extract_raw_response_entries() {
+                retry_entries.extend(entries);
+            }
+        }
+        // Prepend retry error entries before the provider-level fallback entries
+        retry_entries.append(&mut failed_raw_response);
+        failed_raw_response = retry_entries;
+    }
+
     let system = request.system.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
+        provider_type,
         raw_request,
         raw_response: None,
         inference_params,
@@ -836,6 +937,7 @@ async fn infer_model_request_stream<'request>(
         input_messages,
         cached,
         model_inference_id,
+        failed_raw_response,
     };
     let config_type = function.config_type();
     let stream =
@@ -1485,10 +1587,13 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(matches!(
-            error.get_details(),
-            ErrorDetails::ModelProvidersExhausted { .. }
-        ));
+        assert!(
+            matches!(
+                error.get_details(),
+                ErrorDetails::AllModelProvidersFailed { .. }
+            ),
+            "Expected AllModelProvidersFailed error, got {error:?}"
+        );
     }
 
     #[tokio::test]

@@ -30,7 +30,7 @@ use crate::rate_limiting::{
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE, TimeoutKind},
     inference::types::{
         Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role, Usage,
         current_timestamp,
@@ -186,12 +186,14 @@ impl EmbeddingModelConfig {
                     otlp_config: &clients.otlp_config,
                     model_inference_id: Uuid::now_v7(),
                 };
+                let provider_type: Arc<str> = Arc::from(provider_config.inner.provider_type());
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
                     let cache_lookup = embedding_cache_lookup(
                         &clients.cache_manager,
                         &provider_request,
                         clients.cache_options.max_age_s,
+                        provider_type.clone(),
                     )
                     .await
                     .ok()
@@ -229,8 +231,11 @@ impl EmbeddingModelConfig {
                                 CacheValidationInfo { tool_config: None },
                             );
                         };
-                        let embedding_response =
-                            EmbeddingModelResponse::new(response, provider_name.clone());
+                        let embedding_response = EmbeddingModelResponse::new(
+                            response,
+                            provider_name.clone(),
+                            provider_type,
+                        );
                         return Ok(embedding_response);
                     }
                     Err(error) => {
@@ -238,7 +243,7 @@ impl EmbeddingModelConfig {
                     }
                 }
             }
-            Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
+            Err(ErrorDetails::AllModelProvidersFailed { provider_errors }.into())
         };
         // This is the top-level embedding model timeout, which limits the total time taken to run all providers.
         // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
@@ -254,7 +259,7 @@ impl EmbeddingModelConfig {
                     Err(Error::new(ErrorDetails::ModelTimeout {
                         model_name: model_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -408,6 +413,7 @@ pub struct EmbeddingModelResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub cached: bool,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
@@ -416,6 +422,7 @@ impl EmbeddingModelResponse {
     pub fn from_cache(
         cache_lookup: CacheData<EmbeddingCacheData>,
         request: &EmbeddingModelProviderRequest,
+        provider_type: Arc<str>,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -433,6 +440,7 @@ impl EmbeddingModelResponse {
                 response_time: Duration::from_secs(0),
             },
             embedding_provider_name: Arc::from(request.provider_name),
+            provider_type,
             cached: true,
             raw_usage: None,
         }
@@ -465,6 +473,7 @@ pub struct EmbeddingResponseWithMetadata {
     pub usage: Usage,
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub embedding_model_name: Arc<str>,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
 }
@@ -473,6 +482,7 @@ impl EmbeddingModelResponse {
     pub fn new(
         embedding_provider_response: EmbeddingProviderResponse,
         embedding_provider_name: Arc<str>,
+        provider_type: Arc<str>,
     ) -> Self {
         Self {
             id: embedding_provider_response.id,
@@ -484,6 +494,7 @@ impl EmbeddingModelResponse {
             usage: embedding_provider_response.usage,
             latency: embedding_provider_response.latency,
             embedding_provider_name,
+            provider_type,
             cached: false,
             raw_usage: embedding_provider_response.raw_usage,
         }
@@ -502,6 +513,7 @@ impl EmbeddingResponseWithMetadata {
             usage: embedding_response.usage,
             latency: embedding_response.latency,
             embedding_provider_name: embedding_response.embedding_provider_name,
+            provider_type: embedding_response.provider_type,
             embedding_model_name,
             raw_usage: embedding_response.raw_usage,
         }
@@ -533,11 +545,13 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             usage: response.usage,
             latency: response.latency,
             model_provider_name: response.embedding_provider_name.clone(),
+            provider_type: response.provider_type,
             model_name: response.embedding_model_name,
             cached: false,
             finish_reason: None,
             raw_usage: response.raw_usage,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         })
     }
 }
@@ -560,6 +574,18 @@ pub enum EmbeddingProviderConfig {
     OpenRouter(OpenRouterProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
+}
+
+impl EmbeddingProviderConfig {
+    pub fn provider_type(&self) -> &'static str {
+        match self {
+            EmbeddingProviderConfig::OpenAI(_) => crate::providers::openai::PROVIDER_TYPE,
+            EmbeddingProviderConfig::Azure(_) => crate::providers::azure::PROVIDER_TYPE,
+            EmbeddingProviderConfig::OpenRouter(_) => crate::providers::openrouter::PROVIDER_TYPE,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            EmbeddingProviderConfig::Dummy(_) => crate::providers::dummy::PROVIDER_TYPE,
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -631,7 +657,7 @@ impl EmbeddingProviderInfo {
                     Err(Error::new(ErrorDetails::ModelProviderTimeout {
                         provider_name: self.provider_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })?
         } else {

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
@@ -70,9 +71,14 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
     };
 
     // Read (should be None)
-    let result = cache_lookup(&conn, model_provider_request, Some(max_age_s))
-        .await
-        .unwrap();
+    let result = cache_lookup(
+        &conn,
+        model_provider_request,
+        Some(max_age_s),
+        Arc::from("dummy"),
+    )
+    .await
+    .unwrap();
     assert!(result.is_none());
 
     // Write
@@ -97,9 +103,14 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Read (should be Some)
-    let result = cache_lookup(&conn, model_provider_request, Some(max_age_s))
-        .await
-        .unwrap();
+    let result = cache_lookup(
+        &conn,
+        model_provider_request,
+        Some(max_age_s),
+        Arc::from("dummy"),
+    )
+    .await
+    .unwrap();
     assert!(result.is_some());
     let result = result.unwrap();
     assert_eq!(
@@ -147,7 +158,7 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
 
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
-    let result = cache_lookup(&conn, model_provider_request, Some(0))
+    let result = cache_lookup(&conn, model_provider_request, Some(0), Arc::from("dummy"))
         .await
         .unwrap();
     assert!(result.is_none());
@@ -194,9 +205,14 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
     };
 
     // Read (should be None)
-    let result = cache_lookup_streaming(&conn, model_provider_request, Some(max_age_s))
-        .await
-        .unwrap();
+    let result = cache_lookup_streaming(
+        &conn,
+        model_provider_request,
+        Some(max_age_s),
+        Arc::from("dummy"),
+    )
+    .await
+    .unwrap();
     assert!(result.is_none());
 
     let initial_chunks = vec![
@@ -249,9 +265,14 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Read (should be Some)
-    let result = cache_lookup_streaming(&conn, model_provider_request, Some(max_age_s))
-        .await
-        .unwrap();
+    let result = cache_lookup_streaming(
+        &conn,
+        model_provider_request,
+        Some(max_age_s),
+        Arc::from("dummy"),
+    )
+    .await
+    .unwrap();
     assert!(result.is_some());
     let result = result.unwrap();
     let chunks = result.stream.map(|c| c.unwrap()).collect::<Vec<_>>().await;
@@ -296,7 +317,7 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
 
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
-    let result = cache_lookup_streaming(&conn, model_provider_request, Some(0))
+    let result = cache_lookup_streaming(&conn, model_provider_request, Some(0), Arc::from("dummy"))
         .await
         .unwrap();
     assert!(result.is_none());

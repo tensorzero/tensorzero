@@ -380,6 +380,7 @@ dependencies = [
  "tensorzero-optimizers",
  "thiserror 2.0.18",
  "tokio",
+ "ts-rs",
  "uuid",
 ]
 

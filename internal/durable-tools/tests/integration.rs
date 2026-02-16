@@ -152,6 +152,7 @@ impl ToolMetadata for EchoTaskTool {
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
@@ -275,6 +276,7 @@ impl ToolMetadata for InferenceTaskTool {
 
 #[async_trait]
 impl TaskTool for InferenceTaskTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
@@ -352,7 +354,7 @@ async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::R
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<()> {
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(format!("test_queue_{}", Uuid::now_v7()))
         .t0_client(t0_client)
@@ -390,7 +392,7 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
@@ -435,7 +437,7 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
@@ -538,6 +540,7 @@ impl ToolMetadata for MultiCallTaskTool {
 
 #[async_trait]
 impl TaskTool for MultiCallTaskTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,
@@ -585,7 +588,7 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
@@ -703,7 +706,7 @@ async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Resul
     let mock_response = create_mock_chat_response("Response from TaskTool!");
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_response(mock_response));
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(format!("test_queue_{}", Uuid::now_v7()))
         .t0_client(t0_client)
@@ -738,7 +741,7 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
     let mock_response = create_mock_chat_response("Spawned response!");
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_response(mock_response));
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
@@ -843,7 +846,7 @@ async fn task_tool_inference_fails_on_empty_chat_response(pool: PgPool) -> sqlx:
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_empty_chat_response());
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool.clone())
         .queue_name(&queue_name)
         .t0_client(t0_client)
@@ -922,7 +925,7 @@ async fn task_tool_inference_fails_on_empty_json_response(pool: PgPool) -> sqlx:
     let queue_name = format!("test_queue_{}", Uuid::now_v7());
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_empty_json_response());
 
-    let executor = ToolExecutor::builder()
+    let executor = ToolExecutor::builder(())
         .pool(pool.clone())
         .queue_name(&queue_name)
         .t0_client(t0_client)

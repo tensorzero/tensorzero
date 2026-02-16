@@ -16,8 +16,10 @@
 
 -- Lint.IfEdited()
 
--- Minimum TTL in seconds to avoid very short expirations
-local MIN_TTL_SECONDS = 3600  -- 1 hour
+-- Minimum TTL in seconds.
+-- Set high enough (48 hours) so that under `volatile-ttl` eviction policy,
+-- rate limiting keys are not evicted before cache entries (default 24h TTL).
+local MIN_TTL_SECONDS = 172800  -- 48 hours
 
 -- Rate limiting key prefixes
 local RATE_LIMITING_KEY_PREFIX = 'tensorzero_ratelimit:'

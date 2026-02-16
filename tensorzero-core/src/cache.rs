@@ -516,6 +516,7 @@ pub async fn embedding_cache_lookup(
     cache_manager: &impl CacheQueries,
     request: &EmbeddingModelProviderRequest<'_>,
     max_age_s: Option<u32>,
+    provider_type: Arc<str>,
 ) -> Result<Option<EmbeddingModelResponse>, Error> {
     let result = cache_lookup_inner::<EmbeddingCacheData>(
         cache_manager,
@@ -523,13 +524,14 @@ pub async fn embedding_cache_lookup(
         max_age_s,
     )
     .await?;
-    Ok(result.map(|result| EmbeddingModelResponse::from_cache(result, request)))
+    Ok(result.map(|result| EmbeddingModelResponse::from_cache(result, request, provider_type)))
 }
 
 pub async fn cache_lookup(
     cache_manager: &impl CacheQueries,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
+    provider_type: Arc<str>,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
     let result = cache_lookup_inner::<NonStreamingCacheData>(
         cache_manager,
@@ -538,7 +540,12 @@ pub async fn cache_lookup(
     )
     .await?;
     Ok(result.map(|result| {
-        ModelInferenceResponse::from_cache(result, request.request, request.provider_name)
+        ModelInferenceResponse::from_cache(
+            result,
+            request.request,
+            request.provider_name,
+            provider_type,
+        )
     }))
 }
 
@@ -546,12 +553,14 @@ pub async fn cache_lookup_streaming(
     cache_manager: &impl CacheQueries,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
+    provider_type: Arc<str>,
 ) -> Result<Option<StreamResponse>, Error> {
     let result = cache_lookup_inner(cache_manager, request.get_cache_key()?, max_age_s).await?;
     Ok(result.map(|result| {
         StreamResponse::from_cache(
             result,
             Arc::from(request.provider_name),
+            provider_type,
             request.model_inference_id,
         )
     }))

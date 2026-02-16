@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
+use reqwest::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -333,9 +334,14 @@ impl InferenceProvider for DummyProvider {
                     }
                     .into());
                 }
+                let raw_response = if self.model_name.contains("raw_response") {
+                    Some("dummy flaky error raw response".to_string())
+                } else {
+                    None
+                };
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
-                    raw_response: None,
+                    raw_response,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
@@ -348,6 +354,17 @@ impl InferenceProvider for DummyProvider {
             }
         }
 
+        if self.model_name == "error_with_raw_response" {
+            return Err(ErrorDetails::InferenceClient {
+                message: "Error from Dummy provider with raw response".to_string(),
+                raw_request: Some("dummy error raw request".to_string()),
+                raw_response: Some("dummy error raw response".to_string()),
+                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+            }
+            .into());
+        }
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
                 message: format!(
@@ -705,9 +722,14 @@ impl InferenceProvider for DummyProvider {
 
             // Fail on even-numbered calls
             if counter.is_multiple_of(2) {
+                let raw_response = if self.model_name.contains("raw_response") {
+                    Some("dummy flaky error raw response".to_string())
+                } else {
+                    None
+                };
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
-                    raw_response: None,
+                    raw_response,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
@@ -741,6 +763,17 @@ impl InferenceProvider for DummyProvider {
             ));
         }
 
+        if self.model_name == "error_with_raw_response" {
+            return Err(ErrorDetails::InferenceClient {
+                message: "Error from Dummy provider with raw response".to_string(),
+                raw_request: Some("dummy error raw request".to_string()),
+                raw_response: Some("dummy error raw response".to_string()),
+                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
+            }
+            .into());
+        }
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
                 message: format!(

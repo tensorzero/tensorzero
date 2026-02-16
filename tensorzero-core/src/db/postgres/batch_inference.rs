@@ -255,8 +255,8 @@ impl BatchInferenceQueries for PostgresConnectionInfo {
                     .push_bind(row.function_name.as_ref())
                     .push_bind(row.variant_name.as_ref())
                     .push_bind(row.episode_id)
-                    .push_bind(Json::from(&row.input))
-                    .push_bind(Json::from(&row.input_messages))
+                    .push_bind(row.input.as_ref().map(Json::from))
+                    .push_bind(row.input_messages.as_ref().map(Json::from))
                     .push_bind(row.system.as_deref())
                     .push_bind(Json::from(
                         tool_params_ref
@@ -273,9 +273,13 @@ impl BatchInferenceQueries for PostgresConnectionInfo {
                     .push_bind(tool_params_ref.map(|tp| Json::from(&tp.allowed_tools)))
                     .push_bind(tool_params_ref.map(|tp| Json::from(&tp.tool_choice)))
                     .push_bind(tool_params_ref.and_then(|tp| tp.parallel_tool_calls))
-                    .push_bind(Json::from(row.inference_params.as_ref()))
+                    .push_bind(
+                        row.inference_params
+                            .as_ref()
+                            .map(|p| Json::from(p.as_ref())),
+                    )
                     .push_bind(output_schema)
-                    .push_bind(row.raw_request.as_ref())
+                    .push_bind(row.raw_request.as_deref())
                     .push_bind(row.model_name.as_ref())
                     .push_bind(row.model_provider_name.as_ref())
                     .push_bind(Json::from(&row.tags))
@@ -553,17 +557,19 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for BatchRequestRow<'static> {
 /// This allows direct deserialization from Postgres rows.
 impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for BatchModelInferenceRow<'static> {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
-        let input: Json<StoredInput> = row.try_get("input")?;
-        let input_messages: Json<Vec<StoredRequestMessage>> = row.try_get("input_messages")?;
+        let input: Option<Json<StoredInput>> = row.try_get("input")?;
+        let input_messages: Option<Json<Vec<StoredRequestMessage>>> =
+            row.try_get("input_messages")?;
         let dynamic_tools: Json<Vec<Tool>> = row.try_get("dynamic_tools")?;
         let dynamic_provider_tools: Json<Vec<ProviderTool>> =
             row.try_get("dynamic_provider_tools")?;
         let allowed_tools: Option<Json<AllowedTools>> = row.try_get("allowed_tools")?;
         let tool_choice: Option<Json<ToolChoice>> = row.try_get("tool_choice")?;
         let parallel_tool_calls: Option<bool> = row.try_get("parallel_tool_calls")?;
-        let inference_params: Json<InferenceParams> = row.try_get("inference_params")?;
+        let inference_params: Option<Json<InferenceParams>> = row.try_get("inference_params")?;
         let output_schema: Option<Value> = row.try_get("output_schema")?;
         let tags: Json<HashMap<String, String>> = row.try_get("tags")?;
+        let raw_request: Option<String> = row.try_get("raw_request")?;
 
         let tool_params = ToolCallConfigDatabaseInsert::from_stored_values(
             dynamic_tools.0,
@@ -582,13 +588,13 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for BatchModelInferenceRow<'st
             function_name: Cow::Owned(row.try_get("function_name")?),
             variant_name: Cow::Owned(row.try_get("variant_name")?),
             episode_id: row.try_get("episode_id")?,
-            input: input.0,
-            input_messages: input_messages.0,
+            input: input.map(|v| v.0),
+            input_messages: input_messages.map(|v| v.0),
             system: row.try_get::<Option<String>, _>("system")?.map(Cow::Owned),
             tool_params,
-            inference_params: Cow::Owned(inference_params.0),
+            inference_params: inference_params.map(|v| Cow::Owned(v.0)),
             output_schema: output_schema.map(|v| serde_json::to_string(&v).unwrap_or_default()),
-            raw_request: Cow::Owned(row.try_get("raw_request")?),
+            raw_request: raw_request.map(Cow::Owned),
             model_name: Cow::Owned(row.try_get("model_name")?),
             model_provider_name: Cow::Owned(row.try_get("model_provider_name")?),
             tags: tags.0,

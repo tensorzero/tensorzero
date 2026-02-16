@@ -3009,6 +3009,7 @@ fn openai_usage_from_raw_response(raw_response: &str) -> Option<Value> {
 struct OpenAIEmbeddingRequest<'a> {
     model: &'a str,
     input: &'a EmbeddingInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
     dimensions: Option<u32>,
     encoding_format: EmbeddingEncodingFormat,
 }

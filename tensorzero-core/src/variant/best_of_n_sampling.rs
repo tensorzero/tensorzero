@@ -1084,11 +1084,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1123,11 +1125,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1181,11 +1185,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1223,11 +1229,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::ToolCall),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1297,11 +1305,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1336,11 +1346,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider1".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(

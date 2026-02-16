@@ -2,6 +2,9 @@
     test,
     allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)
 )]
+
+// TODO(#5691): Support running these tests against Postgres.
+
 mod common;
 use clap::Parser;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
@@ -528,7 +531,8 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
     // Test: Both datapoint_ids and max_datapoints provided should fail
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client: clickhouse,
+        db: Arc::new(clickhouse),
+
         evaluation_config,
         function_configs,
         evaluation_name,
@@ -1704,7 +1708,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
         inference_executor,
-        clickhouse_client: get_clickhouse().await,
+        db: Arc::new(get_clickhouse().await),
     });
     let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
         content: vec![ContentBlockChatOutput::Text(Text {
@@ -1890,7 +1894,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
         inference_executor,
-        clickhouse_client: get_clickhouse().await,
+        db: Arc::new(get_clickhouse().await),
     });
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
         output: JsonInferenceOutput {
@@ -2774,7 +2778,8 @@ async fn test_evaluation_with_dynamic_variant() {
 
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client: clickhouse,
+        db: Arc::new(clickhouse),
+
         evaluation_config,
         function_configs,
         dataset_name: Some(dataset_name),
@@ -2840,7 +2845,8 @@ async fn test_max_datapoints_parameter() {
     // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
+
         evaluation_config,
         function_configs,
         dataset_name: Some(dataset_name.clone()),
@@ -2940,7 +2946,7 @@ async fn test_precision_targets_parameter() {
 
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         evaluation_config,
         function_configs,
         dataset_name: Some(dataset_name.clone()),
@@ -2963,7 +2969,7 @@ async fn test_precision_targets_parameter() {
     .unwrap();
 
     // Consume results and track evaluations, computing statistics as we go
-    let batcher_join_handle = result.batcher_join_handle.clone();
+    let batcher_join_handles = result.batcher_join_handles.clone();
     let mut receiver = result.receiver;
     let mut exact_match_stats = PerEvaluatorStats::new(true); // Bernoulli evaluator (uses Wilson CI)
     let mut topic_stats = PerEvaluatorStats::new(false); // Treated as float evaluator (uses Wald CI)
@@ -3024,10 +3030,10 @@ async fn test_precision_targets_parameter() {
         precision_targets["topic_starts_with_f"]
     );
 
-    if let Some(handle) = batcher_join_handle {
+    for handle in batcher_join_handles {
         handle
             .await
-            .expect("ClickHouse batch writer should complete before tag assertions");
+            .expect("Batch writer should complete before tag assertions");
     }
     clickhouse.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
