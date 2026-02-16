@@ -1,4 +1,9 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use crate::error::{Error, ErrorDetails};
+use crate::function::FunctionConfig;
+use crate::model::ModelTable;
 
 /// A validated namespace identifier.
 ///
@@ -60,6 +65,58 @@ impl<'de> serde::Deserialize<'de> for Namespace {
         let s = String::deserialize(deserializer)?;
         Namespace::new(s).map_err(|e| serde::de::Error::custom(e.to_string()))
     }
+}
+
+/// Validates that namespaced models are only used in matching namespace experimentation configs.
+///
+/// A variant using a namespaced model must not be reachable from the base experimentation config
+/// or from a different namespace's experimentation config. This ensures that namespace isolation
+/// is maintained: a model scoped to namespace "A" can only be sampled by the experimentation
+/// config for namespace "A".
+pub fn validate_namespaced_model_usage(
+    functions: &HashMap<String, Arc<FunctionConfig>>,
+    models: &ModelTable,
+) -> Result<(), Error> {
+    for (function_name, function) in functions {
+        let experimentation = function.experimentation_with_namespaces();
+        for (variant_name, variant_info) in function.variants() {
+            for model_name in variant_info.inner.direct_model_names() {
+                let Some(model_namespace) = models.get_namespace(model_name) else {
+                    continue; // Unnamespaced models have no restrictions
+                };
+
+                // Check: base experimentation must not sample this variant
+                if experimentation.base.could_sample_variant(variant_name) {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Variant `{variant_name}` of function `{function_name}` uses model `{model_name}` \
+                            which has namespace `{model_namespace}`, but the variant is reachable from the \
+                            base experimentation config. Namespaced model variants must only be reachable \
+                            from a matching namespace experimentation config."
+                        ),
+                    }
+                    .into());
+                }
+
+                // Check: no other namespace experimentation config should sample this variant
+                // unless its namespace matches the model's namespace
+                for (ns_name, ns_config) in &experimentation.namespaces {
+                    if ns_name != model_namespace && ns_config.could_sample_variant(variant_name) {
+                        return Err(ErrorDetails::Config {
+                            message: format!(
+                                "Variant `{variant_name}` of function `{function_name}` uses model `{model_name}` \
+                                which has namespace `{model_namespace}`, but the variant is reachable from \
+                                namespace `{ns_name}` experimentation config. Namespaced model variants must only \
+                                be reachable from a matching namespace experimentation config."
+                            ),
+                        }
+                        .into());
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
