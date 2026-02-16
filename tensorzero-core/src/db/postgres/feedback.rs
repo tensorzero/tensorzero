@@ -34,10 +34,18 @@ use super::PostgresConnectionInfo;
 ///
 /// If `variant_names` is empty, no variant filter is applied (all variants are included).
 /// If `variant_names` is non-empty, only the specified variants are included.
+///
+/// If `namespace` is `Some`, the inferences CTE is extended to include both inference-level
+/// and episode-level IDs filtered by `tags->>'tensorzero::namespace'`.
+///
+/// If `max_samples_per_variant` is `Some`, uses `ROW_NUMBER() OVER (PARTITION BY variant_name)`
+/// to limit to the most recent N samples per variant before aggregating.
 fn build_feedback_by_variant_query(
     metric_name: &str,
     function_name: &str,
     variant_names: &[String],
+    namespace: Option<&str>,
+    max_samples_per_variant: Option<u64>,
 ) -> QueryBuilder<sqlx::Postgres> {
     let mut qb = QueryBuilder::new(
         r"
@@ -55,26 +63,115 @@ fn build_feedback_by_variant_query(
         WHERE metric_name = ",
     );
     qb.push_bind(metric_name);
-    qb.push(
-        r"
+
+    if let Some(ns) = namespace {
+        // Namespace-filtered: include inference IDs and episode IDs from inferences
+        // that match the namespace tag
+        qb.push(
+            r"
     ),
     inferences AS (
         SELECT id, variant_name
         FROM tensorzero.chat_inferences
         WHERE function_name = ",
-    );
-    qb.push_bind(function_name);
-    qb.push(
-        r"
+        );
+        qb.push_bind(function_name);
+        qb.push(r" AND tags->>'tensorzero::namespace' = ");
+        qb.push_bind(ns);
+        qb.push(
+            r"
         UNION ALL
         SELECT id, variant_name
         FROM tensorzero.json_inferences
         WHERE function_name = ",
-    );
-    qb.push_bind(function_name);
+        );
+        qb.push_bind(function_name);
+        qb.push(r" AND tags->>'tensorzero::namespace' = ");
+        qb.push_bind(ns);
+        qb.push(
+            r"
+        UNION ALL
+        SELECT DISTINCT episode_id AS id, variant_name
+        FROM tensorzero.chat_inferences
+        WHERE function_name = ",
+        );
+        qb.push_bind(function_name);
+        qb.push(r" AND tags->>'tensorzero::namespace' = ");
+        qb.push_bind(ns);
+        qb.push(
+            r" AND episode_id IS NOT NULL
+        UNION ALL
+        SELECT DISTINCT episode_id AS id, variant_name
+        FROM tensorzero.json_inferences
+        WHERE function_name = ",
+        );
+        qb.push_bind(function_name);
+        qb.push(r" AND tags->>'tensorzero::namespace' = ");
+        qb.push_bind(ns);
+        qb.push(" AND episode_id IS NOT NULL");
+    } else {
+        // No namespace filter: standard inference-level join
+        qb.push(
+            r"
+    ),
+    inferences AS (
+        SELECT id, variant_name
+        FROM tensorzero.chat_inferences
+        WHERE function_name = ",
+        );
+        qb.push_bind(function_name);
+        qb.push(
+            r"
+        UNION ALL
+        SELECT id, variant_name
+        FROM tensorzero.json_inferences
+        WHERE function_name = ",
+        );
+        qb.push_bind(function_name);
+    }
+
     qb.push(
         r"
+    )",
+    );
+
+    if let Some(limit) = max_samples_per_variant {
+        // Use ROW_NUMBER() to limit samples per variant before aggregating
+        qb.push(
+            r",
+    numbered AS (
+        SELECT
+            i.variant_name,
+            f.value,
+            ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.target_id DESC) as rn
+        FROM feedback f
+        JOIN inferences i ON f.target_id = i.id
+        WHERE 1=1",
+        );
+
+        if !variant_names.is_empty() {
+            qb.push(" AND i.variant_name = ANY(");
+            qb.push_bind(variant_names);
+            qb.push(")");
+        }
+
+        qb.push(
+            r"
     )
+    SELECT
+        variant_name,
+        AVG(value)::REAL as mean,
+        VAR_SAMP(value)::REAL as variance,
+        COUNT(*)::BIGINT as count
+    FROM numbered
+    WHERE rn <= ",
+        );
+        qb.push_bind(limit as i64);
+        qb.push(" GROUP BY variant_name");
+    } else {
+        // No sample limit: aggregate directly
+        qb.push(
+            r"
     SELECT
         i.variant_name,
         AVG(f.value)::REAL as mean,
@@ -83,15 +180,16 @@ fn build_feedback_by_variant_query(
     FROM feedback f
     JOIN inferences i ON f.target_id = i.id
     WHERE 1=1",
-    );
+        );
 
-    if !variant_names.is_empty() {
-        qb.push(" AND i.variant_name = ANY(");
-        qb.push_bind(variant_names);
-        qb.push(")");
+        if !variant_names.is_empty() {
+            qb.push(" AND i.variant_name = ANY(");
+            qb.push_bind(variant_names);
+            qb.push(")");
+        }
+
+        qb.push(" GROUP BY i.variant_name");
     }
-
-    qb.push(" GROUP BY i.variant_name");
 
     qb
 }
@@ -375,14 +473,8 @@ impl FeedbackQueries for PostgresConnectionInfo {
         function_name: &str,
         variant_names: Option<&Vec<String>>,
         namespace: Option<&str>,
-        _max_samples_per_variant: Option<u64>,
+        max_samples_per_variant: Option<u64>,
     ) -> Result<Vec<FeedbackByVariant>, Error> {
-        if namespace.is_some() {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "Namespace-filtered feedback queries are not supported on Postgres"
-                    .to_string(),
-            }));
-        }
         let pool = self.get_pool_result()?;
         // Handle empty variant_names - return early to avoid unnecessary query
         if let Some(names) = variant_names
@@ -393,7 +485,13 @@ impl FeedbackQueries for PostgresConnectionInfo {
 
         // Pass empty slice for None, or the actual slice for Some
         let variant_slice = variant_names.map(|v| v.as_slice()).unwrap_or(&[]);
-        let mut qb = build_feedback_by_variant_query(metric_name, function_name, variant_slice);
+        let mut qb = build_feedback_by_variant_query(
+            metric_name,
+            function_name,
+            variant_slice,
+            namespace,
+            max_samples_per_variant,
+        );
 
         let rows = qb.build().fetch_all(pool).await.map_err(Error::from)?;
 
@@ -1434,7 +1532,7 @@ mod tests {
 
     #[test]
     fn test_build_feedback_by_variant_query_no_variant_filter() {
-        let qb = build_feedback_by_variant_query("my_metric", "my_function", &[]);
+        let qb = build_feedback_by_variant_query("my_metric", "my_function", &[], None, None);
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
 
@@ -1474,7 +1572,8 @@ mod tests {
     #[test]
     fn test_build_feedback_by_variant_query_with_variant_filter() {
         let variant_names = vec!["variant_a".to_string(), "variant_b".to_string()];
-        let qb = build_feedback_by_variant_query("my_metric", "my_function", &variant_names);
+        let qb =
+            build_feedback_by_variant_query("my_metric", "my_function", &variant_names, None, None);
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
 
@@ -1507,6 +1606,222 @@ mod tests {
             FROM feedback f
             JOIN inferences i ON f.target_id = i.id
             WHERE 1=1 AND i.variant_name = ANY($5) GROUP BY i.variant_name
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_feedback_by_variant_query_with_namespace() {
+        let qb = build_feedback_by_variant_query(
+            "my_metric",
+            "my_function",
+            &[],
+            Some("production"),
+            None,
+        );
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            WITH feedback AS (
+                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                FROM tensorzero.boolean_metric_feedback
+                WHERE metric_name = $1
+                UNION ALL
+                SELECT target_id, value
+                FROM tensorzero.float_metric_feedback
+                WHERE metric_name = $2
+            ),
+            inferences AS (
+                SELECT id, variant_name
+                FROM tensorzero.chat_inferences
+                WHERE function_name = $3 AND tags->>'tensorzero::namespace' = $4
+                UNION ALL
+                SELECT id, variant_name
+                FROM tensorzero.json_inferences
+                WHERE function_name = $5 AND tags->>'tensorzero::namespace' = $6
+                UNION ALL
+                SELECT DISTINCT episode_id AS id, variant_name
+                FROM tensorzero.chat_inferences
+                WHERE function_name = $7 AND tags->>'tensorzero::namespace' = $8 AND episode_id IS NOT NULL
+                UNION ALL
+                SELECT DISTINCT episode_id AS id, variant_name
+                FROM tensorzero.json_inferences
+                WHERE function_name = $9 AND tags->>'tensorzero::namespace' = $10 AND episode_id IS NOT NULL
+            )
+            SELECT
+                i.variant_name,
+                AVG(f.value)::REAL as mean,
+                VAR_SAMP(f.value)::REAL as variance,
+                COUNT(*)::BIGINT as count
+            FROM feedback f
+            JOIN inferences i ON f.target_id = i.id
+            WHERE 1=1 GROUP BY i.variant_name
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_feedback_by_variant_query_with_namespace_and_variants() {
+        let variant_names = vec!["variant_a".to_string()];
+        let qb = build_feedback_by_variant_query(
+            "my_metric",
+            "my_function",
+            &variant_names,
+            Some("staging"),
+            None,
+        );
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            WITH feedback AS (
+                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                FROM tensorzero.boolean_metric_feedback
+                WHERE metric_name = $1
+                UNION ALL
+                SELECT target_id, value
+                FROM tensorzero.float_metric_feedback
+                WHERE metric_name = $2
+            ),
+            inferences AS (
+                SELECT id, variant_name
+                FROM tensorzero.chat_inferences
+                WHERE function_name = $3 AND tags->>'tensorzero::namespace' = $4
+                UNION ALL
+                SELECT id, variant_name
+                FROM tensorzero.json_inferences
+                WHERE function_name = $5 AND tags->>'tensorzero::namespace' = $6
+                UNION ALL
+                SELECT DISTINCT episode_id AS id, variant_name
+                FROM tensorzero.chat_inferences
+                WHERE function_name = $7 AND tags->>'tensorzero::namespace' = $8 AND episode_id IS NOT NULL
+                UNION ALL
+                SELECT DISTINCT episode_id AS id, variant_name
+                FROM tensorzero.json_inferences
+                WHERE function_name = $9 AND tags->>'tensorzero::namespace' = $10 AND episode_id IS NOT NULL
+            )
+            SELECT
+                i.variant_name,
+                AVG(f.value)::REAL as mean,
+                VAR_SAMP(f.value)::REAL as variance,
+                COUNT(*)::BIGINT as count
+            FROM feedback f
+            JOIN inferences i ON f.target_id = i.id
+            WHERE 1=1 AND i.variant_name = ANY($11) GROUP BY i.variant_name
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_feedback_by_variant_query_with_max_samples() {
+        let qb = build_feedback_by_variant_query("my_metric", "my_function", &[], None, Some(100));
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            WITH feedback AS (
+                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                FROM tensorzero.boolean_metric_feedback
+                WHERE metric_name = $1
+                UNION ALL
+                SELECT target_id, value
+                FROM tensorzero.float_metric_feedback
+                WHERE metric_name = $2
+            ),
+            inferences AS (
+                SELECT id, variant_name
+                FROM tensorzero.chat_inferences
+                WHERE function_name = $3
+                UNION ALL
+                SELECT id, variant_name
+                FROM tensorzero.json_inferences
+                WHERE function_name = $4
+            ),
+            numbered AS (
+                SELECT
+                    i.variant_name,
+                    f.value,
+                    ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.target_id DESC) as rn
+                FROM feedback f
+                JOIN inferences i ON f.target_id = i.id
+                WHERE 1=1
+            )
+            SELECT
+                variant_name,
+                AVG(value)::REAL as mean,
+                VAR_SAMP(value)::REAL as variance,
+                COUNT(*)::BIGINT as count
+            FROM numbered
+            WHERE rn <= $5 GROUP BY variant_name
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_feedback_by_variant_query_with_namespace_and_max_samples() {
+        let variant_names = vec!["variant_a".to_string(), "variant_b".to_string()];
+        let qb = build_feedback_by_variant_query(
+            "my_metric",
+            "my_function",
+            &variant_names,
+            Some("production"),
+            Some(50),
+        );
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            WITH feedback AS (
+                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                FROM tensorzero.boolean_metric_feedback
+                WHERE metric_name = $1
+                UNION ALL
+                SELECT target_id, value
+                FROM tensorzero.float_metric_feedback
+                WHERE metric_name = $2
+            ),
+            inferences AS (
+                SELECT id, variant_name
+                FROM tensorzero.chat_inferences
+                WHERE function_name = $3 AND tags->>'tensorzero::namespace' = $4
+                UNION ALL
+                SELECT id, variant_name
+                FROM tensorzero.json_inferences
+                WHERE function_name = $5 AND tags->>'tensorzero::namespace' = $6
+                UNION ALL
+                SELECT DISTINCT episode_id AS id, variant_name
+                FROM tensorzero.chat_inferences
+                WHERE function_name = $7 AND tags->>'tensorzero::namespace' = $8 AND episode_id IS NOT NULL
+                UNION ALL
+                SELECT DISTINCT episode_id AS id, variant_name
+                FROM tensorzero.json_inferences
+                WHERE function_name = $9 AND tags->>'tensorzero::namespace' = $10 AND episode_id IS NOT NULL
+            ),
+            numbered AS (
+                SELECT
+                    i.variant_name,
+                    f.value,
+                    ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.target_id DESC) as rn
+                FROM feedback f
+                JOIN inferences i ON f.target_id = i.id
+                WHERE 1=1 AND i.variant_name = ANY($11)
+            )
+            SELECT
+                variant_name,
+                AVG(value)::REAL as mean,
+                VAR_SAMP(value)::REAL as variance,
+                COUNT(*)::BIGINT as count
+            FROM numbered
+            WHERE rn <= $12 GROUP BY variant_name
             ",
         );
     }
