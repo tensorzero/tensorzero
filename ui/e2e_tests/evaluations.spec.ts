@@ -8,8 +8,6 @@ test("should show the evaluation result page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-// This test depends on model inference cache hits (within ClickHouse)
-// If it starts failing, you may need to regenerate the model inference cache
 test("push the new run button, launch an evaluation", async ({ page }) => {
   test.setTimeout(600_000);
   await page.goto("/evaluations");
@@ -53,8 +51,6 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-// This test depends on model inference cache hits (within ClickHouse)
-// If it starts failing, you may need to regenerate the model inference cache
 test("push the new run button, launch an image evaluation", async ({
   page,
 }) => {
@@ -102,8 +98,6 @@ test("push the new run button, launch an image evaluation", async ({
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-// This test depends on model inference cache hits (within ClickHouse)
-// If it starts failing, you may need to regenerate the model inference cache
 test("run evaluation with dataset with no output", async ({ page }) => {
   test.setTimeout(600_000);
   await page.goto("/evaluations");

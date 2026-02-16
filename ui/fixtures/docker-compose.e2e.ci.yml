@@ -24,11 +24,11 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway-dev:${TENSORZERO_COMMIT_TAG}
+    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_E2E_TAG:-${TENSORZERO_COMMIT_TAG:-latest}}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
-      target: gateway
+      target: gateway-e2e
       args:
         PROFILE: dev
     volumes:
@@ -43,6 +43,7 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
       # For mock server during SFT jobs and batch inference (optional, set via host env or .env)
       TENSORZERO_INTERNAL_MOCK_PROVIDER_API: ${TENSORZERO_INTERNAL_MOCK_PROVIDER_API:-}
+      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
     env_file:
       - .env
       - path: .env-gateway
@@ -56,6 +57,8 @@ services:
       clickhouse:
         condition: service_healthy
       gateway-postgres-migrations:
+        condition: service_healthy
+      provider-proxy:
         condition: service_healthy
     healthcheck:
       test:
@@ -113,7 +116,6 @@ services:
     environment:
       TENSORZERO_GATEWAY_URL: ${TENSORZERO_GATEWAY_URL:-http://gateway:3000}
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
-      TENSORZERO_UI_FORCE_CACHE_ON: ${TENSORZERO_UI_FORCE_CACHE_ON:-1}
     env_file:
       - .env
     ports:
@@ -154,8 +156,6 @@ services:
       # API endpoints
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
-      # Force cache on for tests
-      TENSORZERO_UI_FORCE_CACHE_ON: ${TENSORZERO_UI_FORCE_CACHE_ON:-1}
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro

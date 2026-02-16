@@ -24,11 +24,11 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_E2E_TAG:-latest}
     build:
       context: ../..
       dockerfile: gateway/Dockerfile
-      target: gateway
+      target: gateway-e2e
       args:
         PROFILE: dev
     volumes:
@@ -43,6 +43,7 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
       # For mock server during SFT jobs and batch inference (optional, set via host env or .env)
       TENSORZERO_INTERNAL_MOCK_PROVIDER_API: ${TENSORZERO_INTERNAL_MOCK_PROVIDER_API:-}
+      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
     env_file:
       - .env
       - path: .env-gateway
@@ -56,6 +57,8 @@ services:
       clickhouse:
         condition: service_healthy
       gateway-postgres-migrations:
+        condition: service_healthy
+      provider-proxy:
         condition: service_healthy
     healthcheck:
       test:

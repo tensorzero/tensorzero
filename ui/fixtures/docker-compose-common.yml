@@ -50,3 +50,25 @@ services:
       RUST_LOG: debug
     ports:
       - "3030:3030"
+
+  provider-proxy:
+    image: tensorzero/provider-proxy:${TENSORZERO_PROVIDER_PROXY_TAG:-latest}
+    build:
+      context: ../../
+      dockerfile: provider-proxy/Dockerfile
+      target: provider-proxy
+    ports:
+      - "3003:3003"
+    volumes:
+      - ../../ci/provider-proxy-cache-ui:/app/ci/provider-proxy-cache-ui
+    command:
+      [
+        "--cache-path",
+        "/app/ci/provider-proxy-cache-ui",
+        "--mode",
+        "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
+      ]
+    healthcheck:
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
