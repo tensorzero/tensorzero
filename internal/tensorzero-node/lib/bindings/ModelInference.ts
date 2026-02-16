@@ -69,8 +69,8 @@ export type ModelInference = {
    */
   cached: boolean;
   /**
-   * Cost of this inference in dollars.
-   * `None` means cost tracking was not configured for this provider.
+   * Cost of this model inference in dollars.
+   * `None` means cost tracking was not configured for this provider or the provider did not send the necessary information.
    */
   cost: number;
 };

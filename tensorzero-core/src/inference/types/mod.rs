@@ -1584,7 +1584,7 @@ pub struct StoredModelInference {
     pub finish_reason: Option<FinishReason>,
     pub snapshot_hash: Option<SnapshotHash>,
     /// Cost of this inference in dollars.
-    /// `None` means cost tracking was not configured for this provider.
+    /// `None` means cost tracking was not configured for this provider or the provider did not send the necessary information.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<Cost>,
     /// Materialized column in ClickHouse - only present when reading from the database.
