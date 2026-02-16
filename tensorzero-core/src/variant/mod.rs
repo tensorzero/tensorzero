@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::time::error::Elapsed;
 use tracing::instrument;
@@ -288,6 +288,46 @@ impl VariantConfig {
             VariantConfig::ChainOfThought(c) => vec![c.inner.model()],
             VariantConfig::BestOfNSampling(c) => vec![c.evaluator().inner.model()],
             VariantConfig::MixtureOfN(c) => vec![c.fuser().inner.model()],
+        }
+    }
+
+    /// Returns the names of candidate variants referenced by this variant.
+    /// Only BestOfN and MixtureOfN have candidates; other variants return an empty slice.
+    pub fn candidate_variant_names(&self) -> &[String] {
+        match self {
+            VariantConfig::BestOfNSampling(c) => c.candidates(),
+            VariantConfig::MixtureOfN(c) => c.candidates(),
+            _ => &[],
+        }
+    }
+
+    /// Returns all model names used by this variant, recursively including models from
+    /// candidate variants (for BestOfN/MixtureOfN).
+    pub fn all_model_names<'a>(
+        &'a self,
+        all_variants: &'a HashMap<String, Arc<VariantInfo>>,
+    ) -> Vec<&'a Arc<str>> {
+        let mut models = Vec::new();
+        let mut visited = HashSet::new();
+        self.collect_model_names_recursive(all_variants, &mut models, &mut visited);
+        models
+    }
+
+    fn collect_model_names_recursive<'a>(
+        &'a self,
+        all_variants: &'a HashMap<String, Arc<VariantInfo>>,
+        models: &mut Vec<&'a Arc<str>>,
+        visited: &mut HashSet<String>,
+    ) {
+        models.extend(self.direct_model_names());
+        for candidate_name in self.candidate_variant_names() {
+            if visited.insert(candidate_name.clone())
+                && let Some(candidate_info) = all_variants.get(candidate_name)
+            {
+                candidate_info
+                    .inner
+                    .collect_model_names_recursive(all_variants, models, visited);
+            }
         }
     }
 }

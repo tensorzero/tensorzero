@@ -79,8 +79,10 @@ pub fn validate_namespaced_model_usage(
 ) -> Result<(), Error> {
     for (function_name, function) in functions {
         let experimentation = function.experimentation_with_namespaces();
-        for (variant_name, variant_info) in function.variants() {
-            for model_name in variant_info.inner.direct_model_names() {
+        let all_variants = function.variants();
+
+        for (variant_name, variant_info) in all_variants {
+            for model_name in variant_info.inner.all_model_names(all_variants) {
                 let Some(model_namespace) = models.get_namespace(model_name) else {
                     continue; // Unnamespaced models have no restrictions
                 };

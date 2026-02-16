@@ -410,6 +410,148 @@ candidate_variants = {"variant_a" = 1.0}
     );
 }
 
+/// BestOfN variant with evaluator in namespace B and candidates using namespace A model,
+/// reachable from namespace B → error (candidate models must also be namespace-compatible)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_best_of_n_candidate_namespace_mismatch_rejected() {
+    let config = r#"
+[models.mobile_model]
+routing = ["test"]
+namespace = "mobile"
+
+[models.mobile_model.providers.test]
+type = "dummy"
+model_name = "test"
+
+[models.web_model]
+routing = ["test"]
+namespace = "web"
+
+[models.web_model.providers.test]
+type = "dummy"
+model_name = "test"
+
+[models.regular_model]
+routing = ["test"]
+
+[models.regular_model.providers.test]
+type = "dummy"
+model_name = "test"
+
+[functions.test_fn]
+type = "chat"
+
+# Candidate variant that uses a mobile-namespaced model
+[functions.test_fn.variants.mobile_candidate]
+type = "chat_completion"
+model = "mobile_model"
+
+# Regular variant for base experimentation
+[functions.test_fn.variants.regular_variant]
+type = "chat_completion"
+model = "regular_model"
+
+# BestOfN variant with web evaluator but mobile candidate
+[functions.test_fn.variants.bon_variant]
+type = "best_of_n_sampling"
+candidates = ["mobile_candidate"]
+
+[functions.test_fn.variants.bon_variant.evaluator]
+model = "web_model"
+
+[functions.test_fn.experimentation]
+type = "static_weights"
+candidate_variants = {"regular_variant" = 1.0}
+
+# mobile_candidate only in mobile namespace (correct)
+[functions.test_fn.experimentation.namespaces.mobile]
+type = "static_weights"
+candidate_variants = {"mobile_candidate" = 1.0}
+
+# bon_variant in web namespace — should fail because it indirectly uses mobile_model
+[functions.test_fn.experimentation.namespaces.web]
+type = "static_weights"
+candidate_variants = {"bon_variant" = 1.0}
+"#;
+
+    let err = expect_config_error(config).await;
+    assert!(
+        err.contains("namespace") && err.contains("mobile") && err.contains("bon_variant"),
+        "Expected error about BestOfN candidate using namespaced model, got: {err}"
+    );
+}
+
+/// MixtureOfN variant with fuser in namespace B and candidates using namespace A model,
+/// reachable from namespace B → error
+#[tokio::test(flavor = "multi_thread")]
+async fn test_mixture_of_n_candidate_namespace_mismatch_rejected() {
+    let config = r#"
+[models.mobile_model]
+routing = ["test"]
+namespace = "mobile"
+
+[models.mobile_model.providers.test]
+type = "dummy"
+model_name = "test"
+
+[models.web_model]
+routing = ["test"]
+namespace = "web"
+
+[models.web_model.providers.test]
+type = "dummy"
+model_name = "test"
+
+[models.regular_model]
+routing = ["test"]
+
+[models.regular_model.providers.test]
+type = "dummy"
+model_name = "test"
+
+[functions.test_fn]
+type = "chat"
+
+# Candidate variant that uses a mobile-namespaced model
+[functions.test_fn.variants.mobile_candidate]
+type = "chat_completion"
+model = "mobile_model"
+
+# Regular variant for base experimentation
+[functions.test_fn.variants.regular_variant]
+type = "chat_completion"
+model = "regular_model"
+
+# MixtureOfN variant with web fuser but mobile candidate
+[functions.test_fn.variants.mon_variant]
+type = "mixture_of_n"
+candidates = ["mobile_candidate"]
+
+[functions.test_fn.variants.mon_variant.fuser]
+model = "web_model"
+
+[functions.test_fn.experimentation]
+type = "static_weights"
+candidate_variants = {"regular_variant" = 1.0}
+
+# mobile_candidate only in mobile namespace (correct)
+[functions.test_fn.experimentation.namespaces.mobile]
+type = "static_weights"
+candidate_variants = {"mobile_candidate" = 1.0}
+
+# mon_variant in web namespace — should fail because it indirectly uses mobile_model
+[functions.test_fn.experimentation.namespaces.web]
+type = "static_weights"
+candidate_variants = {"mon_variant" = 1.0}
+"#;
+
+    let err = expect_config_error(config).await;
+    assert!(
+        err.contains("namespace") && err.contains("mobile") && err.contains("mon_variant"),
+        "Expected error about MixtureOfN candidate using namespaced model, got: {err}"
+    );
+}
+
 // ============================================================================
 // Model Namespace Tests — Inference-time Validation
 // ============================================================================

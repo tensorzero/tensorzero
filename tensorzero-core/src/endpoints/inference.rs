@@ -2074,6 +2074,7 @@ fn prepare_candidate_variants(
                     &variant_info.inner,
                     models,
                     request_namespace,
+                    function,
                 )?;
             }
 
@@ -2113,6 +2114,7 @@ fn prepare_candidate_variants(
                 &candidate_variant_info.inner,
                 models,
                 request_namespace,
+                function,
             )?;
 
             candidate_variants.clear();
