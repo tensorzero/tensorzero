@@ -43,7 +43,7 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.20.0", features = ["serde", "v7"] }
+uuid = { version = "1.21.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "0.9.11", features = ["preserve_order"] }
@@ -57,10 +57,10 @@ tokio-util = { version = "0.7.17", features = ["rt"] }
 tracing = { version = "0.1.43", features = ["log"] }
 pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
-anyhow = "1.0.99"
+anyhow = "1.0.101"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.55", features = ["derive", "env"] }
-futures = "0.3.30"
+clap = { version = "4.5.59", features = ["derive", "env"] }
+futures = "0.3.32"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
 sse-stream = "0.2.1"
@@ -74,9 +74,9 @@ minijinja = { version = "2.15.1", features = [
     "unstable_machinery",
 ] }
 url = { version = "2.5.8", features = ["serde"] }
-google-cloud-auth = "1.4.0"
+google-cloud-auth = "1.6.0"
 object_store = { version = "0.13.1", features = ["serde", "aws", "gcp"] }
-rand = "0.9.1"
+rand = "0.10.0"
 ts-rs = { version = "12.0.1", features = [
     "serde-compat",
     "serde-json-impl",
@@ -125,7 +125,7 @@ redis = { version = "1.0.2", features = [
 redis-test = { version = "1.0.1", features = ["aio"] }
 globset = "0.4.18"
 walkdir = "2.5.0"
-tempfile = "3.21.0"
+tempfile = "3.25.0"
 toml_edit = "0.24"
 
 [workspace.lints.rust]
