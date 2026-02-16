@@ -823,6 +823,9 @@ async fn infer_model_request(
     let mut model_inference_response = match result {
         Ok(response) => response,
         Err(final_err) => {
+            if retry_errors.is_empty() {
+                return Err(final_err);
+            }
             let mut all_errors = retry_errors;
             all_errors.push(final_err);
             return Err(Error::new(ErrorDetails::AllRetriesFailed {
@@ -831,7 +834,7 @@ async fn infer_model_request(
         }
     };
 
-    if include_raw_response {
+    if include_raw_response && !retry_errors.is_empty() {
         let mut retry_entries = Vec::new();
         for err in &retry_errors {
             if let Some(entries) = err.extract_raw_response_entries() {
@@ -898,6 +901,9 @@ async fn infer_model_request_stream<'request>(
     } = match result {
         Ok(response) => response,
         Err(final_err) => {
+            if retry_errors.is_empty() {
+                return Err(final_err);
+            }
             let mut all_errors = retry_errors;
             all_errors.push(final_err);
             return Err(Error::new(ErrorDetails::AllRetriesFailed {
@@ -906,7 +912,7 @@ async fn infer_model_request_stream<'request>(
         }
     };
 
-    if include_raw_response {
+    if include_raw_response && !retry_errors.is_empty() {
         let mut retry_entries = Vec::new();
         for err in &retry_errors {
             if let Some(entries) = err.extract_raw_response_entries() {
@@ -1577,8 +1583,11 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(
-            matches!(error.get_details(), ErrorDetails::AllRetriesFailed { .. }),
-            "Expected AllRetriesFailed error, got {error:?}"
+            matches!(
+                error.get_details(),
+                ErrorDetails::AllModelProvidersFailed { .. }
+            ),
+            "Expected AllModelProvidersFailed error, got {error:?}"
         );
     }
 
