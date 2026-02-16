@@ -43,17 +43,17 @@ async fn test_setup_pgcron_is_idempotent() {
         "Should have exactly one 'tensorzero_create_inference_partitions' job after running setup twice"
     );
 
-    // Verify there's exactly one job for dropping old partitions
-    let drop_partitions_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_drop_old_inference_partitions'",
+    // Verify there's exactly one job for dropping old metadata partitions
+    let drop_metadata_partitions_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_drop_old_inference_metadata_partitions'",
     )
     .fetch_one(pool)
     .await
     .expect("Should be able to query cron.job table");
 
     assert_eq!(
-        drop_partitions_count, 1,
-        "Should have exactly one 'tensorzero_drop_old_inference_partitions' job after running setup twice"
+        drop_metadata_partitions_count, 1,
+        "Should have exactly one 'tensorzero_drop_old_inference_metadata_partitions' job after running setup twice"
     );
 
     // Verify there's exactly one job for incremental minute latency histogram refresh

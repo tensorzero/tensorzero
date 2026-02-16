@@ -623,7 +623,10 @@ pub async fn setup_postgres(
 
     // Write retention config to Postgres (syncs tensorzero.toml -> database)
     postgres_connection_info
-        .write_retention_config(config.postgres.inference_retention_days)
+        .write_retention_config(
+            config.postgres.inference_metadata_retention_days,
+            config.postgres.inference_data_retention_days,
+        )
         .await?;
 
     Ok(postgres_connection_info)

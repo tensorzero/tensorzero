@@ -189,51 +189,85 @@ impl PostgresConnectionInfo {
     /// This is called on gateway startup to sync config from tensorzero.toml to Postgres.
     pub async fn write_retention_config(
         &self,
-        inference_retention_days: Option<u32>,
+        inference_metadata_retention_days: Option<u32>,
+        inference_data_retention_days: Option<u32>,
     ) -> Result<(), Error> {
         let Some(pool) = self.get_pool() else {
             return Ok(());
         };
 
-        match inference_retention_days {
+        // Clean up the legacy key (replaced by the two keys below)
+        sqlx::query!(
+            "DELETE FROM tensorzero.retention_config WHERE key = 'inference_retention_days'"
+        )
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresQuery {
+                message: format!("Failed to delete legacy `inference_retention_days` config: {e}"),
+            })
+        })?;
+
+        Self::upsert_retention_key(
+            pool,
+            "inference_metadata_retention_days",
+            inference_metadata_retention_days,
+        )
+        .await?;
+        Self::upsert_retention_key(
+            pool,
+            "inference_data_retention_days",
+            inference_data_retention_days,
+        )
+        .await?;
+
+        tracing::info!(
+            inference_metadata_retention_days,
+            inference_data_retention_days,
+            "Configured inference retention policy"
+        );
+
+        Ok(())
+    }
+
+    async fn upsert_retention_key(
+        pool: &sqlx::PgPool,
+        key: &str,
+        value: Option<u32>,
+    ) -> Result<(), Error> {
+        match value {
             Some(days) => {
-                sqlx::query(
+                sqlx::query!(
                     r"
                     INSERT INTO tensorzero.retention_config (key, value, updated_at)
-                    VALUES ('inference_retention_days', $1, NOW())
-                    ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+                    VALUES ($1, $2, NOW())
+                    ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
                     ",
+                    key,
+                    days.to_string(),
                 )
-                .bind(days.to_string())
                 .execute(pool)
                 .await
                 .map_err(|e| {
                     Error::new(ErrorDetails::PostgresQuery {
-                        message: format!("Failed to write inference_retention_days config: {e}"),
+                        message: format!("Failed to write `{key}` config: {e}"),
                     })
                 })?;
-                tracing::info!(
-                    inference_retention_days = days,
-                    "Configured inference retention policy"
-                );
             }
             None => {
-                sqlx::query(
-                    "DELETE FROM tensorzero.retention_config WHERE key = 'inference_retention_days'",
+                sqlx::query!(
+                    "DELETE FROM tensorzero.retention_config WHERE key = $1",
+                    key
                 )
                 .execute(pool)
                 .await
                 .map_err(|e| {
                     Error::new(ErrorDetails::PostgresQuery {
-                        message: format!("Failed to clear inference_retention_days config: {e}"),
+                        message: format!("Failed to clear `{key}` config: {e}"),
                     })
                 })?;
-                tracing::debug!(
-                    "Inference retention policy not configured (partitions retained indefinitely)"
-                );
             }
         }
-
         Ok(())
     }
 }
