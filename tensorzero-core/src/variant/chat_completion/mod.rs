@@ -1388,6 +1388,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let json_model_config = ModelConfig {
             routing: vec!["json_provider".into()],
@@ -1404,6 +1405,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".into(),
@@ -1424,6 +1426,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".into()],
@@ -1440,6 +1443,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![LazyResolvedInputMessage {
@@ -1683,6 +1687,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let provider_types = ProviderTypesConfig::default();
         let models = ModelTable::new(
@@ -2378,6 +2383,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let error_model_config = ModelConfig {
             routing: vec!["error_provider".into()],
@@ -2394,6 +2400,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();

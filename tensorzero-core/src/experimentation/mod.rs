@@ -385,6 +385,21 @@ impl ExperimentationConfig {
         })
     }
 
+    /// Returns whether a variant name could be sampled by this experimentation config.
+    /// Empty allowed lists (e.g. default Uniform with no explicit candidates) means all variants
+    /// are eligible, so we return `true`.
+    pub fn could_sample_variant(&self, variant_name: &str) -> bool {
+        let allowed: Vec<&str> = match self {
+            Self::StaticWeights(c) => c.allowed_variants().collect(),
+            Self::Uniform(c) => c.allowed_variants().collect(),
+            Self::TrackAndStop(c) => c.allowed_variants().collect(),
+            #[cfg(test)]
+            Self::AlwaysFails(c) => c.allowed_variants().collect(),
+        };
+        // Empty means Uniform with no explicit candidates → all variants eligible
+        allowed.is_empty() || allowed.contains(&variant_name)
+    }
+
     pub fn get_current_display_probabilities<'a>(
         &self,
         function_name: &str,

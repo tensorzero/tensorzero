@@ -88,19 +88,23 @@ pub struct ModelConfig {
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
     pub timeouts: TimeoutsConfig,
     pub skip_relay: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_relay: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
 }
 
 impl UninitializedModelConfig {
@@ -158,6 +162,7 @@ impl UninitializedModelConfig {
             providers,
             timeouts: self.timeouts,
             skip_relay,
+            namespace: self.namespace,
         })
     }
 }
@@ -2650,6 +2655,16 @@ pub const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
 
 pub type ModelTable = BaseModelTable<ModelConfig>;
 
+impl ModelTable {
+    /// Get the namespace of a statically-configured model, if any.
+    /// Returns `None` if the model is not in the table or has no namespace.
+    pub fn get_namespace(&self, model_name: &str) -> Option<&str> {
+        self.table
+            .get(model_name)
+            .and_then(|m| m.namespace.as_deref())
+    }
+}
+
 impl ShorthandModelConfig for ModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
     const MODEL_TYPE: &str = "Model";
@@ -2782,6 +2797,7 @@ impl ShorthandModelConfig for ModelConfig {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         })
     }
 
@@ -2895,6 +2911,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
@@ -2980,6 +2997,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3205,6 +3223,7 @@ mod tests {
             ]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
 
         let model_name = "test model";
@@ -3280,6 +3299,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
@@ -3366,6 +3386,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let response = model_config
             .infer_stream(&request, &clients, "my_model")
@@ -3458,6 +3479,7 @@ mod tests {
             ]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
@@ -3552,6 +3574,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
@@ -3686,6 +3709,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
@@ -3841,6 +3865,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let provider_types = ProviderTypesConfig::default();
         let model_table: ModelTable = ModelTable::new(

@@ -7,4 +7,5 @@ export type ModelConfig = {
   providers: { [key in string]: ModelProvider };
   timeouts: TimeoutsConfig;
   skip_relay: boolean;
+  namespace: string | null;
 };

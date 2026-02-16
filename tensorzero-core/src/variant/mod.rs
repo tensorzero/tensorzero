@@ -277,6 +277,19 @@ impl VariantConfig {
             VariantConfig::ChainOfThought(params) => params.inner.set_weight(weight),
         }
     }
+
+    /// Returns the model names directly used by this variant.
+    /// For BestOfN/MixtureOfN, this returns the evaluator/fuser model (not the candidate variant models,
+    /// which are validated separately through experimentation).
+    pub fn direct_model_names(&self) -> Vec<&Arc<str>> {
+        match self {
+            VariantConfig::ChatCompletion(c) => vec![c.model()],
+            VariantConfig::Dicl(c) => vec![c.model()],
+            VariantConfig::ChainOfThought(c) => vec![c.inner.model()],
+            VariantConfig::BestOfNSampling(c) => vec![c.evaluator().inner.model()],
+            VariantConfig::MixtureOfN(c) => vec![c.fuser().inner.model()],
+        }
+    }
 }
 
 impl Variant for VariantInfo {
@@ -1321,6 +1334,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1434,6 +1448,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
 
         // Create the arguments struct
@@ -1501,6 +1516,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
 
         // Create the arguments struct
@@ -1652,6 +1668,7 @@ mod tests {
             ]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1771,6 +1788,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         }));
 
         // Prepare the model inference request
@@ -1974,6 +1992,7 @@ mod tests {
             ]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         }));
         let retry_config = RetryConfig::default();
 

@@ -432,11 +432,15 @@ pub async fn inference(
     let needs_sampling = prepare_candidate_variants(
         &mut candidate_variants,
         &mut params.tags,
-        params.variant_name.as_deref(),
-        params.internal_dynamic_variant_config,
         &mut templates,
-        &function,
-        function_name.clone(),
+        PrepareCandidateVariantsArgs {
+            pinned_variant_name: params.variant_name.as_deref(),
+            dynamic_variant_config: params.internal_dynamic_variant_config,
+            function: &function,
+            function_name: function_name.clone(),
+            models: &config.models,
+            request_namespace: namespace,
+        },
     )?;
     let templates = &templates;
 
@@ -878,6 +882,21 @@ async fn find_function(
                     message: format!("Invalid model name: {e}"),
                 }
                 .into());
+            }
+
+            // Validate namespace compatibility for the model
+            if let Some(model_namespace) = config.models.get_namespace(model_name) {
+                let request_namespace = params.namespace.as_ref().map(|ns| ns.as_str());
+                if request_namespace != Some(model_namespace) {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "Model `{model_name}` has namespace `{model_namespace}`, \
+                            but the request namespace is {}. Namespaced models can only be used with a matching namespace.",
+                            request_namespace.map_or_else(|| "`None`".to_string(), |ns| format!("`{ns}`"))
+                        ),
+                    }
+                    .into());
+                }
             }
 
             // Validate extra_body and extra_headers filters
@@ -2014,6 +2033,32 @@ impl ChatCompletionInferenceParams {
     }
 }
 
+/// Validates that a variant's models are compatible with the request namespace.
+/// Returns an error if any model has a namespace that doesn't match the request namespace.
+fn validate_variant_namespace_at_inference(
+    variant_name: &str,
+    variant_config: &VariantConfig,
+    models: &ModelTable,
+    request_namespace: Option<&str>,
+) -> Result<(), Error> {
+    for model_name in variant_config.direct_model_names() {
+        if let Some(model_namespace) = models.get_namespace(model_name) {
+            let matches = request_namespace == Some(model_namespace);
+            if !matches {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "Variant `{variant_name}` uses model `{model_name}` which has namespace `{model_namespace}`, \
+                        but the request namespace is {}. Namespaced models can only be used with a matching namespace.",
+                        request_namespace.map_or_else(|| "`None`".to_string(), |ns| format!("`{ns}`"))
+                    ),
+                }
+                .into());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Prepares the candidate variants map using inference parameters prior to sampling
 /// This function handles 2 cases:
 /// 1. If a variant is pinned, only that variant should be attempted
@@ -2023,15 +2068,29 @@ impl ChatCompletionInferenceParams {
 ///
 /// Returns `Ok(true)` if experimentation/sampling is needed (multiple candidate variants)
 /// Returns `Ok(false)` if direct inference is needed (single predetermined variant - no sampling)
+struct PrepareCandidateVariantsArgs<'a> {
+    pinned_variant_name: Option<&'a str>,
+    dynamic_variant_config: Option<UninitializedVariantInfo>,
+    function: &'a FunctionConfig,
+    function_name: String,
+    models: &'a ModelTable,
+    request_namespace: Option<&'a str>,
+}
+
 fn prepare_candidate_variants(
     candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
-    pinned_variant_name: Option<&str>,
-    dynamic_variant_config: Option<UninitializedVariantInfo>,
     template_config: &mut Arc<TemplateConfig<'static>>,
-    function: &FunctionConfig,
-    function_name: String,
+    args: PrepareCandidateVariantsArgs<'_>,
 ) -> Result<bool, Error> {
+    let PrepareCandidateVariantsArgs {
+        pinned_variant_name,
+        dynamic_variant_config,
+        function,
+        function_name,
+        models,
+        request_namespace,
+    } = args;
     let needs_sampling = match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
         (Some(variant_name), None) => {
@@ -2044,6 +2103,17 @@ fn prepare_candidate_variants(
                 }
                 .into());
             }
+
+            // Validate namespace compatibility for the pinned variant
+            if let Some(variant_info) = candidate_variants.get(variant_name) {
+                validate_variant_namespace_at_inference(
+                    variant_name,
+                    &variant_info.inner,
+                    models,
+                    request_namespace,
+                )?;
+            }
+
             tags.insert(
                 "tensorzero::variant_pinned".to_string(),
                 variant_name.to_string(),
@@ -2073,6 +2143,15 @@ fn prepare_candidate_variants(
                     .add_template(template_name, path_with_contents.contents.clone())?;
             }
             *template_config = Arc::new(dynamic_template_config);
+
+            // Validate namespace compatibility for the dynamic variant
+            validate_variant_namespace_at_inference(
+                "tensorzero::dynamic_variant",
+                &candidate_variant_info.inner,
+                models,
+                request_namespace,
+            )?;
+
             candidate_variants.clear();
             candidate_variants.insert(
                 "tensorzero::dynamic_variant".to_string(),

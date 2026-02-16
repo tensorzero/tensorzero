@@ -1476,6 +1476,51 @@ impl Config {
             model.validate(model_name, &self.gateway.global_outbound_http_timeout)?;
         }
 
+        // Validate that namespaced models are only used in matching namespace experimentation configs.
+        // A variant using a namespaced model must not be reachable from base experimentation
+        // or from a different namespace's experimentation config.
+        for (function_name, function) in &self.functions {
+            let experimentation = function.experimentation_with_namespaces();
+            for (variant_name, variant_info) in function.variants() {
+                for model_name in variant_info.inner.direct_model_names() {
+                    let Some(model_namespace) = self.models.get_namespace(model_name) else {
+                        continue; // Unnamespaced models have no restrictions
+                    };
+
+                    // Check: base experimentation must not sample this variant
+                    if experimentation.base.could_sample_variant(variant_name) {
+                        return Err(ErrorDetails::Config {
+                            message: format!(
+                                "Variant `{variant_name}` of function `{function_name}` uses model `{model_name}` \
+                                which has namespace `{model_namespace}`, but the variant is reachable from the \
+                                base experimentation config. Namespaced model variants must only be reachable \
+                                from a matching namespace experimentation config."
+                            ),
+                        }
+                        .into());
+                    }
+
+                    // Check: no other namespace experimentation config should sample this variant
+                    // unless its namespace matches the model's namespace
+                    for (ns_name, ns_config) in &experimentation.namespaces {
+                        if ns_name != model_namespace
+                            && ns_config.could_sample_variant(variant_name)
+                        {
+                            return Err(ErrorDetails::Config {
+                                message: format!(
+                                    "Variant `{variant_name}` of function `{function_name}` uses model `{model_name}` \
+                                    which has namespace `{model_namespace}`, but the variant is reachable from \
+                                    namespace `{ns_name}` experimentation config. Namespaced model variants must only \
+                                    be reachable from a matching namespace experimentation config."
+                                ),
+                            }
+                            .into());
+                        }
+                    }
+                }
+            }
+        }
+
         for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
