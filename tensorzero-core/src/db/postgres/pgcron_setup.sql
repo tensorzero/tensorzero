@@ -28,16 +28,21 @@ BEGIN
             $$
         );
 
-        -- Drop old partitions daily at 00:30 UTC (only acts if retention is configured)
+        -- Drop old metadata partitions daily at 00:30 UTC (only acts if retention is configured)
         PERFORM cron.schedule(
-            'tensorzero_drop_old_inference_partitions',
+            'tensorzero_drop_old_inference_metadata_partitions',
             '30 0 * * *',
             $$
-            SELECT tensorzero.drop_old_partitions('chat_inferences', 'inference_retention_days');
-            SELECT tensorzero.drop_old_partitions('json_inferences', 'inference_retention_days');
-            SELECT tensorzero.drop_old_partitions('model_inferences', 'inference_retention_days');
+            SELECT tensorzero.drop_old_partitions('chat_inferences', 'inference_metadata_retention_days');
+            SELECT tensorzero.drop_old_partitions('json_inferences', 'inference_metadata_retention_days');
+            SELECT tensorzero.drop_old_partitions('model_inferences', 'inference_metadata_retention_days');
             $$
         );
+
+        -- Remove the legacy combined job if it exists
+        PERFORM cron.unschedule(jobid)
+        FROM cron.job
+        WHERE jobname = 'tensorzero_drop_old_inference_partitions';
 
         -- Incrementally refresh model provider statistics every 5 minutes, with a 10 minute lookback window
         PERFORM cron.schedule(
