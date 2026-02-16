@@ -72,13 +72,20 @@ pub struct GroqProvider {
     model_name: String,
     #[serde(skip)]
     credentials: GroqCredentials,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_format: Option<String>,
 }
 
 impl GroqProvider {
-    pub fn new(model_name: String, credentials: GroqCredentials) -> Self {
+    pub fn new(
+        model_name: String,
+        credentials: GroqCredentials,
+        reasoning_format: Option<String>,
+    ) -> Self {
         GroqProvider {
             model_name,
             credentials,
+            reasoning_format,
         }
     }
 
@@ -167,16 +174,22 @@ impl InferenceProvider for GroqProvider {
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
 
-        let request_body =
-            serde_json::to_value(GroqRequest::new(&self.model_name, request.request).await?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing Groq request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(
+            GroqRequest::new(
+                &self.model_name,
+                request.request,
+                self.reasoning_format.as_deref(),
+            )
+            .await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Groq request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
 
         let mut request_builder = http_client.post(request_url);
 
@@ -269,15 +282,17 @@ impl InferenceProvider for GroqProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(GroqRequest::new(&self.model_name, request).await?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Groq request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            GroqRequest::new(&self.model_name, request, self.reasoning_format.as_deref()).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Groq request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
         let api_key = self
             .credentials
@@ -584,13 +599,14 @@ impl GroqRequestMessage<'_> {
 
 pub(super) async fn prepare_groq_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
+    supports_reasoning: bool,
 ) -> Result<Vec<GroqRequestMessage<'a>>, Error> {
     let fetch_and_encode = request.fetch_and_encode_input_files_before_inference;
     let mut messages: Vec<_> = try_join_all(
         request
             .messages
             .iter()
-            .map(|msg| tensorzero_to_groq_messages(msg, fetch_and_encode)),
+            .map(|msg| tensorzero_to_groq_messages(msg, fetch_and_encode, supports_reasoning)),
     )
     .await?
     .into_iter()
@@ -670,6 +686,7 @@ pub(super) fn tensorzero_to_groq_system_message<'a>(
 pub(super) async fn tensorzero_to_groq_messages(
     message: &RequestMessage,
     fetch_and_encode_input_files_before_inference: bool,
+    supports_reasoning: bool,
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     match message.role {
         Role::User => {
@@ -683,6 +700,7 @@ pub(super) async fn tensorzero_to_groq_messages(
             tensorzero_to_groq_assistant_messages(
                 &message.content,
                 fetch_and_encode_input_files_before_inference,
+                supports_reasoning,
             )
             .await
         }
@@ -787,6 +805,7 @@ async fn tensorzero_to_groq_user_messages(
 async fn tensorzero_to_groq_assistant_messages(
     content_blocks: &[ContentBlock],
     fetch_and_encode_input_files_before_inference: bool,
+    supports_reasoning: bool,
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
@@ -865,25 +884,29 @@ async fn tensorzero_to_groq_assistant_messages(
                 }
             },
             ContentBlock::Thought(thought) => {
-                // Thought blocks from other providers are already filtered at the model layer.
-                // Extract reasoning text for multi-turn reasoning support.
+                if supports_reasoning {
+                    // Thought blocks from other providers are already filtered at the model layer.
+                    // Extract reasoning text for multi-turn reasoning support.
 
-                // INVARIANT: We should've filtered thought content blocks from other providers.
-                debug_assert!(matches!(
-                    thought.provider_type.as_deref(),
-                    None | Some(PROVIDER_TYPE)
-                ));
+                    // INVARIANT: We should've filtered thought content blocks from other providers.
+                    debug_assert!(matches!(
+                        thought.provider_type.as_deref(),
+                        None | Some(PROVIDER_TYPE)
+                    ));
 
-                if let Some(text) = &thought.text {
-                    match &mut reasoning {
-                        Some(existing) => {
-                            let combined = format!("{}\n\n{}", existing.as_ref(), text);
-                            reasoning = Some(Cow::Owned(combined));
-                        }
-                        None => {
-                            reasoning = Some(Cow::Borrowed(text));
+                    if let Some(text) = &thought.text {
+                        match &mut reasoning {
+                            Some(existing) => {
+                                let combined = format!("{}\n\n{}", existing.as_ref(), text);
+                                reasoning = Some(Cow::Owned(combined));
+                            }
+                            None => {
+                                reasoning = Some(Cow::Borrowed(text));
+                            }
                         }
                     }
+                } else {
+                    warn_discarded_thought_block(PROVIDER_TYPE, thought);
                 }
             }
             ContentBlock::Unknown(Unknown { data, .. }) => {
@@ -1164,6 +1187,7 @@ impl<'a> GroqRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        reasoning_format: Option<&'a str>,
     ) -> Result<GroqRequest<'a>, Error> {
         let response_format = Some(groq_response_format(
             request.json_mode,
@@ -1176,7 +1200,7 @@ impl<'a> GroqRequest<'a> {
         } else {
             None
         };
-        let mut messages = prepare_groq_messages(request).await?;
+        let mut messages = prepare_groq_messages(request, reasoning_format.is_some()).await?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(request)?;
 
@@ -1211,7 +1235,7 @@ impl<'a> GroqRequest<'a> {
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,
             service_tier: None, // handled below
-            reasoning_format: Some("parsed"),
+            reasoning_format,
         };
 
         apply_inference_params(&mut groq_request, &request.inference_params_v2);
@@ -1602,10 +1626,13 @@ mod tests {
             ..Default::default()
         };
 
-        let groq_request =
-            GroqRequest::new("meta-llama/llama-4-scout-17b-16e-instruct", &basic_request)
-                .await
-                .unwrap();
+        let groq_request = GroqRequest::new(
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            &basic_request,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             groq_request.model,
@@ -1650,6 +1677,7 @@ mod tests {
         let groq_request = GroqRequest::new(
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
+            None,
         )
         .await
         .unwrap();
@@ -1710,6 +1738,7 @@ mod tests {
         let groq_request = GroqRequest::new(
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
+            None,
         )
         .await
         .unwrap();
@@ -1759,6 +1788,7 @@ mod tests {
         let groq_request = GroqRequest::new(
             "meta-llama/llama-4-scout-17b-16e-instruct",
             &request_with_tools,
+            None,
         )
         .await
         .unwrap();
@@ -1845,7 +1875,7 @@ mod tests {
             stop: None,
             reasoning_effort: None,
             service_tier: None,
-            reasoning_format: Some("parsed"),
+            reasoning_format: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1948,7 +1978,7 @@ mod tests {
             stop: None,
             reasoning_effort: None,
             service_tier: None,
-            reasoning_format: Some("parsed"),
+            reasoning_format: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
@@ -2020,7 +2050,7 @@ mod tests {
             stop: None,
             reasoning_effort: None,
             service_tier: None,
-            reasoning_format: Some("parsed"),
+            reasoning_format: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -2084,7 +2114,7 @@ mod tests {
             stop: None,
             reasoning_effort: None,
             service_tier: None,
-            reasoning_format: Some("parsed"),
+            reasoning_format: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_multiple_choices,
@@ -2300,7 +2330,7 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks, true)
+        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks, true, false)
             .await
             .unwrap();
         assert_eq!(groq_messages.len(), 1);
@@ -3018,7 +3048,7 @@ mod tests {
             }),
             "Hello".to_string().into(),
         ];
-        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks, true)
+        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks, true, true)
             .await
             .unwrap();
         assert_eq!(groq_messages.len(), 1);
@@ -3060,7 +3090,7 @@ mod tests {
             }),
             "Hello".to_string().into(),
         ];
-        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks, true)
+        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks, true, true)
             .await
             .unwrap();
         assert_eq!(groq_messages.len(), 1);

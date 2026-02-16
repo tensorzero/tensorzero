@@ -1297,6 +1297,7 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        reasoning_format: Option<String>,
     },
     Hyperbolic {
         model_name: String,
@@ -1578,6 +1579,7 @@ impl UninitializedProviderConfig {
             UninitializedProviderConfig::Groq {
                 model_name,
                 api_key_location,
+                reasoning_format,
             } => ProviderConfig::Groq(GroqProvider::new(
                 model_name,
                 GroqKind
@@ -1586,6 +1588,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                reasoning_format,
             )),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
@@ -2701,6 +2704,7 @@ impl ShorthandModelConfig for ModelConfig {
                 GroqKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                None,
             )),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
                 model_name,

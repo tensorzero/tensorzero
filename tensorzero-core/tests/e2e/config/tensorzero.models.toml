@@ -114,6 +114,7 @@ routing = ["groq"]
 [models."groq-qwen3-32b".providers.groq]
 type = "groq"
 model_name = "qwen/qwen3-32b"
+reasoning_format = "parsed"
 
 [models."groq-gpt-oss-20b"]
 routing = ["groq"]
@@ -121,6 +122,7 @@ routing = ["groq"]
 [models."groq-gpt-oss-20b".providers.groq]
 type = "groq"
 model_name = "openai/gpt-oss-20b"
+reasoning_format = "parsed"
 
 [models.claude-haiku-4-5]
 routing = ["anthropic", "aws_bedrock"]
