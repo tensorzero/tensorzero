@@ -144,6 +144,9 @@ pub struct StreamingTimeouts {
     #[serde(default)]
     /// The time allowed for the first token to be produced.
     pub ttft_ms: Option<u64>,
+    #[serde(default)]
+    /// The total time allowed for the entire streaming request to complete.
+    pub total_ms: Option<u64>,
 }
 
 /// Configures the timeouts for both streaming and non-streaming requests.
@@ -163,7 +166,11 @@ impl TimeoutsConfig {
     pub fn validate(&self, global_outbound_http_timeout: &Duration) -> Result<(), Error> {
         let TimeoutsConfig {
             non_streaming: NonStreamingTimeouts { total_ms },
-            streaming: StreamingTimeouts { ttft_ms },
+            streaming:
+                StreamingTimeouts {
+                    ttft_ms,
+                    total_ms: streaming_total_ms,
+                },
         } = self;
 
         let global_ms = global_outbound_http_timeout.num_milliseconds();
@@ -185,6 +192,23 @@ impl TimeoutsConfig {
                     "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
                 ),
             }));
+        }
+        if let Some(streaming_total_ms) = streaming_total_ms
+            && Duration::milliseconds(*streaming_total_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.streaming.total_ms` value `{streaming_total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
+        }
+        if let Some(ttft_ms) = ttft_ms
+            && let Some(streaming_total_ms) = streaming_total_ms
+            && streaming_total_ms < ttft_ms
+        {
+            tracing::warn!(
+                "The `timeouts.streaming.total_ms` value `{streaming_total_ms}` is less than `timeouts.streaming.ttft_ms` value `{ttft_ms}`. The `total_ms` timeout may fire before the `ttft_ms` timeout."
+            );
         }
 
         Ok(())
@@ -794,6 +818,7 @@ impl RuntimeOverlay {
             global_outbound_http_timeout,
             relay,
             metrics,
+            cache,
         } = &config.gateway;
 
         Self {
@@ -817,6 +842,7 @@ impl RuntimeOverlay {
                 ),
                 relay: relay.as_ref().map(|relay| relay.original_config.clone()),
                 metrics: metrics.clone(),
+                cache: cache.clone(),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1957,6 +1983,7 @@ fn propagate_timeout_s_to_candidates(
             },
             streaming: StreamingTimeouts {
                 ttft_ms: Some(timeout_ms),
+                total_ms: None,
             },
         };
 

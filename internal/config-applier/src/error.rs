@@ -37,6 +37,9 @@ pub enum ConfigApplierError {
 
     #[error("Invalid config structure at `{path}`: expected `{key}` to be a table")]
     InvalidConfigStructure { path: String, key: String },
+
+    #[error("Invalid evaluator config: {message}")]
+    InvalidEvaluatorConfig { message: String },
 }
 
 impl ConfigApplierError {

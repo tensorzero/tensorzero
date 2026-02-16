@@ -892,7 +892,7 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::cache::{CacheEnabledMode, CacheOptions};
+    use crate::cache::{CacheEnabledMode, CacheManager, CacheOptions};
     use crate::config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig};
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
@@ -905,7 +905,7 @@ mod tests {
     use crate::inference::types::Template;
     use crate::inference::types::{
         Arguments, ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode,
-        Usage,
+        Usage, usage::ApiType,
     };
     use crate::jsonschema_util::JSONSchema;
     use crate::minijinja_util::tests::{
@@ -1302,6 +1302,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -1631,6 +1632,7 @@ mod tests {
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 )])
             }
@@ -2318,6 +2320,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),

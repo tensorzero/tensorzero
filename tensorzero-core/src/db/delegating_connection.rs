@@ -19,6 +19,10 @@ use crate::db::datasets::{
     DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams,
 };
+use crate::db::evaluation_queries::{
+    EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
+    EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
+};
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
     DemonstrationFeedbackInsert, DemonstrationFeedbackRow, FeedbackBounds, FeedbackByVariant,
@@ -49,7 +53,7 @@ use crate::db::{
 };
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
-use crate::function::FunctionConfig;
+use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
@@ -89,6 +93,7 @@ pub trait DelegatingDatabaseQueries:
     + BatchInferenceQueries
     + ModelInferenceQueries
     + WorkflowEvaluationQueries
+    + EvaluationQueries
     + ResolveUuidQueries
     + EpisodeQueries
     + DICLQueries
@@ -917,6 +922,118 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl EvaluationQueries for DelegatingDatabaseConnection {
+    async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
+        self.get_read_database().count_total_evaluation_runs().await
+    }
+
+    async fn list_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationRunInfoRow>, Error> {
+        self.get_read_database()
+            .list_evaluation_runs(limit, offset)
+            .await
+    }
+
+    async fn count_datapoints_for_evaluation(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<u64, Error> {
+        self.get_read_database()
+            .count_datapoints_for_evaluation(function_name, evaluation_run_ids)
+            .await
+    }
+
+    async fn search_evaluation_runs(
+        &self,
+        evaluation_name: &str,
+        function_name: &str,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationRunSearchResult>, Error> {
+        self.get_read_database()
+            .search_evaluation_runs(evaluation_name, function_name, query, limit, offset)
+            .await
+    }
+
+    async fn get_evaluation_run_infos(
+        &self,
+        evaluation_run_ids: &[Uuid],
+        function_name: &str,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
+        self.get_read_database()
+            .get_evaluation_run_infos(evaluation_run_ids, function_name)
+            .await
+    }
+
+    async fn get_evaluation_run_infos_for_datapoint(
+        &self,
+        datapoint_id: &Uuid,
+        function_name: &str,
+        function_type: FunctionConfigType,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
+        self.get_read_database()
+            .get_evaluation_run_infos_for_datapoint(datapoint_id, function_name, function_type)
+            .await
+    }
+
+    async fn get_evaluation_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        metric_names: &[String],
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationStatisticsRow>, Error> {
+        self.get_read_database()
+            .get_evaluation_statistics(
+                function_name,
+                function_type,
+                metric_names,
+                evaluation_run_ids,
+            )
+            .await
+    }
+
+    async fn get_evaluation_results(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[Uuid],
+        function_type: FunctionConfigType,
+        metric_names: &[String],
+        datapoint_id: Option<&Uuid>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationResultRow>, Error> {
+        self.get_read_database()
+            .get_evaluation_results(
+                function_name,
+                evaluation_run_ids,
+                function_type,
+                metric_names,
+                datapoint_id,
+                limit,
+                offset,
+            )
+            .await
+    }
+
+    async fn get_inference_evaluation_human_feedback(
+        &self,
+        metric_name: &str,
+        datapoint_id: &Uuid,
+        output: &str,
+    ) -> Result<Option<InferenceEvaluationHumanFeedbackRow>, Error> {
+        self.get_read_database()
+            .get_inference_evaluation_human_feedback(metric_name, datapoint_id, output)
+            .await
     }
 }
 

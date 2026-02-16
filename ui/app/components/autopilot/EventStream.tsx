@@ -12,6 +12,11 @@ import {
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
+import { UuidLink } from "~/components/autopilot/UuidLink";
+import {
+  remarkUuidLinks,
+  UUID_LINK_ELEMENT,
+} from "~/components/autopilot/remarkUuidLinks";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -32,6 +37,12 @@ import type {
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 import TopKEvaluationViz from "./TopKEvaluationViz";
+
+/**
+ * Max height for expandable tool content (tool call arguments, tool results, errors).
+ * Keeps long content from dominating the chat view by making it scrollable.
+ */
+export const TOOL_CONTENT_MAX_HEIGHT = "400px";
 
 /**
  * Optimistic messages are shown after the API confirms receipt but before
@@ -253,11 +264,11 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
         description: payload.message,
       };
     case "visualization":
-      // Visualization events render their own content, no text description needed
-      return {};
+    case "user_questions":
+    case "user_questions_answers":
     case "unknown":
-      return {};
-    default:
+      // Visualization events render their own content, no text description needed
+      // TODO (#6270): add a real component for `user_questions` and `user_responses`
       return {};
   }
 }
@@ -418,6 +429,8 @@ function renderEventTitle(event: GatewayEvent) {
           <span>{getVisualizationTitle(payload.visualization)}</span>
         </span>
       );
+    case "user_questions":
+    case "user_questions_answers":
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -495,6 +508,9 @@ class EventErrorBoundary extends Component<
   }
 }
 
+const uuidRemarkPlugins = [remarkUuidLinks];
+const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
+
 function EventItem({
   event,
   isPending = false,
@@ -564,7 +580,12 @@ function EventItem({
         <>
           {event.payload.type === "message" &&
           event.payload.role === "assistant" ? (
-            <Markdown>{summary.description}</Markdown>
+            <Markdown
+              remarkPlugins={uuidRemarkPlugins}
+              components={uuidComponents}
+            >
+              {summary.description}
+            </Markdown>
           ) : event.payload.type === "tool_call" ? (
             <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (
@@ -573,8 +594,14 @@ function EventItem({
                 "text-fg-secondary text-sm whitespace-pre-wrap",
                 (event.payload.type === "tool_result" ||
                   event.payload.type === "error") &&
-                  "font-mono",
+                  "overflow-y-auto font-mono",
               )}
+              style={
+                event.payload.type === "tool_result" ||
+                event.payload.type === "error"
+                  ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
+                  : undefined
+              }
             >
               {summary.description}
             </p>

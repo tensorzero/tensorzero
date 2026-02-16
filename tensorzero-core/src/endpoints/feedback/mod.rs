@@ -179,23 +179,15 @@ pub async fn feedback(
         .increment(1);
     }
 
-    // Note: InferenceQueries is only implemented for ClickHouse currently.
-    // When Postgres implements InferenceQueries, we can use ENABLE_POSTGRES_READ to select.
-    //
-    // TODO(shuyangli): Also implement InferenceQueries for DelegatingDatabaseConnection and only pass one in
-    let read_database: Arc<dyn InferenceQueries + Send + Sync> =
-        Arc::new(clickhouse_connection_info.clone());
-    let write_database: Arc<dyn FeedbackQueries + Send + Sync> =
-        Arc::new(DelegatingDatabaseConnection::new(
-            clickhouse_connection_info.clone(),
-            postgres_connection_info.clone(),
-        ));
+    let database = Arc::new(DelegatingDatabaseConnection::new(
+        clickhouse_connection_info.clone(),
+        postgres_connection_info.clone(),
+    ));
 
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
-                read_database,
-                write_database,
+                database,
                 &deferred_tasks,
                 &params,
                 feedback_metadata.target_id,
@@ -209,8 +201,7 @@ pub async fn feedback(
         }
         FeedbackType::Demonstration => {
             write_demonstration(
-                read_database,
-                write_database,
+                database,
                 &deferred_tasks,
                 &config,
                 &params,
@@ -222,8 +213,7 @@ pub async fn feedback(
         }
         FeedbackType::Float => {
             write_float(
-                read_database,
-                write_database,
+                database,
                 &deferred_tasks,
                 &config,
                 params,
@@ -236,8 +226,7 @@ pub async fn feedback(
         }
         FeedbackType::Boolean => {
             write_boolean(
-                read_database,
-                write_database,
+                database,
                 &deferred_tasks,
                 &config,
                 params,
@@ -316,8 +305,7 @@ fn get_feedback_metadata<'a>(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_comment(
-    read_database: Arc<dyn InferenceQueries + Send + Sync>,
-    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
+    database: Arc<DelegatingDatabaseConnection>,
     deferred_tasks: &TaskTracker,
     params: &Params,
     target_id: Uuid,
@@ -330,7 +318,7 @@ async fn write_comment(
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
     if !disable_validation {
-        let _ = throttled_get_function_info(read_database.as_ref(), level, &target_id).await?;
+        let _ = throttled_get_function_info(database.as_ref(), level, &target_id).await?;
     }
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
@@ -350,16 +338,14 @@ async fn write_comment(
 
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = write_database.insert_comment_feedback(&insert).await;
+            let _ = database.insert_comment_feedback(&insert).await;
         });
     }
     Ok(())
 }
 
-#[expect(clippy::too_many_arguments)]
 async fn write_demonstration(
-    read_database: Arc<dyn InferenceQueries + Send + Sync>,
-    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
+    database: Arc<DelegatingDatabaseConnection>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: &Params,
@@ -369,14 +355,14 @@ async fn write_demonstration(
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     let function_info = throttled_get_function_info(
-        read_database.as_ref(),
+        database.as_ref(),
         &MetricConfigLevel::Inference,
         &inference_id,
     )
     .await?;
     let function_config = config.get_function(&function_info.function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
-        read_database.as_ref(),
+        database.as_ref(),
         inference_id,
         &function_info.function_name,
         &function_config,
@@ -400,7 +386,7 @@ async fn write_demonstration(
 
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = write_database.insert_demonstration_feedback(&insert).await;
+            let _ = database.insert_demonstration_feedback(&insert).await;
         });
     }
     Ok(())
@@ -408,8 +394,7 @@ async fn write_demonstration(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_float(
-    read_database: Arc<dyn InferenceQueries + Send + Sync>,
-    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
+    database: Arc<DelegatingDatabaseConnection>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
@@ -430,7 +415,7 @@ async fn write_float(
     } else {
         // This will also throw if the function does not exist.
         Some(
-            throttled_get_function_info(read_database.as_ref(), &metric_config.level, &target_id)
+            throttled_get_function_info(database.as_ref(), &metric_config.level, &target_id)
                 .await?,
         )
     };
@@ -453,8 +438,7 @@ async fn write_float(
         deferred_tasks.spawn(async move {
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
-                    read_database.as_ref(),
-                    write_database.as_ref(),
+                    database.as_ref(),
                     maybe_function_info,
                     &metric_name,
                     &tags,
@@ -462,7 +446,7 @@ async fn write_float(
                     &value,
                     target_id
                 ),
-                write_database.insert_float_feedback(&insert)
+                database.insert_float_feedback(&insert)
             );
         });
     }
@@ -471,8 +455,7 @@ async fn write_float(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_boolean(
-    read_database: Arc<dyn InferenceQueries + Send + Sync>,
-    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
+    database: Arc<DelegatingDatabaseConnection>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
@@ -493,7 +476,7 @@ async fn write_boolean(
     } else {
         // This will also throw if the function does not exist.
         Some(
-            throttled_get_function_info(read_database.as_ref(), &metric_config.level, &target_id)
+            throttled_get_function_info(database.as_ref(), &metric_config.level, &target_id)
                 .await?,
         )
     };
@@ -515,8 +498,7 @@ async fn write_boolean(
         deferred_tasks.spawn(async move {
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
-                    read_database.as_ref(),
-                    write_database.as_ref(),
+                    database.as_ref(),
                     maybe_function_info,
                     &metric_name,
                     &tags,
@@ -524,7 +506,7 @@ async fn write_boolean(
                     &value,
                     target_id
                 ),
-                write_database.insert_boolean_feedback(&insert)
+                database.insert_boolean_feedback(&insert)
             );
         });
     }

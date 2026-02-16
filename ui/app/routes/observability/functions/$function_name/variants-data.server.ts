@@ -54,7 +54,7 @@ export async function fetchVariantsSectionData(params: {
         },
         timeouts: {
           non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null },
+          streaming: { ttft_ms: null, total_ms: null },
         },
       };
     }

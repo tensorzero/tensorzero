@@ -15,6 +15,7 @@ use crate::{
         extra_body::{DynamicExtraBody, ExtraBodyReplacementKind, FullExtraBodyConfig},
         extra_headers::{DynamicExtraHeader, ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig},
         resolved_input::{FileUrl, LazyFile},
+        usage::ApiType,
     },
     model::{ModelProviderRequestInfo, fully_qualified_name},
 };
@@ -29,6 +30,7 @@ pub struct JsonlBatchFileInfo {
 pub async fn convert_stream_error(
     raw_request: String,
     provider_type: String,
+    api_type: ApiType,
     e: reqwest_sse_stream::ReqwestSseStreamError,
     request_id: Option<&str>,
 ) -> Error {
@@ -51,6 +53,7 @@ pub async fn convert_stream_error(
             ErrorDetails::FatalStreamError {
                 message,
                 provider_type,
+                api_type,
                 raw_request: Some(raw_request),
                 raw_response,
             }
@@ -78,6 +81,7 @@ pub async fn convert_stream_error(
             ErrorDetails::FatalStreamError {
                 message,
                 provider_type,
+                api_type,
                 raw_request: Some(raw_request),
                 raw_response: None,
             }
@@ -93,6 +97,7 @@ pub async fn convert_stream_error(
                 raw_request: Some(raw_request),
                 raw_response: None,
                 provider_type,
+                api_type,
             }
             .into()
         }
@@ -136,6 +141,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
         raw_response,
         file_id,
     }: JsonlBatchFileInfo,
+    api_type: ApiType,
     mut make_output: impl FnMut(T) -> Result<ProviderBatchInferenceOutput, Error>,
 ) -> Result<ProviderBatchInferenceResponse, Error> {
     let bytes = bytes.map_err(|e| {
@@ -147,6 +153,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })?;
     let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
@@ -159,6 +166,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })?;
     for line in text.lines() {
@@ -174,6 +182,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
                     raw_request: None,
                     raw_response: Some(line.to_string()),
                     provider_type: provider_type.to_string(),
+                    api_type,
                 });
                 continue;
             }
@@ -198,8 +207,10 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
 /// Injects extra headers/body fields into a request builder, and sends the request.
 /// This is used when implementing non-streaming inference for a model provider,
 /// and is responsible for actually submitting the HTTP request.
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send(
     provider_type: &str,
+    api_type: ApiType,
     config: &FullExtraBodyConfig,
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
@@ -213,6 +224,7 @@ pub async fn inject_extra_request_data_and_send(
         ..
     } = inject_extra_request_data_and_send_with_headers(
         provider_type,
+        api_type,
         config,
         extra_headers_config,
         model_provider_data,
@@ -227,8 +239,10 @@ pub async fn inject_extra_request_data_and_send(
 
 /// Like `inject_extra_request_data_and_send`, but for streaming requests
 /// Produces an `EventSource` instead of a `Response`.
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_eventsource(
     provider_type: &str,
+    api_type: ApiType,
     config: &FullExtraBodyConfig,
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
@@ -242,6 +256,7 @@ pub async fn inject_extra_request_data_and_send_eventsource(
         ..
     } = inject_extra_request_data_and_send_eventsource_with_headers(
         provider_type,
+        api_type,
         config,
         extra_headers_config,
         model_provider_data,
@@ -260,8 +275,10 @@ pub struct InjectedResponse<T> {
     pub headers: http::HeaderMap,
 }
 
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_with_headers(
     provider_type: &str,
+    api_type: ApiType,
     config: &FullExtraBodyConfig,
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
@@ -302,6 +319,7 @@ pub async fn inject_extra_request_data_and_send_with_headers(
                     status_code,
                     message,
                     provider_type: provider_type.to_string(),
+                    api_type,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 }),
@@ -316,8 +334,10 @@ pub async fn inject_extra_request_data_and_send_with_headers(
     })
 }
 
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
     provider_type: &str,
+    api_type: ApiType,
     config: &FullExtraBodyConfig,
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
@@ -394,6 +414,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
             let error = Error::new(ErrorDetails::FatalStreamError {
                 message,
                 provider_type: provider_type.to_string(),
+                api_type,
                 raw_request: Some(raw_request),
                 raw_response,
             });
@@ -983,6 +1004,7 @@ pub async fn peek_first_chunk<
     stream: &'a mut Peekable<Pin<Box<T>>>,
     raw_request: &str,
     provider_type: &str,
+    api_type: ApiType,
 ) -> Result<&'a mut ProviderInferenceResponseChunk, Error> {
     // If the next stream item is an error, consume and return it
     if let Some(err) = Pin::new(&mut *stream).next_if(Result::is_err).await {
@@ -1007,6 +1029,7 @@ pub async fn peek_first_chunk<
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: "Stream ended before first chunk".to_string(),
                 provider_type: provider_type.to_string(),
+                api_type,
                 raw_request: Some(raw_request.to_string()),
                 raw_response: None,
             }))
@@ -1087,7 +1110,7 @@ mod tests {
     #[tokio::test]
     async fn test_peek_empty() {
         let mut stream = Box::pin(stream::empty()).peekable();
-        let err = peek_first_chunk(&mut stream, "test", "test")
+        let err = peek_first_chunk(&mut stream, "test", "test", ApiType::ChatCompletions)
             .await
             .expect_err("Peeking empty stream should fail");
         let err_msg = err.to_string();
@@ -1105,7 +1128,7 @@ mod tests {
             },
         ))]))
         .peekable();
-        let err = peek_first_chunk(&mut stream, "test", "test")
+        let err = peek_first_chunk(&mut stream, "test", "test", ApiType::ChatCompletions)
             .await
             .expect_err("Peeking errored stream should fail");
         assert_eq!(
@@ -1137,7 +1160,7 @@ mod tests {
         ]))
         .peekable();
         let peeked_chunk: &mut ProviderInferenceResponseChunk =
-            peek_first_chunk(&mut stream, "test", "test")
+            peek_first_chunk(&mut stream, "test", "test", ApiType::ChatCompletions)
                 .await
                 .expect("Peeking stream should succeed");
         assert_eq!(&chunk, peeked_chunk);

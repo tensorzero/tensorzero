@@ -635,6 +635,28 @@ timeouts = { streaming = { ttft_ms = 500 } }
 type = "dummy"
 model_name = "slow_second_chunk"
 
+# Provider-level streaming.total_ms: first chunk arrives fast, but the 2s delay
+# on the second chunk will exceed the 500ms total timeout.
+[models.slow_second_chunk_provider_total_timeout]
+routing = ["slow"]
+
+[models.slow_second_chunk_provider_total_timeout.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
+[models.slow_second_chunk_provider_total_timeout.providers.slow.timeouts]
+streaming = { total_ms = 500 }
+
+# Model-level streaming.total_ms: first chunk arrives fast, but the 2s delay
+# on the second chunk will exceed the 500ms total timeout.
+[models.slow_second_chunk_model_total_timeout]
+routing = ["slow"]
+timeouts = { streaming = { total_ms = 500 } }
+
+[models.slow_second_chunk_model_total_timeout.providers.slow]
+type = "dummy"
+model_name = "slow_second_chunk"
+
 [models.slow]
 routing = ["slow"]
 
@@ -723,6 +745,13 @@ routing = ["dummy"]
 [models.err_in_stream.providers.dummy]
 type = "dummy"
 model_name = "err_in_stream"
+
+[models.err_in_stream_with_raw_response]
+routing = ["dummy"]
+
+[models.err_in_stream_with_raw_response.providers.dummy]
+type = "dummy"
+model_name = "err_in_stream_with_raw_response"
 
 [models.flaky_best_of_n_judge]
 routing = ["dummy"]
@@ -894,3 +923,35 @@ routing = ["openai"]
 type = "openai"
 model_name = "text-embedding-3-small"
 extra_headers = [{ name = "Authorization", value = "Bearer invalid_openai_auth" }]
+
+# Error provider with raw_response -> good provider (for model fallback tests)
+[models.test_fallback_with_raw_response]
+routing = ["error_with_raw", "good"]
+
+[models.test_fallback_with_raw_response.providers.error_with_raw]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[models.test_fallback_with_raw_response.providers.good]
+type = "dummy"
+model_name = "good"
+
+# Both providers error with raw_response (for model fallback both-fail tests)
+[models.test_both_error_with_raw_response]
+routing = ["error_with_raw_1", "error_with_raw_2"]
+
+[models.test_both_error_with_raw_response.providers.error_with_raw_1]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[models.test_both_error_with_raw_response.providers.error_with_raw_2]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+# Single error provider with raw_response (for variant fallback tests)
+[models.error_with_raw_response]
+routing = ["error_with_raw"]
+
+[models.error_with_raw_response.providers.error_with_raw]
+type = "dummy"
+model_name = "error_with_raw_response"

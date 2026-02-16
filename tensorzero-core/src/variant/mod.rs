@@ -22,6 +22,7 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::error::TimeoutKind;
 use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::Role;
@@ -34,7 +35,7 @@ use crate::inference::types::extra_headers::{
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage,
+    ModelInferenceResponseWithMetadata, RawResponseEntry, RequestMessage, stream_with_deadline,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -197,6 +198,7 @@ impl BatchInferenceConfig {
 pub struct ModelUsedInfo {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
@@ -206,6 +208,8 @@ pub struct ModelUsedInfo {
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts during model-level fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 pub trait Variant {
@@ -373,7 +377,7 @@ impl Variant for VariantInfo {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -465,20 +469,59 @@ impl Variant for VariantInfo {
 
         // This future includes a call to `peek_first_chunk`, so applying
         // `streaming_ttft_timeout` is correct.
-        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
-            let timeout = tokio::time::Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, fut)
+        let start = tokio::time::Instant::now();
+
+        // Compute the effective pre-TTFT deadline from both ttft_ms and total_ms.
+        let ttft_timeout = self
+            .timeouts
+            .streaming
+            .ttft_ms
+            .map(tokio::time::Duration::from_millis);
+        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let total_timeout = streaming_total_ms.map(tokio::time::Duration::from_millis);
+        let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
+            (Some(ttft), Some(total)) => {
+                if ttft <= total {
+                    Some((start + ttft, ttft, TimeoutKind::StreamingTtft))
+                } else {
+                    Some((start + total, total, TimeoutKind::StreamingTotal))
+                }
+            }
+            (Some(ttft), None) => Some((start + ttft, ttft, TimeoutKind::StreamingTtft)),
+            (None, Some(total)) => Some((start + total, total, TimeoutKind::StreamingTotal)),
+            (None, None) => None,
+        };
+
+        let (mut stream, info) = if let Some((deadline, timeout, kind)) = pre_ttft_timeout {
+            tokio::time::timeout_at(deadline, fut)
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
                         variant_name: variant_name.to_string(),
                         timeout,
-                        streaming: true,
+                        kind,
                     }))
                 })
         } else {
             fut.await
+        }?;
+
+        // Wrap the post-TTFT stream with the remaining total deadline
+        if let Some(total_ms) = streaming_total_ms {
+            let total_timeout = tokio::time::Duration::from_millis(total_ms);
+            let deadline = start + total_timeout;
+            let variant_name = variant_name.to_string();
+            stream = stream_with_deadline(stream, deadline, move || {
+                Error::new(ErrorDetails::VariantTimeout {
+                    variant_name,
+                    timeout: total_timeout,
+                    kind: TimeoutKind::StreamingTotal,
+                })
+            })
+            .peekable();
         }
+
+        Ok((stream, info))
     }
 
     #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.as_ref()).unwrap_or("")))]
@@ -813,8 +856,10 @@ async fn infer_model_request_stream<'request>(
                 stream,
                 raw_request,
                 model_provider_name,
+                provider_type,
                 cached,
                 model_inference_id,
+                failed_raw_response,
             },
         messages: input_messages,
     } = retry_config
@@ -828,6 +873,7 @@ async fn infer_model_request_stream<'request>(
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
+        provider_type,
         raw_request,
         raw_response: None,
         inference_params,
@@ -836,6 +882,7 @@ async fn infer_model_request_stream<'request>(
         input_messages,
         cached,
         model_inference_id,
+        failed_raw_response,
     };
     let config_type = function.config_type();
     let stream =
@@ -920,7 +967,7 @@ impl ChatCompletionConfigPyClass {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache::{CacheEnabledMode, CacheOptions};
+    use crate::cache::{CacheEnabledMode, CacheManager, CacheOptions};
     use crate::config::SchemaData;
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
@@ -1189,6 +1236,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -1501,6 +1549,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -1675,6 +1724,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -1837,6 +1887,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),

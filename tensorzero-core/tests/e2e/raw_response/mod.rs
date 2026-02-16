@@ -4,6 +4,8 @@
 
 mod cache;
 mod embeddings;
+mod error;
+mod fallback;
 mod openai_compatible;
 
 use futures::StreamExt;
@@ -37,7 +39,7 @@ fn assert_raw_response_entry(entry: &Value) {
     let api_type = entry.get("api_type").unwrap().as_str().unwrap();
     assert!(
         ["chat_completions", "responses", "embeddings"].contains(&api_type),
-        "api_type should be 'chat_completions', 'responses', or 'embeddings', got: {api_type}"
+        "api_type should be `chat_completions`, `responses`, or `embeddings`, got: {api_type}"
     );
 
     // Verify data is a string (raw response from provider)
@@ -54,8 +56,6 @@ fn assert_raw_response_entry(entry: &Value) {
 #[tokio::test]
 async fn test_raw_response_chat_completions_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai",
@@ -65,7 +65,7 @@ async fn test_raw_response_chat_completions_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Tokyo? {random_suffix}")
+                    "content": "What is the weather in Tokyo?"
                 }
             ]
         },
@@ -108,12 +108,12 @@ async fn test_raw_response_chat_completions_non_streaming() {
     let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
     assert_eq!(
         api_type, "chat_completions",
-        "OpenAI chat completions should have api_type 'chat_completions'"
+        "OpenAI chat completions should have api_type `chat_completions`"
     );
 
     // Provider type should be "openai"
     let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
-    assert_eq!(provider_type, "openai", "Provider type should be 'openai'");
+    assert_eq!(provider_type, "openai", "Provider type should be `openai`");
 
     // The data field should be a non-empty string (raw response from provider)
     let data = first_entry.get("data").unwrap().as_str().unwrap();
@@ -123,8 +123,6 @@ async fn test_raw_response_chat_completions_non_streaming() {
 #[tokio::test]
 async fn test_raw_response_chat_completions_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai",
@@ -134,7 +132,7 @@ async fn test_raw_response_chat_completions_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Paris? {random_suffix}")
+                    "content": "What is the weather in Paris?"
                 }
             ]
         },
@@ -209,8 +207,6 @@ async fn test_raw_response_chat_completions_streaming() {
 #[tokio::test]
 async fn test_raw_response_responses_api_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai-responses",
@@ -220,7 +216,7 @@ async fn test_raw_response_responses_api_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in London? {random_suffix}")
+                    "content": "What is the weather in London?"
                 }
             ]
         },
@@ -262,15 +258,17 @@ async fn test_raw_response_responses_api_non_streaming() {
     let api_type = first_entry.get("api_type").unwrap().as_str().unwrap();
     assert_eq!(
         api_type, "responses",
-        "OpenAI Responses API should have api_type 'responses'"
+        "OpenAI Responses API should have api_type `responses`"
     );
+
+    // Provider type should be "openai"
+    let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
+    assert_eq!(provider_type, "openai", "Provider type should be `openai`");
 }
 
 #[tokio::test]
 async fn test_raw_response_responses_api_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai-responses",
@@ -280,7 +278,7 @@ async fn test_raw_response_responses_api_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Berlin? {random_suffix}")
+                    "content": "What is the weather in Berlin?"
                 }
             ]
         },
@@ -335,8 +333,6 @@ async fn test_raw_response_responses_api_streaming() {
 #[tokio::test]
 async fn test_raw_response_not_requested_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai",
@@ -346,7 +342,7 @@ async fn test_raw_response_not_requested_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Sydney? {random_suffix}")
+                    "content": "What is the weather in Sydney?"
                 }
             ]
         },
@@ -375,8 +371,6 @@ async fn test_raw_response_not_requested_non_streaming() {
 #[tokio::test]
 async fn test_raw_response_not_requested_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "weather_helper",
         "variant_name": "openai",
@@ -386,7 +380,7 @@ async fn test_raw_response_not_requested_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the weather in Madrid? {random_suffix}")
+                    "content": "What is the weather in Madrid?"
                 }
             ]
         },
@@ -432,8 +426,6 @@ async fn test_raw_response_not_requested_streaming() {
 #[tokio::test]
 async fn test_raw_response_best_of_n_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "best_of_n",
         "variant_name": "best_of_n_variant_openai",
@@ -443,7 +435,7 @@ async fn test_raw_response_best_of_n_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("Hello, what is your name? {random_suffix}")
+                    "content": "Hello, what is your name?"
                 }
             ]
         },
@@ -489,12 +481,17 @@ async fn test_raw_response_best_of_n_non_streaming() {
         assert_raw_response_entry(entry);
     }
 
-    // All entries should have api_type = "chat_completions" for this variant
+    // All entries should have api_type = "chat_completions" and provider_type = "openai"
     for entry in raw_response_array {
         let api_type = entry.get("api_type").unwrap().as_str().unwrap();
         assert_eq!(
             api_type, "chat_completions",
-            "All Best-of-N inferences should have api_type 'chat_completions'"
+            "All Best-of-N inferences should have api_type `chat_completions`"
+        );
+        let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
+        assert_eq!(
+            provider_type, "openai",
+            "All Best-of-N inferences should have provider_type `openai`"
         );
     }
 }
@@ -502,8 +499,6 @@ async fn test_raw_response_best_of_n_non_streaming() {
 #[tokio::test]
 async fn test_raw_response_best_of_n_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "best_of_n",
         "variant_name": "best_of_n_variant_openai",
@@ -513,7 +508,7 @@ async fn test_raw_response_best_of_n_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is your favorite color? {random_suffix}")
+                    "content": "What is your favorite color?"
                 }
             ]
         },
@@ -555,9 +550,14 @@ async fn test_raw_response_best_of_n_streaming() {
             if let Some(arr) = raw_response.as_array() {
                 raw_response_count += arr.len();
 
-                // Validate each entry has required fields
+                // Validate each entry has required fields and correct provider_type
                 for entry in arr {
                     assert_raw_response_entry(entry);
+                    let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
+                    assert_eq!(
+                        provider_type, "openai",
+                        "Best-of-N streaming entries should have provider_type `openai`"
+                    );
                 }
             }
         }
@@ -589,8 +589,6 @@ async fn test_raw_response_best_of_n_streaming() {
 #[tokio::test]
 async fn test_raw_response_mixture_of_n_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "mixture_of_n",
         "variant_name": "mixture_of_n_variant",
@@ -600,7 +598,7 @@ async fn test_raw_response_mixture_of_n_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("Please write a short sentence. {random_suffix}")
+                    "content": "Please write a short sentence."
                 }
             ]
         },
@@ -641,17 +639,32 @@ async fn test_raw_response_mixture_of_n_non_streaming() {
         raw_response_array.len()
     );
 
-    // Validate each entry has required fields
+    // Validate each entry has required fields and correct provider_type.
+    // Candidates use dummy providers, fuser uses openai.
+    let mut dummy_count = 0;
+    let mut openai_count = 0;
     for entry in raw_response_array {
         assert_raw_response_entry(entry);
+        let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
+        match provider_type {
+            "dummy" => dummy_count += 1,
+            "openai" => openai_count += 1,
+            other => panic!("Unexpected provider_type: {other}"),
+        }
     }
+    assert_eq!(
+        dummy_count, 2,
+        "Mixture-of-N should have 2 dummy candidate entries"
+    );
+    assert_eq!(
+        openai_count, 1,
+        "Mixture-of-N should have 1 openai fuser entry"
+    );
 }
 
 #[tokio::test]
 async fn test_raw_response_mixture_of_n_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "mixture_of_n",
         "variant_name": "mixture_of_n_variant",
@@ -661,7 +674,7 @@ async fn test_raw_response_mixture_of_n_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("Tell me a fun fact. {random_suffix}")
+                    "content": "Tell me a fun fact."
                 }
             ]
         },
@@ -703,9 +716,16 @@ async fn test_raw_response_mixture_of_n_streaming() {
             if let Some(arr) = raw_response.as_array() {
                 raw_response_count += arr.len();
 
-                // Validate each entry has required fields
+                // Validate each entry has required fields and correct provider_type.
+                // In streaming, raw_response contains candidate entries (dummy),
+                // while the fuser (openai) streams via raw_chunk.
                 for entry in arr {
                     assert_raw_response_entry(entry);
+                    let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
+                    assert_eq!(
+                        provider_type, "dummy",
+                        "Mixture-of-N streaming raw_response entries should be dummy candidates"
+                    );
                 }
             }
         }
@@ -738,8 +758,6 @@ async fn test_raw_response_mixture_of_n_streaming() {
 #[tokio::test]
 async fn test_raw_response_dicl_non_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": "dicl",
@@ -749,7 +767,7 @@ async fn test_raw_response_dicl_non_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the capital of France? {random_suffix}")
+                    "content": "What is the capital of France?"
                 }
             ]
         },
@@ -791,9 +809,14 @@ async fn test_raw_response_dicl_non_streaming() {
         raw_response_array
     );
 
-    // Validate each entry has required fields
+    // Validate each entry has required fields and correct provider_type
     for entry in raw_response_array {
         assert_raw_response_entry(entry);
+        let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
+        assert_eq!(
+            provider_type, "openai",
+            "DICL entries should have provider_type `openai`"
+        );
     }
 
     // Check that we have exactly one of each api_type
@@ -819,8 +842,6 @@ async fn test_raw_response_dicl_non_streaming() {
 #[tokio::test]
 async fn test_raw_response_dicl_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
-
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": "dicl",
@@ -830,7 +851,7 @@ async fn test_raw_response_dicl_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the capital of Germany? {random_suffix}")
+                    "content": "What is the capital of Germany?"
                 }
             ]
         },
@@ -872,6 +893,11 @@ async fn test_raw_response_dicl_streaming() {
             if let Some(arr) = raw_response.as_array() {
                 for entry in arr {
                     assert_raw_response_entry(entry);
+                    let provider_type = entry.get("provider_type").unwrap().as_str().unwrap();
+                    assert_eq!(
+                        provider_type, "openai",
+                        "DICL streaming entries should have provider_type `openai`"
+                    );
                     if let Some(api_type) = entry.get("api_type").and_then(|v| v.as_str()) {
                         api_types.push(api_type.to_string());
                     }
@@ -953,6 +979,10 @@ async fn test_raw_response_json_function_non_streaming() {
     // Validate entry structure
     let first_entry = &raw_response_array[0];
     assert_raw_response_entry(first_entry);
+
+    // Provider type should be "openai"
+    let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
+    assert_eq!(provider_type, "openai", "Provider type should be `openai`");
 }
 
 #[tokio::test]

@@ -41,6 +41,7 @@ impl ToolMetadata for FailingTool {
 
 #[async_trait]
 impl TaskTool for FailingTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,

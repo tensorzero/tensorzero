@@ -191,14 +191,18 @@ model = "gpt_4o_mini_api_key_B"
 ## Timeouts
 
 You can set granular timeouts for individual requests to a model provider, model, or variant using the `timeouts` field in the corresponding configuration block.
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT) to a particular model provider.
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request to complete.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request to complete (measured from request start). This is useful for bounding the total duration of a stream, even after the first token has arrived.
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests to a particular model provider.
 
 ```toml
 [models.model_name.providers.provider_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
