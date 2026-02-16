@@ -424,21 +424,21 @@ type = "sglang"
 model_name = "Qwen/Qwen2.5-1.5B-Instruct"
 api_base = "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
 
-[models."qwen2.5-0.5b-instruct-vllm"]
+[models."qwen3-1.7b-vllm"]
 routing = ["vllm"]
 
-[models."qwen2.5-0.5b-instruct-vllm".providers.vllm]
+[models."qwen3-1.7b-vllm".providers.vllm]
 type = "vllm"
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
+model_name = "Qwen/Qwen3-1.7B"
+api_base = "https://tensorzero--vllm-qwen3-inference-vllm-inference.modal.run/v1/"
 
-[models."qwen2.5-0.5b-instruct-vllm-dynamic"]
+[models."qwen3-1.7b-vllm-dynamic"]
 routing = ["vllm"]
 
-[models."qwen2.5-0.5b-instruct-vllm-dynamic".providers.vllm]
+[models."qwen3-1.7b-vllm-dynamic".providers.vllm]
 type = "vllm"
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
+model_name = "Qwen/Qwen3-1.7B"
+api_base = "https://tensorzero--vllm-qwen3-inference-vllm-inference.modal.run/v1/"
 
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]

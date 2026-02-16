@@ -12812,6 +12812,12 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
         return;
     }
 
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+
     let client = Client::new();
     let episode_id = Uuid::now_v7();
     let payload = json!({
@@ -12826,6 +12832,7 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
                     "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
                 }
             ]},
+        "extra_headers": extra_headers.extra_headers,
         "stream": false,
     });
 
@@ -12900,6 +12907,7 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
                 "system": {"assistant_name": "AskJeeves"},
                 "messages": new_messages
             },
+            "extra_headers": extra_headers.extra_headers,
             "stream": false,
         });
         println!("Payload (iteration {iteration}): {payload}");
@@ -12970,6 +12978,12 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
         return;
     }
 
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
+
     let client = Client::new();
     let episode_id = Uuid::now_v7();
     let payload = json!({
@@ -12984,6 +12998,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
                     "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
                 }
             ]},
+        "extra_headers": extra_headers.extra_headers,
         "stream": true,
     });
 
@@ -13096,6 +13111,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
                 "system": {"assistant_name": "AskJeeves"},
                 "messages": new_messages
             },
+            "extra_headers": extra_headers.extra_headers,
             "stream": true,
         });
         println!("Payload (iteration {iteration}): {payload}");
