@@ -26,6 +26,7 @@ import {
 import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { Suspense } from "react";
 import { InputElement } from "~/components/input_output/InputElement";
+import { EmptyMessage } from "~/components/input_output/ContentBlockElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
@@ -365,7 +366,7 @@ function MainContent({
       inferenceId: result.inference_id,
       episodeId: result.episode_id,
       variant_name: result.variant_name,
-      output: result.generated_output,
+      output: result.generated_output ?? [],
       metrics: result.metrics,
     })),
   ];
@@ -374,7 +375,11 @@ function MainContent({
     <SectionsGroup>
       <SectionLayout>
         <SectionHeader heading="Input" />
-        <InputElement input={consolidatedEvaluationResults[0].input} />
+        {consolidatedEvaluationResults[0].input ? (
+          <InputElement input={consolidatedEvaluationResults[0].input} />
+        ) : (
+          <EmptyMessage message="No input" />
+        )}
       </SectionLayout>
       <OutputsSection
         outputsToDisplay={outputsToDisplay}
