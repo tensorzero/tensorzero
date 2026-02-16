@@ -361,19 +361,21 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.sglang]
 type = "chat_completion"
-model = "Qwen/Qwen2.5-1.5B-Instruct"
+model = "Qwen/Qwen3-1.7B"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "strict"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.dynamic_json.variants.sglang-strict]
 type = "chat_completion"
-model = "Qwen/Qwen2.5-1.5B-Instruct"
+model = "Qwen/Qwen3-1.7B"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.dynamic_json.variants.tgi]
 type = "chat_completion"

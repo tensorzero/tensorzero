@@ -22,11 +22,11 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
+    ProviderInferenceResponseArgs, Thought, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk,
+    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
@@ -366,6 +366,8 @@ struct SGLangDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<SGLangToolCallChunk>>,
 }
 
@@ -478,6 +480,17 @@ fn sglang_to_tensorzero_chunk(
     if let Some(choice) = chunk.choices.pop() {
         if let Some(reason) = choice.finish_reason {
             finish_reason = Some(reason.into());
+        }
+        if let Some(reasoning) = choice.delta.reasoning_content {
+            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some(reasoning),
+                signature: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                id: "1".to_string(),
+                summary_id: None,
+                summary_text: None,
+                extra_data: None,
+            }));
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
@@ -775,6 +788,15 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
+            }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -1272,5 +1294,193 @@ mod tests {
         assert!(logs_contain(
             "SGLang does not support the inference parameter `verbosity`"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_sglang_response_with_reasoning_content() {
+        let response = OpenAIResponse {
+            choices: vec![OpenAIResponseChoice {
+                index: 0,
+                message: OpenAIResponseMessage {
+                    content: Some("The answer is 42.".to_string()),
+                    reasoning_content: Some("Let me think about this...".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: OpenAIFinishReason::Stop,
+            }],
+            usage: Some(OpenAIUsage {
+                prompt_tokens: Some(10),
+                completion_tokens: Some(30),
+            }),
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What is the meaning of life?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let sglang_response_with_metadata = SGLangResponseWithMetadata {
+            response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: serde_json::to_string(
+                &SGLangRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+        let inference_response: ProviderInferenceResponse =
+            sglang_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(
+            inference_response.output.len(),
+            2,
+            "Expected 2 content blocks: Thought and Text"
+        );
+        match &inference_response.output[0] {
+            ContentBlockOutput::Thought(thought) => {
+                assert_eq!(
+                    thought.text.as_deref(),
+                    Some("Let me think about this..."),
+                    "Thought text should match reasoning_content"
+                );
+                assert_eq!(
+                    thought.provider_type.as_deref(),
+                    Some(PROVIDER_TYPE),
+                    "provider_type should be set to sglang"
+                );
+            }
+            other => panic!("Expected Thought block, got {other:?}"),
+        }
+        assert_eq!(
+            inference_response.output[1],
+            "The answer is 42.".to_string().into(),
+            "Second block should be the text content"
+        );
+    }
+
+    #[test]
+    fn test_sglang_to_tensorzero_chunk_with_reasoning_content() {
+        let chunk = SGLangChatChunk {
+            choices: vec![SGLangChatChunkChoice {
+                delta: SGLangDelta {
+                    content: None,
+                    reasoning_content: Some("thinking...".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+        let raw_message = serde_json::to_string(&chunk).unwrap();
+        let mut tool_call_ids = Vec::new();
+        let model_inference_id = Uuid::now_v7();
+
+        let result = sglang_to_tensorzero_chunk(
+            raw_message,
+            chunk,
+            Duration::from_millis(100),
+            &mut tool_call_ids,
+            model_inference_id,
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result.content.len(),
+            1,
+            "Expected exactly one content block for reasoning"
+        );
+        match &result.content[0] {
+            ContentBlockChunk::Thought(thought_chunk) => {
+                assert_eq!(
+                    thought_chunk.text.as_deref(),
+                    Some("thinking..."),
+                    "ThoughtChunk text should match reasoning_content"
+                );
+                assert_eq!(thought_chunk.id, "1", "ThoughtChunk id should be '1'");
+                assert_eq!(
+                    thought_chunk.provider_type.as_deref(),
+                    Some(PROVIDER_TYPE),
+                    "provider_type should be set to sglang"
+                );
+            }
+            other => panic!("Expected ThoughtChunk, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_sglang_to_tensorzero_chunk_with_reasoning_and_text() {
+        let chunk = SGLangChatChunk {
+            choices: vec![SGLangChatChunkChoice {
+                delta: SGLangDelta {
+                    content: Some("hello".to_string()),
+                    reasoning_content: Some("let me think".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+        let raw_message = serde_json::to_string(&chunk).unwrap();
+        let mut tool_call_ids = Vec::new();
+        let model_inference_id = Uuid::now_v7();
+
+        let result = sglang_to_tensorzero_chunk(
+            raw_message,
+            chunk,
+            Duration::from_millis(100),
+            &mut tool_call_ids,
+            model_inference_id,
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result.content.len(),
+            2,
+            "Expected two content blocks: Thought and Text"
+        );
+        match &result.content[0] {
+            ContentBlockChunk::Thought(thought_chunk) => {
+                assert_eq!(
+                    thought_chunk.text.as_deref(),
+                    Some("let me think"),
+                    "ThoughtChunk should come first with reasoning_content"
+                );
+                assert_eq!(thought_chunk.id, "1", "ThoughtChunk id should be '1'");
+            }
+            other => panic!("Expected ThoughtChunk first, got {other:?}"),
+        }
+        match &result.content[1] {
+            ContentBlockChunk::Text(text_chunk) => {
+                assert_eq!(
+                    text_chunk.text, "hello",
+                    "TextChunk should come second with content"
+                );
+                assert_eq!(text_chunk.id, "0", "TextChunk id should be '0'");
+            }
+            other => panic!("Expected TextChunk second, got {other:?}"),
+        }
     }
 }

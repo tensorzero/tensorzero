@@ -23,7 +23,7 @@ pub fn get_modal_extra_headers() -> UnfilteredInferenceExtraHeaders {
             value: modal_key.clone(),
         });
         extra_headers.push(DynamicExtraHeader::ModelProvider {
-            model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+            model_name: "Qwen/Qwen3-1.7B".to_string(),
             provider_name: Some("sglang".to_string()),
             name: "Modal-Key".to_string(),
             value: modal_key.clone(),
@@ -49,7 +49,7 @@ pub fn get_modal_extra_headers() -> UnfilteredInferenceExtraHeaders {
             value: modal_secret.clone(),
         });
         extra_headers.push(DynamicExtraHeader::ModelProvider {
-            model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+            model_name: "Qwen/Qwen3-1.7B".to_string(),
             provider_name: Some("sglang".to_string()),
             name: "Modal-Secret".to_string(),
             value: modal_secret.clone(),
