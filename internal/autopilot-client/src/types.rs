@@ -641,6 +641,7 @@ pub struct EventPayloadUserQuestionsAnswers {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UserQuestionAnswer {
     MultipleChoice(MultipleChoiceAnswer),
     FreeResponse(FreeResponseAnswer),
