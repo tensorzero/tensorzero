@@ -4,6 +4,9 @@
 
 pub mod aws_bedrock;
 pub mod deepseek;
+pub mod groq;
+pub mod mistral;
 pub mod openai;
 pub mod openrouter;
+pub mod serde_util;
 pub mod xai;

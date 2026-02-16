@@ -353,6 +353,22 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "strict"
 max_tokens = 500
 
+[functions.json_success.variants.groq-reasoning]
+type = "chat_completion"
+model = "groq-qwen3-32b"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 500
+
+[functions.json_success.variants.groq-reasoning-usage]
+type = "chat_completion"
+model = "groq-gpt-oss-20b"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
+max_tokens = 500
+
 [functions.json_success.variants.json_reasoner]
 type = "chat_completion"
 model = "json_reasoner"

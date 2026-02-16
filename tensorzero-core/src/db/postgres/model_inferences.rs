@@ -7,13 +7,14 @@ use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
 use sqlx::types::Json;
 use sqlx::{PgPool, QueryBuilder, Row};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::query_helpers::uuid_to_datetime;
 use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::{
     ContentBlockOutput, FinishReason, StoredModelInference, StoredRequestMessage,
 };
@@ -25,6 +26,32 @@ pub const POSTGRES_QUANTILES: &[f64; 17] = &[
     0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.15, 0.25, 0.5, 0.75, 0.85, 0.9, 0.95, 0.98, 0.99, 0.995,
     0.999,
 ];
+
+const LATENCY_HISTOGRAM_BUCKETS_PER_POWER_OF_TWO: f64 = 64.0;
+const RESPONSE_TIME_MS_METRIC: &str = "response_time_ms";
+const TTFT_MS_METRIC: &str = "ttft_ms";
+
+#[derive(Debug, Clone, Copy)]
+struct LatencyHistogramBucket {
+    bucket_id: i32,
+    bucket_count: f64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct ModelLatencyHistogramBucketRow {
+    model_name: String,
+    count: i64,
+    metric: Option<String>,
+    bucket_id: Option<i32>,
+    bucket_count: Option<f64>,
+}
+
+#[derive(Debug, Default)]
+struct ModelLatencyHistogramModelData {
+    count: u64,
+    response_time_ms_buckets: Vec<LatencyHistogramBucket>,
+    ttft_ms_buckets: Vec<LatencyHistogramBucket>,
+}
 lazy_static! {
     /// Quantiles array string for Postgres queries.
     pub static ref POSTGRES_QUANTILES_ARRAY_STRING: String = POSTGRES_QUANTILES
@@ -90,11 +117,55 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
     ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
         let pool = self.get_pool_result()?;
 
-        let mut query_builder = build_model_latency_quantiles_query(&time_window);
-        let rows: Vec<ModelLatencyDatapoint> =
+        if time_window == TimeWindow::Minute {
+            let mut query_builder = build_model_latency_quantiles_raw_query(&time_window);
+            let rows: Vec<ModelLatencyDatapoint> =
+                query_builder.build_query_as().fetch_all(pool).await?;
+            return Ok(rows);
+        }
+
+        let (source_table, source_time_column, time_window_interval) = match time_window {
+            TimeWindow::Hour => (
+                "tensorzero.model_latency_histogram_minute",
+                "minute",
+                Some("1 hour"),
+            ),
+            TimeWindow::Day => (
+                "tensorzero.model_latency_histogram_hour",
+                "hour",
+                Some("1 day"),
+            ),
+            TimeWindow::Week => (
+                "tensorzero.model_latency_histogram_hour",
+                "hour",
+                Some("1 week"),
+            ),
+            TimeWindow::Month => (
+                "tensorzero.model_latency_histogram_hour",
+                "hour",
+                Some("1 month"),
+            ),
+            TimeWindow::Cumulative => ("tensorzero.model_latency_histogram_hour", "hour", None),
+            TimeWindow::Minute => {
+                return Err(Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Trying to handle TimeWindow::Minute when constructing histogram query. {IMPOSSIBLE_ERROR_MESSAGE}"
+                    ),
+                }));
+            }
+        };
+
+        let mut query_builder = build_model_latency_quantiles_histogram_query(
+            source_table,
+            source_time_column,
+            time_window_interval,
+        );
+        let bucket_rows: Vec<ModelLatencyHistogramBucketRow> =
             query_builder.build_query_as().fetch_all(pool).await?;
 
-        Ok(rows)
+        Ok(compute_model_latency_quantiles_from_histogram_buckets(
+            bucket_rows,
+        ))
     }
 
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
@@ -165,8 +236,8 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(&row.raw_request)
             .push_bind(&row.raw_response)
             .push_bind(&row.system)
-            .push_bind(Json(&row.input_messages))
-            .push_bind(Json(&row.output))
+            .push_bind(row.input_messages.as_ref().map(Json::from))
+            .push_bind(row.output.as_ref().map(Json::from))
             .push_bind(row.input_tokens.map(|v| v as i32))
             .push_bind(row.output_tokens.map(|v| v as i32))
             .push_bind(row.response_time_ms.map(|v| v as i32))
@@ -279,44 +350,195 @@ async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimeP
     Ok(rows)
 }
 
-/// Builds the query for model latency quantiles.
-/// For Minute, queries raw data. For Hour/Day/Week/Month/Cumulative, queries materialized views.
-fn build_model_latency_quantiles_query(time_window: &TimeWindow) -> QueryBuilder<sqlx::Postgres> {
-    // For Hour/Day/Week/Month/Cumulative, use precomputed materialized views
-    // For Minute, compute from raw data since the data volume is small
-    match time_window {
-        TimeWindow::Minute => build_model_latency_quantiles_raw_query(time_window),
-        TimeWindow::Hour => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles_hour")
-        }
-        TimeWindow::Day => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles_day")
-        }
-        TimeWindow::Week => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles_week")
-        }
-        TimeWindow::Month => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles_month")
-        }
-        TimeWindow::Cumulative => {
-            build_model_latency_quantiles_view_query("tensorzero.model_latency_quantiles")
-        }
+/// Builds a query that returns aggregated histogram buckets.
+fn build_model_latency_quantiles_histogram_query(
+    source_table: &str,
+    source_time_column: &str,
+    time_window: Option<&str>,
+) -> QueryBuilder<sqlx::Postgres> {
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        "WITH model_counts AS (
+            SELECT
+                model_name,
+                SUM(inference_count)::BIGINT AS count
+            FROM tensorzero.model_provider_statistics
+            WHERE TRUE",
+    );
+
+    push_now_window_filter(&mut query_builder, "minute", time_window);
+    query_builder.push(
+        "
+            GROUP BY model_name
+        ),
+        hist AS (
+            SELECT
+                model_name,
+                metric,
+                bucket_id,
+                SUM(bucket_count)::DOUBLE PRECISION AS bucket_count
+            FROM ",
+    );
+    query_builder.push(source_table);
+    query_builder.push(
+        "
+            WHERE TRUE",
+    );
+    push_now_window_filter(&mut query_builder, source_time_column, time_window);
+    query_builder.push(
+        "
+            GROUP BY model_name, metric, bucket_id
+        )
+        SELECT
+            mc.model_name,
+            mc.count,
+            h.metric,
+            h.bucket_id,
+            h.bucket_count
+        FROM model_counts mc
+        LEFT JOIN hist h
+          ON h.model_name = mc.model_name
+        ORDER BY mc.model_name, h.metric, h.bucket_id",
+    );
+
+    query_builder
+}
+
+/// Pushes an optional window filter anchored to `NOW()`.
+fn push_now_window_filter(
+    query_builder: &mut QueryBuilder<sqlx::Postgres>,
+    time_column: &str,
+    time_window: Option<&str>,
+) {
+    if let Some(time_window) = time_window {
+        query_builder.push(" AND ");
+        query_builder.push(time_column);
+        query_builder.push(" >= NOW() - INTERVAL '");
+        query_builder.push(time_window);
+        query_builder.push("' AND ");
+        query_builder.push(time_column);
+        query_builder.push(" <= NOW()");
     }
 }
 
-/// Builds a query to read from a precomputed materialized view.
-fn build_model_latency_quantiles_view_query(table_name: &str) -> QueryBuilder<sqlx::Postgres> {
-    let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
-        "SELECT
+fn compute_model_latency_quantiles_from_histogram_buckets(
+    rows: Vec<ModelLatencyHistogramBucketRow>,
+) -> Vec<ModelLatencyDatapoint> {
+    let mut model_data_by_name: BTreeMap<String, ModelLatencyHistogramModelData> = BTreeMap::new();
+
+    for row in rows {
+        let model_data = model_data_by_name.entry(row.model_name).or_default();
+        model_data.count = row.count.max(0) as u64;
+
+        let (metric, bucket_id, bucket_count) = match (row.metric, row.bucket_id, row.bucket_count)
+        {
+            (Some(metric), Some(bucket_id), Some(bucket_count)) => {
+                (metric, bucket_id, bucket_count)
+            }
+            _ => continue,
+        };
+
+        let bucket = LatencyHistogramBucket {
+            bucket_id,
+            bucket_count,
+        };
+
+        match metric.as_str() {
+            RESPONSE_TIME_MS_METRIC => model_data.response_time_ms_buckets.push(bucket),
+            TTFT_MS_METRIC => model_data.ttft_ms_buckets.push(bucket),
+            _ => {}
+        }
+    }
+
+    model_data_by_name
+        .into_iter()
+        .map(|(model_name, model_data)| ModelLatencyDatapoint {
             model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM ",
-    );
-    qb.push(table_name);
-    qb.push(" ORDER BY model_name");
-    qb
+            response_time_ms_quantiles: compute_quantiles_from_histogram_buckets(
+                &model_data.response_time_ms_buckets,
+            ),
+            ttft_ms_quantiles: compute_quantiles_from_histogram_buckets(
+                &model_data.ttft_ms_buckets,
+            ),
+            count: model_data.count,
+        })
+        .collect()
+}
+
+fn compute_quantiles_from_histogram_buckets(
+    buckets: &[LatencyHistogramBucket],
+) -> Vec<Option<f32>> {
+    if buckets.is_empty() {
+        return EMPTY_QUANTILES.clone();
+    }
+
+    let mut sorted_buckets = buckets.to_vec();
+    sorted_buckets.sort_by_key(|bucket| bucket.bucket_id);
+    let sample_count: f64 = sorted_buckets
+        .iter()
+        .map(|bucket| bucket.bucket_count)
+        .sum();
+
+    if sample_count <= 0.0 {
+        return EMPTY_QUANTILES.clone();
+    }
+
+    // TODO(shuyangli): Switch this to do a single pass instead of O(n^2).
+    POSTGRES_QUANTILES
+        .iter()
+        .map(|quantile| {
+            compute_quantile_from_histogram_buckets(&sorted_buckets, *quantile, sample_count)
+        })
+        .collect()
+}
+
+fn compute_quantile_from_histogram_buckets(
+    sorted_buckets: &[LatencyHistogramBucket],
+    quantile: f64,
+    sample_count: f64,
+) -> Option<f32> {
+    let rank_target = 1.0 + quantile * (sample_count - 1.0);
+    let mut cumulative_count = 0.0;
+
+    for bucket in sorted_buckets {
+        cumulative_count += bucket.bucket_count;
+
+        if cumulative_count < rank_target {
+            continue;
+        }
+
+        if bucket.bucket_count <= 0.0 {
+            return None;
+        }
+
+        let lower_ms = latency_bucket_lower_ms(bucket.bucket_id);
+        let upper_ms = latency_bucket_upper_ms(bucket.bucket_id);
+
+        let quantile_ms = if lower_ms <= 0.0 || upper_ms <= 0.0 {
+            0.0
+        } else {
+            (lower_ms * upper_ms).sqrt()
+        };
+
+        return Some(quantile_ms as f32);
+    }
+
+    None
+}
+
+fn latency_bucket_lower_ms(bucket_id: i32) -> f64 {
+    if bucket_id < 0 {
+        0.0
+    } else {
+        2f64.powf(bucket_id as f64 / LATENCY_HISTOGRAM_BUCKETS_PER_POWER_OF_TWO)
+    }
+}
+
+fn latency_bucket_upper_ms(bucket_id: i32) -> f64 {
+    if bucket_id < 0 {
+        1.0
+    } else {
+        2f64.powf((bucket_id + 1) as f64 / LATENCY_HISTOGRAM_BUCKETS_PER_POWER_OF_TWO)
+    }
 }
 
 /// Builds a query to compute latency quantiles from raw model_inferences data.
@@ -425,11 +647,12 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
         let id: Uuid = row.try_get("id")?;
         let inference_id: Uuid = row.try_get("inference_id")?;
-        let raw_request: String = row.try_get("raw_request")?;
-        let raw_response: String = row.try_get("raw_response")?;
+        let raw_request: Option<String> = row.try_get("raw_request")?;
+        let raw_response: Option<String> = row.try_get("raw_response")?;
         let system: Option<String> = row.try_get("system")?;
-        let input_messages: Json<Vec<StoredRequestMessage>> = row.try_get("input_messages")?;
-        let output: Json<Vec<ContentBlockOutput>> = row.try_get("output")?;
+        let input_messages: Option<Json<Vec<StoredRequestMessage>>> =
+            row.try_get("input_messages")?;
+        let output: Option<Json<Vec<ContentBlockOutput>>> = row.try_get("output")?;
         let input_tokens: Option<i32> = row.try_get("input_tokens")?;
         let output_tokens: Option<i32> = row.try_get("output_tokens")?;
         let response_time_ms: Option<i32> = row.try_get("response_time_ms")?;
@@ -450,8 +673,8 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
             raw_request,
             raw_response,
             system,
-            input_messages: input_messages.0,
-            output: output.0,
+            input_messages: input_messages.map(|v| v.0),
+            output: output.map(|v| v.0),
             input_tokens: input_tokens.map(|v| v as u32),
             output_tokens: output_tokens.map(|v| v as u32),
             response_time_ms: response_time_ms.map(|v| v as u32),
@@ -473,7 +696,9 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::test_helpers::assert_query_equals;
+    use crate::db::test_helpers::{
+        assert_query_contains, assert_query_does_not_contain, assert_query_equals,
+    };
 
     // =========================================================================
     // Model usage timeseries query tests
@@ -584,8 +809,8 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_build_model_latency_quantiles_query_minute() {
-        let qb = build_model_latency_quantiles_query(&TimeWindow::Minute);
+    fn test_build_model_latency_quantiles_raw_query_minute() {
+        let qb = build_model_latency_quantiles_raw_query(&TimeWindow::Minute);
         assert_query_equals(
             qb.sql().as_str(),
             &format!(
@@ -611,73 +836,283 @@ mod tests {
     }
 
     #[test]
-    fn test_build_model_latency_quantiles_query_hour() {
-        let qb = build_model_latency_quantiles_query(&TimeWindow::Hour);
-        assert_query_equals(
+    fn test_build_model_latency_quantiles_histogram_query_hour() {
+        let qb = build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_minute",
+            "minute",
+            Some("1 hour"),
+        );
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles_hour ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 hour'
+            AND minute <= NOW()
+            GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_minute WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 hour'
+            AND minute <= NOW()
+            GROUP BY model_name, metric, bucket_id",
         );
     }
 
     #[test]
-    fn test_build_model_latency_quantiles_query_day() {
-        let qb = build_model_latency_quantiles_query(&TimeWindow::Day);
-        assert_query_equals(
+    fn test_build_model_latency_quantiles_histogram_query_day() {
+        let qb = build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_hour",
+            "hour",
+            Some("1 day"),
+        );
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles_day ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 day'
+            AND minute <= NOW()
+            GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_hour WHERE TRUE
+            AND hour >= NOW() - INTERVAL '1 day'
+            AND hour <= NOW()
+            GROUP BY model_name, metric, bucket_id",
         );
     }
 
     #[test]
-    fn test_build_model_latency_quantiles_query_week() {
-        let qb = build_model_latency_quantiles_query(&TimeWindow::Week);
-        assert_query_equals(
+    fn test_build_model_latency_quantiles_histogram_query_week() {
+        let qb = build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_hour",
+            "hour",
+            Some("1 week"),
+        );
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles_week ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 week'
+            AND minute <= NOW()
+            GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_hour WHERE TRUE
+            AND hour >= NOW() - INTERVAL '1 week'
+            AND hour <= NOW()
+            GROUP BY model_name, metric, bucket_id",
         );
     }
 
     #[test]
-    fn test_build_model_latency_quantiles_query_month() {
-        let qb = build_model_latency_quantiles_query(&TimeWindow::Month);
-        assert_query_equals(
+    fn test_build_model_latency_quantiles_histogram_query_month() {
+        let qb = build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_hour",
+            "hour",
+            Some("1 month"),
+        );
+        assert_query_contains(
             qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles_month ORDER BY model_name",
+            "FROM tensorzero.model_provider_statistics WHERE TRUE
+            AND minute >= NOW() - INTERVAL '1 month'
+            AND minute <= NOW()
+            GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_hour WHERE TRUE
+            AND hour >= NOW() - INTERVAL '1 month'
+            AND hour <= NOW()
+            GROUP BY model_name, metric, bucket_id",
         );
     }
 
     #[test]
-    fn test_build_model_latency_quantiles_query_cumulative() {
-        let qb = build_model_latency_quantiles_query(&TimeWindow::Cumulative);
-        assert_query_equals(
-            qb.sql().as_str(),
-            r"SELECT
-            model_name,
-            response_time_ms_quantiles,
-            ttft_ms_quantiles,
-            count
-        FROM tensorzero.model_latency_quantiles ORDER BY model_name",
+    fn test_build_model_latency_quantiles_histogram_query_cumulative() {
+        let qb = build_model_latency_quantiles_histogram_query(
+            "tensorzero.model_latency_histogram_hour",
+            "hour",
+            None,
         );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_provider_statistics WHERE TRUE GROUP BY model_name",
+        );
+        assert_query_contains(
+            qb.sql().as_str(),
+            "FROM tensorzero.model_latency_histogram_hour WHERE TRUE GROUP BY model_name, metric, bucket_id",
+        );
+        assert_query_does_not_contain(qb.sql().as_str(), "NOW() - INTERVAL");
+    }
+
+    #[test]
+    fn test_compute_model_latency_quantiles_from_histogram_buckets_empty_metrics() {
+        let rows = vec![ModelLatencyHistogramBucketRow {
+            model_name: "model_without_latency".to_string(),
+            count: 12,
+            metric: None,
+            bucket_id: None,
+            bucket_count: None,
+        }];
+
+        let datapoints = compute_model_latency_quantiles_from_histogram_buckets(rows);
+        assert_eq!(
+            datapoints.len(),
+            1,
+            "Expected one datapoint for one model count row"
+        );
+        assert_eq!(
+            datapoints[0].count, 12,
+            "Expected model count to match the aggregated model_provider_statistics count"
+        );
+        assert!(
+            datapoints[0]
+                .response_time_ms_quantiles
+                .iter()
+                .all(Option::is_none),
+            "Expected response time quantiles to be all None when no histogram buckets are present"
+        );
+        assert!(
+            datapoints[0].ttft_ms_quantiles.iter().all(Option::is_none),
+            "Expected TTFT quantiles to be all None when no histogram buckets are present"
+        );
+    }
+
+    #[test]
+    fn test_compute_model_latency_quantiles_from_histogram_buckets_uses_geometric_mean() {
+        let rows = vec![
+            ModelLatencyHistogramBucketRow {
+                model_name: "model_a".to_string(),
+                count: 20,
+                metric: Some(RESPONSE_TIME_MS_METRIC.to_string()),
+                bucket_id: Some(0),
+                bucket_count: Some(10.0),
+            },
+            ModelLatencyHistogramBucketRow {
+                model_name: "model_a".to_string(),
+                count: 20,
+                metric: Some(RESPONSE_TIME_MS_METRIC.to_string()),
+                bucket_id: Some(64),
+                bucket_count: Some(10.0),
+            },
+            ModelLatencyHistogramBucketRow {
+                model_name: "model_a".to_string(),
+                count: 20,
+                metric: Some(TTFT_MS_METRIC.to_string()),
+                bucket_id: Some(-1),
+                bucket_count: Some(20.0),
+            },
+        ];
+
+        let datapoints = compute_model_latency_quantiles_from_histogram_buckets(rows);
+        let p50_idx = POSTGRES_QUANTILES
+            .iter()
+            .position(|quantile| (*quantile - 0.5).abs() < f64::EPSILON)
+            .expect("Expected quantiles to include P50");
+
+        let response_p50 = datapoints[0].response_time_ms_quantiles[p50_idx]
+            .expect("Expected response P50 to be present for non-empty histogram");
+        let expected_response_p50 =
+            (latency_bucket_lower_ms(64) * latency_bucket_upper_ms(64)).sqrt() as f32;
+        assert!(
+            (response_p50 - expected_response_p50).abs() < f32::EPSILON,
+            "Expected response P50 to equal the geometric mean of the selected response bucket"
+        );
+
+        let ttft_p50 = datapoints[0].ttft_ms_quantiles[p50_idx]
+            .expect("Expected TTFT P50 to be present for non-empty histogram");
+        assert!(
+            ttft_p50.abs() < f32::EPSILON,
+            "Expected TTFT P50 to be zero when the selected bucket has lower bound 0"
+        );
+    }
+
+    #[test]
+    fn test_compute_model_latency_quantiles_from_histogram_buckets_empty_buckets() {
+        let datapoints = compute_model_latency_quantiles_from_histogram_buckets(vec![]);
+        assert!(
+            datapoints.is_empty(),
+            "Expected no datapoints when there are no histogram rows"
+        );
+
+        let zero_weight_rows = vec![ModelLatencyHistogramBucketRow {
+            model_name: "model_zero_weight".to_string(),
+            count: 3,
+            metric: Some(RESPONSE_TIME_MS_METRIC.to_string()),
+            bucket_id: Some(0),
+            bucket_count: Some(0.0),
+        }];
+
+        let datapoints = compute_model_latency_quantiles_from_histogram_buckets(zero_weight_rows);
+        assert_eq!(
+            datapoints.len(),
+            1,
+            "Expected one datapoint for one model even when bucket weights are zero"
+        );
+        assert_eq!(
+            datapoints[0].count, 3,
+            "Expected model count to come from aggregated model_provider_statistics"
+        );
+        assert!(
+            datapoints[0]
+                .response_time_ms_quantiles
+                .iter()
+                .all(Option::is_none),
+            "Expected response quantiles to be all None when histogram sample_count is zero"
+        );
+    }
+
+    #[test]
+    fn test_compute_model_latency_quantiles_from_histogram_buckets_very_few_elements() {
+        let rows = vec![
+            ModelLatencyHistogramBucketRow {
+                model_name: "model_sparse".to_string(),
+                count: 1,
+                metric: Some(RESPONSE_TIME_MS_METRIC.to_string()),
+                bucket_id: Some(0),
+                bucket_count: Some(1.0),
+            },
+            ModelLatencyHistogramBucketRow {
+                model_name: "model_sparse".to_string(),
+                count: 1,
+                metric: Some(TTFT_MS_METRIC.to_string()),
+                bucket_id: Some(-1),
+                bucket_count: Some(1.0),
+            },
+        ];
+
+        let datapoints = compute_model_latency_quantiles_from_histogram_buckets(rows);
+        assert_eq!(
+            datapoints.len(),
+            1,
+            "Expected one datapoint for one sparse model"
+        );
+        assert_eq!(
+            datapoints[0].count, 1,
+            "Expected sparse model count to be preserved"
+        );
+
+        let expected_response =
+            (latency_bucket_lower_ms(0) * latency_bucket_upper_ms(0)).sqrt() as f32;
+        for quantile in &datapoints[0].response_time_ms_quantiles {
+            let value = quantile.expect(
+                "Expected every response quantile to be present when one response bucket exists",
+            );
+            assert!(
+                (value - expected_response).abs() < f32::EPSILON,
+                "Expected response quantiles to equal the geometric mean of the single response bucket"
+            );
+        }
+
+        let expected_ttft = 0.0_f32;
+        for quantile in &datapoints[0].ttft_ms_quantiles {
+            let value = quantile
+                .expect("Expected every TTFT quantile to be present when one TTFT bucket exists");
+            assert!(
+                (value - expected_ttft).abs() < f32::EPSILON,
+                "Expected TTFT quantiles to be zero when the single TTFT bucket has lower bound 0"
+            );
+        }
     }
 
     // =========================================================================
@@ -723,11 +1158,11 @@ mod tests {
         let rows = vec![StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            raw_request: "request".to_string(),
-            raw_response: "response".to_string(),
+            raw_request: Some("request".to_string()),
+            raw_response: Some("response".to_string()),
             system: Some("system".to_string()),
-            input_messages: vec![],
-            output: vec![],
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
             input_tokens: Some(10),
             output_tokens: Some(20),
             response_time_ms: Some(100),
@@ -763,11 +1198,11 @@ mod tests {
             StoredModelInference {
                 id: Uuid::now_v7(),
                 inference_id: Uuid::now_v7(),
-                raw_request: "request1".to_string(),
-                raw_response: "response1".to_string(),
+                raw_request: Some("request1".to_string()),
+                raw_response: Some("response1".to_string()),
                 system: None,
-                input_messages: vec![],
-                output: vec![],
+                input_messages: Some(vec![]),
+                output: Some(vec![]),
                 input_tokens: None,
                 output_tokens: None,
                 response_time_ms: None,
@@ -782,11 +1217,11 @@ mod tests {
             StoredModelInference {
                 id: Uuid::now_v7(),
                 inference_id: Uuid::now_v7(),
-                raw_request: "request2".to_string(),
-                raw_response: "response2".to_string(),
+                raw_request: Some("request2".to_string()),
+                raw_response: Some("response2".to_string()),
                 system: Some("system2".to_string()),
-                input_messages: vec![],
-                output: vec![],
+                input_messages: Some(vec![]),
+                output: Some(vec![]),
                 input_tokens: Some(100),
                 output_tokens: Some(200),
                 response_time_ms: Some(500),

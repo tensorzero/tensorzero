@@ -344,6 +344,7 @@ pub fn http_gateway_client(url: Url) -> Result<Arc<dyn TensorZeroClient>, Client
 ///     Some("http://localhost:8123".into()),
 ///     None,
 ///     None,
+///     None,
 /// ).await?;
 /// ```
 pub async fn embedded_gateway_client(

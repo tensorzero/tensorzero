@@ -170,7 +170,7 @@ By default, all HTTP requests will timeout after 15 minutes (900,000 ms).
 This timeout is intentionally set high to accommodate slow model responses, but you can customize it based on your requirements.
 
 The `global_outbound_http_timeout_ms` acts as an upper bound for all more specific timeout configurations in your system.
-Any variant-level timeouts (e.g., `timeouts.non_streaming.total_ms`, `timeouts.streaming.ttft_ms`), provider-level timeouts, or embedding model timeouts must be less than or equal to this global timeout.
+Any variant-level timeouts (e.g., `timeouts.non_streaming.total_ms`, `timeouts.streaming.ttft_ms`, `timeouts.streaming.total_ms`), provider-level timeouts, or embedding model timeouts must be less than or equal to this global timeout.
 
 <Warning>
 
@@ -397,14 +397,18 @@ The edge gateway must have the necessary provider credentials configured to make
 
 The `timeouts` object allows you to set granular timeouts for requests to this model.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [models.model_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -563,14 +567,18 @@ Intelligence-Level: AGI
 
 The `timeouts` object allows you to set granular timeouts for individual requests to a model provider.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [models.model_name.providers.provider_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -579,7 +587,7 @@ If you're using an advanced variant type that performs multiple requests, the ti
 If you've defined retries and fallbacks, the timeout will apply to each retry and fallback separately.
 This setting is particularly useful if you'd like to retry or fallback on a request that's taking too long.
 
-You can also set timeouts at the model level and provider level.
+You can also set timeouts at the model level and variant level.
 Multiple timeouts can be active simultaneously.
 
 Separately, you can set a global timeout for the entire inference request using the TensorZero client's `timeout` field (or simply killing the request if you're using a different client).
@@ -1405,6 +1413,24 @@ See [Groq's documentation](https://groq.com/pricing) for the list of available m
 # ...
 type = "groq"
 model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
+# ...
+```
+
+##### `reasoning_format`
+
+- **Type:** string
+- **Required:** no (default: none)
+
+When set to `"parsed"`, Groq will return structured reasoning content (thinking) separately from the main response.
+This should only be set for reasoning models that support the `reasoning_format` parameter (e.g. `qwen/qwen3-32b`).
+Non-reasoning models will reject requests with this parameter.
+
+```toml title="tensorzero.toml"
+[models.qwen3_32b.providers.groq]
+# ...
+type = "groq"
+model_name = "qwen/qwen3-32b"
+reasoning_format = "parsed"
 # ...
 ```
 
@@ -3292,14 +3318,18 @@ thinking_budget_tokens = 10000
 
 The `timeouts` object allows you to set granular timeouts for requests using this variant.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [functions.function_name.variants.variant_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -3426,14 +3456,18 @@ type = "experimental_best_of_n"
 
 The `timeouts` object allows you to set granular timeouts for requests using this variant.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [functions.function_name.variants.variant_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -3500,14 +3534,18 @@ type = "experimental_mixture_of_n"
 
 The `timeouts` object allows you to set granular timeouts for requests using this variant.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [functions.function_name.variants.variant_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -3900,14 +3938,18 @@ temperature = 0.5
 
 The `timeouts` object allows you to set granular timeouts for requests using this variant.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [functions.function_name.variants.variant_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 

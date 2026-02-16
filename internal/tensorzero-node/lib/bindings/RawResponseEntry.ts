@@ -6,7 +6,7 @@ import type { ApiType } from "./ApiType";
  * This preserves the original provider-specific response string that TensorZero normalizes.
  */
 export type RawResponseEntry = {
-  model_inference_id: string;
+  model_inference_id?: string;
   provider_type: string;
   api_type: ApiType;
   data: string;

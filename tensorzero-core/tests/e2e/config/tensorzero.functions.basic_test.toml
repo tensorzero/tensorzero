@@ -378,6 +378,18 @@ model = "groq-qwen-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.groq-reasoning]
+type = "chat_completion"
+model = "groq-qwen3-32b"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.groq-reasoning-usage]
+type = "chat_completion"
+model = "groq-gpt-oss-20b"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
@@ -794,6 +806,12 @@ model = "err_in_stream"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.err_in_stream_with_raw_response]
+type = "chat_completion"
+model = "err_in_stream_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.dicl]
 type = "experimental_dynamic_in_context_learning"
 model = "gpt-4o-mini-2024-07-18"
@@ -880,3 +898,16 @@ model = "claude-haiku-4-5-openrouter"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 thinking_budget_tokens = 1024
+
+# Model fallback variants for raw_response fallback tests
+[functions.basic_test.variants.model_fallback_with_raw_response]
+type = "chat_completion"
+model = "test_fallback_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.model_both_error_with_raw_response]
+type = "chat_completion"
+model = "test_both_error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100

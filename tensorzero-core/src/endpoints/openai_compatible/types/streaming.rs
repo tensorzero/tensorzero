@@ -328,10 +328,17 @@ pub fn prepare_serialized_openai_compatible_events(
         let mut is_first_chunk = true;
 
         while let Some(chunk) = stream.next().await {
-            // NOTE: in the future, we may want to end the stream early if we get an error
-            // For now, we just ignore the error and try to get more chunks
-            let Ok(chunk) = chunk else {
-                continue;
+            let chunk = match chunk {
+                Ok(chunk) => chunk,
+                Err(e) => {
+                    let error_event = e.build_streaming_error_event(true, include_raw_response);
+                    yield Event::default().json_data(&error_event).map_err(|ser_err| {
+                        Error::new(ErrorDetails::Inference {
+                            message: format!("Failed to convert error to Event: {ser_err}"),
+                        })
+                    });
+                    continue;
+                }
             };
 
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(

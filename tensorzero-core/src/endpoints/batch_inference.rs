@@ -129,6 +129,7 @@ pub async fn start_batch_inference(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        cache_manager,
         deferred_tasks,
         rate_limiting_manager,
         ..
@@ -238,6 +239,7 @@ pub async fn start_batch_inference(
         postgres_connection_info: database.postgres.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: cache_options.clone(),
+        cache_manager,
         rate_limiting_manager,
         tags: tags.clone(),
         otlp_config: config.gateway.export.otlp.clone(),
@@ -515,7 +517,7 @@ pub async fn poll_batch_inference_handler(
         BatchStatus::Pending => {
             // For now, we don't support dynamic API keys for batch inference
             let credentials = InferenceCredentials::default();
-            let response = poll_batch_inference(
+            let (response, provider_type) = poll_batch_inference(
                 &batch_request,
                 http_client,
                 &config.models,
@@ -523,8 +525,14 @@ pub async fn poll_batch_inference_handler(
                 config.gateway.relay.as_ref(),
             )
             .await?;
-            let response =
-                write_poll_batch_inference(&database, &batch_request, response, &config).await?;
+            let response = write_poll_batch_inference(
+                &database,
+                &batch_request,
+                response,
+                provider_type,
+                &config,
+            )
+            .await?;
             Ok(Json(response.filter_by_query(path_params)).into_response())
         }
         BatchStatus::Completed => {
@@ -619,15 +627,16 @@ pub async fn get_batch_request(
 /// Polls a batch inference request from the model provider that
 /// the original request was sent to
 ///
-/// Returns: a `PollBatchInferenceResponse` which is the current status of the batch
-/// and if it's newly completed, the response.
+/// Returns: a `(PollBatchInferenceResponse, Arc<str>)` tuple where the first element
+/// is the current status of the batch (and if it's newly completed, the response),
+/// and the second element is the provider type (e.g. "openai", "anthropic").
 async fn poll_batch_inference(
     batch_request: &BatchRequestRow<'static>,
     http_client: TensorzeroHttpClient,
     models: &ModelTable,
     credentials: &InferenceCredentials,
     relay: Option<&TensorzeroRelay>,
-) -> Result<PollBatchInferenceResponse, Error> {
+) -> Result<(PollBatchInferenceResponse, Arc<str>), Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
@@ -647,9 +656,11 @@ async fn poll_batch_inference(
                 provider_name: batch_request.model_provider_name.to_string(),
             })
         })?;
-    model_provider
+    let provider_type = Arc::from(model_provider.provider_type());
+    let response = model_provider
         .poll_batch_inference(batch_request, &http_client, credentials)
-        .await
+        .await?;
+    Ok((response, provider_type))
 }
 
 // Helper struct for writing to the `BatchModelInference` table in ClickHouse
@@ -731,18 +742,20 @@ async fn write_start_batch_inference<'a>(
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[i],
-            input: resolved_input.into_stored_input(),
-            input_messages: try_join_all(
-                row.input_messages
-                    .into_iter()
-                    .map(RequestMessage::into_stored_message),
-            )
-            .await?,
+            input: Some(resolved_input.into_stored_input()),
+            input_messages: Some(
+                try_join_all(
+                    row.input_messages
+                        .into_iter()
+                        .map(RequestMessage::into_stored_message),
+                )
+                .await?,
+            ),
             system: row.system.map(Cow::Borrowed),
             tool_params,
-            inference_params: Cow::Borrowed(row.inference_params),
+            inference_params: Some(Cow::Borrowed(row.inference_params)),
             output_schema: row.output_schema.map(Value::to_string),
-            raw_request: Cow::Borrowed(row.raw_request),
+            raw_request: Some(Cow::Borrowed(row.raw_request)),
             model_name: Cow::Borrowed(model_name),
             model_provider_name: Cow::Borrowed(model_provider_name),
             tags: row.tags.unwrap_or_default(),
@@ -804,11 +817,11 @@ pub async fn write_batch_request_row(
 ///
 /// Note: only call this function if the batch was Pending prior to being polled.
 /// We don't need to poll if the batch is failed or completed because the status will not change.
-// TODO(#5691): take trait bounds instead of concrete type after implementing batch ModelInference writes for Postgres
 pub async fn write_poll_batch_inference(
-    database: &DelegatingDatabaseConnection,
+    database: &(impl BatchInferenceQueries + InferenceQueries + ModelInferenceQueries + Sync),
     batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
+    provider_type: Arc<str>,
     config: &Config,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
@@ -829,8 +842,14 @@ pub async fn write_poll_batch_inference(
         PollBatchInferenceResponse::Completed(response) => {
             let raw_request = response.raw_request.clone();
             let raw_response = response.raw_response.clone();
-            let inferences =
-                write_completed_batch_inference(database, batch_request, response, config).await?;
+            let inferences = write_completed_batch_inference(
+                database,
+                batch_request,
+                response,
+                provider_type,
+                config,
+            )
+            .await?;
             // NOTE - in older versions of TensorZero, we were missing this call.
             // As a result, some customers may have databases with duplicate inferences.
             write_batch_request_status_update(
@@ -902,11 +921,11 @@ async fn write_batch_request_status_update(
 /// TODO: this function has a large number of Clones that are not necessary.
 /// To avoid these, the types that are calling for clones must be changed to Cows and then the code in the non-batch inference
 /// handler must be adjusted to deal with it and also the lifetimes associated there.
-// TODO(#5691): take trait bounds instead of concrete type after implementing batch ModelInference writes for Postgres
 pub async fn write_completed_batch_inference<'a>(
-    database: &DelegatingDatabaseConnection,
+    database: &(impl BatchInferenceQueries + InferenceQueries + ModelInferenceQueries + Sync),
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
+    provider_type: Arc<str>,
     config: &Config,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
@@ -961,17 +980,19 @@ pub async fn write_completed_batch_inference<'a>(
             id: Uuid::now_v7(),
             output: output.clone(),
             system: system.map(Cow::into_owned),
-            input_messages: RequestMessagesOrBatch::BatchInput(input_messages),
-            raw_request: raw_request.into_owned(),
+            input_messages: RequestMessagesOrBatch::BatchInput(input_messages.unwrap_or_default()),
+            raw_request: raw_request.map(Cow::into_owned).unwrap_or_default(),
             raw_response,
             usage,
             latency: Latency::Batch,
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
+            provider_type: provider_type.clone(),
             cached: false,
             finish_reason,
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             relay_raw_response: None, // batch inference does not support include_raw_response (#5710)
+            failed_raw_response: vec![],
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {
@@ -1011,13 +1032,14 @@ pub async fn write_completed_batch_inference<'a>(
             extra_headers,
             extra_cache_key: None,
         };
+        let inference_params_owned = inference_params.map(Cow::into_owned).unwrap_or_default();
         let inference_result = function
             .prepare_response(
                 inference_id,
                 output,
                 vec![model_inference_response],
                 &inference_config,
-                inference_params.into_owned(),
+                inference_params_owned,
                 None,
             )
             .await?;

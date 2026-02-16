@@ -2844,7 +2844,7 @@ async fn deny_bad_timeouts_streaming_field() {
 
     assert_eq!(
         err.to_string(),
-        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
+        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms` or `total_ms`"
     );
 }
 

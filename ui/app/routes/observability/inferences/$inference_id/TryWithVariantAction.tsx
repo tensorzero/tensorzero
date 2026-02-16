@@ -18,7 +18,7 @@ interface TryWithVariantActionProps {
   inference: StoredInference;
   options: string[];
   isDefault: boolean;
-  input: Input;
+  input: Input | undefined;
   inferenceUsage: InferenceUsage;
   onFeedbackAdded: (redirectUrl?: string) => void;
 }
@@ -123,6 +123,13 @@ export function TryWithVariantAction({
 
   const handleSelect = useCallback(
     (option: string) => {
+      if (!input) {
+        toast.error({
+          title: "Input Unavailable",
+          description: "Cannot retry inference without input data.",
+        });
+        return;
+      }
       const args = isDefault
         ? {
             resource: inference,
@@ -139,7 +146,7 @@ export function TryWithVariantAction({
 
       processRequest(option, args);
     },
-    [inference, input, isDefault, processRequest],
+    [inference, input, isDefault, processRequest, toast],
   );
 
   const handleRefresh = useCallback(() => {

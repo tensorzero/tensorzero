@@ -19,6 +19,13 @@ struct InferenceRow {
 }
 
 #[derive(Debug, Deserialize)]
+struct ModelInferenceRow {
+    inference_id: Uuid,
+    model_name: String,
+    model_provider_name: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct DatapointRow {
     dataset_name: String,
     function_name: String,
@@ -33,6 +40,7 @@ impl ResolveUuidQueries for ClickHouseConnectionInfo {
         // Query all tables concurrently
         let (
             inference_result,
+            model_inference_result,
             episode_result,
             boolean_result,
             float_result,
@@ -42,6 +50,7 @@ impl ResolveUuidQueries for ClickHouseConnectionInfo {
             json_datapoint_result,
         ) = tokio::try_join!(
             self.query_inference(&params),
+            self.query_model_inference(&params),
             self.query_episode(&params),
             self.query_exists("BooleanMetricFeedback", &params),
             self.query_exists("FloatMetricFeedback", &params),
@@ -59,6 +68,14 @@ impl ResolveUuidQueries for ClickHouseConnectionInfo {
                 function_type: row.function_type,
                 variant_name: row.variant_name,
                 episode_id: row.episode_id,
+            });
+        }
+
+        if let Some(row) = model_inference_result {
+            results.push(ResolvedObject::ModelInference {
+                inference_id: row.inference_id,
+                model_name: row.model_name,
+                model_provider_name: row.model_provider_name,
             });
         }
 
@@ -123,6 +140,36 @@ impl ClickHouseConnectionInfo {
         }
 
         let row: InferenceRow = serde_json::from_str(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })?;
+
+        Ok(Some(row))
+    }
+
+    async fn query_model_inference(
+        &self,
+        params: &HashMap<&str, &str>,
+    ) -> Result<Option<ModelInferenceRow>, Error> {
+        let query = r"
+            SELECT inference_id, model_name, model_provider_name
+            FROM ModelInference
+            WHERE id = {id:UUID}
+            LIMIT 1
+            FORMAT JSONEachRow
+            SETTINGS max_threads=1
+        ";
+
+        let response = self
+            .run_query_synchronous(query.to_string(), params)
+            .await?;
+
+        if response.response.is_empty() {
+            return Ok(None);
+        }
+
+        let row: ModelInferenceRow = serde_json::from_str(&response.response).map_err(|e| {
             Error::new(ErrorDetails::ClickHouseDeserialization {
                 message: e.to_string(),
             })

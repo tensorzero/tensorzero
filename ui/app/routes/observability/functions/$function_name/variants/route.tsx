@@ -494,7 +494,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
         },
         timeouts: {
           non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null },
+          streaming: { ttft_ms: null, total_ms: null },
         },
       };
     } else {

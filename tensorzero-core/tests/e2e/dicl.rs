@@ -19,7 +19,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
 };
 use tensorzero_core::{
-    cache::{CacheEnabledMode, CacheOptions},
+    cache::{CacheEnabledMode, CacheManager, CacheOptions},
     config::provider_types::ProviderTypesConfig,
     db::{
         DICLQueries, StoredDICLExample, clickhouse::test_helpers::select_json_inference_clickhouse,
@@ -355,13 +355,14 @@ async fn embed_insert_example(
         Arc::new(Default::default());
     let clients = InferenceClients {
         http_client: client.clone(),
-        clickhouse_connection_info: clickhouse,
+        clickhouse_connection_info: clickhouse.clone(),
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         credentials: Arc::new(api_keys),
         cache_options: CacheOptions {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
+        cache_manager: CacheManager::new(Arc::new(clickhouse.clone())),
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,

@@ -37,9 +37,9 @@ pub async fn check_pgcron_configured_correctly(pool: &PgPool) -> Result<(), Dela
         }));
     }
 
-    // Verify the materialized view refresh job is scheduled, as an example of a TensorZero-specific job.
-    let refresh_job_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM cron.job WHERE jobname = 'tensorzero_refresh_materialized_views')",
+    // Verify TensorZero's minute and hour latency refresh jobs are scheduled.
+    let refresh_minute_job_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM cron.job WHERE jobname = 'tensorzero_refresh_model_latency_histogram_minute_incremental')",
     )
     .fetch_one(pool)
     .await
@@ -49,7 +49,18 @@ pub async fn check_pgcron_configured_correctly(pool: &PgPool) -> Result<(), Dela
         })
     })?;
 
-    if !refresh_job_exists {
+    let refresh_hour_job_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM cron.job WHERE jobname = 'tensorzero_refresh_model_latency_histogram_hour_incremental')",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| {
+        DelayedError::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to check pg_cron jobs: {e}"),
+        })
+    })?;
+
+    if !(refresh_minute_job_exists && refresh_hour_job_exists) {
         return Err(DelayedError::new(ErrorDetails::PostgresMigration {
             message:
                 "pg_cron extension is installed but TensorZero's pg_cron jobs are not scheduled."

@@ -36,21 +36,28 @@ pub async fn health_handler(
         clickhouse_connection_info,
         postgres_connection_info,
         valkey_connection_info,
+        valkey_cache_connection_info,
         ..
     }): AppState,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let (clickhouse_result, postgres_result, valkey_result) = join!(
+    let (clickhouse_result, postgres_result, valkey_result, valkey_cache_result) = join!(
         clickhouse_connection_info.health(),
         postgres_connection_info.health(),
         valkey_connection_info.health(),
+        valkey_cache_connection_info.health(),
     );
 
-    if clickhouse_result.is_ok() && postgres_result.is_ok() && valkey_result.is_ok() {
+    if clickhouse_result.is_ok()
+        && postgres_result.is_ok()
+        && valkey_result.is_ok()
+        && valkey_cache_result.is_ok()
+    {
         return Ok(Json(json!({
             "gateway": "ok",
             "clickhouse": "ok",
             "postgres": "ok",
             "valkey": "ok",
+            "valkey_cache": "ok",
         })));
     }
 
@@ -61,6 +68,7 @@ pub async fn health_handler(
             "clickhouse": if clickhouse_result.is_ok() { "ok" } else { "error" },
             "postgres": if postgres_result.is_ok() { "ok" } else { "error" },
             "valkey": if valkey_result.is_ok() { "ok" } else { "error" },
+            "valkey_cache": if valkey_cache_result.is_ok() { "ok" } else { "error" },
         })),
     ))
 }
@@ -95,6 +103,7 @@ mod tests {
         assert_eq!(response_value.get("clickhouse").unwrap(), "ok");
         assert_eq!(response_value.get("postgres").unwrap(), "ok");
         assert_eq!(response_value.get("valkey").unwrap(), "ok");
+        assert_eq!(response_value.get("valkey_cache").unwrap(), "ok");
     }
 
     #[tokio::test]

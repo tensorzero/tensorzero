@@ -308,6 +308,7 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedInferenceEvaluationConfig {
+    #[serde(default)]
     pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     pub function_name: String,
     #[serde(default)]
