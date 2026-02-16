@@ -364,8 +364,9 @@ system_template = "../../../fixtures/config/functions/weather_helper_parallel/pr
 [functions.weather_helper_parallel.variants.vllm]
 type = "chat_completion"
 weight = 1
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.weather_helper_parallel.variants.gcp-vertex-haiku]
 type = "chat_completion"

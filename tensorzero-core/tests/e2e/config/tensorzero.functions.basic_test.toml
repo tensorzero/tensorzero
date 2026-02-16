@@ -611,9 +611,10 @@ extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.basic_test.variants.vllm-gpt-oss-20b]
 type = "chat_completion"
@@ -623,23 +624,32 @@ max_tokens = 100
 
 [functions.basic_test.variants.vllm-extra-body]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+extra_body = [{ pointer = "/temperature", value = 0.123 }, { pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.basic_test.variants.vllm-extra-headers]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 extra_headers = [{ name = "Authorization", value = "invalid_vllm_auth" }]
 
 [functions.basic_test.variants.vllm-dynamic]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm-dynamic"
+model = "qwen3-1.7b-vllm-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
+
+[functions.basic_test.variants.vllm-reasoning]
+type = "chat_completion"
+model = "qwen3-1.7b-vllm"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true }]
 
 [functions.basic_test.variants.xai]
 type = "chat_completion"

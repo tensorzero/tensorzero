@@ -18,7 +18,7 @@ fi
 
 echo "Warming up VLLM Modal instance..."
 curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" \
-     https://tensorzero--vllm-inference-vllm-inference.modal.run/docs \
+     https://tensorzero--vllm-qwen3-inference-vllm-inference.modal.run/docs \
      > vllm_modal_logs.txt &
 
 echo "Warming up SGLang Modal instance..."

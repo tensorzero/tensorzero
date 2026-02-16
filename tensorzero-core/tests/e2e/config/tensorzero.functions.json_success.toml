@@ -538,11 +538,12 @@ json_mode = "strict"
 
 [functions.json_success.variants.vllm]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.json_success.variants.vllm-gpt-oss-20b]
 type = "chat_completion"
@@ -554,11 +555,21 @@ max_tokens = 100
 
 [functions.json_success.variants.vllm-strict]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
+
+[functions.json_success.variants.vllm-reasoning]
+type = "chat_completion"
+model = "qwen3-1.7b-vllm"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true }]
 
 [functions.json_success.variants.dicl]
 type = "experimental_dynamic_in_context_learning"
@@ -763,11 +774,12 @@ max_tokens = 100
 
 [functions.json_success.variants.vllm_json_mode_off]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.json_success.variants.xai_json_mode_off]
 type = "chat_completion"
