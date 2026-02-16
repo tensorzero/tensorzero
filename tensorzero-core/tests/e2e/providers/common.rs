@@ -2341,10 +2341,6 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
 }
 
 pub async fn test_bad_auth_extra_headers_with_provider(provider: E2ETestProvider) {
-    if provider.variant_name.contains("openrouter") {
-        // TODO (#6302): re-enable openrouter
-        return;
-    }
     test_bad_auth_extra_headers_with_provider_and_stream(&provider, false).await;
     test_bad_auth_extra_headers_with_provider_and_stream(&provider, true).await;
 }
