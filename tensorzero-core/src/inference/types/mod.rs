@@ -1306,6 +1306,7 @@ pub struct ModelInferenceResponse {
     pub usage: Usage,
     pub provider_latency: Latency,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
     /// Raw usage entries for `include_raw_usage` feature.
@@ -1313,6 +1314,9 @@ pub struct ModelInferenceResponse {
     /// Raw response entries passed through from gateway relay.
     /// When present, these should be used instead of generating new entries.
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw response entries from failed provider attempts during fallback.
+    /// Populated when a model has multiple providers and earlier ones fail before a later one succeeds.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1334,6 +1338,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub usage: Usage,
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub model_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
@@ -1342,6 +1347,8 @@ pub struct ModelInferenceResponseWithMetadata {
     /// Raw response entries passed through from relay.
     /// When present, these should be used instead of generating new entries.
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw response entries from failed provider attempts during fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1623,6 +1630,7 @@ impl ModelInferenceResponse {
     pub fn new(
         provider_inference_response: ProviderInferenceResponse,
         model_provider_name: Arc<str>,
+        provider_type: Arc<str>,
         cached: bool,
     ) -> Self {
         Self {
@@ -1636,9 +1644,11 @@ impl ModelInferenceResponse {
             provider_latency: provider_inference_response.provider_latency,
             finish_reason: provider_inference_response.finish_reason,
             model_provider_name,
+            provider_type,
             cached,
             raw_usage: provider_inference_response.raw_usage,
             relay_raw_response: provider_inference_response.relay_raw_response,
+            failed_raw_response: vec![],
         }
     }
 
@@ -1646,6 +1656,7 @@ impl ModelInferenceResponse {
         cache_lookup: CacheData<NonStreamingCacheData>,
         request: &ModelInferenceRequest<'_>,
         model_provider_name: &str,
+        provider_type: Arc<str>,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -1663,10 +1674,12 @@ impl ModelInferenceResponse {
             },
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
+            provider_type,
             cached: true,
             // TensorZero cache hits are excluded from raw_usage and raw_response lists
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }
     }
 }
@@ -1686,10 +1699,12 @@ impl ModelInferenceResponseWithMetadata {
             latency: model_inference_response.provider_latency,
             finish_reason: model_inference_response.finish_reason,
             model_provider_name: model_inference_response.model_provider_name,
+            provider_type: model_inference_response.provider_type,
             model_name,
             cached: model_inference_response.cached,
             raw_usage: model_inference_response.raw_usage,
             relay_raw_response: model_inference_response.relay_raw_response,
+            failed_raw_response: model_inference_response.failed_raw_response,
         }
     }
 }
@@ -2321,10 +2336,12 @@ mod tests {
             },
             finish_reason: None,
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2371,10 +2388,12 @@ mod tests {
             },
             finish_reason: Some(FinishReason::Stop),
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2424,10 +2443,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2473,10 +2494,12 @@ mod tests {
             },
             finish_reason: Some(FinishReason::ToolCall),
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2542,10 +2565,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2629,10 +2654,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2725,10 +2752,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2777,10 +2806,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2853,10 +2884,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2911,10 +2944,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -3109,10 +3144,12 @@ mod tests {
                 },
                 finish_reason: None,
                 model_provider_name: "test_provider".into(),
+                provider_type: Arc::from("dummy"),
                 model_name: "test_model".into(),
                 cached,
                 raw_usage: None,
                 relay_raw_response: None,
+                failed_raw_response: vec![],
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly
@@ -3346,11 +3383,13 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test".into(),
             cached: false,
             finish_reason: Some(FinishReason::Stop),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let response_middle = ModelInferenceResponseWithMetadata {
@@ -3365,11 +3404,13 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test".into(),
             cached: false,
             finish_reason: Some(FinishReason::ToolCall),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let response_newest = ModelInferenceResponseWithMetadata {
@@ -3384,11 +3425,13 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test".into(),
             cached: false,
             finish_reason: Some(FinishReason::Length),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         // Test: passing results in order newest-first should still return newest's finish_reason

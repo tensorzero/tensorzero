@@ -886,3 +886,16 @@ model = "claude-haiku-4-5-openrouter"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 thinking_budget_tokens = 1024
+
+# Model fallback variants for raw_response fallback tests
+[functions.basic_test.variants.model_fallback_with_raw_response]
+type = "chat_completion"
+model = "test_fallback_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.model_both_error_with_raw_response]
+type = "chat_completion"
+model = "test_both_error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100

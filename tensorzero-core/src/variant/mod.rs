@@ -35,7 +35,7 @@ use crate::inference::types::extra_headers::{
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage, stream_with_deadline,
+    ModelInferenceResponseWithMetadata, RawResponseEntry, RequestMessage, stream_with_deadline,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -198,6 +198,7 @@ impl BatchInferenceConfig {
 pub struct ModelUsedInfo {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
@@ -207,6 +208,8 @@ pub struct ModelUsedInfo {
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts during model-level fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 pub trait Variant {
@@ -853,8 +856,10 @@ async fn infer_model_request_stream<'request>(
                 stream,
                 raw_request,
                 model_provider_name,
+                provider_type,
                 cached,
                 model_inference_id,
+                failed_raw_response,
             },
         messages: input_messages,
     } = retry_config
@@ -868,6 +873,7 @@ async fn infer_model_request_stream<'request>(
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
+        provider_type,
         raw_request,
         raw_response: None,
         inference_params,
@@ -876,6 +882,7 @@ async fn infer_model_request_stream<'request>(
         input_messages,
         cached,
         model_inference_id,
+        failed_raw_response,
     };
     let config_type = function.config_type();
     let stream =
