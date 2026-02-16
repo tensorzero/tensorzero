@@ -1199,7 +1199,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::AllCandidatesFailed { candidate_errors } => {
                 write!(
                     f,
-                    "All best-of-n candidates failed with errors: {}",
+                    "All candidates failed with errors: {}",
                     candidate_errors
                         .iter()
                         .map(|(candidate_name, error)| format!("{candidate_name}: {error}"))
