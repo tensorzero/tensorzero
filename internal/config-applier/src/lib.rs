@@ -19,8 +19,40 @@ use std::path::{Path, PathBuf};
 
 use locator::LoadedConfigFile;
 use path_resolver::FileToWrite;
-use tensorzero_core::config::ConfigFileGlob;
+use tensorzero_core::config::{ConfigFileGlob, UninitializedVariantConfig};
+use tensorzero_core::evaluations::{UninitializedEvaluationConfig, UninitializedEvaluatorConfig};
+use tensorzero_core::utils::retries::RetryConfig;
 use toml_edit::DocumentMut;
+
+/// Validate that an evaluator config won't produce undeserializable TOML after cleaning.
+///
+/// `strip_empty_tables` removes empty inline tables like `variants = {}`, but some evaluator
+/// types (e.g. `llm_judge`) require `variants` to be present. We reject these early so we
+/// never write invalid config.
+fn validate_evaluator(evaluator: &UninitializedEvaluatorConfig) -> Result<(), ConfigApplierError> {
+    if let UninitializedEvaluatorConfig::LLMJudge(config) = evaluator
+        && config.variants.is_empty()
+    {
+        return Err(ConfigApplierError::InvalidEvaluatorConfig {
+            message: "LLM judge evaluator must have at least one variant".to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// Convert subtables to inline tables, strip the given keys, and remove empty tables.
+///
+/// This must be called after `extract_resolved_paths` (which needs regular tables)
+/// and before `upsert_*` (which inserts into the document).
+fn clean_serialized_item(item: &mut toml_edit::Item, keys_to_strip: &[&str]) {
+    let Some(table) = item.as_table_mut() else {
+        return;
+    };
+
+    toml_writer::convert_subtables_to_inline(table);
+    toml_writer::strip_keys(table, keys_to_strip);
+    toml_writer::strip_empty_tables(table);
+}
 
 /// ConfigApplier handles applying edits to TensorZero config files.
 pub struct ConfigApplier {
@@ -131,6 +163,22 @@ impl ConfigApplier {
             ],
         )?;
 
+        // Determine which keys have default values and should be stripped
+        let mut keys_to_strip = Vec::new();
+        let retries = match &payload.variant.inner {
+            UninitializedVariantConfig::ChatCompletion(c) => Some(c.retries),
+            UninitializedVariantConfig::Dicl(c) => Some(c.retries),
+            UninitializedVariantConfig::ChainOfThought(c) => Some(c.inner.retries),
+            UninitializedVariantConfig::BestOfNSampling(_)
+            | UninitializedVariantConfig::MixtureOfN(_) => None,
+        };
+        if retries == Some(RetryConfig::default()) {
+            keys_to_strip.push("retries");
+        }
+
+        // Convert subtables to inline, strip defaults, and remove empty tables
+        clean_serialized_item(&mut variant_item, &keys_to_strip);
+
         // Apply the edit to the document
         toml_writer::upsert_variant(
             &mut location.file.document,
@@ -158,7 +206,10 @@ impl ConfigApplier {
         let location = locator::locate_function(&mut self.files, &payload.function_name)?;
 
         // Serialize the experimentation config to a TOML item
-        let experimentation_item = toml_writer::serialize_to_item(&payload.experimentation)?;
+        let mut experimentation_item = toml_writer::serialize_to_item(&payload.experimentation)?;
+
+        // Convert subtables to inline and remove empty tables
+        clean_serialized_item(&mut experimentation_item, &[]);
 
         // Apply the edit to the document
         toml_writer::upsert_experimentation(
@@ -180,6 +231,11 @@ impl ConfigApplier {
         &mut self,
         payload: &UpsertEvaluationPayload,
     ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
+        // Validate all evaluators in the evaluation before writing
+        let UninitializedEvaluationConfig::Inference(config) = &payload.evaluation;
+        for evaluator in config.evaluators.values() {
+            validate_evaluator(evaluator)?;
+        }
         path_resolver::validate_path_component(&payload.evaluation_name, "evaluation_name")?;
 
         let (location, _is_new) =
@@ -202,6 +258,9 @@ impl ConfigApplier {
             &["evaluations", &payload.evaluation_name],
         )?;
 
+        // Convert subtables to inline and remove empty tables
+        clean_serialized_item(&mut evaluation_item, &[]);
+
         // Apply the edit to the document
         toml_writer::upsert_evaluation(
             &mut location.file.document,
@@ -223,6 +282,7 @@ impl ConfigApplier {
         &mut self,
         payload: &UpsertEvaluatorPayload,
     ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
+        validate_evaluator(&payload.evaluator)?;
         path_resolver::validate_path_component(&payload.evaluation_name, "evaluation_name")?;
         path_resolver::validate_path_component(&payload.evaluator_name, "evaluator_name")?;
 
@@ -250,6 +310,9 @@ impl ConfigApplier {
                 &payload.evaluator_name,
             ],
         )?;
+
+        // Convert subtables to inline and remove empty tables
+        clean_serialized_item(&mut evaluator_item, &[]);
 
         // Apply the edit to the document
         toml_writer::upsert_evaluator(
@@ -288,15 +351,17 @@ mod tests {
     use std::sync::Arc;
     use tempfile::TempDir;
     use tensorzero_core::config::path::ResolvedTomlPathData;
+    use tensorzero_core::config::{UninitializedVariantConfig, UninitializedVariantInfo};
     use tensorzero_core::evaluations::{
-        LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize, LLMJudgeOutputType,
-        UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
+        ExactMatchConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize,
+        LLMJudgeOutputType, UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
         UninitializedInferenceEvaluationConfig, UninitializedLLMJudgeChatCompletionVariantConfig,
         UninitializedLLMJudgeConfig, UninitializedLLMJudgeVariantConfig,
         UninitializedLLMJudgeVariantInfo,
     };
     use tensorzero_core::utils::retries::RetryConfig;
     use tensorzero_core::variant::JsonMode;
+    use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 
     fn setup_test_config(dir: &Path) {
         fs::write(
@@ -546,6 +611,332 @@ type = "exact_match"
             system_instructions,
             "evaluations/my_evaluation/evaluators/judge/variants/v1/system_instructions.txt",
             "expected TOML to reference the extracted system_instructions path"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_evaluation_with_empty_evaluators() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        let evaluation =
+            UninitializedEvaluationConfig::Inference(UninitializedInferenceEvaluationConfig {
+                evaluators: HashMap::new(),
+                function_name: "my_function".to_string(),
+                description: None,
+            });
+
+        let edit = EditPayload::UpsertEvaluation(UpsertEvaluationPayload {
+            evaluation_name: "empty_eval".to_string(),
+            evaluation,
+        });
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("failed to apply evaluation edit");
+
+        let toml_contents =
+            fs::read_to_string(tmp.path().join("tensorzero.toml")).expect("failed to read config");
+
+        // Verify the TOML round-trips: deserializing should succeed even though
+        // `clean_serialized_item` strips the empty `evaluators` table.
+        // Re-parse the full config as a toml::Value and extract the evaluation section.
+        let full: toml::Value =
+            toml::from_str(&toml_contents).expect("failed to parse updated TOML");
+        let eval_value = full
+            .get("evaluations")
+            .and_then(|v| v.get("empty_eval"))
+            .expect("expected evaluation to exist in TOML");
+
+        let eval_toml = toml::to_string(eval_value).expect("failed to serialize evaluation");
+        let _parsed: UninitializedEvaluationConfig =
+            toml::from_str(&eval_toml).expect("empty evaluators should deserialize successfully");
+    }
+
+    #[tokio::test]
+    async fn test_upsert_evaluator_after_upsert_evaluation() {
+        // Regression test: upsert_evaluation converts evaluator sub-tables to inline tables.
+        // A subsequent upsert_evaluator must still be able to traverse the evaluators path
+        // even though it was stored as an inline table.
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        // First: upsert an evaluation with an exact_match evaluator
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "exact_match".to_string(),
+            UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let evaluation =
+            UninitializedEvaluationConfig::Inference(UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: "my_function".to_string(),
+                description: None,
+            });
+
+        let edit = EditPayload::UpsertEvaluation(UpsertEvaluationPayload {
+            evaluation_name: "my_eval".to_string(),
+            evaluation,
+        });
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("failed to apply evaluation edit");
+
+        // Second: upsert another evaluator into the same evaluation.
+        // This should succeed even though the evaluators table was inlined.
+        let new_evaluator =
+            UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.5) });
+
+        let edit = EditPayload::UpsertEvaluator(UpsertEvaluatorPayload {
+            evaluation_name: "my_eval".to_string(),
+            evaluator_name: "second_match".to_string(),
+            evaluator: new_evaluator,
+        });
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("upsert_evaluator should succeed after upsert_evaluation");
+
+        let toml_contents =
+            fs::read_to_string(tmp.path().join("tensorzero.toml")).expect("failed to read config");
+        assert!(
+            toml_contents.contains("second_match"),
+            "expected new evaluator to appear in TOML, got:\n{toml_contents}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_variant_inline_tables_and_default_stripping() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        // Create a variant with default retries (should be stripped)
+        let variant_default_retries = UninitializedVariantInfo {
+            inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
+                model: Arc::from("gpt-4o"),
+                retries: RetryConfig::default(),
+                ..Default::default()
+            }),
+            timeouts: None,
+        };
+
+        let edit = EditPayload::UpsertVariant(Box::new(UpsertVariantPayload {
+            function_name: "my_function".to_string(),
+            variant_name: "default_retries".to_string(),
+            variant: variant_default_retries,
+        }));
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("failed to apply variant edit");
+
+        let toml_contents =
+            fs::read_to_string(tmp.path().join("tensorzero.toml")).expect("failed to read config");
+
+        // Default retries should NOT appear in output (check for the key, not the variant name)
+        assert!(
+            !toml_contents.contains("num_retries"),
+            "default retries should be stripped from output, got:\n{toml_contents}"
+        );
+        assert!(
+            !toml_contents.contains("max_delay_s"),
+            "default retries should be stripped from output, got:\n{toml_contents}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_variant_non_default_retries_preserved() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        // Create a variant with non-default retries (should be preserved)
+        let variant_custom_retries = UninitializedVariantInfo {
+            inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
+                model: Arc::from("gpt-4o"),
+                retries: RetryConfig {
+                    num_retries: 3,
+                    max_delay_s: 5.0,
+                },
+                ..Default::default()
+            }),
+            timeouts: None,
+        };
+
+        let edit = EditPayload::UpsertVariant(Box::new(UpsertVariantPayload {
+            function_name: "my_function".to_string(),
+            variant_name: "custom_retries".to_string(),
+            variant: variant_custom_retries,
+        }));
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("failed to apply variant edit");
+
+        let toml_contents =
+            fs::read_to_string(tmp.path().join("tensorzero.toml")).expect("failed to read config");
+
+        // Non-default retries SHOULD appear as inline table
+        assert!(
+            toml_contents.contains("retries"),
+            "non-default retries should be preserved in output, got:\n{toml_contents}"
+        );
+        assert!(
+            toml_contents.contains("num_retries = 3"),
+            "expected num_retries = 3 in output, got:\n{toml_contents}"
+        );
+
+        // Retries should be an inline table, not a separate section
+        assert!(
+            !toml_contents.contains("[functions.my_function.variants.custom_retries.retries]"),
+            "retries should be inline table, not a separate section, got:\n{toml_contents}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_variant_empty_timeouts_stripped() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        // Create a variant with default (empty) timeouts
+        let variant = UninitializedVariantInfo {
+            inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
+                model: Arc::from("gpt-4o"),
+                ..Default::default()
+            }),
+            timeouts: Some(Default::default()),
+        };
+
+        let edit = EditPayload::UpsertVariant(Box::new(UpsertVariantPayload {
+            function_name: "my_function".to_string(),
+            variant_name: "empty_timeouts".to_string(),
+            variant,
+        }));
+
+        writer
+            .apply_edit(&edit)
+            .await
+            .expect("failed to apply variant edit");
+
+        let toml_contents =
+            fs::read_to_string(tmp.path().join("tensorzero.toml")).expect("failed to read config");
+
+        // Empty timeouts should be stripped (timeouts = {} or timeouts with empty sub-tables)
+        // Check specifically for the timeouts key assignment, not the variant name
+        assert!(
+            !toml_contents.contains("timeouts ="),
+            "empty timeouts should be stripped from output, got:\n{toml_contents}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_evaluator_rejects_llm_judge_with_empty_variants() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config_with_evaluation(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Messages,
+            variants: HashMap::new(),
+            output_type: LLMJudgeOutputType::Boolean,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig::default(),
+            cutoff: None,
+            description: None,
+        });
+
+        let edit = EditPayload::UpsertEvaluator(UpsertEvaluatorPayload {
+            evaluation_name: "my_evaluation".to_string(),
+            evaluator_name: "empty_judge".to_string(),
+            evaluator,
+        });
+
+        let result = writer.apply_edit(&edit).await;
+        assert!(
+            result.is_err(),
+            "should reject LLM judge evaluator with empty variants"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at least one variant"),
+            "error should mention missing variants, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_evaluation_rejects_llm_judge_with_empty_variants() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Messages,
+            variants: HashMap::new(),
+            output_type: LLMJudgeOutputType::Boolean,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig::default(),
+            cutoff: None,
+            description: None,
+        });
+
+        let mut evaluators = HashMap::new();
+        evaluators.insert("empty_judge".to_string(), evaluator);
+
+        let evaluation =
+            UninitializedEvaluationConfig::Inference(UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: "my_function".to_string(),
+                description: None,
+            });
+
+        let edit = EditPayload::UpsertEvaluation(UpsertEvaluationPayload {
+            evaluation_name: "bad_eval".to_string(),
+            evaluation,
+        });
+
+        let result = writer.apply_edit(&edit).await;
+        assert!(
+            result.is_err(),
+            "should reject evaluation containing LLM judge with empty variants"
         );
     }
 }
