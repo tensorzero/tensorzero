@@ -660,6 +660,9 @@ fn inject_failed_variant_raw_response(
     variant_name: String,
     function_config_type: FunctionConfigType,
 ) -> InferenceOutput {
+    if failed_raw_response.is_empty() {
+        return output;
+    }
     match output {
         InferenceOutput::NonStreaming(mut response) => {
             match &mut response {
