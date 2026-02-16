@@ -20,8 +20,25 @@ use std::path::{Path, PathBuf};
 use locator::LoadedConfigFile;
 use path_resolver::FileToWrite;
 use tensorzero_core::config::{ConfigFileGlob, UninitializedVariantConfig};
+use tensorzero_core::evaluations::{UninitializedEvaluationConfig, UninitializedEvaluatorConfig};
 use tensorzero_core::utils::retries::RetryConfig;
 use toml_edit::DocumentMut;
+
+/// Validate that an evaluator config won't produce undeserializable TOML after cleaning.
+///
+/// `strip_empty_tables` removes empty inline tables like `variants = {}`, but some evaluator
+/// types (e.g. `llm_judge`) require `variants` to be present. We reject these early so we
+/// never write invalid config.
+fn validate_evaluator(evaluator: &UninitializedEvaluatorConfig) -> Result<(), ConfigApplierError> {
+    if let UninitializedEvaluatorConfig::LLMJudge(config) = evaluator
+        && config.variants.is_empty()
+    {
+        return Err(ConfigApplierError::InvalidEvaluatorConfig {
+            message: "LLM judge evaluator must have at least one variant".to_string(),
+        });
+    }
+    Ok(())
+}
 
 /// Convert subtables to inline tables, strip the given keys, and remove empty tables.
 ///
@@ -214,6 +231,11 @@ impl ConfigApplier {
         &mut self,
         payload: &UpsertEvaluationPayload,
     ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
+        // Validate all evaluators in the evaluation before writing
+        let UninitializedEvaluationConfig::Inference(config) = &payload.evaluation;
+        for evaluator in config.evaluators.values() {
+            validate_evaluator(evaluator)?;
+        }
         path_resolver::validate_path_component(&payload.evaluation_name, "evaluation_name")?;
 
         let (location, _is_new) =
@@ -260,6 +282,7 @@ impl ConfigApplier {
         &mut self,
         payload: &UpsertEvaluatorPayload,
     ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
+        validate_evaluator(&payload.evaluator)?;
         path_resolver::validate_path_component(&payload.evaluation_name, "evaluation_name")?;
         path_resolver::validate_path_component(&payload.evaluator_name, "evaluator_name")?;
 
@@ -834,6 +857,86 @@ type = "exact_match"
         assert!(
             !toml_contents.contains("timeouts ="),
             "empty timeouts should be stripped from output, got:\n{toml_contents}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_evaluator_rejects_llm_judge_with_empty_variants() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config_with_evaluation(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Messages,
+            variants: HashMap::new(),
+            output_type: LLMJudgeOutputType::Boolean,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig::default(),
+            cutoff: None,
+            description: None,
+        });
+
+        let edit = EditPayload::UpsertEvaluator(UpsertEvaluatorPayload {
+            evaluation_name: "my_evaluation".to_string(),
+            evaluator_name: "empty_judge".to_string(),
+            evaluator,
+        });
+
+        let result = writer.apply_edit(&edit).await;
+        assert!(
+            result.is_err(),
+            "should reject LLM judge evaluator with empty variants"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at least one variant"),
+            "error should mention missing variants, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_upsert_evaluation_rejects_llm_judge_with_empty_variants() {
+        let tmp = TempDir::new().expect("failed to create temp dir");
+        setup_test_config(tmp.path());
+
+        let glob = format!("{}/tensorzero.toml", tmp.path().display());
+        let mut writer = ConfigApplier::new(&glob)
+            .await
+            .expect("failed to create writer");
+
+        let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Messages,
+            variants: HashMap::new(),
+            output_type: LLMJudgeOutputType::Boolean,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig::default(),
+            cutoff: None,
+            description: None,
+        });
+
+        let mut evaluators = HashMap::new();
+        evaluators.insert("empty_judge".to_string(), evaluator);
+
+        let evaluation =
+            UninitializedEvaluationConfig::Inference(UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: "my_function".to_string(),
+                description: None,
+            });
+
+        let edit = EditPayload::UpsertEvaluation(UpsertEvaluationPayload {
+            evaluation_name: "bad_eval".to_string(),
+            evaluation,
+        });
+
+        let result = writer.apply_edit(&edit).await;
+        assert!(
+            result.is_err(),
+            "should reject evaluation containing LLM judge with empty variants"
         );
     }
 }
