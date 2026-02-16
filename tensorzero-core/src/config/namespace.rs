@@ -101,7 +101,9 @@ pub fn validate_namespaced_model_usage(
                 // Check: no other namespace experimentation config should sample this variant
                 // unless its namespace matches the model's namespace
                 for (ns_name, ns_config) in &experimentation.namespaces {
-                    if ns_name != model_namespace && ns_config.could_sample_variant(variant_name) {
+                    if ns_name != model_namespace.as_str()
+                        && ns_config.could_sample_variant(variant_name)
+                    {
                         return Err(ErrorDetails::Config {
                             message: format!(
                                 "Variant `{variant_name}` of function `{function_name}` uses model `{model_name}` \
