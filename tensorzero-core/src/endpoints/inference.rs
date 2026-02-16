@@ -71,6 +71,9 @@ use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
+use crate::endpoints::namespace::{
+    validate_model_namespace, validate_variant_namespace_at_inference,
+};
 use crate::endpoints::validate_tags;
 use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
@@ -381,14 +384,12 @@ pub async fn inference(
     }
 
     // Store namespace as a tag (validation happens during deserialization)
-    let namespace = if let Some(ref ns) = params.namespace {
+    let namespace = params.namespace.as_ref();
+    if let Some(ns) = namespace {
         params
             .tags
             .insert("tensorzero::namespace".to_string(), ns.to_string());
-        Some(ns.as_str())
-    } else {
-        None
-    };
+    }
 
     let (function, function_name) = find_function(&params, &config).await?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
@@ -885,19 +886,7 @@ async fn find_function(
             }
 
             // Validate namespace compatibility for the model
-            if let Some(model_namespace) = config.models.get_namespace(model_name) {
-                let request_namespace = params.namespace.as_ref().map(|ns| ns.as_str());
-                if request_namespace != Some(model_namespace) {
-                    return Err(ErrorDetails::InvalidRequest {
-                        message: format!(
-                            "Model `{model_name}` has namespace `{model_namespace}`, \
-                            but the request namespace is {}. Namespaced models can only be used with a matching namespace.",
-                            request_namespace.map_or_else(|| "`None`".to_string(), |ns| format!("`{ns}`"))
-                        ),
-                    }
-                    .into());
-                }
-            }
+            validate_model_namespace(model_name, &config.models, params.namespace.as_ref())?;
 
             // Validate extra_body and extra_headers filters
             validate_inference_filters(
@@ -2033,32 +2022,6 @@ impl ChatCompletionInferenceParams {
     }
 }
 
-/// Validates that a variant's models are compatible with the request namespace.
-/// Returns an error if any model has a namespace that doesn't match the request namespace.
-fn validate_variant_namespace_at_inference(
-    variant_name: &str,
-    variant_config: &VariantConfig,
-    models: &ModelTable,
-    request_namespace: Option<&str>,
-) -> Result<(), Error> {
-    for model_name in variant_config.direct_model_names() {
-        if let Some(model_namespace) = models.get_namespace(model_name) {
-            let matches = request_namespace == Some(model_namespace);
-            if !matches {
-                return Err(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Variant `{variant_name}` uses model `{model_name}` which has namespace `{model_namespace}`, \
-                        but the request namespace is {}. Namespaced models can only be used with a matching namespace.",
-                        request_namespace.map_or_else(|| "`None`".to_string(), |ns| format!("`{ns}`"))
-                    ),
-                }
-                .into());
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Prepares the candidate variants map using inference parameters prior to sampling
 /// This function handles 2 cases:
 /// 1. If a variant is pinned, only that variant should be attempted
@@ -2074,7 +2037,7 @@ struct PrepareCandidateVariantsArgs<'a> {
     function: &'a FunctionConfig,
     function_name: String,
     models: &'a ModelTable,
-    request_namespace: Option<&'a str>,
+    request_namespace: Option<&'a Namespace>,
 }
 
 fn prepare_candidate_variants(

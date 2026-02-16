@@ -1503,7 +1503,7 @@ impl Config {
                     // Check: no other namespace experimentation config should sample this variant
                     // unless its namespace matches the model's namespace
                     for (ns_name, ns_config) in &experimentation.namespaces {
-                        if ns_name != model_namespace
+                        if ns_name.as_str() != model_namespace.as_str()
                             && ns_config.could_sample_variant(variant_name)
                         {
                             return Err(ErrorDetails::Config {

@@ -11,6 +11,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::config::Namespace;
 use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -133,9 +134,9 @@ impl ExperimentationConfigWithNamespaces {
     /// Get the experimentation config for a given namespace.
     /// If namespace is None or the namespace doesn't have a specific config,
     /// returns the base config.
-    pub fn get_for_namespace(&self, namespace: Option<&str>) -> &ExperimentationConfig {
+    pub fn get_for_namespace(&self, namespace: Option<&Namespace>) -> &ExperimentationConfig {
         match namespace {
-            Some(ns) => self.namespaces.get(ns).unwrap_or(&self.base),
+            Some(ns) => self.namespaces.get(ns.as_str()).unwrap_or(&self.base),
             None => &self.base,
         }
     }
@@ -838,7 +839,8 @@ mod tests {
             base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
             namespaces: HashMap::new(),
         };
-        let result = config.get_for_namespace(Some("unknown"));
+        let ns = Namespace::new("unknown").unwrap();
+        let result = config.get_for_namespace(Some(&ns));
         assert!(
             matches!(result, ExperimentationConfig::Uniform(_)),
             "Unknown namespace should fall back to the base config"
@@ -860,7 +862,8 @@ mod tests {
             base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
             namespaces,
         };
-        let result = config.get_for_namespace(Some("mobile"));
+        let ns = Namespace::new("mobile").unwrap();
+        let result = config.get_for_namespace(Some(&ns));
         assert!(
             matches!(result, ExperimentationConfig::StaticWeights(_)),
             "Known namespace should return the namespace-specific config"

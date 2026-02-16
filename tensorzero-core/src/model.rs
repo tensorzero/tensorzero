@@ -24,7 +24,7 @@ use crate::cache::{
 };
 use crate::config::with_skip_credential_validation;
 use crate::config::{
-    OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
+    Namespace, OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -90,7 +90,7 @@ pub struct ModelConfig {
     pub skip_relay: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub namespace: Option<String>,
+    pub namespace: Option<Namespace>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -105,7 +105,7 @@ pub struct UninitializedModelConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_relay: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub namespace: Option<String>,
+    pub namespace: Option<Namespace>,
 }
 
 impl UninitializedModelConfig {
@@ -2659,10 +2659,10 @@ pub type ModelTable = BaseModelTable<ModelConfig>;
 impl ModelTable {
     /// Get the namespace of a statically-configured model, if any.
     /// Returns `None` if the model is not in the table or has no namespace.
-    pub fn get_namespace(&self, model_name: &str) -> Option<&str> {
+    pub fn get_namespace(&self, model_name: &str) -> Option<&Namespace> {
         self.table
             .get(model_name)
-            .and_then(|m| m.namespace.as_deref())
+            .and_then(|m| m.namespace.as_ref())
     }
 }
 
