@@ -3,4 +3,10 @@
 export type Usage = {
   input_tokens: number | null;
   output_tokens: number | null;
+  /**
+   * Cost of this inference in dollars, computed from the provider response
+   * using the user-configured cost pointer mappings on the model provider.
+   * `None` means cost tracking is not configured for this provider.
+   */
+  cost?: number;
 };

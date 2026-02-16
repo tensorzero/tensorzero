@@ -88,7 +88,8 @@ pub struct StoredEmbeddingProviderConfig {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub extra_headers: Option<ExtraHeadersConfig>,
     /// Cost configuration for computing embedding cost from raw provider responses.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub cost: Option<UninitializedCostConfig>,
 }
 
