@@ -1234,8 +1234,6 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
 }
 
 #[tokio::test]
-// TODO(#6302): re-enable
-#[ignore]
 async fn test_embedding_request() {
     let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"

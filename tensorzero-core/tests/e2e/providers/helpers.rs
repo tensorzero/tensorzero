@@ -11,13 +11,13 @@ pub fn get_modal_extra_headers() -> UnfilteredInferenceExtraHeaders {
     let mut extra_headers = Vec::new();
     if let Ok(modal_key) = env::var("MODAL_KEY") {
         extra_headers.push(DynamicExtraHeader::ModelProvider {
-            model_name: "qwen2.5-0.5b-instruct-vllm".to_string(),
+            model_name: "qwen3-1.7b-vllm".to_string(),
             provider_name: Some("vllm".to_string()),
             name: "Modal-Key".to_string(),
             value: modal_key.clone(),
         });
         extra_headers.push(DynamicExtraHeader::ModelProvider {
-            model_name: "qwen2.5-0.5b-instruct-vllm-dynamic".to_string(),
+            model_name: "qwen3-1.7b-vllm-dynamic".to_string(),
             provider_name: Some("vllm".to_string()),
             name: "Modal-Key".to_string(),
             value: modal_key.clone(),
@@ -37,13 +37,13 @@ pub fn get_modal_extra_headers() -> UnfilteredInferenceExtraHeaders {
     }
     if let Ok(modal_secret) = env::var("MODAL_SECRET") {
         extra_headers.push(DynamicExtraHeader::ModelProvider {
-            model_name: "qwen2.5-0.5b-instruct-vllm".to_string(),
+            model_name: "qwen3-1.7b-vllm".to_string(),
             provider_name: Some("vllm".to_string()),
             name: "Modal-Secret".to_string(),
             value: modal_secret.clone(),
         });
         extra_headers.push(DynamicExtraHeader::ModelProvider {
-            model_name: "qwen2.5-0.5b-instruct-vllm-dynamic".to_string(),
+            model_name: "qwen3-1.7b-vllm-dynamic".to_string(),
             provider_name: Some("vllm".to_string()),
             name: "Modal-Secret".to_string(),
             value: modal_secret.clone(),

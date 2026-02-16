@@ -79,6 +79,9 @@ model = "llama4_scout_17b_16e_instruct"
 
 See the [list of models available on Groq](https://groq.com/pricing).
 
+For reasoning models (e.g. `qwen/qwen3-32b`), set `reasoning_format = "parsed"` to receive structured reasoning content separately from the main response.
+See the [Configuration Reference](/gateway/configuration-reference/) for more details.
+
 ### Credentials
 
 You must set the `GROQ_API_KEY` environment variable before running the gateway.

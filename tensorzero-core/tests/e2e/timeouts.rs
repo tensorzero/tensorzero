@@ -297,7 +297,7 @@ async fn test_model_provider_timeout_non_streaming() {
         json!({
             "error": "All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `non_streaming.total_ms` timeout (400ms)",
             "error_json": {
-                "ModelProvidersExhausted": {
+                "AllModelProvidersFailed": {
                     "provider_errors": {
                         "slow": {
                             "ModelProviderTimeout": {
@@ -347,7 +347,7 @@ async fn test_model_provider_timeout_streaming() {
         json!({
             "error": "All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `streaming.ttft_ms` timeout (500ms)",
             "error_json": {
-                "ModelProvidersExhausted": {
+                "AllModelProvidersFailed": {
                     "provider_errors": {
                         "slow": {
                             "ModelProviderTimeout": {

@@ -364,8 +364,9 @@ system_template = "../../../fixtures/config/functions/weather_helper_parallel/pr
 [functions.weather_helper_parallel.variants.vllm]
 type = "chat_completion"
 weight = 1
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.weather_helper_parallel.variants.gcp-vertex-haiku]
 type = "chat_completion"
@@ -838,6 +839,41 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 max_tokens = 100
 
 # Variant fallback: error variant fails, fallback variant succeeds initially but errors mid-stream
+# Retry tests: flaky model (fails on even calls, succeeds on odd) with raw_response
+[functions.raw_response_retries_flaky]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.raw_response_retries_flaky.variants.test]
+type = "chat_completion"
+model = "flaky_raw_response_retries"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+retries = { num_retries = 5, max_delay_s = 0.01 }
+
+# Retry tests: always-failing model with raw_response (all retries exhaust)
+[functions.raw_response_retries_all_fail]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.raw_response_retries_all_fail.variants.test]
+type = "chat_completion"
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+retries = { num_retries = 2, max_delay_s = 0.01 }
+
+# Retry tests: model with provider fallback + retries
+[functions.raw_response_retries_with_provider_fallback]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.raw_response_retries_with_provider_fallback.variants.test]
+type = "chat_completion"
+model = "test_fallback_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+retries = { num_retries = 3, max_delay_s = 0.01 }
 [functions.raw_response_variant_fallback_mid_stream_error]
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"

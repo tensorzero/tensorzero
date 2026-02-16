@@ -159,21 +159,21 @@ max_tokens = 100
 
 [functions.json_success.variants.fireworks]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 1500
 
-[functions.json_success.variants.fireworks-gpt-oss-20b]
+[functions.json_success.variants.fireworks-kimi-k2p5]
 type = "chat_completion"
-model = "gpt-oss-20b-fireworks"
+model = "kimi-k2p5-fireworks"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 # Fireworks gives us 'Failed to format non-streaming choice: Expected message start token but ran out of tokens' if
-# we try to explicitly request a 'json_object' response format for gpt-oss-20b.
+# we try to explicitly request a 'json_object' response format for kimi-k2p5.
 json_mode = "off"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.json_success.variants.google-ai-studio-gemini-3-flash]
 type = "chat_completion"
@@ -185,11 +185,11 @@ max_tokens = 1000
 
 [functions.json_success.variants.fireworks-implicit]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.json_success.variants.deepseek-reasoner]
 type = "chat_completion"
@@ -209,10 +209,10 @@ max_tokens = 800
 
 [functions.json_success.variants.fireworks-strict]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 json_mode = "strict"
 
 [functions.json_success.variants.gcp-vertex-gemini-flash]
@@ -351,6 +351,22 @@ model = "groq-qwen"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "strict"
+max_tokens = 500
+
+[functions.json_success.variants.groq-reasoning]
+type = "chat_completion"
+model = "groq-qwen3-32b"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 500
+
+[functions.json_success.variants.groq-reasoning-usage]
+type = "chat_completion"
+model = "groq-gpt-oss-20b"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
 max_tokens = 500
 
 [functions.json_success.variants.json_reasoner]
@@ -549,11 +565,12 @@ extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true 
 
 [functions.json_success.variants.vllm]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.json_success.variants.vllm-gpt-oss-20b]
 type = "chat_completion"
@@ -565,11 +582,21 @@ max_tokens = 100
 
 [functions.json_success.variants.vllm-strict]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
+
+[functions.json_success.variants.vllm-reasoning]
+type = "chat_completion"
+model = "qwen3-1.7b-vllm"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true }]
 
 [functions.json_success.variants.dicl]
 type = "experimental_dynamic_in_context_learning"
@@ -596,9 +623,9 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 max_tokens = 100
 json_mode = "strict"
 
-[functions.json_success.variants.fireworks-deepseek]
+[functions.json_success.variants.fireworks-kimi-k2p5-reasoning]
 type = "chat_completion"
-model = "deepseek-r1"
+model = "kimi-k2p5-fireworks-reasoning"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -662,11 +689,11 @@ max_tokens = 100
 
 [functions.json_success.variants.fireworks_json_mode_off]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.json_success.variants.together_deepseek_r1_json_mode_off]
 type = "chat_completion"
@@ -775,11 +802,12 @@ max_tokens = 100
 
 [functions.json_success.variants.vllm_json_mode_off]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.json_success.variants.xai_json_mode_off]
 type = "chat_completion"
@@ -788,6 +816,14 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
 max_tokens = 100
+
+[functions.json_success.variants.mistral-reasoning]
+type = "chat_completion"
+model = "magistral-small-latest"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
+max_tokens = 800
 
 [functions.json_success.variants.xai-reasoning]
 type = "chat_completion"

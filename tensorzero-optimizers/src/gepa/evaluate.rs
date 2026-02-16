@@ -8,6 +8,7 @@ use tensorzero_core::{
     client::Client,
     config::{Config, UninitializedVariantConfig, UninitializedVariantInfo},
     db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::datasets::v1::{
         create_datapoints,
         types::{CreateDatapointRequest, CreateDatapointsRequest, CreateDatapointsResponse},
@@ -192,9 +193,11 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
     let inference_executor = Arc::new(ClientInferenceExecutor::new(params.gateway_client));
 
     // Create EvaluationCoreArgs
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+        Arc::new(params.clickhouse_connection_info.clone());
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client: params.clickhouse_connection_info.clone(),
+        db,
         evaluation_config: params.evaluation_config.clone(),
         function_configs,
         evaluation_name: params.evaluation_name,

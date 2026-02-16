@@ -1518,7 +1518,7 @@ impl TensorZeroGateway {
 
         let core_args = EvaluationCoreArgs {
             inference_executor,
-            clickhouse_client: app_state.clickhouse_connection_info.clone(),
+            db: Arc::new(app_state.get_delegating_database()),
             evaluation_config,
             function_configs,
             evaluation_name,
@@ -2786,7 +2786,7 @@ impl AsyncTensorZeroGateway {
 
             let core_args = EvaluationCoreArgs {
                 inference_executor,
-                clickhouse_client: app_state.clickhouse_connection_info.clone(),
+                db: Arc::new(app_state.get_delegating_database()),
                 evaluation_config,
                 function_configs,
                 evaluation_name,

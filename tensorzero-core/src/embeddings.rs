@@ -239,7 +239,7 @@ impl EmbeddingModelConfig {
                     }
                 }
             }
-            Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
+            Err(ErrorDetails::AllModelProvidersFailed { provider_errors }.into())
         };
         // This is the top-level embedding model timeout, which limits the total time taken to run all providers.
         // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
