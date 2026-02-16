@@ -157,6 +157,17 @@ model = "groq-qwen"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 500
 
+[functions.weather_helper.variants.groq-reasoning]
+type = "chat_completion"
+model = "groq-qwen3-32b"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.weather_helper.variants.groq-reasoning-usage]
+type = "chat_completion"
+model = "groq-gpt-oss-20b"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+
 [functions.weather_helper.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
