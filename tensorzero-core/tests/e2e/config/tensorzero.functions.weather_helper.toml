@@ -103,9 +103,9 @@ max_tokens = 100
 
 [functions.weather_helper.variants.fireworks]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.weather_helper.variants.gcp-vertex-gemini-flash]
 type = "chat_completion"
@@ -180,15 +180,15 @@ model = "deepseek-reasoner"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 800
 
-[functions.weather_helper.variants.fireworks-deepseek]
+[functions.weather_helper.variants.fireworks-kimi-k2p5-reasoning]
 type = "chat_completion"
-model = "deepseek-r1"
+model = "kimi-k2p5-fireworks-reasoning"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 800
 
-[functions.weather_helper.variants.fireworks-gpt-oss-20b]
+[functions.weather_helper.variants.fireworks-kimi-k2p5]
 type = "chat_completion"
-model = "gpt-oss-20b-fireworks"
+model = "kimi-k2p5-fireworks"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 
 

@@ -119,27 +119,27 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.fireworks]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.dynamic_json.variants.fireworks-strict]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 json_mode = "strict"
 
 [functions.dynamic_json.variants.fireworks-implicit]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.dynamic_json.variants.gcp-vertex-gemini-flash]
 type = "chat_completion"

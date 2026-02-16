@@ -25,12 +25,12 @@ extra_body = [
     { pointer = "/frequency_penalty", value = 1.42 },
 ]
 
-[models."gpt-oss-20b-fireworks"]
+[models."kimi-k2p5-fireworks"]
 routing = ["fireworks"]
 
-[models."gpt-oss-20b-fireworks".providers.fireworks]
+[models."kimi-k2p5-fireworks".providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/gpt-oss-20b"
+model_name = "accounts/fireworks/models/kimi-k2p5"
 parse_think_blocks = false
 
 [models."gpt-oss-20b-vllm"]
@@ -376,12 +376,12 @@ region = "us-east-1"
 [models.qwen2p5-72b-instruct]
 routing = ["fireworks"]
 
-[models."deepseek-r1"]
+[models."kimi-k2p5-fireworks-reasoning"]
 routing = ["fireworks"]
 
-[models."deepseek-r1".providers.fireworks]
+[models."kimi-k2p5-fireworks-reasoning".providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/deepseek-r1-0528"
+model_name = "accounts/fireworks/models/kimi-k2p5"
 
 [models.qwen2p5-72b-instruct.providers.fireworks]
 type = "fireworks"
