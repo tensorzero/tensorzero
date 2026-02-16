@@ -1,5 +1,5 @@
 #[expect(clippy::disallowed_types)]
-use backon::{ExponentialBuilder, Retryable};
+use backon::{BackoffBuilder, ExponentialBuilder, Retryable};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, time::Duration};
@@ -61,6 +61,41 @@ impl RetryConfig {
     ) -> impl Future<Output = Result<R, Error>> {
         let backoff = self.get_backoff();
         func.retry(backoff).when(Error::is_retryable)
+    }
+
+    /// Like `retry`, but collects intermediate errors from failed attempts.
+    ///
+    /// Returns `(final_result, intermediate_errors)`:
+    /// - On success: `intermediate_errors` contains errors from all failed attempts before the success.
+    /// - On failure: `intermediate_errors` contains errors from earlier attempts;
+    ///   the final (non-retryable or last-attempt) error is in the `Err`.
+    pub async fn retry_collecting_errors<R, F, Fut>(
+        &self,
+        mut func: F,
+    ) -> (Result<R, Error>, Vec<Error>)
+    where
+        F: FnMut() -> Fut,
+        Fut: Future<Output = Result<R, Error>>,
+    {
+        let mut backoff = self.get_backoff().build();
+        let mut errors = Vec::new();
+        loop {
+            match func().await {
+                Ok(result) => return (Ok(result), errors),
+                Err(err) => {
+                    if !err.is_retryable() {
+                        return (Err(err), errors);
+                    }
+                    match backoff.next() {
+                        Some(delay) => {
+                            errors.push(err);
+                            tokio::time::sleep(delay).await;
+                        }
+                        None => return (Err(err), errors),
+                    }
+                }
+            }
+        }
     }
 
     fn get_backoff(&self) -> backon::ExponentialBuilder {

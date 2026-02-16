@@ -1622,19 +1622,21 @@ mod tests {
         let details = err.get_details();
         assert_eq!(
             *details,
-            ErrorDetails::ModelProvidersExhausted {
-                provider_errors: IndexMap::from([(
-                    "error".to_string(),
-                    Error::new(ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider for model 'error'."
-                            .to_string(),
-                        status_code: None,
-                        raw_request: Some("raw request".to_string()),
-                        raw_response: None,
-                        provider_type: "dummy".to_string(),
-                        api_type: ApiType::ChatCompletions,
-                    })
-                )])
+            ErrorDetails::AllRetriesFailed {
+                errors: vec![Error::new(ErrorDetails::AllModelProvidersFailed {
+                    provider_errors: IndexMap::from([(
+                        "error".to_string(),
+                        Error::new(ErrorDetails::InferenceClient {
+                            message: "Error sending request to Dummy provider for model 'error'."
+                                .to_string(),
+                            status_code: None,
+                            raw_request: Some("raw request".to_string()),
+                            raw_response: None,
+                            provider_type: "dummy".to_string(),
+                            api_type: ApiType::ChatCompletions,
+                        })
+                    )])
+                })]
             }
         );
 
@@ -2496,16 +2498,25 @@ mod tests {
             Err(e) => e,
         };
         match err.get_details() {
-            ErrorDetails::ModelProvidersExhausted {
-                provider_errors, ..
-            } => {
-                assert_eq!(provider_errors.len(), 1);
-                assert!(matches!(
-                    provider_errors["error_provider"].get_details(),
-                    ErrorDetails::InferenceClient { .. }
-                ));
+            ErrorDetails::AllRetriesFailed { errors } => {
+                assert_eq!(errors.len(), 1, "Expected 1 error in AllRetriesFailed");
+                match errors[0].get_details() {
+                    ErrorDetails::AllModelProvidersFailed {
+                        provider_errors, ..
+                    } => {
+                        assert_eq!(provider_errors.len(), 1);
+                        assert!(matches!(
+                            provider_errors["error_provider"].get_details(),
+                            ErrorDetails::InferenceClient { .. }
+                        ));
+                    }
+                    _ => panic!(
+                        "Expected AllModelProvidersFailed inside AllRetriesFailed, got {:?}",
+                        errors[0]
+                    ),
+                }
             }
-            _ => panic!("Expected ModelProvidersExhausted error, got {err:?}"),
+            _ => panic!("Expected AllRetriesFailed error, got {err:?}"),
         }
 
         // Test case 2: Model inference succeeds

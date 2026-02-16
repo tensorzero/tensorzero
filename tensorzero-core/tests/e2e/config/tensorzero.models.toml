@@ -948,6 +948,14 @@ model_name = "error_with_raw_response"
 type = "dummy"
 model_name = "error_with_raw_response"
 
+# Flaky model with raw_response for retry tests
+[models.flaky_raw_response_retries]
+routing = ["dummy"]
+
+[models.flaky_raw_response_retries.providers.dummy]
+type = "dummy"
+model_name = "flaky_raw_response_retries"
+
 # Single error provider with raw_response (for variant fallback tests)
 [models.error_with_raw_response]
 routing = ["error_with_raw"]
