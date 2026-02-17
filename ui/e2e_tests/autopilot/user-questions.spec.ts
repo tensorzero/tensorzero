@@ -2,10 +2,19 @@ import { test, expect } from "@playwright/test";
 import { v7 } from "uuid";
 import { insertEvent, queryEventPayloads } from "./helpers/db";
 
-/**
- * Build a user_questions event payload with multiple choice questions.
- * Returns the payload and the IDs for later reference.
- */
+// ── Types ──────────────────────────────────────────────────────────────
+
+type AnswerPayload = {
+  type: string;
+  user_questions_event_id: string;
+  responses: Record<
+    string,
+    { type: string; selected?: string[]; text?: string }
+  >;
+};
+
+// ── Payload builders ───────────────────────────────────────────────────
+
 function buildMultipleChoicePayload() {
   const q1Id = v7();
   const opt1Id = v7();
@@ -39,9 +48,57 @@ function buildMultipleChoicePayload() {
   return { payload, q1Id, opt1Id, opt2Id };
 }
 
-/**
- * Build a multi-question payload with one MC question and one free response.
- */
+function buildMultiSelectPayload() {
+  const q1Id = v7();
+  const opt1Id = v7();
+  const opt2Id = v7();
+  const opt3Id = v7();
+
+  const payload = {
+    type: "user_questions" as const,
+    questions: [
+      {
+        id: q1Id,
+        header: "Features",
+        question: "Which features should we include?",
+        type: "multiple_choice" as const,
+        options: [
+          { id: opt1Id, label: "SSR", description: "Server-side rendering" },
+          { id: opt2Id, label: "i18n", description: "Internationalization" },
+          {
+            id: opt3Id,
+            label: "PWA",
+            description: "Progressive web app support",
+          },
+        ],
+        multi_select: true,
+      },
+    ],
+  };
+
+  return { payload, q1Id, opt1Id, opt2Id, opt3Id };
+}
+
+function buildFreeResponsePayload(
+  question = "What specific requirements do you have?",
+) {
+  const q1Id = v7();
+
+  const payload = {
+    type: "user_questions" as const,
+    questions: [
+      {
+        id: q1Id,
+        header: "Details",
+        question,
+        type: "free_response" as const,
+      },
+    ],
+  };
+
+  return { payload, q1Id };
+}
+
 function buildMultiQuestionPayload() {
   const q1Id = v7();
   const q2Id = v7();
@@ -78,9 +135,12 @@ function buildMultiQuestionPayload() {
   return { payload, q1Id, q2Id, opt1Id, opt2Id };
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────
+
 /**
  * Create a new autopilot session and return the session ID.
- * Sends a message through the UI, waits for redirect, then interrupts.
+ * Sends a message through the UI, waits for redirect, then interrupts
+ * so the worker stops generating events and the session is quiescent.
  */
 async function createAndInterruptSession(
   page: import("@playwright/test").Page,
@@ -99,7 +159,6 @@ async function createAndInterruptSession(
     .match(/\/autopilot\/sessions\/([a-f0-9-]+)$/)?.[1];
   if (!sessionId) throw new Error("Could not extract session ID from URL");
 
-  // Interrupt the session so the worker stops generating events
   const stopButton = page.getByRole("button", { name: /stop session/i });
   await expect(stopButton).toBeVisible({ timeout: 30000 });
   await stopButton.click();
@@ -110,15 +169,25 @@ async function createAndInterruptSession(
   return sessionId;
 }
 
+/**
+ * Query the first user_questions_answers payload for a session.
+ * Asserts at least one answer exists before returning.
+ */
+function queryFirstAnswerPayload(sessionId: string): AnswerPayload {
+  const payloads = queryEventPayloads(sessionId, "user_questions_answers");
+  expect(payloads.length).toBeGreaterThanOrEqual(1);
+  return payloads[0] as AnswerPayload;
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
 test.describe("User questions", () => {
-  test("should display a multiple choice question and submit the selected answer", async ({
-    page,
-  }) => {
+  test("should submit a multiple choice answer", async ({ page }) => {
     test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
-    // Insert a user_questions event with a single MC question
+    // Insert a user_questions event via the database
     const eventId = v7();
     const { payload, q1Id, opt1Id } = buildMultipleChoicePayload();
     insertEvent(eventId, sessionId, payload);
@@ -128,30 +197,17 @@ test.describe("User questions", () => {
       page.getByText("Which authentication method should we use?"),
     ).toBeVisible({ timeout: 15000 });
 
-    // The "Question" header should be visible
+    // Single-question cards show "Question" header (no step tabs)
     await expect(page.getByText("Question").first()).toBeVisible();
 
-    // Select the JWT option
     await page.getByText("JWT").click();
-
-    // Submit the answer
     await page.getByRole("button", { name: /submit/i }).click();
 
-    // Verify "Question · Answered" event appears in the stream
+    // Verify "Answered" event appears in the stream
     await expect(page.getByText("Answered")).toBeVisible({ timeout: 10000 });
 
-    // Verify the response was recorded in the database
-    const answers = queryEventPayloads(sessionId, "user_questions_answers");
-    expect(answers.length).toBeGreaterThanOrEqual(1);
-
-    const answer = answers[0] as {
-      type: string;
-      user_questions_event_id: string;
-      responses: Record<
-        string,
-        { type: string; selected?: string[]; text?: string }
-      >;
-    };
+    // Verify the response was persisted correctly
+    const answer = queryFirstAnswerPayload(sessionId);
     expect(answer.type).toBe("user_questions_answers");
     expect(answer.user_questions_event_id).toBe(eventId);
     expect(answer.responses[q1Id]).toBeDefined();
@@ -159,56 +215,27 @@ test.describe("User questions", () => {
     expect(answer.responses[q1Id].selected).toContain(opt1Id);
   });
 
-  test("should display a free response question and submit the typed answer", async ({
-    page,
-  }) => {
+  test("should submit a free response answer", async ({ page }) => {
     test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
-    // Insert a user_questions event with a free response question
     const eventId = v7();
-    const q1Id = v7();
-    const payload = {
-      type: "user_questions" as const,
-      questions: [
-        {
-          id: q1Id,
-          header: "Details",
-          question: "What specific requirements do you have?",
-          type: "free_response" as const,
-        },
-      ],
-    };
+    const { payload, q1Id } = buildFreeResponsePayload();
     insertEvent(eventId, sessionId, payload);
 
-    // Wait for the PendingQuestionCard to appear
     await expect(
       page.getByText("What specific requirements do you have?"),
     ).toBeVisible({ timeout: 15000 });
 
-    // Type a response
     const textarea = page.getByPlaceholder("Type your response...");
     await textarea.fill("We need RBAC with role-based permissions");
 
-    // Submit
     await page.getByRole("button", { name: /submit/i }).click();
 
-    // Verify answered event appears
     await expect(page.getByText("Answered")).toBeVisible({ timeout: 10000 });
 
-    // Verify the response in the database
-    const answers = queryEventPayloads(sessionId, "user_questions_answers");
-    expect(answers.length).toBeGreaterThanOrEqual(1);
-
-    const answer = answers[0] as {
-      type: string;
-      user_questions_event_id: string;
-      responses: Record<
-        string,
-        { type: string; selected?: string[]; text?: string }
-      >;
-    };
+    const answer = queryFirstAnswerPayload(sessionId);
     expect(answer.user_questions_event_id).toBe(eventId);
     expect(answer.responses[q1Id].type).toBe("free_response");
     expect(answer.responses[q1Id].text).toBe(
@@ -216,68 +243,128 @@ test.describe("User questions", () => {
     );
   });
 
-  test("should navigate between steps in a multi-question flow and submit all answers", async ({
+  test("should submit multi-select question with multiple selected options", async ({
     page,
   }) => {
     test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
-    // Insert a user_questions event with two questions
+    const eventId = v7();
+    const { payload, q1Id, opt1Id, opt2Id } = buildMultiSelectPayload();
+    insertEvent(eventId, sessionId, payload);
+
+    await expect(
+      page.getByText("Which features should we include?"),
+    ).toBeVisible({ timeout: 15000 });
+
+    // Multi-select questions show hint text
+    await expect(page.getByText("Select all that apply")).toBeVisible();
+
+    // Select two of three options
+    await page.getByRole("button", { name: /SSR/ }).click();
+    await page.getByRole("button", { name: /i18n/ }).click();
+
+    await page.getByRole("button", { name: /submit/i }).click();
+
+    await expect(page.getByText("Answered")).toBeVisible({ timeout: 10000 });
+
+    // Verify exactly the two selected options were persisted
+    const answer = queryFirstAnswerPayload(sessionId);
+    expect(answer.responses[q1Id].type).toBe("multiple_choice");
+    expect(answer.responses[q1Id].selected).toContain(opt1Id);
+    expect(answer.responses[q1Id].selected).toContain(opt2Id);
+    expect(answer.responses[q1Id].selected).toHaveLength(2);
+  });
+
+  test("should navigate multi-question flow and submit all answers", async ({
+    page,
+  }) => {
+    test.setTimeout(120000);
+
+    const sessionId = await createAndInterruptSession(page);
+
     const eventId = v7();
     const { payload, q1Id, q2Id, opt1Id } = buildMultiQuestionPayload();
     insertEvent(eventId, sessionId, payload);
 
-    // Wait for the first question to appear
+    // Wait for Q1 (multiple choice)
     await expect(page.getByText("Which framework do you prefer?")).toBeVisible({
       timeout: 15000,
     });
 
-    // Multi-question cards show "Questions" header and step tabs
+    // Multi-question cards show "Questions" header (plural) with step tabs
     await expect(page.getByText("Questions").first()).toBeVisible();
 
-    // Select React for the first question (use role to avoid matching description text)
     await page
       .getByRole("button", { name: "React React with TypeScript" })
       .click();
 
-    // Click Next to move to the second question
+    // Navigate to Q2 (free response)
     await page.getByRole("button", { name: /next/i }).click();
 
-    // Wait for the free response step to appear
     await expect(page.getByText("Any additional requirements?")).toBeVisible();
 
-    // Type a free response
     const textarea = page.getByPlaceholder("Type your response...");
     await textarea.fill("Must support SSR");
 
-    // Submit all answers
     await page.getByRole("button", { name: /submit/i }).click();
 
-    // Verify answered event appears
     await expect(page.getByText("Answered")).toBeVisible({ timeout: 10000 });
 
-    // Verify both answers in the database
-    const answers = queryEventPayloads(sessionId, "user_questions_answers");
-    expect(answers.length).toBeGreaterThanOrEqual(1);
-
-    const answer = answers[0] as {
-      type: string;
-      user_questions_event_id: string;
-      responses: Record<
-        string,
-        { type: string; selected?: string[]; text?: string }
-      >;
-    };
+    // Verify both answers persisted
+    const answer = queryFirstAnswerPayload(sessionId);
     expect(answer.user_questions_event_id).toBe(eventId);
-
-    // First question: multiple choice
     expect(answer.responses[q1Id].type).toBe("multiple_choice");
     expect(answer.responses[q1Id].selected).toContain(opt1Id);
-
-    // Second question: free response
     expect(answer.responses[q2Id].type).toBe("free_response");
     expect(answer.responses[q2Id].text).toBe("Must support SSR");
+  });
+
+  test("should preserve selections when navigating back", async ({ page }) => {
+    test.setTimeout(120000);
+
+    const sessionId = await createAndInterruptSession(page);
+
+    const eventId = v7();
+    const { payload, opt1Id } = buildMultiQuestionPayload();
+    insertEvent(eventId, sessionId, payload);
+
+    await expect(page.getByText("Which framework do you prefer?")).toBeVisible({
+      timeout: 15000,
+    });
+
+    await page
+      .getByRole("button", { name: "React React with TypeScript" })
+      .click();
+
+    await page.getByRole("button", { name: /next/i }).click();
+    await expect(page.getByText("Any additional requirements?")).toBeVisible();
+
+    await page.getByRole("button", { name: /back/i }).click();
+    await expect(
+      page.getByText("Which framework do you prefer?"),
+    ).toBeVisible();
+
+    // Verify React is still selected (button should have selected styling)
+    const reactButton = page.getByRole("button", {
+      name: "React React with TypeScript",
+    });
+    await expect(reactButton).toHaveClass(/border-purple-500/);
+
+    // Complete the flow and verify the preserved selection in DB
+    await page.getByRole("button", { name: /next/i }).click();
+    const textarea = page.getByPlaceholder("Type your response...");
+    await textarea.fill("Needs dark mode");
+    await page.getByRole("button", { name: /submit/i }).click();
+
+    await expect(page.getByText("Answered")).toBeVisible({ timeout: 10000 });
+
+    const answer = queryFirstAnswerPayload(sessionId);
+    const mcResponse = Object.values(answer.responses).find(
+      (r) => r.type === "multiple_choice",
+    );
+    expect(mcResponse?.selected).toContain(opt1Id);
   });
 
   test("should skip questions when dismiss button is clicked", async ({
@@ -287,36 +374,26 @@ test.describe("User questions", () => {
 
     const sessionId = await createAndInterruptSession(page);
 
-    // Insert a user_questions event
     const eventId = v7();
     const { payload, q1Id } = buildMultipleChoicePayload();
     insertEvent(eventId, sessionId, payload);
 
-    // Wait for the question card to appear
     await expect(
       page.getByText("Which authentication method should we use?"),
     ).toBeVisible({ timeout: 15000 });
 
-    // Click the dismiss/skip button
+    // Dismiss instead of answering
     await page.getByRole("button", { name: "Dismiss questions" }).click();
 
-    // Verify skipped event appears (skip submits as type: "skipped")
+    // Skip submits type: "skipped" for each question
     await expect(page.getByText("Skipped")).toBeVisible({ timeout: 10000 });
 
-    // Verify the skipped response in the database
-    const answers = queryEventPayloads(sessionId, "user_questions_answers");
-    expect(answers.length).toBeGreaterThanOrEqual(1);
-
-    const answer = answers[0] as {
-      type: string;
-      user_questions_event_id: string;
-      responses: Record<string, { type: string }>;
-    };
+    const answer = queryFirstAnswerPayload(sessionId);
     expect(answer.user_questions_event_id).toBe(eventId);
     expect(answer.responses[q1Id].type).toBe("skipped");
   });
 
-  test("should show user_questions event in the event stream with Action Required badge", async ({
+  test("should show Action Required badge for pending questions", async ({
     page,
   }) => {
     test.setTimeout(120000);
@@ -327,15 +404,43 @@ test.describe("User questions", () => {
     const { payload } = buildMultipleChoicePayload();
     insertEvent(eventId, sessionId, payload);
 
-    // Wait for the event to appear in the stream
+    // Pending questions show "Action Required" badge in the event stream
     await expect(page.getByText("Action Required")).toBeVisible({
       timeout: 15000,
     });
 
-    // The event stream should show "Question" as the event title
-    // (expandable event in the stream, separate from the footer card)
+    // The event stream title should be "Question"
     const questionEvent = page.getByText("Question").first();
     await expect(questionEvent).toBeVisible();
+  });
+
+  test("should disable Submit when free response is empty", async ({
+    page,
+  }) => {
+    test.setTimeout(120000);
+
+    const sessionId = await createAndInterruptSession(page);
+
+    const eventId = v7();
+    const { payload } = buildFreeResponsePayload("Describe your requirements");
+    insertEvent(eventId, sessionId, payload);
+
+    await expect(page.getByText("Describe your requirements")).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Submit should be disabled with empty textarea
+    const submitButton = page.getByRole("button", { name: /submit/i });
+    await expect(submitButton).toBeDisabled();
+
+    // Whitespace-only input should still be disabled
+    const textarea = page.getByPlaceholder("Type your response...");
+    await textarea.fill("   ");
+    await expect(submitButton).toBeDisabled();
+
+    // Real content should enable Submit
+    await textarea.fill("Need RBAC");
+    await expect(submitButton).toBeEnabled();
   });
 
   test("spam-clicking Submit sends only one answer request", async ({
@@ -345,8 +450,7 @@ test.describe("User questions", () => {
 
     const sessionId = await createAndInterruptSession(page);
 
-    // Track answer-questions requests (set up after navigation so the
-    // route handler survives for the rest of the test)
+    // Intercept answer-questions requests to count them
     let answerRequestCount = 0;
     await page.route("**/events/answer-questions", async (route) => {
       answerRequestCount++;
@@ -357,15 +461,12 @@ test.describe("User questions", () => {
     const { payload } = buildMultipleChoicePayload();
     insertEvent(eventId, sessionId, payload);
 
-    // Wait for question card
     await expect(
       page.getByText("Which authentication method should we use?"),
     ).toBeVisible({ timeout: 15000 });
 
-    // Select an option
     await page.getByText("JWT").click();
 
-    // Get submit button position before clicking
     const submitButton = page.getByRole("button", { name: /submit/i });
     await expect(submitButton).toBeEnabled();
     const boundingBox = await submitButton.boundingBox();
@@ -374,14 +475,12 @@ test.describe("User questions", () => {
     const clickX = boundingBox.x + boundingBox.width / 2;
     const clickY = boundingBox.y + boundingBox.height / 2;
 
-    // Spam-click at the fixed position
     await Promise.all([
       page.mouse.click(clickX, clickY),
       page.mouse.click(clickX, clickY),
       page.mouse.click(clickX, clickY),
     ]);
 
-    // Wait for submission to complete
     await page.waitForTimeout(3000);
 
     expect(
