@@ -15,9 +15,12 @@ use crate::inference::types::{
 };
 
 use super::inference_queries::{
-    build_insert_chat_inferences_query, build_insert_json_inferences_query,
+    build_insert_chat_inference_data_query, build_insert_chat_inferences_query,
+    build_insert_json_inference_data_query, build_insert_json_inferences_query,
 };
-use super::model_inferences::build_insert_model_inferences_query;
+use super::model_inferences::{
+    build_insert_model_inference_data_query, build_insert_model_inferences_query,
+};
 
 /// A `PostgresBatchSender` is used to submit entries to the batch writer, which aggregates
 /// and submits them to Postgres on a schedule defined by a `BatchWritesConfig`.
@@ -164,6 +167,18 @@ impl PostgresBatchWriter {
                                     tracing::error!("Error building chat inferences query: {e}");
                                 }
                             }
+                            match build_insert_chat_inference_data_query(&buffer) {
+                                Ok(mut qb) => {
+                                    if let Err(e) = qb.build().execute(&pool).await {
+                                        tracing::error!(
+                                            "Error writing chat inference IO to Postgres: {e}"
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Error building chat inference IO query: {e}");
+                                }
+                            }
                             buffer
                         }
                     },
@@ -197,6 +212,18 @@ impl PostgresBatchWriter {
                                     tracing::error!("Error building json inferences query: {e}");
                                 }
                             }
+                            match build_insert_json_inference_data_query(&buffer) {
+                                Ok(mut qb) => {
+                                    if let Err(e) = qb.build().execute(&pool).await {
+                                        tracing::error!(
+                                            "Error writing json inference IO to Postgres: {e}"
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Error building json inference IO query: {e}");
+                                }
+                            }
                             buffer
                         }
                     },
@@ -227,6 +254,18 @@ impl PostgresBatchWriter {
                                 }
                                 Err(e) => {
                                     tracing::error!("Error building model inferences query: {e}");
+                                }
+                            }
+                            match build_insert_model_inference_data_query(&buffer) {
+                                Ok(mut qb) => {
+                                    if let Err(e) = qb.build().execute(&pool).await {
+                                        tracing::error!(
+                                            "Error writing model inference IO to Postgres: {e}"
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Error building model inference IO query: {e}");
                                 }
                             }
                             buffer

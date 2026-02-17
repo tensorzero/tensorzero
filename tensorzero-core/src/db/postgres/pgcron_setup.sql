@@ -18,13 +18,21 @@ BEGIN
     -- Check if pg_cron extension is available
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
         -- Create future partitions daily at 00:05 UTC
+        -- Inference metadata tables use monthly partitions; IO tables use daily partitions
         PERFORM cron.schedule(
             'tensorzero_create_inference_partitions',
             '5 0 * * *',
             $$
-            SELECT tensorzero.create_partitions('chat_inferences');
-            SELECT tensorzero.create_partitions('json_inferences');
-            SELECT tensorzero.create_partitions('model_inferences');
+            SELECT tensorzero.create_monthly_partitions('chat_inferences');
+            SELECT tensorzero.create_monthly_partitions('json_inferences');
+            SELECT tensorzero.create_monthly_partitions('model_inferences');
+            SELECT tensorzero.create_monthly_partitions('batch_requests');
+            SELECT tensorzero.create_monthly_partitions('batch_model_inferences');
+            SELECT tensorzero.create_partitions('chat_inference_data');
+            SELECT tensorzero.create_partitions('json_inference_data');
+            SELECT tensorzero.create_partitions('model_inference_data');
+            SELECT tensorzero.create_partitions('batch_request_data');
+            SELECT tensorzero.create_partitions('batch_model_inference_data');
             $$
         );
 
@@ -33,9 +41,24 @@ BEGIN
             'tensorzero_drop_old_inference_metadata_partitions',
             '30 0 * * *',
             $$
-            SELECT tensorzero.drop_old_partitions('chat_inferences', 'inference_metadata_retention_days');
-            SELECT tensorzero.drop_old_partitions('json_inferences', 'inference_metadata_retention_days');
-            SELECT tensorzero.drop_old_partitions('model_inferences', 'inference_metadata_retention_days');
+            SELECT tensorzero.drop_old_monthly_partitions('chat_inferences', 'inference_metadata_retention_days');
+            SELECT tensorzero.drop_old_monthly_partitions('json_inferences', 'inference_metadata_retention_days');
+            SELECT tensorzero.drop_old_monthly_partitions('model_inferences', 'inference_metadata_retention_days');
+            SELECT tensorzero.drop_old_monthly_partitions('batch_requests', 'inference_metadata_retention_days');
+            SELECT tensorzero.drop_old_monthly_partitions('batch_model_inferences', 'inference_metadata_retention_days');
+            $$
+        );
+
+        -- Drop old data partitions daily at 00:35 UTC (only acts if retention is configured)
+        PERFORM cron.schedule(
+            'tensorzero_drop_old_inference_data_partitions',
+            '35 0 * * *',
+            $$
+            SELECT tensorzero.drop_old_partitions('chat_inference_data', 'inference_data_retention_days');
+            SELECT tensorzero.drop_old_partitions('json_inference_data', 'inference_data_retention_days');
+            SELECT tensorzero.drop_old_partitions('model_inference_data', 'inference_data_retention_days');
+            SELECT tensorzero.drop_old_partitions('batch_request_data', 'inference_data_retention_days');
+            SELECT tensorzero.drop_old_partitions('batch_model_inference_data', 'inference_data_retention_days');
             $$
         );
 

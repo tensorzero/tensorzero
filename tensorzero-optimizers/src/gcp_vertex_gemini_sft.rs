@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use tensorzero_core::{
     config::{Config, provider_types::GCPSFTConfig, provider_types::ProviderTypesConfig},
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     http::TensorzeroHttpClient,
@@ -59,7 +59,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Get provider-level config
