@@ -455,14 +455,18 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     }
-    case "user_questions_answers":
+    case "user_questions_answers": {
+      const allSkipped = Object.values(payload.responses).every(
+        (r) => r.type === "skipped",
+      );
       return (
         <span className="inline-flex items-center gap-2">
           Question
           <DotSeparator />
-          Answered
+          {allSkipped ? "Skipped" : "Answered"}
         </span>
       );
+    }
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
