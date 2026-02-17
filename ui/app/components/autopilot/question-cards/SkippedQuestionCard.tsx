@@ -30,6 +30,10 @@ export function SkippedQuestionCard({
         <button
           type="button"
           onClick={() => setIsExpanded((e) => !e)}
+          aria-expanded={isExpanded}
+          aria-label={
+            isExpanded ? "Collapse question details" : "Expand question details"
+          }
           className="inline-flex cursor-pointer items-center gap-2 text-left"
         >
           <span className="inline-flex items-center gap-2 text-sm font-medium">

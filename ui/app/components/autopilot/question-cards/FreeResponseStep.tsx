@@ -1,6 +1,5 @@
 import { Textarea } from "~/components/ui/textarea";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
-import { InlineMarkdown } from "./InlineMarkdown";
 
 export function FreeResponseStep({
   question,
@@ -14,7 +13,7 @@ export function FreeResponseStep({
   return (
     <div className="flex flex-col gap-3">
       <span className="text-fg-primary text-sm font-medium">
-        <InlineMarkdown text={question.question} />
+        {question.question}
       </span>
       <Textarea
         value={text}
