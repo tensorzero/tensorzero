@@ -9,6 +9,15 @@ import type {
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 import { formatResponse } from "./formatResponse";
+import { hasAnsweredResponse } from "./responseStatus";
+
+type CompletedQuestionCardProps = {
+  payload: EventPayloadUserQuestions;
+  responses?: Record<string, UserQuestionAnswer>;
+  eventId: string;
+  timestamp: string;
+  className?: string;
+};
 
 export function CompletedQuestionCard({
   payload,
@@ -16,13 +25,7 @@ export function CompletedQuestionCard({
   eventId,
   timestamp,
   className,
-}: {
-  payload: EventPayloadUserQuestions;
-  responses?: Record<string, UserQuestionAnswer>;
-  eventId: string;
-  timestamp: string;
-  className?: string;
-}) {
+}: CompletedQuestionCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -45,10 +48,7 @@ export function CompletedQuestionCard({
           <span className="inline-flex items-center gap-2 text-sm font-medium">
             Question
             <DotSeparator />
-            {responses &&
-            Object.values(responses).some((r) => r.type !== "skipped")
-              ? "Answered"
-              : "Skipped"}
+            {hasAnsweredResponse(responses) ? "Answered" : "Skipped"}
           </span>
           <span
             className={cn(

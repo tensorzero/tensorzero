@@ -4,12 +4,16 @@
  * These functions insert/query events directly in the autopilot Postgres
  * database, bypassing the API. Useful for injecting server-only event types
  * (like `user_questions`) that can't be created via the client API.
+ *
+ * Uses `docker exec` to run psql inside the Postgres container so that
+ * no local psql installation is required.
  */
 import { execSync } from "node:child_process";
 
-const POSTGRES_URL =
-  process.env.TENSORZERO_AUTOPILOT_POSTGRES_URL ||
-  "postgres://postgres:postgres@localhost:5433/autopilot_api";
+const POSTGRES_CONTAINER =
+  process.env.TENSORZERO_AUTOPILOT_POSTGRES_CONTAINER || "autopilot-postgres-1";
+
+const PSQL_PREFIX = `docker exec -i ${POSTGRES_CONTAINER} psql -U postgres -d autopilot_api -p 5433`;
 
 /**
  * Insert an event directly into the autopilot events table.
@@ -22,7 +26,7 @@ export function insertEvent(
 ): void {
   const payloadJson = JSON.stringify(payload);
   const sql = `INSERT INTO autopilot.events (id, payload, session_id) VALUES ('${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}')`;
-  execSync(`psql "${POSTGRES_URL}" -q`, {
+  execSync(`${PSQL_PREFIX} -q`, {
     input: sql,
     timeout: 5000,
     stdio: ["pipe", "pipe", "pipe"],
@@ -37,10 +41,13 @@ export function queryEventPayloads(
   sessionId: string,
   eventType: string,
 ): object[] {
-  const result = execSync(
-    `psql "${POSTGRES_URL}" -tAc "SELECT payload::text FROM autopilot.events WHERE session_id = '${sessionId}' AND payload->>'type' = '${eventType}' ORDER BY created_at DESC"`,
-    { timeout: 5000, encoding: "utf-8" },
-  );
+  const sql = `SELECT payload::text FROM autopilot.events WHERE session_id = '${sessionId}' AND payload->>'type' = '${eventType}' ORDER BY created_at DESC`;
+  const result = execSync(`${PSQL_PREFIX} -tA`, {
+    input: sql,
+    timeout: 5000,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+  });
   return result
     .trim()
     .split("\n")

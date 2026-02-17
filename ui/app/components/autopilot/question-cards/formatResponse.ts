@@ -20,5 +20,9 @@ export function formatResponse(
       return response.text || "\u2014";
     case "skipped":
       return "Skipped";
+    default: {
+      const _exhaustiveCheck: never = response;
+      return _exhaustiveCheck;
+    }
   }
 }
