@@ -271,7 +271,7 @@ pub fn create_mock_stored_chat_inference(
     StoredInference::Chat(StoredChatInference {
         function_name: function_name.to_string(),
         variant_name: variant_name.to_string(),
-        input: StoredInput {
+        input: Some(StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
@@ -279,18 +279,18 @@ pub fn create_mock_stored_chat_inference(
                     text: "test input".to_string(),
                 })],
             }],
-        },
-        output: vec![ContentBlockChatOutput::Text(Text {
+        }),
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test output".to_string(),
-        })],
+        })]),
         dispreferred_outputs: vec![],
         timestamp: Utc::now(),
         episode_id: Uuid::now_v7(),
         inference_id,
         tool_params: DynamicToolParams::default(),
         tags: HashMap::new(),
-        extra_body: Default::default(),
-        inference_params: Default::default(),
+        extra_body: Some(Default::default()),
+        inference_params: Some(Default::default()),
         processing_time_ms: Some(100),
         ttft_ms: Some(50),
     })

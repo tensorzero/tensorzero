@@ -7,6 +7,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::{EvaluationQueries, EvaluationResultRow};
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::EvaluationConfig;
@@ -61,9 +62,13 @@ pub async fn get_evaluation_results_handler(
     let limit = params.limit.unwrap_or(100);
     let offset = params.offset.unwrap_or(0);
 
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_evaluation_results(
         &app_state.config,
-        &app_state.clickhouse_connection_info,
+        &database,
         &params.evaluation_name,
         &evaluation_run_ids,
         params.datapoint_id.as_ref(),
@@ -244,8 +249,8 @@ mod tests {
                         datapoint_id,
                         evaluation_run_id,
                         evaluator_inference_id: None,
-                        input: Input::default(),
-                        generated_output: vec![],
+                        input: Some(Input::default()),
+                        generated_output: Some(vec![]),
                         reference_output: Some(vec![]),
                         dataset_name: "test_dataset".to_string(),
                         metric_name: Some(
@@ -493,8 +498,8 @@ mod tests {
                         datapoint_id,
                         evaluation_run_id,
                         evaluator_inference_id: None,
-                        input: Input::default(),
-                        generated_output: vec![],
+                        input: Some(Input::default()),
+                        generated_output: Some(vec![]),
                         reference_output: Some(vec![]),
                         dataset_name: "test_dataset".to_string(),
                         metric_name: Some(

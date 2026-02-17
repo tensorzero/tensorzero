@@ -137,6 +137,11 @@ impl Display for ProviderType {
 // #[serde(bound(deserialize = "T: ShorthandModelConfig + Deserialize<'de>"))]
 // #[serde(try_from = "HashMap<Arc<str>, T>")]
 pub struct BaseModelTable<T> {
+    /// The underlying HashMap of explicitly configured models.
+    ///
+    /// **WARNING:** This does NOT contain shorthand models (e.g. `openai::gpt-5`).
+    /// Shorthand models are constructed dynamically at lookup time.
+    /// Use `BaseModelTable::get()` instead, which handles both explicit and shorthand models.
     pub table: HashMap<Arc<str>, T>,
     #[serde(skip)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]

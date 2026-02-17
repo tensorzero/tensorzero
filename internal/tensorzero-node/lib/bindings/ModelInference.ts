@@ -17,11 +17,11 @@ export type ModelInference = {
   /**
    * Raw request sent to the model.
    */
-  raw_request: string;
+  raw_request?: string;
   /**
    * Raw response received from the model.
    */
-  raw_response: string;
+  raw_response?: string;
   /**
    * Name of the model used for the inference.
    */
@@ -59,11 +59,11 @@ export type ModelInference = {
   /**
    * Input messages sent to the model.
    */
-  input_messages: Array<StoredRequestMessage>;
+  input_messages?: Array<StoredRequestMessage>;
   /**
    * Output content blocks from the model.
    */
-  output: Array<ContentBlockOutput>;
+  output?: Array<ContentBlockOutput>;
   /**
    * Whether the inference was cached.
    */

@@ -6,11 +6,12 @@ use tensorzero::{RenderedSample, Role, System};
 use tensorzero_core::{
     config::{Config, ConfigFileGlob},
     db::clickhouse::test_helpers::get_clickhouse,
+    db::delegating_connection::DelegatingDatabaseQueries,
     http::TensorzeroHttpClient,
     inference::types::{
-        Arguments, ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedContentBlock,
-        ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent,
-        Template, Text,
+        Arguments, ContentBlockChatOutput, FunctionType, JsonInferenceOutput, ModelInput,
+        ResolvedContentBlock, ResolvedRequestMessage, StoredInput, StoredInputMessage,
+        StoredInputMessageContent, Template, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, gepa::GEPAConfig},
@@ -69,13 +70,14 @@ pub async fn test_gepa_optimization_chat() {
     );
 
     // Launch GEPA optimization
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
     let job_handle = gepa_config
         .launch(
             &client,
             train_examples,
             val_examples,
             &credentials,
-            &clickhouse,
+            &db,
             config.clone(),
         )
         .await
@@ -205,13 +207,14 @@ pub async fn test_gepa_optimization_json() {
     );
 
     // Launch GEPA optimization
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
     let job_handle = gepa_config
         .launch(
             &client,
             train_examples,
             val_examples,
             &credentials,
-            &clickhouse,
+            &db,
             config.clone(),
         )
         .await
@@ -338,6 +341,7 @@ fn create_chat_example(
 ) -> RenderedSample {
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: system.as_ref().map(std::string::ToString::to_string),
             messages: vec![ResolvedRequestMessage {
@@ -428,6 +432,7 @@ fn create_json_example(
 
     RenderedSample {
         function_name: "json_success".to_string(),
+        function_type: FunctionType::Json,
         input: ModelInput {
             system: system.as_ref().map(std::string::ToString::to_string),
             messages: vec![ResolvedRequestMessage {

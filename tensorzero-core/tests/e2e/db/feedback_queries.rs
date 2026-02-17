@@ -165,8 +165,8 @@ async fn test_query_feedback_bounds_by_target_id(conn: impl FeedbackQueries) {
 make_db_test!(test_query_feedback_bounds_by_target_id);
 
 async fn test_count_feedback_by_target_id(conn: impl FeedbackQueries) {
-    // Use a known inference ID
-    let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
+    // Use a target ID from fixtures that isn't mutated by concurrent insert tests
+    let target_id = Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d721").unwrap();
 
     let count = conn.count_feedback_by_target_id(target_id).await.unwrap();
 
@@ -1183,8 +1183,7 @@ async fn test_insert_static_eval_feedback(
         "Evaluator inference ID should match"
     );
 }
-// TODO(#5691): Implement after we support EvaluationQueries in Postgres.
-make_clickhouse_only_test!(test_insert_static_eval_feedback);
+make_db_test!(test_insert_static_eval_feedback);
 
 async fn test_insert_static_eval_feedback_without_evaluator_inference_id(
     conn: impl FeedbackQueries + EvaluationQueries + TestDatabaseHelpers,
@@ -1233,8 +1232,7 @@ async fn test_insert_static_eval_feedback_without_evaluator_inference_id(
         "Evaluator inference ID should be nil UUID when not provided"
     );
 }
-// TODO(#5691): Implement after we support EvaluationQueries in Postgres.
-make_clickhouse_only_test!(test_insert_static_eval_feedback_without_evaluator_inference_id);
+make_db_test!(test_insert_static_eval_feedback_without_evaluator_inference_id);
 
 /// Tests that `get_variant_performances` returns only the latest feedback per inference
 /// when there are multiple feedbacks for the same inference (deduplication via DISTINCT ON).

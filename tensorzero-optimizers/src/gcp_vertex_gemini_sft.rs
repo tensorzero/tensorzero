@@ -7,10 +7,11 @@ use uuid::Uuid;
 
 use tensorzero_core::{
     config::{Config, provider_types::GCPSFTConfig, provider_types::ProviderTypesConfig},
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     http::TensorzeroHttpClient,
+    inference::types::usage::ApiType,
     model_table::{GCPVertexGeminiKind, ProviderTypeDefaultCredentials},
     optimization::{
         OptimizationJobInfo,
@@ -58,7 +59,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Get provider-level config
@@ -222,6 +223,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
             })
@@ -235,6 +237,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
             })
@@ -250,6 +253,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                     raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Other,
                 })
             })?;
 
@@ -342,6 +346,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
             })
@@ -355,6 +360,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
             })
@@ -370,6 +376,7 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                     raw_request: None,
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Other,
                 })
             })?;
 

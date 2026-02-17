@@ -16,7 +16,7 @@ interface InferenceActionBarProps {
   inference: StoredInference;
   usedVariantsPromise: Promise<string[]>;
   hasDemonstrationPromise: Promise<boolean>;
-  inputPromise: Promise<Input>;
+  inputPromise: Promise<Input | undefined>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
   locationKey: string;
@@ -85,7 +85,7 @@ function AddToDatasetButtonStreaming({
 interface TryWithVariantActionStreamingProps {
   inference: StoredInference;
   usedVariantsPromise: Promise<string[]>;
-  inputPromise: Promise<Input>;
+  inputPromise: Promise<Input | undefined>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
 }

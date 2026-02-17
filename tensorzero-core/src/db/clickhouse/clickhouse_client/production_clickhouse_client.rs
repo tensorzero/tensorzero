@@ -11,6 +11,7 @@ use std::time::Duration;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
+use crate::db::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseClient;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::ClickHouseResponse;
@@ -21,7 +22,6 @@ use crate::db::clickhouse::HealthCheckable;
 use crate::db::clickhouse::Rows;
 use crate::db::clickhouse::TableName;
 use crate::db::clickhouse::batching::BatchSender;
-use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::migrations::check_table_exists;
 use crate::error::DelayedError;

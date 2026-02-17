@@ -1,11 +1,9 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::time::Duration;
 
 use crate::config::BatchWritesConfig;
+use crate::db::BatchWriterHandle;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use enum_map::EnumMap;
-use futures::future::Shared;
 use futures::{FutureExt, TryFutureExt};
 use tokio::runtime::{Handle, RuntimeFlavor};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -14,8 +12,6 @@ use tokio::task::JoinSet;
 use crate::db::batching::process_channel_with_capacity_and_timeout;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::error::{Error, ErrorDetails};
-
-pub type BatchWriterHandle = Shared<Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
 
 /// A `BatchSender` is used to submit entries to the batch writer, which aggregates
 /// and submits them to ClickHouse on a schedule defined by a `BatchWritesConfig`.

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use crate::{Client, ClientBuilder, ClientBuilderMode, PostgresConfig};
 use tempfile::NamedTempFile;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
+use tensorzero_core::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use url::Url;
 use uuid::Uuid;
 
@@ -21,11 +22,19 @@ pub async fn make_http_gateway() -> Client {
 }
 
 pub async fn make_embedded_gateway() -> Client {
+    let postgres_config = if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
+        let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+            .expect("TENSORZERO_POSTGRES_URL must be set when Postgres flags are enabled");
+        Some(PostgresConfig::Url(postgres_url))
+    } else {
+        None
+    };
+
     let config_path = get_e2e_config_path();
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_config: None,
+        postgres_config,
         valkey_url: None,
         timeout: None,
         verify_credentials: true,
@@ -212,10 +221,34 @@ pub async fn make_embedded_gateway_e2e_with_unique_db(db_prefix: &str) -> Client
     .unwrap()
 }
 
-/// Starts an HTTP gateway with a unique ClickHouse database.
+/// Creates an embedded gateway using the e2e config with a unique ClickHouse database,
+/// plus Postgres and Valkey connections from env vars.
+/// Use this when testing with `ENABLE_POSTGRES_WRITE=true` (e.g. Valkey cache backend).
+pub async fn make_embedded_gateway_e2e_with_unique_db_all_backends(db_prefix: &str) -> Client {
+    let clickhouse_url = create_unique_clickhouse_url(db_prefix);
+    let config_path = get_e2e_config_path();
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for all-backends tests");
+    let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
+
+    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path),
+        clickhouse_url: Some(clickhouse_url),
+        postgres_config: Some(PostgresConfig::Url(postgres_url)),
+        valkey_url,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+/// Starts an OpenAI-compatible HTTP gateway with a unique ClickHouse database.
 /// Returns the base URL (e.g., "http://127.0.0.1:12345") and a shutdown handle.
 /// The gateway shuts down when the handle is dropped.
-pub async fn make_http_gateway_with_unique_db(
+pub async fn make_http_gateway_openai_only_with_unique_db(
     db_prefix: &str,
 ) -> (String, tensorzero_core::utils::gateway::ShutdownHandle) {
     let clickhouse_url = create_unique_clickhouse_url(db_prefix);

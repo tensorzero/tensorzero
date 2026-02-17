@@ -427,6 +427,7 @@ mod tests {
             clickhouse_connection_info,
             postgres_connection_info,
             ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
             CancellationToken::new(),
         )

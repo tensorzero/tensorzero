@@ -182,12 +182,24 @@ impl InferenceQueries for PostgresConnectionInfo {
 
         let count = match function_config_type {
             Some(FunctionConfigType::Chat) => {
-                count_single_table_inferences(pool, config, params, "tensorzero.chat_inferences")
-                    .await?
+                count_single_table_inferences(
+                    pool,
+                    config,
+                    params,
+                    "tensorzero.chat_inferences",
+                    "tensorzero.chat_inference_data",
+                )
+                .await?
             }
             Some(FunctionConfigType::Json) => {
-                count_single_table_inferences(pool, config, params, "tensorzero.json_inferences")
-                    .await?
+                count_single_table_inferences(
+                    pool,
+                    config,
+                    params,
+                    "tensorzero.json_inferences",
+                    "tensorzero.json_inference_data",
+                )
+                .await?
             }
             None => {
                 // Use UNION ALL to count both tables in a single query
@@ -282,13 +294,14 @@ impl InferenceQueries for PostgresConnectionInfo {
         let result = sqlx::query!(
             r"
             SELECT
-                dynamic_tools,
-                dynamic_provider_tools,
-                allowed_tools,
-                tool_choice,
-                parallel_tool_calls
-            FROM tensorzero.chat_inferences
-            WHERE function_name = $1 AND id = $2
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
+                io.allowed_tools,
+                io.tool_choice,
+                io.parallel_tool_calls
+            FROM tensorzero.chat_inferences i
+            INNER JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
+            WHERE i.function_name = $1 AND i.id = $2
             LIMIT 1
             ",
             function_name,
@@ -330,9 +343,10 @@ impl InferenceQueries for PostgresConnectionInfo {
 
         let result = sqlx::query!(
             r"
-            SELECT output_schema
-            FROM tensorzero.json_inferences
-            WHERE function_name = $1 AND id = $2
+            SELECT io.output_schema
+            FROM tensorzero.json_inferences i
+            INNER JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
+            WHERE i.function_name = $1 AND i.id = $2
             LIMIT 1
             ",
             function_name,
@@ -344,7 +358,7 @@ impl InferenceQueries for PostgresConnectionInfo {
         Ok(result.map(|r| r.output_schema))
     }
 
-    // TODO(#5691): Change this to return either a Value of a typed output.
+    // TODO(#5691): Change this to return either a Value or a typed output.
     async fn get_inference_output(
         &self,
         function_info: &FunctionInfo,
@@ -356,12 +370,13 @@ impl InferenceQueries for PostgresConnectionInfo {
             FunctionType::Chat => {
                 let result = sqlx::query!(
                     r"
-                    SELECT output
-                    FROM tensorzero.chat_inferences
-                    WHERE id = $1
-                      AND episode_id = $2
-                      AND function_name = $3
-                      AND variant_name = $4
+                    SELECT io.output
+                    FROM tensorzero.chat_inferences i
+                    INNER JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
+                    WHERE i.id = $1
+                      AND i.episode_id = $2
+                      AND i.function_name = $3
+                      AND i.variant_name = $4
                     LIMIT 1
                     ",
                     inference_id,
@@ -378,12 +393,13 @@ impl InferenceQueries for PostgresConnectionInfo {
             FunctionType::Json => {
                 let result = sqlx::query!(
                     r"
-                    SELECT output
-                    FROM tensorzero.json_inferences
-                    WHERE id = $1
-                      AND episode_id = $2
-                      AND function_name = $3
-                      AND variant_name = $4
+                    SELECT io.output
+                    FROM tensorzero.json_inferences i
+                    INNER JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
+                    WHERE i.id = $1
+                      AND i.episode_id = $2
+                      AND i.function_name = $3
+                      AND i.variant_name = $4
                     LIMIT 1
                     ",
                     inference_id,
@@ -415,8 +431,10 @@ impl InferenceQueries for PostgresConnectionInfo {
         }
 
         let pool = self.get_pool_result()?;
-        let mut query_builder = build_insert_chat_inferences_query(rows)?;
-        query_builder.build().execute(pool).await?;
+        let mut metadata_qb = build_insert_chat_inferences_query(rows)?;
+        metadata_qb.build().execute(pool).await?;
+        let mut io_qb = build_insert_chat_inference_data_query(rows)?;
+        io_qb.build().execute(pool).await?;
 
         Ok(())
     }
@@ -434,8 +452,10 @@ impl InferenceQueries for PostgresConnectionInfo {
         }
 
         let pool = self.get_pool_result()?;
-        let mut query_builder = build_insert_json_inferences_query(rows)?;
-        query_builder.build().execute(pool).await?;
+        let mut metadata_qb = build_insert_json_inferences_query(rows)?;
+        metadata_qb.build().execute(pool).await?;
+        let mut io_qb = build_insert_json_inference_data_query(rows)?;
+        io_qb.build().execute(pool).await?;
 
         Ok(())
     }
@@ -531,7 +551,7 @@ impl InferenceQueries for PostgresConnectionInfo {
 
 // ===== Query builder functions for insert operations =====
 
-/// Builds a query to insert chat inferences.
+/// Builds a query to insert chat inference metadata.
 pub(super) fn build_insert_chat_inferences_query(
     rows: &[ChatInferenceDatabaseInsert],
 ) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
@@ -544,10 +564,9 @@ pub(super) fn build_insert_chat_inferences_query(
     let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
         r"
         INSERT INTO tensorzero.chat_inferences (
-            id, function_name, variant_name, episode_id, input, output,
-            inference_params, processing_time_ms, ttft_ms,
-            tags, extra_body, dynamic_tools, dynamic_provider_tools,
-            allowed_tools, tool_choice, parallel_tool_calls, snapshot_hash, created_at
+            id, function_name, variant_name, episode_id,
+            processing_time_ms, ttft_ms, tags,
+            snapshot_hash, created_at
         ) ",
     );
 
@@ -555,21 +574,47 @@ pub(super) fn build_insert_chat_inferences_query(
         let snapshot_hash_bytes: Option<Vec<u8>> =
             row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
 
-        // For tool params, use empty defaults when None
+        b.push_bind(row.id)
+            .push_bind(&row.function_name)
+            .push_bind(&row.variant_name)
+            .push_bind(row.episode_id)
+            .push_bind(row.processing_time_ms.map(|v| v as i32))
+            .push_bind(row.ttft_ms.map(|v| v as i32))
+            .push_bind(Json::from(&row.tags))
+            .push_bind(snapshot_hash_bytes)
+            .push_bind(created_at);
+    });
+
+    Ok(query_builder)
+}
+
+/// Builds a query to insert chat inference IO data.
+pub(super) fn build_insert_chat_inference_data_query(
+    rows: &[ChatInferenceDatabaseInsert],
+) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
+    let timestamps: Vec<DateTime<Utc>> = rows
+        .iter()
+        .map(|row| uuid_to_datetime(row.id))
+        .collect::<Result<_, _>>()?;
+
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        r"
+        INSERT INTO tensorzero.chat_inference_data (
+            id, input, output, inference_params,
+            extra_body, dynamic_tools, dynamic_provider_tools,
+            allowed_tools, tool_choice, parallel_tool_calls, created_at
+        ) ",
+    );
+
+    query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
         let tool_params_ref = row.tool_params.as_ref();
         let empty_tools: Vec<Tool> = vec![];
         let empty_provider_tools: Vec<ProviderTool> = vec![];
 
         b.push_bind(row.id)
-            .push_bind(&row.function_name)
-            .push_bind(&row.variant_name)
-            .push_bind(row.episode_id)
             .push_bind(Json::from(&row.input))
             .push_bind(Json::from(&row.output))
             .push_bind(Json::from(&row.inference_params))
-            .push_bind(row.processing_time_ms.map(|v| v as i32))
-            .push_bind(row.ttft_ms.map(|v| v as i32))
-            .push_bind(Json::from(&row.tags))
             .push_bind(Json::from(&row.extra_body))
             .push_bind(Json::from(
                 tool_params_ref
@@ -584,14 +629,13 @@ pub(super) fn build_insert_chat_inferences_query(
             .push_bind(tool_params_ref.map(|tp| Json::from(&tp.allowed_tools)))
             .push_bind(tool_params_ref.map(|tp| Json::from(&tp.tool_choice)))
             .push_bind(tool_params_ref.and_then(|tp| tp.parallel_tool_calls))
-            .push_bind(snapshot_hash_bytes)
             .push_bind(created_at);
     });
 
     Ok(query_builder)
 }
 
-/// Builds a query to insert json inferences.
+/// Builds a query to insert json inference metadata.
 pub(super) fn build_insert_json_inferences_query(
     rows: &[JsonInferenceDatabaseInsert],
 ) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
@@ -604,9 +648,8 @@ pub(super) fn build_insert_json_inferences_query(
     let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
         r"
         INSERT INTO tensorzero.json_inferences (
-            id, function_name, variant_name, episode_id, input, output,
-            output_schema, inference_params, processing_time_ms, ttft_ms,
-            tags, extra_body, auxiliary_content, snapshot_hash, created_at
+            id, function_name, variant_name, episode_id,
+            processing_time_ms, ttft_ms, tags, snapshot_hash, created_at
         ) ",
     );
 
@@ -618,16 +661,41 @@ pub(super) fn build_insert_json_inferences_query(
             .push_bind(&row.function_name)
             .push_bind(&row.variant_name)
             .push_bind(row.episode_id)
+            .push_bind(row.processing_time_ms.map(|v| v as i32))
+            .push_bind(row.ttft_ms.map(|v| v as i32))
+            .push_bind(Json::from(&row.tags))
+            .push_bind(snapshot_hash_bytes)
+            .push_bind(created_at);
+    });
+
+    Ok(query_builder)
+}
+
+/// Builds a query to insert json inference IO data.
+pub(super) fn build_insert_json_inference_data_query(
+    rows: &[JsonInferenceDatabaseInsert],
+) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
+    let timestamps: Vec<DateTime<Utc>> = rows
+        .iter()
+        .map(|row| uuid_to_datetime(row.id))
+        .collect::<Result<_, _>>()?;
+
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        r"
+        INSERT INTO tensorzero.json_inference_data (
+            id, input, output, output_schema, inference_params,
+            extra_body, auxiliary_content, created_at
+        ) ",
+    );
+
+    query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
+        b.push_bind(row.id)
             .push_bind(Json::from(&row.input))
             .push_bind(Json::from(&row.output))
             .push_bind(&row.output_schema)
             .push_bind(Json::from(&row.inference_params))
-            .push_bind(row.processing_time_ms.map(|v| v as i32))
-            .push_bind(row.ttft_ms.map(|v| v as i32))
-            .push_bind(Json::from(&row.tags))
             .push_bind(Json::from(&row.extra_body))
             .push_bind(Json::from(&row.auxiliary_content))
-            .push_bind(snapshot_hash_bytes)
             .push_bind(created_at);
     });
 
@@ -812,10 +880,10 @@ fn build_chat_inferences_query(
     // Build the SELECT clause based on output_source
     let output_select = match params.output_source {
         InferenceOutputSource::None | InferenceOutputSource::Inference => {
-            "i.output, NULL::jsonb as dispreferred_output"
+            "io.output, NULL::jsonb as dispreferred_output"
         }
         InferenceOutputSource::Demonstration => {
-            "demo_f.value AS output, i.output as dispreferred_output"
+            "demo_f.value AS output, io.output as dispreferred_output"
         }
     };
 
@@ -827,19 +895,20 @@ fn build_chat_inferences_query(
             i.variant_name,
             i.episode_id,
             i.created_at as timestamp,
-            i.input,
+            io.input,
             {output_select},
-            i.dynamic_tools,
-            i.dynamic_provider_tools,
-            i.allowed_tools,
-            i.tool_choice,
-            i.parallel_tool_calls,
+            io.dynamic_tools,
+            io.dynamic_provider_tools,
+            io.allowed_tools,
+            io.tool_choice,
+            io.parallel_tool_calls,
             i.tags,
-            i.extra_body,
-            i.inference_params,
+            io.extra_body,
+            io.inference_params,
             i.processing_time_ms,
             i.ttft_ms
         FROM tensorzero.chat_inferences i
+        LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
         "
     ));
 
@@ -893,9 +962,9 @@ fn build_chat_inferences_query(
     // Apply search query filter
     if let Some(search_query) = params.search_query_experimental {
         let search_pattern = format!("%{search_query}%");
-        query_builder.push(" AND (i.input::text ILIKE ");
+        query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
-        query_builder.push(" OR i.output::text ILIKE ");
+        query_builder.push(" OR io.output::text ILIKE ");
         query_builder.push_bind(search_pattern);
         query_builder.push(")");
     }
@@ -956,10 +1025,10 @@ fn build_json_inferences_query(
     // Build the SELECT clause based on output_source
     let output_select = match params.output_source {
         InferenceOutputSource::None | InferenceOutputSource::Inference => {
-            "i.output, NULL::jsonb as dispreferred_output"
+            "io.output, NULL::jsonb as dispreferred_output"
         }
         InferenceOutputSource::Demonstration => {
-            "demo_f.value AS output, i.output as dispreferred_output"
+            "demo_f.value AS output, io.output as dispreferred_output"
         }
     };
 
@@ -971,15 +1040,16 @@ fn build_json_inferences_query(
             i.variant_name,
             i.episode_id,
             i.created_at as timestamp,
-            i.input,
+            io.input,
             {output_select},
-            i.output_schema,
+            io.output_schema,
             i.tags,
-            i.extra_body,
-            i.inference_params,
+            io.extra_body,
+            io.inference_params,
             i.processing_time_ms,
             i.ttft_ms
         FROM tensorzero.json_inferences i
+        LEFT JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
         "
     ));
 
@@ -1033,9 +1103,9 @@ fn build_json_inferences_query(
     // Apply search query filter
     if let Some(search_query) = params.search_query_experimental {
         let search_pattern = format!("%{search_query}%");
-        query_builder.push(" AND (i.input::text ILIKE ");
+        query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
-        query_builder.push(" OR i.output::text ILIKE ");
+        query_builder.push(" OR io.output::text ILIKE ");
         query_builder.push_bind(search_pattern);
         query_builder.push(")");
     }
@@ -1118,53 +1188,57 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredChatInferenceDatabas
         let variant_name: String = row.try_get("variant_name")?;
         let episode_id: Uuid = row.try_get("episode_id")?;
         let timestamp: DateTime<Utc> = row.try_get("timestamp")?;
-        let input: Json<StoredInput> = row.try_get("input")?;
-        let output: Json<Vec<ContentBlockChatOutput>> = row.try_get("output")?;
+        let input: Option<Json<StoredInput>> = row.try_get("input")?;
+        let output: Option<Json<Vec<ContentBlockChatOutput>>> = row.try_get("output")?;
         let dispreferred_output: Option<Json<Vec<ContentBlockChatOutput>>> =
             row.try_get("dispreferred_output")?;
         let tags: Json<HashMap<String, String>> = row.try_get("tags")?;
-        let extra_body: Json<UnfilteredInferenceExtraBody> = row.try_get("extra_body")?;
-        let inference_params: Json<InferenceParams> = row.try_get("inference_params")?;
+        let extra_body: Option<Json<UnfilteredInferenceExtraBody>> = row.try_get("extra_body")?;
+        let inference_params: Option<Json<InferenceParams>> = row.try_get("inference_params")?;
         let processing_time_ms: Option<i32> = row.try_get("processing_time_ms")?;
         let ttft_ms: Option<i32> = row.try_get("ttft_ms")?;
 
         // Get chat-specific fields for tool_params reconstruction
-        let dynamic_tools: Vec<Tool> = row.try_get::<Json<Vec<Tool>>, _>("dynamic_tools")?.0;
-        let dynamic_provider_tools: Vec<ProviderTool> = row
-            .try_get::<Json<Vec<ProviderTool>>, _>("dynamic_provider_tools")?
-            .0;
-        let allowed_tools: Option<AllowedTools> = row
-            .try_get::<Option<Json<AllowedTools>>, _>("allowed_tools")?
-            .map(|v| v.0);
-        let tool_choice: Option<ToolChoice> = row
-            .try_get::<Option<Json<ToolChoice>>, _>("tool_choice")?
-            .map(|v| v.0);
+        let dynamic_tools: Option<Json<Vec<Tool>>> = row.try_get("dynamic_tools")?;
+        let dynamic_provider_tools: Option<Json<Vec<ProviderTool>>> =
+            row.try_get("dynamic_provider_tools")?;
+        let allowed_tools: Option<Json<AllowedTools>> = row.try_get("allowed_tools")?;
+        let tool_choice: Option<Json<ToolChoice>> = row.try_get("tool_choice")?;
         let parallel_tool_calls: Option<bool> = row.try_get("parallel_tool_calls")?;
 
-        let tool_params = ToolCallConfigDatabaseInsert::from_stored_values(
-            dynamic_tools,
-            dynamic_provider_tools,
-            allowed_tools,
-            tool_choice,
-            parallel_tool_calls,
-        )
-        .unwrap_or_default();
+        // Only construct tool_params if any tool-related field is present
+        let tool_params = if dynamic_tools.is_some()
+            || dynamic_provider_tools.is_some()
+            || allowed_tools.is_some()
+            || tool_choice.is_some()
+        {
+            // These intentionally use unwrap_or_default.
+            ToolCallConfigDatabaseInsert::from_stored_values(
+                dynamic_tools.map(|dt| dt.0).unwrap_or_default(),
+                dynamic_provider_tools.map(|v| v.0).unwrap_or_default(),
+                allowed_tools.map(|v| v.0),
+                tool_choice.map(|v| v.0),
+                parallel_tool_calls,
+            )
+        } else {
+            None
+        };
 
         let dispreferred_outputs = dispreferred_output.map(|d| vec![d.0]).unwrap_or_default();
 
         Ok(StoredChatInferenceDatabase {
             function_name,
             variant_name,
-            input: input.0,
-            output: output.0,
+            input: input.map(|v| v.0),
+            output: output.map(|v| v.0),
             dispreferred_outputs,
             timestamp,
             episode_id,
             inference_id: id,
             tool_params,
             tags: tags.0,
-            extra_body: extra_body.0,
-            inference_params: inference_params.0,
+            extra_body: extra_body.map(|v| v.0),
+            inference_params: inference_params.map(|v| v.0),
             processing_time_ms: processing_time_ms.map(|v| v as u64),
             ttft_ms: ttft_ms.map(|v| v as u64),
         })
@@ -1180,14 +1254,14 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredJsonInference {
         let variant_name: String = row.try_get("variant_name")?;
         let episode_id: Uuid = row.try_get("episode_id")?;
         let timestamp: DateTime<Utc> = row.try_get("timestamp")?;
-        let input: Json<StoredInput> = row.try_get("input")?;
-        let output: Json<JsonInferenceOutput> = row.try_get("output")?;
+        let input: Option<Json<StoredInput>> = row.try_get("input")?;
+        let output: Option<Json<JsonInferenceOutput>> = row.try_get("output")?;
         let dispreferred_output: Option<Json<JsonInferenceOutput>> =
             row.try_get("dispreferred_output")?;
-        let output_schema: Value = row.try_get("output_schema")?;
+        let output_schema: Option<Value> = row.try_get("output_schema")?;
         let tags: Json<HashMap<String, String>> = row.try_get("tags")?;
-        let extra_body: Json<UnfilteredInferenceExtraBody> = row.try_get("extra_body")?;
-        let inference_params: Json<InferenceParams> = row.try_get("inference_params")?;
+        let extra_body: Option<Json<UnfilteredInferenceExtraBody>> = row.try_get("extra_body")?;
+        let inference_params: Option<Json<InferenceParams>> = row.try_get("inference_params")?;
         let processing_time_ms: Option<i32> = row.try_get("processing_time_ms")?;
         let ttft_ms: Option<i32> = row.try_get("ttft_ms")?;
 
@@ -1196,16 +1270,16 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredJsonInference {
         Ok(StoredJsonInference {
             function_name,
             variant_name,
-            input: input.0,
-            output: output.0,
+            input: input.map(|v| v.0),
+            output: output.map(|v| v.0),
             dispreferred_outputs,
             timestamp,
             episode_id,
             inference_id: id,
             output_schema,
             tags: tags.0,
-            extra_body: extra_body.0,
-            inference_params: inference_params.0,
+            extra_body: extra_body.map(|v| v.0),
+            inference_params: inference_params.map(|v| v.0),
             processing_time_ms: processing_time_ms.map(|v| v as u64),
             ttft_ms: ttft_ms.map(|v| v as u64),
         })
@@ -1288,12 +1362,12 @@ fn build_inferences_union_query(
     // Build the SELECT clause based on output_source
     let (chat_output_select, json_output_select) = match params.output_source {
         InferenceOutputSource::None | InferenceOutputSource::Inference => (
-            "i.output, NULL::jsonb as dispreferred_output",
-            "i.output, NULL::jsonb as dispreferred_output",
+            "io.output, NULL::jsonb as dispreferred_output",
+            "io.output, NULL::jsonb as dispreferred_output",
         ),
         InferenceOutputSource::Demonstration => (
-            "demo_f.value AS output, i.output as dispreferred_output",
-            "demo_f.value AS output, i.output as dispreferred_output",
+            "demo_f.value AS output, io.output as dispreferred_output",
+            "demo_f.value AS output, io.output as dispreferred_output",
         ),
     };
 
@@ -1323,20 +1397,21 @@ fn build_inferences_union_query(
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                i.input,
+                io.input,
                 {chat_output_select},
-                i.dynamic_tools,
-                i.dynamic_provider_tools,
-                i.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
+                io.allowed_tools,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 NULL::jsonb as output_schema,
                 i.tags,
-                i.extra_body,
-                i.inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
+            LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             {demo_join}
             WHERE 1=1"
     ));
@@ -1360,20 +1435,21 @@ fn build_inferences_union_query(
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                i.input,
+                io.input,
                 {json_output_select},
                 NULL::jsonb as dynamic_tools,
                 NULL::jsonb as dynamic_provider_tools,
                 NULL::jsonb as allowed_tools,
                 NULL::jsonb as tool_choice,
                 NULL::boolean as parallel_tool_calls,
-                i.output_schema,
+                io.output_schema,
                 i.tags,
-                i.extra_body,
-                i.inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.json_inferences i
+            LEFT JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             {demo_join}
             WHERE 1=1"
     ));
@@ -1444,12 +1520,12 @@ fn apply_union_filters(
     // Apply inference filter (e.g., DemonstrationFeedback, metric filters, etc.)
     apply_inference_filter(query_builder, params.filters, config)?;
 
-    // Apply search query filter
+    // Apply search query filter (input/output are in IO tables)
     if let Some(search_query) = params.search_query_experimental {
         let search_pattern = format!("%{search_query}%");
-        query_builder.push(" AND (i.input::text ILIKE ");
+        query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
-        query_builder.push(" OR i.output::text ILIKE ");
+        query_builder.push(" OR io.output::text ILIKE ");
         query_builder.push_bind(search_pattern);
         query_builder.push(")");
     }
@@ -1537,14 +1613,23 @@ async fn count_single_table_inferences(
     config: &Config,
     params: &CountInferencesParams<'_>,
     table_name: &str,
+    io_table_name: &str,
 ) -> Result<u64, Error> {
     let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(format!(
         r"
         SELECT COUNT(*)::BIGINT
         FROM {table_name} i
-        WHERE 1=1
         "
     ));
+
+    // JOIN with IO table when search requires input/output columns
+    if params.search_query_experimental.is_some() {
+        query_builder.push(format!(
+            " JOIN {io_table_name} io ON io.id = i.id AND io.created_at = i.created_at"
+        ));
+    }
+
+    query_builder.push(" WHERE 1=1");
 
     if let Some(function_name) = params.function_name {
         query_builder.push(" AND i.function_name = ");
@@ -1564,13 +1649,13 @@ async fn count_single_table_inferences(
     // Apply inference filter (e.g., DemonstrationFeedback, metric filters, etc.)
     apply_inference_filter(&mut query_builder, params.filters, config)?;
 
-    // Apply search query filter
+    // Apply search query filter (input/output are in IO tables)
     if let Some(search_query) = params.search_query_experimental {
         let json_escaped_text_query = json_double_escape_string_without_quotes(search_query)?;
         let search_pattern = format!("%{json_escaped_text_query}%");
-        query_builder.push(" AND (i.input::text ILIKE ");
+        query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
-        query_builder.push(" OR i.output::text ILIKE ");
+        query_builder.push(" OR io.output::text ILIKE ");
         query_builder.push_bind(search_pattern);
         query_builder.push(")");
     }
@@ -1587,12 +1672,22 @@ async fn count_inferences_union(
     config: &Config,
     params: &CountInferencesParams<'_>,
 ) -> Result<u64, Error> {
+    let needs_io_join = params.search_query_experimental.is_some();
+
     // Build the entire query using a single QueryBuilder
     let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
         r"
         SELECT COUNT(*)::BIGINT FROM (
-            (SELECT i.id FROM tensorzero.chat_inferences i WHERE 1=1",
+            (SELECT i.id FROM tensorzero.chat_inferences i",
     );
+
+    if needs_io_join {
+        query_builder.push(
+            " JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at",
+        );
+    }
+
+    query_builder.push(" WHERE 1=1");
 
     // Add chat filters (no function_name filter since we're querying both tables)
     apply_count_filters(&mut query_builder, config, params)?;
@@ -1601,8 +1696,16 @@ async fn count_inferences_union(
     query_builder.push(
         r")
             UNION ALL
-            (SELECT i.id FROM tensorzero.json_inferences i WHERE 1=1",
+            (SELECT i.id FROM tensorzero.json_inferences i",
     );
+
+    if needs_io_join {
+        query_builder.push(
+            " JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at",
+        );
+    }
+
+    query_builder.push(" WHERE 1=1");
 
     // Add json filters
     apply_count_filters(&mut query_builder, config, params)?;
@@ -1727,13 +1830,13 @@ fn apply_count_filters(
     // Apply inference filter (e.g., DemonstrationFeedback, metric filters, etc.)
     apply_inference_filter(query_builder, params.filters, config)?;
 
-    // Apply search query filter
+    // Apply search query filter (input/output are in IO tables)
     if let Some(search_query) = params.search_query_experimental {
         let json_escaped_text_query = json_double_escape_string_without_quotes(search_query)?;
         let search_pattern = format!("%{json_escaped_text_query}%");
-        query_builder.push(" AND (i.input::text ILIKE ");
+        query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
-        query_builder.push(" OR i.output::text ILIKE ");
+        query_builder.push(" OR io.output::text ILIKE ");
         query_builder.push_bind(search_pattern);
         query_builder.push(")");
     }
@@ -1930,19 +2033,20 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                i.input,
-                i.output, NULL::jsonb as dispreferred_output,
-                i.dynamic_tools,
-                i.dynamic_provider_tools,
-                i.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
+                io.allowed_tools,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                i.extra_body,
-                i.inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
+            LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             WHERE 1=1 AND i.function_name = $1
             ORDER BY i.id DESC
             LIMIT $2 OFFSET $3
@@ -1979,19 +2083,20 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                i.input,
-                demo_f.value AS output, i.output as dispreferred_output,
-                i.dynamic_tools,
-                i.dynamic_provider_tools,
-                i.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.input,
+                demo_f.value AS output, io.output as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
+                io.allowed_tools,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                i.extra_body,
-                i.inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
+            LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             JOIN (
                 SELECT DISTINCT ON (inference_id)
                     inference_id,
@@ -2036,19 +2141,20 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                i.input,
-                i.output, NULL::jsonb as dispreferred_output,
-                i.dynamic_tools,
-                i.dynamic_provider_tools,
-                i.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
+                io.allowed_tools,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                i.extra_body,
-                i.inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
+            LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             WHERE 1=1 AND i.function_name = $1 AND i.id < $2
             ORDER BY i.id DESC
             LIMIT $3 OFFSET $4
@@ -2086,19 +2192,20 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                i.input,
-                i.output, NULL::jsonb as dispreferred_output,
-                i.dynamic_tools,
-                i.dynamic_provider_tools,
-                i.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
+                io.allowed_tools,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                i.extra_body,
-                i.inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
+            LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             WHERE 1=1 AND i.function_name = $1 AND i.id > $2
             ORDER BY i.id ASC
             LIMIT $3 OFFSET $4
@@ -2135,21 +2242,22 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                i.input,
-                i.output, NULL::jsonb as dispreferred_output,
-                i.dynamic_tools,
-                i.dynamic_provider_tools,
-                i.allowed_tools,
-                i.tool_choice,
-                i.parallel_tool_calls,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.dynamic_tools,
+                io.dynamic_provider_tools,
+                io.allowed_tools,
+                io.tool_choice,
+                io.parallel_tool_calls,
                 i.tags,
-                i.extra_body,
-                i.inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
+            LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             WHERE 1=1 AND i.function_name = $1
-            AND (i.input::text ILIKE $2 OR i.output::text ILIKE $3)
+            AND (io.input::text ILIKE $2 OR io.output::text ILIKE $3)
             ORDER BY i.id DESC
             LIMIT $4 OFFSET $5
             ",
@@ -2185,15 +2293,16 @@ mod tests {
                 i.variant_name,
                 i.episode_id,
                 i.created_at as timestamp,
-                i.input,
-                i.output, NULL::jsonb as dispreferred_output,
-                i.output_schema,
+                io.input,
+                io.output, NULL::jsonb as dispreferred_output,
+                io.output_schema,
                 i.tags,
-                i.extra_body,
-                i.inference_params,
+                io.extra_body,
+                io.inference_params,
                 i.processing_time_ms,
                 i.ttft_ms
             FROM tensorzero.json_inferences i
+            LEFT JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             WHERE 1=1 AND i.function_name = $1
             ORDER BY i.id DESC
             LIMIT $2 OFFSET $3
@@ -2232,20 +2341,21 @@ mod tests {
                     i.variant_name,
                     i.episode_id,
                     i.created_at as timestamp,
-                    i.input,
-                    i.output, NULL::jsonb as dispreferred_output,
-                    i.dynamic_tools,
-                    i.dynamic_provider_tools,
-                    i.allowed_tools,
-                    i.tool_choice,
-                    i.parallel_tool_calls,
+                    io.input,
+                    io.output, NULL::jsonb as dispreferred_output,
+                    io.dynamic_tools,
+                    io.dynamic_provider_tools,
+                    io.allowed_tools,
+                    io.tool_choice,
+                    io.parallel_tool_calls,
                     NULL::jsonb as output_schema,
                     i.tags,
-                    i.extra_body,
-                    i.inference_params,
+                    io.extra_body,
+                    io.inference_params,
                     i.processing_time_ms,
                     i.ttft_ms
                 FROM tensorzero.chat_inferences i
+                LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
                 WHERE 1=1 ORDER BY id DESC LIMIT $1)
                 UNION ALL
                 (SELECT
@@ -2255,20 +2365,21 @@ mod tests {
                     i.variant_name,
                     i.episode_id,
                     i.created_at as timestamp,
-                    i.input,
-                    i.output, NULL::jsonb as dispreferred_output,
+                    io.input,
+                    io.output, NULL::jsonb as dispreferred_output,
                     NULL::jsonb as dynamic_tools,
                     NULL::jsonb as dynamic_provider_tools,
                     NULL::jsonb as allowed_tools,
                     NULL::jsonb as tool_choice,
                     NULL::boolean as parallel_tool_calls,
-                    i.output_schema,
+                    io.output_schema,
                     i.tags,
-                    i.extra_body,
-                    i.inference_params,
+                    io.extra_body,
+                    io.inference_params,
                     i.processing_time_ms,
                     i.ttft_ms
                 FROM tensorzero.json_inferences i
+                LEFT JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
                 WHERE 1=1 ORDER BY id DESC LIMIT $2)
             ) AS combined
             ORDER BY id DESC LIMIT $3 OFFSET $4

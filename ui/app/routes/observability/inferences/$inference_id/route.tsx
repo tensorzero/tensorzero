@@ -202,9 +202,15 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard
-            parameters={JSON.stringify(inference.inference_params, null, 2)}
-          />
+          {inference.inference_params ? (
+            <ParameterCard
+              parameters={JSON.stringify(inference.inference_params, null, 2)}
+            />
+          ) : (
+            <div className="text-fg-muted flex items-center justify-center py-12 text-sm">
+              Parameters missing
+            </div>
+          )}
         </SectionLayout>
 
         {inference.type === "chat" && (

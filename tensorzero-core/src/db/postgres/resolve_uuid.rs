@@ -8,6 +8,19 @@ use crate::inference::types::FunctionType;
 
 use super::PostgresConnectionInfo;
 
+#[derive(sqlx::FromRow)]
+struct InferenceRow {
+    function_name: String,
+    variant_name: String,
+    episode_id: Uuid,
+}
+
+#[derive(sqlx::FromRow)]
+struct DatapointRow {
+    dataset_name: String,
+    function_name: String,
+}
+
 #[async_trait]
 impl ResolveUuidQueries for PostgresConnectionInfo {
     async fn resolve_uuid(&self, id: &Uuid) -> Result<Vec<ResolvedObject>, Error> {
@@ -16,6 +29,7 @@ impl ResolveUuidQueries for PostgresConnectionInfo {
         // Run all queries concurrently
         let (
             inference_result,
+            model_inference_result,
             episode_result,
             boolean_result,
             float_result,
@@ -25,6 +39,7 @@ impl ResolveUuidQueries for PostgresConnectionInfo {
             json_datapoint_result,
         ) = tokio::try_join!(
             query_inference(pool, id),
+            query_model_inference(pool, id),
             query_episode(pool, id),
             query_exists(pool, "tensorzero.boolean_metric_feedback", id),
             query_exists(pool, "tensorzero.float_metric_feedback", id),
@@ -42,6 +57,14 @@ impl ResolveUuidQueries for PostgresConnectionInfo {
                 function_type,
                 variant_name,
                 episode_id,
+            });
+        }
+
+        if let Some((inference_id, model_name, model_provider_name)) = model_inference_result {
+            results.push(ResolvedObject::ModelInference {
+                inference_id,
+                model_name,
+                model_provider_name,
             });
         }
 
@@ -65,17 +88,17 @@ impl ResolveUuidQueries for PostgresConnectionInfo {
             results.push(ResolvedObject::DemonstrationFeedback);
         }
 
-        if let Some((dataset_name, function_name)) = chat_datapoint_result {
+        if let Some(row) = chat_datapoint_result {
             results.push(ResolvedObject::ChatDatapoint {
-                dataset_name,
-                function_name,
+                dataset_name: row.dataset_name,
+                function_name: row.function_name,
             });
         }
 
-        if let Some((dataset_name, function_name)) = json_datapoint_result {
+        if let Some(row) = json_datapoint_result {
             results.push(ResolvedObject::JsonDatapoint {
-                dataset_name,
-                function_name,
+                dataset_name: row.dataset_name,
+                function_name: row.function_name,
             });
         }
 
@@ -89,7 +112,7 @@ async fn query_inference(
     id: &Uuid,
 ) -> Result<Option<(String, FunctionType, String, Uuid)>, Error> {
     // Try chat_inferences first
-    let row = sqlx::query_as::<_, (String, String, Uuid)>(
+    let row = sqlx::query_as::<_, InferenceRow>(
         "SELECT function_name, variant_name, episode_id FROM tensorzero.chat_inferences WHERE id = $1 LIMIT 1",
     )
     .bind(id)
@@ -101,17 +124,17 @@ async fn query_inference(
         })
     })?;
 
-    if let Some((function_name, variant_name, episode_id)) = row {
+    if let Some(row) = row {
         return Ok(Some((
-            function_name,
+            row.function_name,
             FunctionType::Chat,
-            variant_name,
-            episode_id,
+            row.variant_name,
+            row.episode_id,
         )));
     }
 
     // Try json_inferences
-    let row = sqlx::query_as::<_, (String, String, Uuid)>(
+    let row = sqlx::query_as::<_, InferenceRow>(
         "SELECT function_name, variant_name, episode_id FROM tensorzero.json_inferences WHERE id = $1 LIMIT 1",
     )
     .bind(id)
@@ -123,16 +146,36 @@ async fn query_inference(
         })
     })?;
 
-    if let Some((function_name, variant_name, episode_id)) = row {
+    if let Some(row) = row {
         return Ok(Some((
-            function_name,
+            row.function_name,
             FunctionType::Json,
-            variant_name,
-            episode_id,
+            row.variant_name,
+            row.episode_id,
         )));
     }
 
     Ok(None)
+}
+
+/// Query model_inferences for a matching model inference ID.
+async fn query_model_inference(
+    pool: &sqlx::PgPool,
+    id: &Uuid,
+) -> Result<Option<(Uuid, String, String)>, Error> {
+    let row = sqlx::query_as::<_, (Uuid, String, String)>(
+        "SELECT inference_id, model_name, model_provider_name FROM tensorzero.model_inferences WHERE id = $1 LIMIT 1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to query model_inferences: {e}"),
+        })
+    })?;
+
+    Ok(row)
 }
 
 /// Query for an episode by checking if any inference has this episode_id.
@@ -194,7 +237,7 @@ async fn query_datapoint(
     pool: &sqlx::PgPool,
     table: &str,
     id: &Uuid,
-) -> Result<Option<(String, String)>, Error> {
+) -> Result<Option<DatapointRow>, Error> {
     let mut qb: QueryBuilder<sqlx::Postgres> =
         QueryBuilder::new("SELECT dataset_name, function_name FROM ");
     qb.push(table);
@@ -203,7 +246,7 @@ async fn query_datapoint(
     qb.push(" LIMIT 1");
 
     let row = qb
-        .build_query_as::<(String, String)>()
+        .build_query_as::<DatapointRow>()
         .fetch_optional(pool)
         .await
         .map_err(|e| {
