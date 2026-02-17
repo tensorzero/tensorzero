@@ -90,25 +90,36 @@ async fn health_check_inner(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use crate::config::Config;
-    use crate::db::clickhouse::ClickHouseConnectionInfo;
-    use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
-    use crate::db::postgres::PostgresConnectionInfo;
-    use crate::db::valkey::ValkeyConnectionInfo;
+    use crate::db::MockHealthCheckable;
+    use crate::error::{Error, ErrorDetails};
 
     use super::*;
 
+    fn mock_healthy() -> MockHealthCheckable {
+        let mut mock = MockHealthCheckable::new();
+        mock.expect_health().returning(|| Ok(()));
+        mock
+    }
+
+    fn mock_unhealthy() -> MockHealthCheckable {
+        let mut mock = MockHealthCheckable::new();
+        mock.expect_health().returning(|| {
+            Err(Error::new(ErrorDetails::InternalError {
+                message: "unhealthy".to_string(),
+            }))
+        });
+        mock
+    }
+
     #[tokio::test]
     async fn test_health_handler() {
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(FakeClickHouseClient::new(
-            /* healthy= */ true,
-        )));
-        let postgres = PostgresConnectionInfo::new_mock(/* healthy= */ true);
-        let valkey = ValkeyConnectionInfo::Disabled;
+        let clickhouse = mock_healthy();
+        let postgres = mock_healthy();
+        let valkey = mock_healthy();
+        let valkey_cache = mock_healthy();
 
-        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey).await;
+        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey_cache).await;
         assert!(response.is_ok(), "health check should pass");
         let response_value = response.unwrap();
         assert_eq!(response_value.get("gateway").unwrap(), "ok");
@@ -120,13 +131,12 @@ mod tests {
 
     #[tokio::test]
     async fn should_report_error_for_unhealthy_clickhouse() {
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(FakeClickHouseClient::new(
-            /* healthy= */ false,
-        )));
-        let postgres = PostgresConnectionInfo::new_mock(/* healthy= */ true);
-        let valkey = ValkeyConnectionInfo::Disabled;
+        let clickhouse = mock_unhealthy();
+        let postgres = mock_healthy();
+        let valkey = mock_healthy();
+        let valkey_cache = mock_healthy();
 
-        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey).await;
+        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey_cache).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
         assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
@@ -136,13 +146,12 @@ mod tests {
 
     #[tokio::test]
     async fn should_report_error_for_unhealthy_postgres() {
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(FakeClickHouseClient::new(
-            /* healthy= */ true,
-        )));
-        let postgres = PostgresConnectionInfo::new_mock(/* healthy= */ false);
-        let valkey = ValkeyConnectionInfo::Disabled;
+        let clickhouse = mock_healthy();
+        let postgres = mock_unhealthy();
+        let valkey = mock_healthy();
+        let valkey_cache = mock_healthy();
 
-        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey).await;
+        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey_cache).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
         assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
