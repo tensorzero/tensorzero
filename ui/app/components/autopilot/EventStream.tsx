@@ -542,11 +542,11 @@ class EventErrorBoundary extends Component<
   }
 }
 
-function UserQuestionsContent({
-  questions,
-}: {
+type UserQuestionsContentProps = {
   questions: EventPayloadUserQuestion[];
-}) {
+};
+
+function UserQuestionsContent({ questions }: UserQuestionsContentProps) {
   return (
     <div className="flex flex-col gap-2">
       {questions.map((q) => (
@@ -559,13 +559,15 @@ function UserQuestionsContent({
   );
 }
 
+type UserQuestionsAnswersContentProps = {
+  responses: Record<string, UserQuestionAnswer>;
+  questions: EventPayloadUserQuestion[];
+};
+
 function UserQuestionsAnswersContent({
   responses,
   questions,
-}: {
-  responses: Record<string, UserQuestionAnswer>;
-  questions: EventPayloadUserQuestion[];
-}) {
+}: UserQuestionsAnswersContentProps) {
   return (
     <div className="flex flex-col gap-2">
       {Object.entries(responses).map(([questionId, response]) => {

@@ -12,8 +12,9 @@ import { execSync } from "node:child_process";
 
 const POSTGRES_CONTAINER =
   process.env.TENSORZERO_AUTOPILOT_POSTGRES_CONTAINER || "autopilot-postgres-1";
+const POSTGRES_PORT = process.env.TENSORZERO_AUTOPILOT_POSTGRES_PORT || "5433";
 
-const PSQL_PREFIX = `docker exec -i ${POSTGRES_CONTAINER} psql -U postgres -d autopilot_api -p 5433`;
+const PSQL_PREFIX = `docker exec -i ${POSTGRES_CONTAINER} psql -U postgres -d autopilot_api -p ${POSTGRES_PORT}`;
 
 /**
  * Insert an event directly into the autopilot events table.
