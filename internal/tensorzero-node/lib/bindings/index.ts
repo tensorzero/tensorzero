@@ -448,5 +448,6 @@ export * from "./WorkflowEvaluationRunEpisodeWithFeedback";
 export * from "./WorkflowEvaluationRunEpisodeWithFeedbackRow";
 export * from "./WorkflowEvaluationRunStatistics";
 export * from "./WorkflowEvaluationRunWithEpisodeCount";
+export * from "./WriteConfigToolParams";
 export * from "./XAIProvider";
 export * from "./serde_json/JsonValue";

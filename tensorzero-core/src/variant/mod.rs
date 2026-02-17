@@ -35,7 +35,7 @@ use crate::inference::types::extra_headers::{
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage, stream_with_deadline,
+    ModelInferenceResponseWithMetadata, RawResponseEntry, RequestMessage, stream_with_deadline,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -198,6 +198,7 @@ impl BatchInferenceConfig {
 pub struct ModelUsedInfo {
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub raw_request: String,
     pub raw_response: Option<String>,
     pub system: Option<String>,
@@ -207,6 +208,8 @@ pub struct ModelUsedInfo {
     // These responses will get added into the final inference result (after `collect_chunks` finishes)
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts during model-level fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 pub trait Variant {
@@ -860,14 +863,41 @@ async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
     let clients = args.clients.clone();
-    let model_inference_response = args
+    let include_raw_response = clients.include_raw_response;
+    let (result, retry_errors) = args
         .retry_config
-        .retry(|| async {
+        .retry_collecting_errors(|| async {
             args.model_config
                 .infer(&args.request, &clients, &args.model_name)
                 .await
         })
-        .await?;
+        .await;
+
+    let mut model_inference_response = match result {
+        Ok(response) => response,
+        Err(final_err) => {
+            if retry_errors.is_empty() {
+                return Err(final_err);
+            }
+            let mut all_errors = retry_errors;
+            all_errors.push(final_err);
+            return Err(Error::new(ErrorDetails::AllRetriesFailed {
+                errors: all_errors,
+            }));
+        }
+    };
+
+    if include_raw_response && !retry_errors.is_empty() {
+        let mut retry_entries = Vec::new();
+        for err in &retry_errors {
+            if let Some(entries) = err.extract_raw_response_entries() {
+                retry_entries.extend(entries);
+            }
+        }
+        // Prepend retry error entries before the provider-level fallback entries
+        retry_entries.append(&mut model_inference_response.failed_raw_response);
+        model_inference_response.failed_raw_response = retry_entries;
+    }
 
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
@@ -900,27 +930,58 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+    let include_raw_response = clients.include_raw_response;
+    let (result, retry_errors) = retry_config
+        .retry_collecting_errors(|| async {
+            model_config
+                .infer_stream(&request, &clients, &model_name)
+                .await
+        })
+        .await;
+
     let StreamResponseAndMessages {
         response:
             StreamResponse {
                 stream,
                 raw_request,
                 model_provider_name,
+                provider_type,
                 cached,
                 model_inference_id,
+                mut failed_raw_response,
             },
         messages: input_messages,
-    } = retry_config
-        .retry(|| async {
-            model_config
-                .infer_stream(&request, &clients, &model_name)
-                .await
-        })
-        .await?;
+    } = match result {
+        Ok(response) => response,
+        Err(final_err) => {
+            if retry_errors.is_empty() {
+                return Err(final_err);
+            }
+            let mut all_errors = retry_errors;
+            all_errors.push(final_err);
+            return Err(Error::new(ErrorDetails::AllRetriesFailed {
+                errors: all_errors,
+            }));
+        }
+    };
+
+    if include_raw_response && !retry_errors.is_empty() {
+        let mut retry_entries = Vec::new();
+        for err in &retry_errors {
+            if let Some(entries) = err.extract_raw_response_entries() {
+                retry_entries.extend(entries);
+            }
+        }
+        // Prepend retry error entries before the provider-level fallback entries
+        retry_entries.append(&mut failed_raw_response);
+        failed_raw_response = retry_entries;
+    }
+
     let system = request.system.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
+        provider_type,
         raw_request,
         raw_response: None,
         inference_params,
@@ -929,6 +990,7 @@ async fn infer_model_request_stream<'request>(
         input_messages,
         cached,
         model_inference_id,
+        failed_raw_response,
     };
     let config_type = function.config_type();
     let stream =
@@ -1576,10 +1638,13 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(matches!(
-            error.get_details(),
-            ErrorDetails::ModelProvidersExhausted { .. }
-        ));
+        assert!(
+            matches!(
+                error.get_details(),
+                ErrorDetails::AllModelProvidersFailed { .. }
+            ),
+            "Expected AllModelProvidersFailed error, got {error:?}"
+        );
     }
 
     #[tokio::test]

@@ -63,13 +63,13 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input: input.clone(),
-        input_messages: vec![],
+        input: Some(input.clone()),
+        input_messages: Some(vec![]),
         system: None,
         tool_params: None,
-        inference_params: Cow::Owned(InferenceParams::default()),
+        inference_params: Some(Cow::Owned(InferenceParams::default())),
         output_schema: None,
-        raw_request: Cow::Borrowed(""),
+        raw_request: Some(Cow::Borrowed("")),
         model_name: Cow::Borrowed(model_name),
         model_provider_name: Cow::Borrowed(model_provider_name),
         tags: HashMap::new(),
@@ -82,13 +82,13 @@ async fn write_2_batch_model_inference_rows(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input,
-        input_messages: vec![],
+        input: Some(input),
+        input_messages: Some(vec![]),
         system: None,
         tool_params: None,
-        inference_params: Cow::Owned(InferenceParams::default()),
+        inference_params: Some(Cow::Owned(InferenceParams::default())),
         output_schema: None,
-        raw_request: Cow::Borrowed(""),
+        raw_request: Some(Cow::Borrowed("")),
         model_name: Cow::Borrowed(model_name),
         model_provider_name: Cow::Borrowed(model_provider_name),
         tags: HashMap::new(),
@@ -164,11 +164,13 @@ async fn test_get_batch_request_endpoint(
         "status should be Pending"
     );
     assert_eq!(
-        batch_request.raw_request, raw_request,
+        batch_request.raw_request.as_deref(),
+        Some(raw_request),
         "raw_request should match"
     );
     assert_eq!(
-        batch_request.raw_response, raw_response,
+        batch_request.raw_response.as_deref(),
+        Some(raw_response),
         "raw_response should match"
     );
 
@@ -186,13 +188,13 @@ async fn test_get_batch_request_endpoint(
         function_name: function_name.into(),
         variant_name: variant_name.into(),
         episode_id,
-        input,
-        input_messages: vec![],
+        input: Some(input),
+        input_messages: Some(vec![]),
         system: None,
         tool_params: None,
-        inference_params: Cow::Owned(InferenceParams::default()),
+        inference_params: Some(Cow::Owned(InferenceParams::default())),
         output_schema: None,
-        raw_request: Cow::Borrowed(""),
+        raw_request: Some(Cow::Borrowed("")),
         model_name: Cow::Borrowed(model_name),
         model_provider_name: Cow::Borrowed(model_provider_name),
         tags: HashMap::new(),
@@ -269,6 +271,7 @@ async fn test_write_poll_batch_inference_endpoint(
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         },
+        Arc::from("dummy"),
         &config,
     )
     .await
@@ -317,6 +320,7 @@ async fn test_write_poll_batch_inference_endpoint(
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         },
+        Arc::from("dummy"),
         &config,
     )
     .await
@@ -379,6 +383,7 @@ async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionIn
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         },
+        Arc::from("dummy"),
         &config,
     )
     .await
@@ -512,10 +517,15 @@ async fn test_write_read_completed_batch_inference_chat(
         raw_request: raw_request.clone(),
         raw_response: raw_response.clone(),
     };
-    let mut inference_responses =
-        write_completed_batch_inference(&database, &batch_request, response, &config)
-            .await
-            .unwrap();
+    let mut inference_responses = write_completed_batch_inference(
+        &database,
+        &batch_request,
+        response,
+        Arc::from("dummy"),
+        &config,
+    )
+    .await
+    .unwrap();
 
     // Sort inferences by inference_id to ensure consistent ordering
     inference_responses.sort_by_key(tensorzero::InferenceResponse::inference_id);
@@ -602,7 +612,8 @@ async fn test_write_read_completed_batch_inference_chat(
         .get(&inference_id1)
         .expect("Should find inference_id1");
     assert_eq!(row1.variant_name, variant_name, "variant_name should match");
-    let output1: Vec<ContentBlockChatOutput> = serde_json::from_str(&row1.output).unwrap();
+    let output1: Vec<ContentBlockChatOutput> =
+        serde_json::from_str(row1.output.as_deref().expect("output should be present")).unwrap();
     assert_eq!(output1.len(), 1, "Should have 1 content block");
     match &output1[0] {
         ContentBlockChatOutput::Text(text) => {
@@ -621,7 +632,8 @@ async fn test_write_read_completed_batch_inference_chat(
         .get(&inference_id2)
         .expect("Should find inference_id2");
     assert_eq!(row2.variant_name, variant_name, "variant_name should match");
-    let output2: Vec<ContentBlockChatOutput> = serde_json::from_str(&row2.output).unwrap();
+    let output2: Vec<ContentBlockChatOutput> =
+        serde_json::from_str(row2.output.as_deref().expect("output should be present")).unwrap();
     match &output2[0] {
         ContentBlockChatOutput::Text(text) => {
             assert_eq!(text.text, "goodbye world", "text should match");
@@ -812,10 +824,15 @@ async fn test_write_read_completed_batch_inference_json(
         raw_request: raw_request.clone(),
         raw_response: raw_response.clone(),
     };
-    let inference_responses =
-        write_completed_batch_inference(&database, &batch_request, response, &config)
-            .await
-            .unwrap();
+    let inference_responses = write_completed_batch_inference(
+        &database,
+        &batch_request,
+        response,
+        Arc::from("dummy"),
+        &config,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(
         inference_responses.len(),
@@ -908,7 +925,8 @@ async fn test_write_read_completed_batch_inference_json(
         .get(&inference_id1)
         .expect("Should find inference_id1");
     assert_eq!(row1.variant_name, variant_name, "variant_name should match");
-    let output1: JsonInferenceOutput = serde_json::from_str(&row1.output).unwrap();
+    let output1: JsonInferenceOutput =
+        serde_json::from_str(row1.output.as_deref().expect("output should be present")).unwrap();
     assert_eq!(
         output1.parsed.unwrap()["answer"],
         "hello world",
@@ -930,7 +948,8 @@ async fn test_write_read_completed_batch_inference_json(
         .get(&inference_id2)
         .expect("Should find inference_id2");
     assert_eq!(row2.variant_name, variant_name, "variant_name should match");
-    let output2: JsonInferenceOutput = serde_json::from_str(&row2.output).unwrap();
+    let output2: JsonInferenceOutput =
+        serde_json::from_str(row2.output.as_deref().expect("output should be present")).unwrap();
     assert!(
         output2.parsed.is_none(),
         "parsed output should be None for invalid schema"

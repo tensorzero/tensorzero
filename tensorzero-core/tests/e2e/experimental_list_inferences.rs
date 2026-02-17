@@ -515,9 +515,11 @@ async fn test_combined_time_and_tag_filter() {
 pub async fn test_query_by_ids_json_only() {
     let client = make_embedded_gateway().await;
 
-    // First, get some JSON inference IDs
+    // First, get some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
+        variant_name: Some("baseline"),
         limit: 3,
         ..Default::default()
     };
@@ -556,9 +558,11 @@ pub async fn test_query_by_ids_json_only() {
 pub async fn test_query_by_ids_chat_only() {
     let client = make_embedded_gateway().await;
 
-    // First, get some Chat inference IDs
+    // First, get some Chat inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let opts = ListInferencesParams {
         function_name: Some("write_haiku"),
+        variant_name: Some("better_prompt_haiku_4_5"),
         limit: 2,
         ..Default::default()
     };
@@ -611,9 +615,11 @@ pub async fn test_query_by_ids_unknown_id_returns_empty() {
 pub async fn test_query_by_ids_mixed_types() {
     let client = make_embedded_gateway().await;
 
-    // Get some JSON inference IDs
+    // Get some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let json_opts = ListInferencesParams {
         function_name: Some("extract_entities"),
+        variant_name: Some("baseline"),
         limit: 2,
         ..Default::default()
     };
@@ -622,9 +628,11 @@ pub async fn test_query_by_ids_mixed_types() {
         .await
         .unwrap();
 
-    // Get some Chat inference IDs
+    // Get some Chat inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let chat_opts = ListInferencesParams {
         function_name: Some("write_haiku"),
+        variant_name: Some("better_prompt_haiku_4_5"),
         limit: 2,
         ..Default::default()
     };
@@ -680,9 +688,11 @@ pub async fn test_query_by_ids_mixed_types() {
 pub async fn test_query_by_ids_with_order_by_timestamp() {
     let client = make_embedded_gateway().await;
 
-    // Get some mixed inference IDs
+    // Get some mixed inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let json_opts = ListInferencesParams {
         function_name: Some("extract_entities"),
+        variant_name: Some("baseline"),
         limit: 3,
         ..Default::default()
     };
@@ -693,6 +703,7 @@ pub async fn test_query_by_ids_with_order_by_timestamp() {
 
     let chat_opts = ListInferencesParams {
         function_name: Some("write_haiku"),
+        variant_name: Some("better_prompt_haiku_4_5"),
         limit: 3,
         ..Default::default()
     };
@@ -748,9 +759,11 @@ pub async fn test_query_by_ids_with_order_by_timestamp() {
 pub async fn test_query_by_ids_with_order_by_metric_errors() {
     let client = make_embedded_gateway().await;
 
-    // Get some JSON inference IDs
+    // Get some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
+        variant_name: Some("baseline"),
         limit: 2,
         ..Default::default()
     };
