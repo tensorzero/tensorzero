@@ -1357,6 +1357,7 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        prompt_mode: Option<String>,
     },
     OpenAI {
         model_name: String,
@@ -1645,6 +1646,7 @@ impl UninitializedProviderConfig {
             UninitializedProviderConfig::Mistral {
                 model_name,
                 api_key_location,
+                prompt_mode,
             } => ProviderConfig::Mistral(MistralProvider::new(
                 model_name,
                 MistralKind
@@ -1653,6 +1655,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                prompt_mode,
             )),
             UninitializedProviderConfig::OpenAI {
                 model_name,
@@ -2757,6 +2760,7 @@ impl ShorthandModelConfig for ModelConfig {
                 MistralKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                None,
             )),
             "openai" => {
                 if let Some(stripped_model_name) = model_name.strip_prefix("responses::") {

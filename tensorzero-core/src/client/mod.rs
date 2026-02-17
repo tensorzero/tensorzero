@@ -599,7 +599,7 @@ impl ClientBuilder {
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = match postgres_config {
                     Some(PostgresConfig::Url(url)) => {
-                        setup_postgres(&config, Some(url.clone())).await.map_err(|e| {
+                        setup_postgres(&config, Some(url)).await.map_err(|e| {
                             ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
                         })?
                     }
@@ -784,8 +784,9 @@ impl ClientBuilder {
         Self::validate_embedded_gateway_config(&config, false)?;
 
         // Setup Postgres with runtime URL
-        let postgres_connection_info =
-            setup_postgres(&config, postgres_url).await.map_err(|e| {
+        let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref())
+            .await
+            .map_err(|e| {
                 ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
             })?;
 

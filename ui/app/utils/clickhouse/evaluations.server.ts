@@ -8,6 +8,9 @@ import { getTensorZeroClient } from "../tensorzero.server";
 export async function loadFileDataForEvaluationResult(
   result: EvaluationResultRow,
 ): Promise<EvaluationResultRow> {
+  if (result.input == null) {
+    return result;
+  }
   const inputWithFiles = await loadFileDataForInput(result.input);
   return {
     ...result,

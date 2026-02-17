@@ -262,7 +262,7 @@ export function EvaluationTable({
       {
         id: string;
         name?: string;
-        input: Input;
+        input?: Input;
         reference_output?: JsonInferenceOutput | ContentBlockChatOutput[];
       }
     >();
@@ -291,7 +291,7 @@ export function EvaluationTable({
       Map<
         string, // evaluation run id
         {
-          generated_output: JsonInferenceOutput | ContentBlockChatOutput[];
+          generated_output?: JsonInferenceOutput | ContentBlockChatOutput[];
           metrics: Map<string, MetricValueInfo>;
         }
       >
@@ -524,10 +524,14 @@ export function EvaluationTable({
                                   rowSpan={filteredVariants.length}
                                   className="max-w-[200px] align-middle"
                                 >
-                                  <TruncatedContent
-                                    content={datapoint.input}
-                                    type="input"
-                                  />
+                                  {datapoint.input ? (
+                                    <TruncatedContent
+                                      content={datapoint.input}
+                                      type="input"
+                                    />
+                                  ) : (
+                                    "-"
+                                  )}
                                 </TableCell>
                               )}
 
@@ -562,10 +566,14 @@ export function EvaluationTable({
 
                               {/* Generated output */}
                               <TableCell className="max-w-[200px] align-middle">
-                                <TruncatedContent
-                                  content={data.generated_output}
-                                  type="output"
-                                />
+                                {data.generated_output ? (
+                                  <TruncatedContent
+                                    content={data.generated_output}
+                                    type="output"
+                                  />
+                                ) : (
+                                  "-"
+                                )}
                               </TableCell>
 
                               {/* Metrics cells */}
