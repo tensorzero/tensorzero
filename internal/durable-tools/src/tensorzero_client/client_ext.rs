@@ -4,10 +4,11 @@
 //! handling both HTTP gateway and embedded gateway modes via the client's internal
 //! mode switching.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use autopilot_client::AutopilotError;
 use autopilot_client::GatewayListEventsResponse;
-use std::sync::Arc;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
@@ -563,7 +564,7 @@ impl TensorZeroClient for Client {
                 gateway,
                 timeout: _,
             } => get_latest_feedback_id_by_metric(
-                &gateway.handle.app_state.clickhouse_connection_info,
+                &gateway.handle.app_state.get_delegating_database(),
                 target_id,
             )
             .await
@@ -589,7 +590,7 @@ impl TensorZeroClient for Client {
             } => gateway
                 .handle
                 .app_state
-                .clickhouse_connection_info
+                .get_delegating_database()
                 .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
                 .await
                 .map_err(|e| {

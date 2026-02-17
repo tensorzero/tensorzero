@@ -4,7 +4,6 @@ use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::HealthCheckable;
-use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
@@ -561,7 +560,7 @@ async fn create_datapoints_internal(
                     params,
                     &gateway.handle.app_state.config,
                     &gateway.handle.app_state.http_client,
-                    &gateway.handle.app_state.clickhouse_connection_info,
+                    &gateway.handle.app_state.get_delegating_database(),
                 )
                 .await
                 .map_err(err_to_http)
@@ -796,7 +795,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     let mut response = tensorzero_core::endpoints::datasets::v1::get_datapoints(
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         Some(dataset_name.clone()),
                         GetDatapointsRequest {
                             ids: vec![datapoint_id],
@@ -831,7 +830,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::stale_dataset(
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         &dataset_name,
                     )
                     .await
@@ -874,7 +873,7 @@ impl ClientExt for Client {
                     tensorzero_core::endpoints::datasets::v1::create_datapoints(
                         &gateway.handle.app_state.config,
                         &gateway.handle.app_state.http_client,
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         &dataset_name,
                         request,
                     )
@@ -951,7 +950,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::get_datapoints(
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         dataset_name,
                         request,
                     )
@@ -982,7 +981,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::list_datapoints(
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         dataset_name,
                         request,
                     )
@@ -1014,7 +1013,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::update_datapoints_metadata(
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         &dataset_name,
                         request,
                     )
@@ -1046,7 +1045,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::delete_datapoints(
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         &dataset_name,
                         request,
                     )
@@ -1076,7 +1075,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::delete_dataset(
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         &dataset_name,
                     )
                     .await
@@ -1108,7 +1107,7 @@ impl ClientExt for Client {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::create_from_inferences(
                         &gateway.handle.app_state.config,
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         dataset_name,
                         request,
                     )
@@ -1160,7 +1159,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::list_datasets(
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         request,
                     )
                     .await
@@ -1201,7 +1200,7 @@ impl ClientExt for Client {
         let inferences = gateway
             .handle
             .app_state
-            .clickhouse_connection_info
+            .get_delegating_database()
             .list_inferences(&gateway.handle.app_state.config, &params)
             .await
             .map_err(err_to_http)?;
@@ -1241,7 +1240,7 @@ impl ClientExt for Client {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::stored_inferences::v1::get_inferences(
                         &gateway.handle.app_state.config,
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         request,
                     )
                     .await
@@ -1271,7 +1270,7 @@ impl ClientExt for Client {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
                         &gateway.handle.app_state.config,
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.get_delegating_database(),
                         request,
                     )
                     .await
@@ -1324,7 +1323,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
-                        Arc::new(gateway.handle.app_state.clickhouse_connection_info.clone());
+                        Arc::new(gateway.handle.app_state.get_delegating_database());
                     launch_optimization(
                         &gateway.handle.app_state.http_client,
                         params,
@@ -1356,7 +1355,7 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Box::pin(with_embedded_timeout(*timeout, async {
                     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
-                        Arc::new(gateway.handle.app_state.clickhouse_connection_info.clone());
+                        Arc::new(gateway.handle.app_state.get_delegating_database());
                     launch_optimization_workflow(
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.config.clone(),
@@ -1482,7 +1481,7 @@ impl ClientExt for Client {
                     let snapshot = gateway
                         .handle
                         .app_state
-                        .clickhouse_connection_info
+                        .get_delegating_database()
                         .get_config_snapshot(snapshot_hash)
                         .await
                         .map_err(err_to_http)?;
@@ -1529,11 +1528,11 @@ impl ClientExt for Client {
 
                     let hash = snapshot.hash.to_string();
 
-                    let db = DelegatingDatabaseConnection::new(
-                        gateway.handle.app_state.clickhouse_connection_info.clone(),
-                        gateway.handle.app_state.postgres_connection_info.clone(),
-                    );
-                    db.write_config_snapshot(&snapshot)
+                    gateway
+                        .handle
+                        .app_state
+                        .get_delegating_database()
+                        .write_config_snapshot(&snapshot)
                         .await
                         .map_err(err_to_http)?;
 
