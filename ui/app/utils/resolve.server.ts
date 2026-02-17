@@ -89,12 +89,9 @@ async function resolveModelInferenceMessages(
     return [];
   }
   return Promise.all(
-    messages.map(async (message) => ({
-      role: message.role,
-      content: await Promise.all(
-        message.content.map(resolveModelInferenceContent),
-      ),
-    })),
+    messages.map(async (message) => {
+      return resolveModelInferenceMessage(message);
+    }),
   );
 }
 
@@ -105,6 +102,20 @@ async function resolveMessage(
   const resolvedContent = await Promise.all(
     message.content.map(async (content) => {
       return resolveContent(content, message.role, functionConfig);
+    }),
+  );
+  return {
+    ...message,
+    content: resolvedContent,
+  };
+}
+
+async function resolveModelInferenceMessage(
+  message: StoredRequestMessage,
+): Promise<InputMessage> {
+  const resolvedContent = await Promise.all(
+    message.content.map(async (content) => {
+      return resolveModelInferenceContent(content);
     }),
   );
   return {
@@ -171,38 +182,37 @@ async function resolveModelInferenceContent(
 ): Promise<InputMessageContent> {
   switch (content.type) {
     case "text":
-      return { type: "text", text: content.text };
+      // Do not use prepareDisplayText here because these are model inferences and should be post-templating
+      // and will always be unstructured text.
+      return {
+        type: "text",
+        text: content.text,
+      };
     case "tool_call":
     case "tool_result":
     case "thought":
     case "unknown":
       return content;
     case "file": {
+      const fileContent: ZodFileContent = {
+        type: "file",
+        file: {
+          mime_type: content.mime_type,
+          url: content.source_url,
+        },
+        storage_path: content.storage_path,
+      };
       try {
-        const resolved = await resolveFile({
-          type: "file",
-          file: { mime_type: content.mime_type, url: content.source_url },
-          storage_path: content.storage_path,
-        });
+        const resolved = await resolveFile(fileContent);
         return {
-          type: "file",
+          ...content,
           file_type: "object_storage",
           data: resolved.data,
-          mime_type: resolved.mime_type,
-          storage_path: content.storage_path,
-          source_url: content.source_url,
-          detail: content.detail,
-          filename: content.filename,
         };
       } catch (error) {
         return {
-          type: "file",
+          ...content,
           file_type: "object_storage_error",
-          mime_type: content.mime_type,
-          storage_path: content.storage_path,
-          source_url: content.source_url,
-          detail: content.detail,
-          filename: content.filename,
           error: error instanceof Error ? error.message : String(error),
         };
       }
