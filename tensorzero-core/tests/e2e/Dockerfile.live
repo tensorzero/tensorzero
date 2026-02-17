@@ -1,6 +1,6 @@
 # ========== chef ==========
 
-FROM lukemathwalker/cargo-chef:latest-rust-1.88-trixie AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.93-trixie AS chef
 
 WORKDIR /app
 

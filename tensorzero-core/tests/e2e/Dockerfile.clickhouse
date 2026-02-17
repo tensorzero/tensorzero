@@ -1,6 +1,6 @@
 # ========== base ==========
 
-FROM rust:1.88.0 AS base
+FROM rust:1.93.0 AS base
 
 # Install required system dependencies
 RUN apt-get update && \
