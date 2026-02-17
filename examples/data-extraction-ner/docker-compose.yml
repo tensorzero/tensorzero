@@ -96,6 +96,9 @@ services:
 
   ui:
     image: tensorzero/ui
+    volumes:
+      - ./config:/app/config
+    command: --config-file /app/config/tensorzero.toml
     environment:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
