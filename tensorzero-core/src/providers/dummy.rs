@@ -958,6 +958,17 @@ impl EmbeddingProvider for DummyProvider {
         dynamic_api_keys: &InferenceCredentials,
         _model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
+        if self.model_name == "error_with_raw_response" {
+            return Err(ErrorDetails::InferenceClient {
+                message: "Error from Dummy embedding provider with raw response".to_string(),
+                raw_request: Some("dummy error raw request".to_string()),
+                raw_response: Some("dummy error raw response".to_string()),
+                status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
+            }
+            .into());
+        }
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
                 message: format!(

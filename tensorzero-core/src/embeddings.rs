@@ -30,7 +30,7 @@ use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE, TimeoutKind},
     inference::types::{
         Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role, Usage,
-        current_timestamp,
+        current_timestamp, usage::RawResponseEntry,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -227,11 +227,19 @@ impl EmbeddingModelConfig {
                                 CacheValidationInfo { tool_config: None },
                             );
                         };
-                        let embedding_response = EmbeddingModelResponse::new(
+                        let mut embedding_response = EmbeddingModelResponse::new(
                             response,
                             provider_name.clone(),
                             provider_type,
                         );
+                        // Collect raw response entries from failed providers for fallback reporting
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                if let Some(entries) = error.extract_raw_response_entries() {
+                                    embedding_response.failed_raw_response.extend(entries);
+                                }
+                            }
+                        }
                         return Ok(embedding_response);
                     }
                     Err(error) => {
@@ -412,6 +420,7 @@ pub struct EmbeddingModelResponse {
     pub provider_type: Arc<str>,
     pub cached: bool,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 impl EmbeddingModelResponse {
@@ -438,6 +447,7 @@ impl EmbeddingModelResponse {
             provider_type,
             cached: true,
             raw_usage: None,
+            failed_raw_response: vec![],
         }
     }
 
@@ -470,6 +480,7 @@ pub struct EmbeddingResponseWithMetadata {
     pub provider_type: Arc<str>,
     pub embedding_model_name: Arc<str>,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 impl EmbeddingModelResponse {
@@ -491,6 +502,7 @@ impl EmbeddingModelResponse {
             provider_type,
             cached: false,
             raw_usage: embedding_provider_response.raw_usage,
+            failed_raw_response: vec![],
         }
     }
 }
@@ -510,6 +522,7 @@ impl EmbeddingResponseWithMetadata {
             provider_type: embedding_response.provider_type,
             embedding_model_name,
             raw_usage: embedding_response.raw_usage,
+            failed_raw_response: embedding_response.failed_raw_response,
         }
     }
 }
@@ -545,7 +558,7 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             finish_reason: None,
             raw_usage: response.raw_usage,
             relay_raw_response: None,
-            failed_raw_response: vec![],
+            failed_raw_response: response.failed_raw_response,
         })
     }
 }

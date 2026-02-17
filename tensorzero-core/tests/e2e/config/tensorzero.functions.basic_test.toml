@@ -911,3 +911,27 @@ type = "chat_completion"
 model = "test_both_error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+# DICL raw_response tests: embedding partial failure (first provider fails, second succeeds)
+[functions.basic_test.variants.dicl_embedding_partial_fail]
+type = "experimental_dynamic_in_context_learning"
+model = "test"
+embedding_model = "embedding_fallback_with_raw_response"
+k = 0
+max_tokens = 100
+
+# DICL raw_response tests: all embedding providers fail
+[functions.basic_test.variants.dicl_embedding_all_fail]
+type = "experimental_dynamic_in_context_learning"
+model = "test"
+embedding_model = "embedding_both_error_with_raw_response"
+k = 0
+max_tokens = 100
+
+# DICL raw_response tests: embedding succeeds, LLM fails
+[functions.basic_test.variants.dicl_llm_fail]
+type = "experimental_dynamic_in_context_learning"
+model = "error_with_raw_response"
+embedding_model = "dummy-embedding-model"
+k = 0
+max_tokens = 100
