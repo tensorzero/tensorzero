@@ -4,6 +4,8 @@
 
 use std::path::Path;
 
+use crate::db::get_test_postgres;
+
 use chrono::{TimeZone, Utc};
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, MetricConfigLevel},
@@ -38,29 +40,8 @@ async fn get_e2e_config() -> Config {
 // These tests work with both ClickHouse and Postgres.
 
 async fn test_get_inference_output_chat_inference(conn: impl InferenceQueries) {
-    let config = get_e2e_config().await;
-
-    // First, list some chat inferences to get a valid inference_id
-    let inferences = conn
-        .list_inferences(
-            &config,
-            &ListInferencesParams {
-                function_name: Some("write_haiku"),
-                output_source: InferenceOutputSource::Inference,
-                limit: 1,
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-
-    assert!(
-        !inferences.is_empty(),
-        "Should have at least one chat inference"
-    );
-
-    let inference = &inferences[0];
-    let inference_id = inference.id();
+    // Use a hardcoded inference ID.
+    let inference_id = Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2").expect("Valid UUID");
 
     // Get function info for this inference
     let function_info = conn
@@ -94,29 +75,8 @@ async fn test_get_inference_output_chat_inference(conn: impl InferenceQueries) {
 make_db_test!(test_get_inference_output_chat_inference);
 
 async fn test_get_inference_output_json_inference(conn: impl InferenceQueries) {
-    let config = get_e2e_config().await;
-
-    // First, list some json inferences to get a valid inference_id
-    let inferences = conn
-        .list_inferences(
-            &config,
-            &ListInferencesParams {
-                function_name: Some("extract_entities"),
-                output_source: InferenceOutputSource::Inference,
-                limit: 1,
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-
-    assert!(
-        !inferences.is_empty(),
-        "Should have at least one json inference"
-    );
-
-    let inference = &inferences[0];
-    let inference_id = inference.id();
+    // Use a hardcoded inference ID.
+    let inference_id = Uuid::parse_str("0196374c-2c6d-7ce0-b508-e3b24ee4579c").expect("Valid UUID");
 
     // Get function info for this inference
     let function_info = conn
@@ -239,12 +199,14 @@ make_db_test!(test_list_inferences_json_function);
 async fn test_get_function_info_for_inference(conn: impl InferenceQueries) {
     let config = get_e2e_config().await;
 
-    // Get an inference ID to test with
+    // Get an inference ID to test with.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let inferences = conn
         .list_inferences(
             &config,
             &ListInferencesParams {
                 function_name: Some("write_haiku"),
+                variant_name: Some("better_prompt_haiku_4_5"),
                 output_source: InferenceOutputSource::Inference,
                 limit: 1,
                 ..Default::default()
@@ -1667,3 +1629,183 @@ async fn test_list_inferences_returns_processing_time_ms_json(conn: impl Inferen
     }
 }
 make_db_test!(test_list_inferences_returns_processing_time_ms_json);
+
+// ===== METADATA-ONLY INFERENCE TESTS (Postgres only) =====
+// These tests exercise the case where inference data rows have been dropped
+// (e.g. due to data retention expiry) but metadata rows remain.
+// The fixture file `metadata_only_inference_examples.jsonl` inserts rows only
+// into the metadata tables (chat_inferences / json_inferences), with no
+// corresponding rows in the data tables (chat_inference_data / json_inference_data).
+
+#[tokio::test]
+async fn test_list_inferences_returns_metadata_only_chat_postgres() {
+    let conn = get_test_postgres().await;
+    let config = get_e2e_config().await;
+    let metadata_only_id = Uuid::parse_str("019c592a-111d-7190-bcfa-380a6143e5ee").unwrap();
+
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                function_name: Some("write_haiku"),
+                output_source: InferenceOutputSource::Inference,
+                ids: Some(&[metadata_only_id]),
+                limit: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        inferences.len(),
+        1,
+        "Should find exactly one metadata-only chat inference"
+    );
+
+    let inference = &inferences[0];
+    match inference {
+        tensorzero_core::stored_inference::StoredInferenceDatabase::Chat(chat) => {
+            assert_eq!(
+                chat.input, None,
+                "input should be None for metadata-only inference"
+            );
+            assert_eq!(
+                chat.output, None,
+                "output should be None for metadata-only inference"
+            );
+            assert_eq!(
+                chat.extra_body, None,
+                "extra_body should be None for metadata-only inference"
+            );
+            assert_eq!(
+                chat.inference_params, None,
+                "inference_params should be None for metadata-only inference"
+            );
+            assert_eq!(
+                chat.tool_params, None,
+                "tool_params should be None for metadata-only inference"
+            );
+            assert_eq!(chat.function_name, "write_haiku");
+            assert_eq!(chat.variant_name, "initial_prompt_gpt4o_mini");
+        }
+        tensorzero_core::stored_inference::StoredInferenceDatabase::Json(_) => {
+            panic!("Expected Chat inference")
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_list_inferences_returns_metadata_only_json_postgres() {
+    let conn = get_test_postgres().await;
+    let config = get_e2e_config().await;
+    let metadata_only_id = Uuid::parse_str("019c592a-2fd7-78cc-8703-7e3f8fba7d44").unwrap();
+
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                function_name: Some("extract_entities"),
+                output_source: InferenceOutputSource::Inference,
+                ids: Some(&[metadata_only_id]),
+                limit: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        inferences.len(),
+        1,
+        "Should find exactly one metadata-only json inference"
+    );
+
+    let inference = &inferences[0];
+    match inference {
+        tensorzero_core::stored_inference::StoredInferenceDatabase::Json(json) => {
+            assert_eq!(
+                json.input, None,
+                "input should be None for metadata-only inference"
+            );
+            assert_eq!(
+                json.output, None,
+                "output should be None for metadata-only inference"
+            );
+            assert_eq!(
+                json.output_schema, None,
+                "output_schema should be None for metadata-only inference"
+            );
+            assert_eq!(
+                json.extra_body, None,
+                "extra_body should be None for metadata-only inference"
+            );
+            assert_eq!(
+                json.inference_params, None,
+                "inference_params should be None for metadata-only inference"
+            );
+            assert_eq!(json.function_name, "extract_entities");
+            assert_eq!(json.variant_name, "gpt4o_mini_initial_prompt");
+        }
+        tensorzero_core::stored_inference::StoredInferenceDatabase::Chat(_) => {
+            panic!("Expected Json inference")
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_list_inferences_union_returns_metadata_only_postgres() {
+    let conn = get_test_postgres().await;
+    let config = get_e2e_config().await;
+    let chat_id = Uuid::parse_str("019c592a-111d-7190-bcfa-380a6143e5ee").unwrap();
+    let json_id = Uuid::parse_str("019c592a-2fd7-78cc-8703-7e3f8fba7d44").unwrap();
+
+    // Query without function_name to exercise the UNION ALL path
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                output_source: InferenceOutputSource::Inference,
+                ids: Some(&[chat_id, json_id]),
+                limit: 10,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        inferences.len(),
+        2,
+        "Should find both metadata-only inferences via UNION ALL"
+    );
+
+    for inference in &inferences {
+        match inference {
+            tensorzero_core::stored_inference::StoredInferenceDatabase::Chat(chat) => {
+                assert_eq!(
+                    chat.input, None,
+                    "input should be None for metadata-only chat inference in UNION"
+                );
+                assert_eq!(
+                    chat.output, None,
+                    "output should be None for metadata-only chat inference in UNION"
+                );
+            }
+            tensorzero_core::stored_inference::StoredInferenceDatabase::Json(json) => {
+                assert_eq!(
+                    json.input, None,
+                    "input should be None for metadata-only json inference in UNION"
+                );
+                assert_eq!(
+                    json.output, None,
+                    "output should be None for metadata-only json inference in UNION"
+                );
+                assert_eq!(
+                    json.output_schema, None,
+                    "output_schema should be None for metadata-only json inference in UNION"
+                );
+            }
+        }
+    }
+}

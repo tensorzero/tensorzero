@@ -1,14 +1,10 @@
 use reqwest::Client;
 use uuid::Uuid;
 
-use tensorzero::ClientExt;
 use tensorzero_core::db::clickhouse::query_builder::{
     InferenceFilter, TagComparisonOperator, TagFilter,
 };
-use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
-use tensorzero_core::db::inferences::{
-    InferenceOutputSource, InferenceQueries, ListInferencesParams,
-};
+use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse,
@@ -20,21 +16,12 @@ use crate::common::get_gateway_endpoint;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_ids_success() {
     let client = Client::new();
-    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
-    let embedded_client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let config = embedded_client.get_config().unwrap();
 
-    // Get some existing inferences from the database
-    let params = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        limit: 2,
-        ..Default::default()
-    };
-    let inferences = database.list_inferences(&config, &params).await.unwrap();
-    assert!(inferences.len() >= 2, "Need at least 2 inferences for test");
-
-    let inference_id1 = inferences[0].id();
-    let inference_id2 = inferences[1].id();
+    // Use hardcoded inference IDs known to have input and output data
+    let inference_id1 =
+        Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2").expect("Valid UUID");
+    let inference_id2 =
+        Uuid::parse_str("01963691-b040-7441-8069-44c9b2814f57").expect("Valid UUID");
 
     // Create datapoints from these inferences
     let request = CreateDatapointsFromInferenceRequest {
@@ -63,12 +50,12 @@ async fn test_create_from_inference_ids_success() {
 async fn test_create_from_inference_query_success() {
     let client = Client::new();
 
-    // Create datapoints using a query (no filters, just function name)
+    // Create datapoints using a query
     let request = CreateDatapointsFromInferenceRequest {
         params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
             query: Box::new(ListInferencesRequest {
                 function_name: Some("write_haiku".to_string()),
-                variant_name: None,
+                variant_name: Some("better_prompt_haiku_4_5".to_string()),
                 output_source: InferenceOutputSource::Inference,
                 ..Default::default()
             }),
@@ -94,20 +81,9 @@ async fn test_create_from_inference_query_success() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_same_inference_multiple_times_succeeds() {
     let client = Client::new();
-    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
-    let embedded_client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let config = embedded_client.get_config().unwrap();
 
-    // Get an existing inference from the database
-    let params = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        limit: 1,
-        ..Default::default()
-    };
-    let inferences = database.list_inferences(&config, &params).await.unwrap();
-    assert!(!inferences.is_empty(), "Need at least 1 inference for test");
-
-    let inference_id = inferences[0].id();
+    // Use a hardcoded inference ID known to have input and output data
+    let inference_id = Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2").expect("Valid UUID");
 
     // Create datapoint from this inference
     let request = CreateDatapointsFromInferenceRequest {
@@ -149,20 +125,10 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_missing_ids_error() {
     let client = Client::new();
-    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
-    let embedded_client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let config = embedded_client.get_config().unwrap();
 
-    // Get one real inference
-    let params = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        limit: 1,
-        ..Default::default()
-    };
-    let inferences = database.list_inferences(&config, &params).await.unwrap();
-    assert!(!inferences.is_empty(), "Need at least 1 inference for test");
-
-    let real_inference_id = inferences[0].id();
+    // Use a hardcoded inference ID known to have input and output data
+    let real_inference_id =
+        Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2").expect("Valid UUID");
 
     // Generate a fake inference ID that doesn't exist
     let fake_inference_id = Uuid::now_v7();
@@ -209,7 +175,7 @@ async fn test_create_from_inference_with_filters() {
         params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
             query: Box::new(ListInferencesRequest {
                 function_name: Some("write_haiku".to_string()),
-                variant_name: None,
+                variant_name: Some("better_prompt_haiku_4_5".to_string()),
                 filters: Some(filter),
                 output_source: InferenceOutputSource::Inference,
                 ..Default::default()

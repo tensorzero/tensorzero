@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                dynamic_tools,\n                dynamic_provider_tools,\n                allowed_tools,\n                tool_choice,\n                parallel_tool_calls\n            FROM tensorzero.chat_inferences\n            WHERE function_name = $1 AND id = $2\n            LIMIT 1\n            ",
+  "query": "\n            SELECT\n                io.dynamic_tools,\n                io.dynamic_provider_tools,\n                io.allowed_tools,\n                io.tool_choice,\n                io.parallel_tool_calls\n            FROM tensorzero.chat_inferences i\n            INNER JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at\n            WHERE i.function_name = $1 AND i.id = $2\n            LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Jsonb",
         "origin": {
           "Table": {
-            "table": "tensorzero.chat_inferences",
+            "table": "tensorzero.chat_inference_data",
             "name": "dynamic_tools"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Jsonb",
         "origin": {
           "Table": {
-            "table": "tensorzero.chat_inferences",
+            "table": "tensorzero.chat_inference_data",
             "name": "dynamic_provider_tools"
           }
         }
@@ -31,7 +31,7 @@
         "type_info": "Jsonb",
         "origin": {
           "Table": {
-            "table": "tensorzero.chat_inferences",
+            "table": "tensorzero.chat_inference_data",
             "name": "allowed_tools"
           }
         }
@@ -42,7 +42,7 @@
         "type_info": "Jsonb",
         "origin": {
           "Table": {
-            "table": "tensorzero.chat_inferences",
+            "table": "tensorzero.chat_inference_data",
             "name": "tool_choice"
           }
         }
@@ -53,7 +53,7 @@
         "type_info": "Bool",
         "origin": {
           "Table": {
-            "table": "tensorzero.chat_inferences",
+            "table": "tensorzero.chat_inference_data",
             "name": "parallel_tool_calls"
           }
         }
@@ -73,5 +73,5 @@
       true
     ]
   },
-  "hash": "f4fea76553ddd658b402eeddec40ef822e2bf014311e28a7fd7f5587b6bbf4ef"
+  "hash": "80c90c2065413230983ad3faa90bf3f2ddda152be21b16af51a4efaef2d37709"
 }

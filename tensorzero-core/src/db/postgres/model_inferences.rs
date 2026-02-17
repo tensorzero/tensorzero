@@ -92,8 +92,10 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
         }
 
         let pool = self.get_pool_result()?;
-        let mut qb = build_insert_model_inferences_query(rows)?;
-        qb.build().execute(pool).await?;
+        let mut metadata_qb = build_insert_model_inferences_query(rows)?;
+        metadata_qb.build().execute(pool).await?;
+        let mut io_qb = build_insert_model_inference_data_query(rows)?;
+        io_qb.build().execute(pool).await?;
         Ok(())
     }
 
@@ -182,32 +184,33 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
     let mut qb = QueryBuilder::new(
         r"
         SELECT
-            id,
-            inference_id,
-            raw_request,
-            raw_response,
-            system,
-            input_messages,
-            output,
-            input_tokens,
-            output_tokens,
-            response_time_ms,
-            model_name,
-            model_provider_name,
-            ttft_ms,
-            cached,
-            finish_reason,
-            snapshot_hash,
-            created_at
-        FROM tensorzero.model_inferences
-        WHERE inference_id = ",
+            i.id,
+            i.inference_id,
+            io.raw_request,
+            io.raw_response,
+            io.system,
+            io.input_messages,
+            io.output,
+            i.input_tokens,
+            i.output_tokens,
+            i.response_time_ms,
+            i.model_name,
+            i.model_provider_name,
+            i.ttft_ms,
+            i.cached,
+            i.finish_reason,
+            i.snapshot_hash,
+            i.created_at
+        FROM tensorzero.model_inferences i
+        LEFT JOIN tensorzero.model_inference_data io ON io.id = i.id AND io.created_at = i.created_at
+        WHERE i.inference_id = ",
     );
     qb.push_bind(inference_id);
 
     qb
 }
 
-/// Builds a query to insert model inferences.
+/// Builds a query to insert model inference metadata.
 pub(super) fn build_insert_model_inferences_query(
     rows: &[StoredModelInference],
 ) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
@@ -220,8 +223,7 @@ pub(super) fn build_insert_model_inferences_query(
     let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
         r"
         INSERT INTO tensorzero.model_inferences (
-            id, inference_id, raw_request, raw_response, system,
-            input_messages, output, input_tokens, output_tokens,
+            id, inference_id, input_tokens, output_tokens,
             response_time_ms, model_name, model_provider_name,
             ttft_ms, cached, finish_reason, snapshot_hash, created_at
         ) ",
@@ -233,11 +235,6 @@ pub(super) fn build_insert_model_inferences_query(
 
         b.push_bind(row.id)
             .push_bind(row.inference_id)
-            .push_bind(&row.raw_request)
-            .push_bind(&row.raw_response)
-            .push_bind(&row.system)
-            .push_bind(row.input_messages.as_ref().map(Json::from))
-            .push_bind(row.output.as_ref().map(Json::from))
             .push_bind(row.input_tokens.map(|v| v as i32))
             .push_bind(row.output_tokens.map(|v| v as i32))
             .push_bind(row.response_time_ms.map(|v| v as i32))
@@ -247,6 +244,36 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(row.cached)
             .push_bind(row.finish_reason)
             .push_bind(snapshot_hash_bytes)
+            .push_bind(created_at);
+    });
+
+    Ok(qb)
+}
+
+/// Builds a query to insert model inference IO data.
+pub(super) fn build_insert_model_inference_data_query(
+    rows: &[StoredModelInference],
+) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
+    let timestamps: Vec<DateTime<Utc>> = rows
+        .iter()
+        .map(|row| uuid_to_datetime(row.id))
+        .collect::<Result<_, _>>()?;
+
+    let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        r"
+        INSERT INTO tensorzero.model_inference_data (
+            id, raw_request, raw_response, system,
+            input_messages, output, created_at
+        ) ",
+    );
+
+    qb.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
+        b.push_bind(row.id)
+            .push_bind(&row.raw_request)
+            .push_bind(&row.raw_response)
+            .push_bind(&row.system)
+            .push_bind(row.input_messages.as_ref().map(Json::from))
+            .push_bind(row.output.as_ref().map(Json::from))
             .push_bind(created_at);
     });
 
@@ -1130,25 +1157,26 @@ mod tests {
             sql,
             r"
             SELECT
-                id,
-                inference_id,
-                raw_request,
-                raw_response,
-                system,
-                input_messages,
-                output,
-                input_tokens,
-                output_tokens,
-                response_time_ms,
-                model_name,
-                model_provider_name,
-                ttft_ms,
-                cached,
-                finish_reason,
-                snapshot_hash,
-                created_at
-            FROM tensorzero.model_inferences
-            WHERE inference_id = $1
+                i.id,
+                i.inference_id,
+                io.raw_request,
+                io.raw_response,
+                io.system,
+                io.input_messages,
+                io.output,
+                i.input_tokens,
+                i.output_tokens,
+                i.response_time_ms,
+                i.model_name,
+                i.model_provider_name,
+                i.ttft_ms,
+                i.cached,
+                i.finish_reason,
+                i.snapshot_hash,
+                i.created_at
+            FROM tensorzero.model_inferences i
+            LEFT JOIN tensorzero.model_inference_data io ON io.id = i.id AND io.created_at = i.created_at
+            WHERE i.inference_id = $1
             ",
         );
     }
@@ -1175,19 +1203,26 @@ mod tests {
             timestamp: None,
         }];
 
-        let qb = build_insert_model_inferences_query(&rows).expect("Should build query");
-        let sql_str = qb.sql();
-        let sql = sql_str.as_str();
-
+        let qb = build_insert_model_inferences_query(&rows).expect("Should build metadata query");
         assert_query_equals(
-            sql,
+            qb.sql().as_str(),
             r"
             INSERT INTO tensorzero.model_inferences (
-                id, inference_id, raw_request, raw_response, system,
-                input_messages, output, input_tokens, output_tokens,
+                id, inference_id, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ",
+        );
+
+        let io_qb = build_insert_model_inference_data_query(&rows).expect("Should build IO query");
+        assert_query_equals(
+            io_qb.sql().as_str(),
+            r"
+            INSERT INTO tensorzero.model_inference_data (
+                id, raw_request, raw_response, system,
+                input_messages, output, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             ",
         );
     }
@@ -1235,20 +1270,28 @@ mod tests {
             },
         ];
 
-        let qb = build_insert_model_inferences_query(&rows).expect("Should build query");
-        let sql_str = qb.sql();
-        let sql = sql_str.as_str();
-
+        let qb = build_insert_model_inferences_query(&rows).expect("Should build metadata query");
         assert_query_equals(
-            sql,
+            qb.sql().as_str(),
             r"
             INSERT INTO tensorzero.model_inferences (
-                id, inference_id, raw_request, raw_response, system,
-                input_messages, output, input_tokens, output_tokens,
+                id, inference_id, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17),
-            ($18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12),
+            ($13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+            ",
+        );
+
+        let io_qb = build_insert_model_inference_data_query(&rows).expect("Should build IO query");
+        assert_query_equals(
+            io_qb.sql().as_str(),
+            r"
+            INSERT INTO tensorzero.model_inference_data (
+                id, raw_request, raw_response, system,
+                input_messages, output, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7),
+            ($8, $9, $10, $11, $12, $13, $14)
             ",
         );
     }
