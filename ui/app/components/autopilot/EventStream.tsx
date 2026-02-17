@@ -599,8 +599,7 @@ function EventItem({
       </div>
       {shouldShowDetails && summary.description && (
         <>
-          {event.payload.type === "message" &&
-          event.payload.role === "assistant" ? (
+          {event.payload.type === "message" ? (
             <Markdown
               remarkPlugins={uuidRemarkPlugins}
               components={uuidComponents}
@@ -678,9 +677,9 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
-      <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+      <Markdown remarkPlugins={uuidRemarkPlugins} components={uuidComponents}>
         {message.text}
-      </p>
+      </Markdown>
     </div>
   );
 }
