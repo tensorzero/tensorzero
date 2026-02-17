@@ -380,22 +380,22 @@ routing = ["test"]
 type = "dummy"
 model_name = "test"
 
-[functions.test_fn]
+[functions.test_function]
 type = "chat"
 
-[functions.test_fn.variants.variant_a]
+[functions.test_function.variants.variant_a]
 type = "chat_completion"
 model = "namespaced_model"
 
-[functions.test_fn.variants.variant_b]
+[functions.test_function.variants.variant_b]
 type = "chat_completion"
 model = "regular_model"
 
-[functions.test_fn.experimentation]
+[functions.test_function.experimentation]
 type = "static_weights"
 candidate_variants = {"variant_b" = 1.0}
 
-[functions.test_fn.experimentation.namespaces.mobile]
+[functions.test_function.experimentation.namespaces.mobile]
 type = "static_weights"
 candidate_variants = {"variant_a" = 1.0}
 "#;
@@ -453,7 +453,7 @@ model = "regular_model"
 
 # BestOfN variant with web evaluator but mobile candidate
 [functions.test_fn.variants.bon_variant]
-type = "best_of_n_sampling"
+type = "experimental_best_of_n_sampling"
 candidates = ["mobile_candidate"]
 
 [functions.test_fn.variants.bon_variant.evaluator]
@@ -524,7 +524,7 @@ model = "regular_model"
 
 # MixtureOfN variant with web fuser but mobile candidate
 [functions.test_fn.variants.mon_variant]
-type = "mixture_of_n"
+type = "experimental_mixture_of_n"
 candidates = ["mobile_candidate"]
 
 [functions.test_fn.variants.mon_variant.fuser]
