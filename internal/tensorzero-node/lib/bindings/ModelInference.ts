@@ -72,5 +72,5 @@ export type ModelInference = {
    * Cost of this model inference in dollars.
    * `None` means cost tracking was not configured for this provider or the provider did not send the necessary information.
    */
-  cost: number;
+  cost: number | undefined;
 };

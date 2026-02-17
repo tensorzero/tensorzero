@@ -87,7 +87,7 @@ pub struct ModelInference {
     /// Cost of this model inference in dollars.
     /// `None` means cost tracking was not configured for this provider or the provider did not send the necessary information.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | undefined"))]
     pub cost: Option<Cost>,
 }
 
