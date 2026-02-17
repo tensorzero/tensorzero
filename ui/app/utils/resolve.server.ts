@@ -203,11 +203,10 @@ async function resolveModelInferenceContent(
         storage_path: content.storage_path,
       };
       try {
-        const resolved = await resolveFile(fileContent);
         return {
           ...content,
           file_type: "object_storage",
-          data: resolved.data,
+          data: (await resolveFile(fileContent)).data,
         };
       } catch (error) {
         return {
