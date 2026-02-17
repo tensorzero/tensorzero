@@ -204,7 +204,7 @@ interface ItemProps {
 
 function Item({ label, children }: ItemProps) {
   return (
-    <div className="grid grid-cols-[4rem_1fr] items-baseline gap-2">
+    <div className="grid grid-cols-[4rem_1fr] items-center gap-2">
       <span className="text-muted-foreground text-xs">{label}</span>
       {children}
     </div>
