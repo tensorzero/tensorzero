@@ -4,9 +4,9 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
-  modelInferenceOutputContentBlockSchema,
   ZodJsonValueSchema,
 } from "./common";
+import type { ZodModelInferenceOutputContentBlock } from "./common";
 import type {
   InputMessage,
   JsonInferenceOutput,
@@ -184,29 +184,23 @@ export function parseInferenceOutput(
   return jsonInferenceOutputSchema.parse(parsed);
 }
 
-// TODO(shuyangli): sort out file loading and delete these Zod schemas.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const parsedModelInferenceRowSchema = z.object({
-  id: z.string().uuid(),
-  inference_id: z.string().uuid(),
-  raw_request: z.string(),
-  raw_response: z.string(),
-  model_name: z.string(),
-  model_provider_name: z.string(),
-  input_tokens: z.number().optional(),
-  output_tokens: z.number().optional(),
-  response_time_ms: z.number().nullable(),
-  ttft_ms: z.number().nullable(),
-  timestamp: z.string().datetime(),
-  system: z.string().nullable(),
-  input_messages: z.custom<InputMessage[]>(),
-  output: z.array(modelInferenceOutputContentBlockSchema),
-  cached: z.boolean(),
-});
-
-export type ParsedModelInferenceRow = z.infer<
-  typeof parsedModelInferenceRowSchema
->;
+export type ParsedModelInferenceRow = {
+  id: string;
+  inference_id: string;
+  raw_request: string;
+  raw_response: string;
+  model_name: string;
+  model_provider_name: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  response_time_ms: number | null;
+  ttft_ms: number | null;
+  timestamp: string;
+  system: string | null;
+  input_messages: InputMessage[];
+  output: ZodModelInferenceOutputContentBlock[];
+  cached: boolean;
+};
 
 /// Hacky helper to determine if the output is JSON
 // We should continue to refactor our types to avoid stuff like this...
