@@ -1017,7 +1017,7 @@ jobs:
       id-token: write
     needs: [build-gateway-container, build-mock-provider-api-container]
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     strategy:
       fail-fast: false
       matrix:
@@ -1299,6 +1299,7 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   ui-tests:
+    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
     permissions:
       contents: read
       actions: read
