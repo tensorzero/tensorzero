@@ -1,7 +1,7 @@
 /**
  * Database helpers for autopilot e2e tests.
  *
- * These functions insert/query events directly in the autopilot PostgreSQL
+ * These functions insert/query events directly in the autopilot Postgres
  * database, bypassing the API. Useful for injecting server-only event types
  * (like `user_questions`) that can't be created via the client API.
  */
@@ -13,7 +13,7 @@ const POSTGRES_URL =
 
 /**
  * Insert an event directly into the autopilot events table.
- * Uses PostgreSQL dollar-quoting to avoid JSON escaping issues.
+ * Uses Postgres dollar-quoting to avoid JSON escaping issues.
  */
 export function insertEvent(
   eventId: string,
