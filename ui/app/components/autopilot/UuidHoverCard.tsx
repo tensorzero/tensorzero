@@ -54,12 +54,7 @@ export function UuidHoverCard({
             "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           )}
         >
-          <HoverCardContent
-            uuid={uuid}
-            obj={obj}
-            url={url}
-            isOpen={isOpen}
-          />
+          <HoverCardContent uuid={uuid} obj={obj} url={url} isOpen={isOpen} />
         </HoverCard.Content>
       </HoverCard.Portal>
     </HoverCard.Root>
@@ -73,12 +68,7 @@ interface HoverCardContentProps {
   isOpen: boolean;
 }
 
-function HoverCardContent({
-  uuid,
-  obj,
-  url,
-  isOpen,
-}: HoverCardContentProps) {
+function HoverCardContent({ uuid, obj, url, isOpen }: HoverCardContentProps) {
   switch (obj.type) {
     case "inference":
       return (
@@ -109,12 +99,7 @@ interface InferenceContentProps {
   isOpen: boolean;
 }
 
-function InferenceContent({
-  uuid,
-  obj,
-  url,
-  isOpen,
-}: InferenceContentProps) {
+function InferenceContent({ uuid, obj, url, isOpen }: InferenceContentProps) {
   const { data, isLoading } = useEntityPreview<InferencePreview>(
     `/api/tensorzero/inference_preview/${encodeURIComponent(uuid)}`,
     isOpen,

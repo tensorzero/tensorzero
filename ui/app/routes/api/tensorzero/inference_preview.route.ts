@@ -14,7 +14,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     const client = getTensorZeroClient();
     const response = await client.getInferences({
       ids: [inference_id],
-      output_source: "inference",
+      output_source: "none",
     });
 
     if (response.inferences.length === 0) {
