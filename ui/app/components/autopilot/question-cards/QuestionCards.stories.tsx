@@ -115,11 +115,11 @@ const multiQuestionPayload: EventPayloadUserQuestions = {
   ],
 };
 
-const singleAnswers: Record<string, UserQuestionAnswer> = {
+const singleResponses: Record<string, UserQuestionAnswer> = {
   q1: { type: "multiple_choice", selected: ["jwt"] },
 };
 
-const multiAnswers: Record<string, UserQuestionAnswer> = {
+const multiResponses: Record<string, UserQuestionAnswer> = {
   q1: { type: "multiple_choice", selected: ["datefns"] },
   q2: { type: "multiple_choice", selected: ["i18n", "tz"] },
   q3: {
@@ -233,7 +233,7 @@ function InteractivePending() {
         eventId="evt-interactive"
         payload={multiQuestionPayload}
         isLoading={false}
-        onSubmit={(_id, answers) => setLastSubmission(answers)}
+        onSubmit={(_id, responses) => setLastSubmission(responses)}
         onSkip={() => setLastSubmission(null)}
       />
       {lastSubmission && (
@@ -266,7 +266,7 @@ export const AnsweredSingle: Story = {
     <div className="w-[500px] p-4">
       <CompletedQuestionCard
         payload={singleMcPayload}
-        answers={singleAnswers}
+        responses={singleResponses}
         eventId="evt-answered-1"
         timestamp={new Date().toISOString()}
       />
@@ -280,7 +280,7 @@ export const AnsweredMulti: Story = {
     <div className="w-[500px] p-4">
       <CompletedQuestionCard
         payload={multiQuestionPayload}
-        answers={multiAnswers}
+        responses={multiResponses}
         eventId="evt-answered-2"
         timestamp={new Date().toISOString()}
       />
