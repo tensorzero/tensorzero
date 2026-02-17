@@ -2,9 +2,15 @@ name: Build Fixtures Container
 
 on:
   workflow_call:
+    inputs:
+      distribution_mode:
+        description: "How to distribute built images: `artifact` or `registry`"
+        required: false
+        type: string
+        default: artifact
     secrets:
       DOCKERHUB_LIMITED_TOKEN:
-        required: true
+        required: false
 
 jobs:
   build-fixtures-container:
@@ -21,6 +27,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Login to DockerHub
+        if: inputs.distribution_mode == 'registry'
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
           username: tensorzero
@@ -30,23 +37,29 @@ jobs:
       # (where the oidc token is not available)
 
       - name: Install Namespace CLI
+        if: inputs.distribution_mode == 'registry'
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
+        if: inputs.distribution_mode == 'registry'
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
         with:
           wait-for-builder: true
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Build `fixtures` container
         run: |
-          docker buildx build -f ui/fixtures/Dockerfile . -t tensorzero/fixtures:sha-${{ github.sha }} -t nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
+          TAGS="-t tensorzero/fixtures:sha-${{ github.sha }}"
+          if [ "${{ inputs.distribution_mode }}" = "registry" ]; then
+            TAGS="$TAGS -t nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}"
+          fi
+          docker buildx build -f ui/fixtures/Dockerfile . ${TAGS}
 
       - name: Save `fixtures` container
+        if: inputs.distribution_mode == 'artifact'
         run: docker save tensorzero/fixtures:sha-${{ github.sha }} > fixtures-container.tar
 
       - name: Upload `fixtures` container as an artifact
+        if: inputs.distribution_mode == 'artifact'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: build-fixtures-container
@@ -56,9 +69,11 @@ jobs:
           overwrite: false
 
       - name: Push `fixtures` container to Docker Hub
+        if: inputs.distribution_mode == 'registry'
         run: docker push tensorzero/fixtures:sha-${{ github.sha }}
 
       - name: Wait for image to be available on Docker Hub
+        if: inputs.distribution_mode == 'registry'
         run: |
           IMAGE="tensorzero/fixtures:sha-${{ github.sha }}"
           echo "Waiting for ${IMAGE} to be available on Docker Hub..."
@@ -74,9 +89,9 @@ jobs:
           exit 1
 
       - name: Login to Namespace registry
+        if: inputs.distribution_mode == 'registry'
         run: nsc docker login
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Push `fixtures` container to Namespace registry
+        if: inputs.distribution_mode == 'registry'
         run: docker push nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}

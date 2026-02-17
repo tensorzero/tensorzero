@@ -1,0 +1,93 @@
+name: Load container images
+description: Load container images from artifacts or Namespace registry.
+
+inputs:
+  distribution-mode:
+    description: "`artifact` or `registry`"
+    required: true
+  artifact-pattern:
+    description: Artifact pattern to download in `artifact` mode.
+    required: false
+    default: ""
+  registry-images:
+    description: Space or newline separated image names (for example `gateway ui`).
+    required: false
+    default: ""
+  optional-registry-images:
+    description: Space or newline separated optional image names in `registry` mode.
+    required: false
+    default: ""
+  namespace-registry:
+    description: Namespace container registry prefix.
+    required: false
+    default: nscr.io/igvf4asmf8kri
+  tag-fixtures-postgres:
+    description: Also tag `tensorzero/fixtures` as `tensorzero/fixtures-postgres`.
+    required: false
+    default: "false"
+  sha:
+    description: Commit SHA used in image tags.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Download container image artifacts
+      if: ${{ inputs.distribution-mode == 'artifact' }}
+      uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      with:
+        pattern: ${{ inputs.artifact-pattern }}
+        merge-multiple: true
+
+    - name: Load container image artifacts
+      if: ${{ inputs.distribution-mode == 'artifact' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        image_tars=(*-container.tar)
+        if [ ${#image_tars[@]} -eq 0 ]; then
+          echo "No image artifacts were downloaded for pattern: ${{ inputs.artifact-pattern }}"
+          exit 1
+        fi
+        for image_tar in "${image_tars[@]}"; do
+          docker load < "${image_tar}"
+        done
+
+    - name: Install Namespace CLI
+      if: ${{ inputs.distribution-mode == 'registry' }}
+      uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+
+    - name: Login to Namespace registry
+      if: ${{ inputs.distribution-mode == 'registry' }}
+      shell: bash
+      run: nsc docker login
+
+    - name: Pull required container images from Namespace registry
+      if: ${{ inputs.distribution-mode == 'registry' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        for image in ${{ inputs.registry-images }}; do
+          docker pull "${{ inputs.namespace-registry }}/${image}:sha-${{ inputs.sha }}"
+          docker tag "${{ inputs.namespace-registry }}/${image}:sha-${{ inputs.sha }}" "tensorzero/${image}:sha-${{ inputs.sha }}"
+        done
+
+    - name: Pull optional container images from Namespace registry
+      if: ${{ inputs.distribution-mode == 'registry' && inputs.optional-registry-images != '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        for image in ${{ inputs.optional-registry-images }}; do
+          if docker pull "${{ inputs.namespace-registry }}/${image}:sha-${{ inputs.sha }}"; then
+            docker tag "${{ inputs.namespace-registry }}/${image}:sha-${{ inputs.sha }}" "tensorzero/${image}:sha-${{ inputs.sha }}"
+          else
+            echo "Skipping optional image: ${image}"
+          fi
+        done
+
+    - name: Tag fixtures-postgres image alias
+      if: ${{ inputs.tag-fixtures-postgres == 'true' }}
+      shell: bash
+      run: |
+        docker tag tensorzero/fixtures:sha-${{ inputs.sha }} tensorzero/fixtures-postgres:sha-${{ inputs.sha }}
