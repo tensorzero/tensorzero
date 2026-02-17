@@ -19,6 +19,7 @@ import type {
 import type {
   File,
   FunctionConfig,
+  InputMessage,
   JsonValue,
   Input,
   InputMessageContent,
@@ -83,14 +84,17 @@ export async function resolveModelInferences(
 
 async function resolveModelInferenceMessages(
   messages: StoredRequestMessage[] | undefined,
-): Promise<ZodDisplayInputMessage[]> {
+): Promise<InputMessage[]> {
   if (!messages) {
     return [];
   }
   return Promise.all(
-    messages.map(async (message) => {
-      return resolveModelInferenceMessage(message);
-    }),
+    messages.map(async (message) => ({
+      role: message.role,
+      content: await Promise.all(
+        message.content.map(resolveModelInferenceContent),
+      ),
+    })),
   );
 }
 
@@ -101,20 +105,6 @@ async function resolveMessage(
   const resolvedContent = await Promise.all(
     message.content.map(async (content) => {
       return resolveContent(content, message.role, functionConfig);
-    }),
-  );
-  return {
-    ...message,
-    content: resolvedContent,
-  };
-}
-
-async function resolveModelInferenceMessage(
-  message: StoredRequestMessage,
-): Promise<ZodDisplayInputMessage> {
-  const resolvedContent = await Promise.all(
-    message.content.map(async (content) => {
-      return resolveModelInferenceContent(content);
     }),
   );
   return {
@@ -178,39 +168,41 @@ async function resolveContent(
 
 async function resolveModelInferenceContent(
   content: StoredContentBlock,
-): Promise<ZodDisplayInputMessageContent> {
+): Promise<InputMessageContent> {
   switch (content.type) {
     case "text":
-      // Do not use prepareDisplayText here because these are model inferences and should be post-templating
-      // and will always be unstructured text.
-      return {
-        type: "text",
-        text: content.text,
-      };
+      return { type: "text", text: content.text };
     case "tool_call":
     case "tool_result":
     case "thought":
     case "unknown":
       return content;
     case "file": {
-      const fileContent: ZodFileContent = {
-        type: "file",
-        file: {
-          mime_type: content.mime_type,
-          url: content.source_url,
-        },
-        storage_path: content.storage_path,
-      };
       try {
+        const resolved = await resolveFile({
+          type: "file",
+          file: { mime_type: content.mime_type, url: content.source_url },
+          storage_path: content.storage_path,
+        });
         return {
-          ...content,
-          file: await resolveFile(fileContent),
+          type: "file",
+          file_type: "object_storage",
+          data: resolved.data,
+          mime_type: resolved.mime_type,
+          storage_path: content.storage_path,
+          source_url: content.source_url,
+          detail: content.detail,
+          filename: content.filename,
         };
       } catch (error) {
         return {
-          ...content,
-          type: "file_error",
-          file: fileContent.file,
+          type: "file",
+          file_type: "object_storage_error",
+          mime_type: content.mime_type,
+          storage_path: content.storage_path,
+          source_url: content.source_url,
+          detail: content.detail,
+          filename: content.filename,
           error: error instanceof Error ? error.message : String(error),
         };
       }
