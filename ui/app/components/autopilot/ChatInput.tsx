@@ -65,6 +65,7 @@ export function ChatInput({
   const [internalText, setInternalText] = useState(initialMessage ?? "");
   // Use controlled draft if provided, otherwise fall back to internal state
   const text = draftText ?? internalText;
+  // Ref keeps setText stable so effects depending on it don't re-run when callback identity changes
   const onDraftTextChangeRef = useRef(onDraftTextChange);
   onDraftTextChangeRef.current = onDraftTextChange;
   const setText = useCallback((value: string) => {

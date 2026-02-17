@@ -9,7 +9,7 @@ import { MultipleChoiceStep } from "./MultipleChoiceStep";
 import { FreeResponseStep } from "./FreeResponseStep";
 import { StepTab } from "./StepTab";
 import { useQuestionCardState } from "./useQuestionCardState";
-import { useAnimatedHeight } from "./useAnimatedHeight";
+import { useAnimatedHeight } from "~/hooks/useAnimatedHeight";
 
 type PendingQuestionCardProps = {
   eventId: string;
@@ -37,7 +37,7 @@ export function PendingQuestionCard({
   );
 
   const renderActiveStep = () => {
-    const data = state.renderStepData(state.activeStep);
+    const data = state.getStepData(state.activeStep);
     switch (data.question.type) {
       case "multiple_choice":
         return (
