@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { HoverCard } from "radix-ui";
 import type { ResolvedObject } from "~/types/tensorzero";
-import { useEntityPreview } from "~/hooks/useEntityPreview";
+import { EntityPreviewType, useEntityPreview } from "~/hooks/useEntityPreview";
 import { getRelativeTimeString, getTimestampTooltipData } from "~/utils/date";
 import {
   Tooltip,
@@ -100,10 +100,11 @@ interface InferenceContentProps {
 }
 
 function InferenceContent({ uuid, obj, url, isOpen }: InferenceContentProps) {
-  const { data, isLoading } = useEntityPreview<InferencePreview>(
-    `/api/tensorzero/inference_preview/${encodeURIComponent(uuid)}`,
-    isOpen,
-  );
+  const { data, isLoading } = useEntityPreview<InferencePreview>({
+    type: EntityPreviewType.Inference,
+    id: uuid,
+    enabled: isOpen,
+  });
   const functionConfig = useFunctionConfig(obj.function_name);
   const variantType =
     functionConfig?.variants[obj.variant_name]?.inner.type ?? null;
@@ -133,10 +134,11 @@ interface EpisodeContentProps {
 }
 
 function EpisodeContent({ uuid, url, isOpen }: EpisodeContentProps) {
-  const { data, isLoading } = useEntityPreview<EpisodePreview>(
-    `/api/tensorzero/episode_preview/${encodeURIComponent(uuid)}`,
-    isOpen,
-  );
+  const { data, isLoading } = useEntityPreview<EpisodePreview>({
+    type: EntityPreviewType.Episode,
+    id: uuid,
+    enabled: isOpen,
+  });
 
   const inferenceCountText = data
     ? `${data.inference_count} inference${data.inference_count !== 1 ? "s" : ""}`
