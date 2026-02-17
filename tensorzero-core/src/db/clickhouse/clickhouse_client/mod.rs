@@ -16,25 +16,18 @@ use crate::error::{DelayedError, Error};
 use mockall::mock;
 
 pub(crate) use disabled_clickhouse_client::DisabledClickHouseClient;
-#[cfg(any(test, feature = "pyo3"))]
-pub(crate) use fake_clickhouse_client::FakeClickHouseClient;
 pub use production_clickhouse_client::ProductionClickHouseClient;
 
 mod disabled_clickhouse_client;
-mod fake_clickhouse_client;
 mod production_clickhouse_client;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClickHouseClientType {
     Production,
-    Fake,
     Disabled,
 }
 
 /// Trait defining the interface for ClickHouse database operations.
-///
-/// For testing, use `FakeClickHouseClient` from the `mock_clickhouse_client` module.
-/// For advanced mocking scenarios, you can use `mockall` to create custom mocks.
 #[async_trait]
 pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
     /// Returns the database URL
