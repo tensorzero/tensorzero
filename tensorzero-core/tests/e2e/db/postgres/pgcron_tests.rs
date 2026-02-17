@@ -43,30 +43,56 @@ async fn test_setup_pgcron_is_idempotent() {
         "Should have exactly one 'tensorzero_create_inference_partitions' job after running setup twice"
     );
 
-    // Verify there's exactly one job for dropping old partitions
-    let drop_partitions_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_drop_old_inference_partitions'",
+    // Verify there's exactly one job for dropping old metadata partitions
+    let drop_metadata_partitions_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_drop_old_inference_metadata_partitions'",
     )
     .fetch_one(pool)
     .await
     .expect("Should be able to query cron.job table");
 
     assert_eq!(
-        drop_partitions_count, 1,
-        "Should have exactly one 'tensorzero_drop_old_inference_partitions' job after running setup twice"
+        drop_metadata_partitions_count, 1,
+        "Should have exactly one 'tensorzero_drop_old_inference_metadata_partitions' job after running setup twice"
     );
 
-    // Verify there's exactly one job for refreshing materialized views
-    let refresh_views_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_refresh_materialized_views'",
+    // Verify there's exactly one job for incremental minute latency histogram refresh
+    let refresh_latency_histogram_minute_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_refresh_model_latency_histogram_minute_incremental'",
     )
     .fetch_one(pool)
     .await
     .expect("Should be able to query cron.job table");
 
     assert_eq!(
-        refresh_views_count, 1,
-        "Should have exactly one 'tensorzero_refresh_materialized_views' job after running setup twice"
+        refresh_latency_histogram_minute_count, 1,
+        "Should have exactly one 'tensorzero_refresh_model_latency_histogram_minute_incremental' job after running setup twice"
+    );
+
+    // Verify there's exactly one job for incremental hour latency histogram refresh
+    let refresh_latency_histogram_hour_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_refresh_model_latency_histogram_hour_incremental'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("Should be able to query cron.job table");
+
+    assert_eq!(
+        refresh_latency_histogram_hour_count, 1,
+        "Should have exactly one 'tensorzero_refresh_model_latency_histogram_hour_incremental' job after running setup twice"
+    );
+
+    // Verify there's exactly one job for incremental model provider statistics refresh
+    let refresh_model_provider_stats_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM cron.job WHERE jobname = 'tensorzero_refresh_model_provider_statistics_incremental'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("Should be able to query cron.job table");
+
+    assert_eq!(
+        refresh_model_provider_stats_count, 1,
+        "Should have exactly one 'tensorzero_refresh_model_provider_statistics_incremental' job after running setup twice"
     );
 }
 

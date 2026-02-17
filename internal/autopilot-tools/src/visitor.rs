@@ -42,7 +42,7 @@ pub trait ToolVisitor {
     /// For remote execution, this wraps the tool in an adapter.
     async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
     where
-        T: TaskTool<SideInfo = AutopilotSideInfo>;
+        T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>;
 
     /// Visit a `SimpleTool`.
     ///
@@ -90,7 +90,7 @@ impl ToolVisitor for ToolNameCollector {
 
     async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
     where
-        T: TaskTool<SideInfo = AutopilotSideInfo>,
+        T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
     {
         let mut names = self
             .names

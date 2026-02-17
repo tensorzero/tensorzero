@@ -222,7 +222,7 @@ async fn insert_from_existing(
     match inference_data {
         TaggedInferenceDatabaseInsert::Json(inference) => {
             let output = match output {
-                OutputKind::Inherit => Some(inference.output),
+                OutputKind::Inherit => inference.output,
                 OutputKind::Demonstration => {
                     let demonstration = query_demonstration(clickhouse, *inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
@@ -242,9 +242,20 @@ async fn insert_from_existing(
                 name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
-                input: inference.input,
+                input: inference.input.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: "Cannot create datapoint: JSON inference `input` is missing"
+                            .to_string(),
+                    })
+                })?,
                 output,
-                output_schema: inference.output_schema,
+                output_schema: inference.output_schema.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message:
+                            "Cannot create datapoint: JSON inference `output_schema` is missing"
+                                .to_string(),
+                    })
+                })?,
                 tags: Some(inference.tags),
                 auxiliary: String::new(),
                 is_custom: false,
@@ -267,7 +278,7 @@ async fn insert_from_existing(
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
             let output = match output {
-                OutputKind::Inherit => Some(inference.output),
+                OutputKind::Inherit => inference.output,
                 OutputKind::Demonstration => {
                     let demonstration = query_demonstration(clickhouse, *inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
@@ -287,7 +298,12 @@ async fn insert_from_existing(
                 name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
-                input: inference.input,
+                input: inference.input.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: "Cannot create datapoint: chat inference `input` is missing"
+                            .to_string(),
+                    })
+                })?,
                 output,
                 tool_params: inference.tool_params,
                 tags: Some(inference.tags),

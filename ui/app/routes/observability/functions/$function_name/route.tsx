@@ -15,7 +15,6 @@ import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
-import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { Suspense, useMemo } from "react";
@@ -46,6 +45,8 @@ import {
 } from "~/components/ui/table";
 import { fetchVariantsSectionData } from "./variants-data.server";
 import { VariantsSection } from "./VariantsSection";
+import { fetchExperimentationSectionData } from "./experimentation-data.server";
+import { ExperimentationSection } from "./ExperimentationSection";
 
 export type FunctionDetailData = Awaited<
   ReturnType<typeof fetchFunctionDetailData>
@@ -85,11 +86,6 @@ function FunctionDetailPageHeader({
 function SectionsSkeleton() {
   return (
     <>
-      <SectionLayout>
-        <SectionHeader heading="Experimentation" />
-        <Skeleton className="h-32 w-full" />
-      </SectionLayout>
-
       <SectionLayout>
         <SectionHeader heading="Throughput" />
         <Skeleton className="h-64 w-full" />
@@ -148,7 +144,6 @@ function SectionsErrorState() {
 
 type FetchParams = {
   function_name: string;
-  function_config: FunctionConfig;
   config: Awaited<ReturnType<typeof getConfig>>;
   beforeInference: string | null;
   afterInference: string | null;
@@ -156,13 +151,11 @@ type FetchParams = {
   metric_name: string | undefined;
   time_granularity: TimeWindow;
   throughput_time_granularity: TimeWindow;
-  feedback_time_granularity: TimeWindow;
 };
 
 async function fetchFunctionDetailData(params: FetchParams) {
   const {
     function_name,
-    function_config,
     config,
     beforeInference,
     afterInference,
@@ -170,7 +163,6 @@ async function fetchFunctionDetailData(params: FetchParams) {
     metric_name,
     time_granularity,
     throughput_time_granularity,
-    feedback_time_granularity,
   } = params;
 
   const client = getTensorZeroClient();
@@ -203,47 +195,18 @@ async function fetchFunctionDetailData(params: FetchParams) {
     )
     .then((response) => response.throughput);
 
-  // Get feedback timeseries
-  // For now, we only fetch this for track_and_stop experimentation
-  // but the underlying query is general and could be used for other experimentation types
-  const feedbackParams =
-    function_config.experimentation.base.type === "track_and_stop"
-      ? {
-          metric_name: function_config.experimentation.base.metric,
-          variant_names:
-            function_config.experimentation.base.candidate_variants,
-        }
-      : null;
-  const feedbackTimeseriesPromise = feedbackParams
-    ? tensorZeroClient.getCumulativeFeedbackTimeseries({
-        function_name,
-        ...feedbackParams,
-        time_window: feedback_time_granularity as TimeWindow,
-        max_periods: 10,
-      })
-    : Promise.resolve(undefined);
-
-  // Get variant sampling probabilities from the gateway
-  const variantSamplingProbabilitiesPromise = tensorZeroClient
-    .getVariantSamplingProbabilities(function_name)
-    .then((response) => response.probabilities);
-
   const [
     inferenceResult,
     num_inferences,
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    feedback_timeseries,
-    variant_sampling_probabilities,
   ] = await Promise.all([
     inferencePromise,
     numInferencesPromise,
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
     variantThroughputPromise,
-    feedbackTimeseriesPromise,
-    variantSamplingProbabilitiesPromise,
   ]);
 
   // Handle pagination from listInferenceMetadata response
@@ -265,8 +228,6 @@ async function fetchFunctionDetailData(params: FetchParams) {
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    feedback_timeseries,
-    variant_sampling_probabilities,
   };
 }
 
@@ -298,9 +259,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     function_name,
     variantsData: fetchVariantsSectionData({ function_name, function_config }),
+    experimentationData:
+      function_name !== DEFAULT_FUNCTION
+        ? fetchExperimentationSectionData({
+            function_name,
+            function_config,
+            time_granularity: feedback_time_granularity,
+          })
+        : null,
     functionDetailData: fetchFunctionDetailData({
       function_name,
-      function_config,
       config,
       beforeInference,
       afterInference,
@@ -308,18 +276,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       metric_name,
       time_granularity,
       throughput_time_granularity,
-      feedback_time_granularity,
     }),
   };
 }
 
 function SectionsContent({
   data,
-  functionName,
   functionConfig,
 }: {
   data: FunctionDetailData;
-  functionName: string;
   functionConfig: FunctionConfig;
 }) {
   const {
@@ -330,8 +295,6 @@ function SectionsContent({
     metricsWithFeedback,
     variant_performances,
     variant_throughput,
-    feedback_timeseries,
-    variant_sampling_probabilities,
   } = data;
 
   const navigate = useNavigate();
@@ -377,18 +340,6 @@ function SectionsContent({
 
   return (
     <>
-      {functionName !== DEFAULT_FUNCTION && (
-        <SectionLayout>
-          <SectionHeader heading="Experimentation" />
-          <FunctionExperimentation
-            functionConfig={functionConfig}
-            functionName={functionName}
-            feedbackTimeseries={feedback_timeseries}
-            variantSamplingProbabilities={variant_sampling_probabilities}
-          />
-        </SectionLayout>
-      )}
-
       <SectionLayout>
         <SectionHeader heading="Throughput" />
         <VariantThroughput variant_throughput={variant_throughput} />
@@ -431,7 +382,12 @@ function SectionsContent({
 export default function FunctionDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { function_name, variantsData, functionDetailData } = loaderData;
+  const {
+    function_name,
+    variantsData,
+    experimentationData,
+    functionDetailData,
+  } = loaderData;
   const location = useLocation();
   const function_config = useFunctionConfig(function_name);
 
@@ -453,17 +409,22 @@ export default function FunctionDetailPage({
           locationKey={location.key}
         />
 
+        {experimentationData && (
+          <ExperimentationSection
+            experimentationData={experimentationData}
+            functionConfig={function_config}
+            functionName={function_name}
+            locationKey={location.key}
+          />
+        )}
+
         <Suspense key={location.key} fallback={<SectionsSkeleton />}>
           <Await
             resolve={functionDetailData}
             errorElement={<SectionsErrorState />}
           >
             {(data) => (
-              <SectionsContent
-                data={data}
-                functionName={function_name}
-                functionConfig={function_config}
-              />
+              <SectionsContent data={data} functionConfig={function_config} />
             )}
           </Await>
         </Suspense>

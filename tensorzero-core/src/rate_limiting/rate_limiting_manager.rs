@@ -77,7 +77,7 @@ impl RateLimitingManager {
                 return Ok(Self::new(config, Arc::new(valkey_connection_info.clone())));
             }
             return Err(Error::new(ErrorDetails::Config {
-                message: "Rate limiting is configured to use Valkey, but Valkey is not available. Please check the environment variable `TENSORZERO_VALKEY_URL` is set.".to_string(),
+                message: "Rate limiting is configured to use Valkey, but Valkey is not available. Please check that the environment variable `TENSORZERO_VALKEY_URL` is set.".to_string(),
             }));
         }
 

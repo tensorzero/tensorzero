@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
 use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions};
 
+// TODO(shuyangli): Remove in favor of mocks.
 pub fn get_unit_test_gateway_handle(config: Arc<Config>) -> GatewayHandle {
     let fake = FakeClickHouseClient::new(/* healthy= */ true);
     get_unit_test_gateway_handle_with_options(

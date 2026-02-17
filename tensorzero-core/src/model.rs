@@ -45,7 +45,8 @@ use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Thought, Unknown, Usage,
+    ProviderInferenceResponseStreamInner, RawResponseEntry, RequestMessage, Thought, Unknown,
+    Usage, stream_with_deadline,
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
@@ -62,7 +63,7 @@ use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
 use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, TimeoutKind},
     inference::{
         InferenceProvider,
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
@@ -165,14 +166,18 @@ pub struct StreamResponse {
     pub stream: Instrumented<PeekableProviderInferenceResponseStream>,
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub cached: bool,
     pub model_inference_id: Uuid,
+    /// Raw response entries from failed provider attempts during fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 impl StreamResponse {
     pub fn from_cache(
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
+        provider_type: Arc<str>,
         model_inference_id: Uuid,
     ) -> Self {
         let chunks = cache_lookup.output.chunks;
@@ -210,8 +215,10 @@ impl StreamResponse {
                 )),
             raw_request: cache_lookup.raw_request,
             model_provider_name,
+            provider_type,
             cached: true,
             model_inference_id,
+            failed_raw_response: vec![],
         }
     }
 }
@@ -345,12 +352,14 @@ impl ModelConfig {
         provider: &'request ModelProvider,
         clients: &InferenceClients,
     ) -> Result<ModelInferenceResponse, Error> {
+        let provider_type: Arc<str> = Arc::from(provider.provider_type());
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup(
-                &clients.clickhouse_connection_info,
+                &clients.cache_manager,
                 model_provider_request,
                 clients.cache_options.max_age_s,
+                provider_type.clone(),
             )
             .await
             .ok()
@@ -371,6 +380,7 @@ impl ModelConfig {
         Ok(ModelInferenceResponse::new(
             response,
             model_provider_request.provider_name.into(),
+            provider_type,
             false,
         ))
     }
@@ -388,12 +398,14 @@ impl ModelConfig {
         provider: &'request ModelProvider,
         clients: &InferenceClients,
     ) -> Result<StreamResponseAndMessages, Error> {
+        let provider_type: Arc<str> = Arc::from(provider.provider_type());
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup_streaming(
-                &clients.clickhouse_connection_info,
+                &clients.cache_manager,
                 model_provider_request,
                 clients.cache_options.max_age_s,
+                provider_type.clone(),
             )
             .await
             .ok()
@@ -434,6 +446,7 @@ impl ModelConfig {
             stream.inner_mut(),
             &raw_request,
             model_provider_request.provider_name,
+            provider.api_type(),
         )
         .await?;
         Ok(StreamResponseAndMessages {
@@ -441,8 +454,10 @@ impl ModelConfig {
                 stream,
                 raw_request,
                 model_provider_name: model_provider_request.provider_name.into(),
+                provider_type,
                 cached: false,
                 model_inference_id: model_provider_request.model_inference_id,
+                failed_raw_response: vec![],
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -474,6 +489,7 @@ impl ModelConfig {
                 return Ok(ModelInferenceResponse::new(
                     response,
                     "tensorzero::relay".into(),
+                    "tensorzero::relay".into(),
                     false,
                 ));
             }
@@ -504,7 +520,7 @@ impl ModelConfig {
                             Err(Error::new(ErrorDetails::ModelProviderTimeout {
                                 provider_name: provider_name.to_string(),
                                 timeout,
-                                streaming: false,
+                                kind: TimeoutKind::NonStreamingTotal,
                             }))
                         })
                 } else {
@@ -512,12 +528,12 @@ impl ModelConfig {
                 };
 
                 match response {
-                    Ok(response) => {
+                    Ok(mut response) => {
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
                         // (in case we ever add a blocking cache write option)
                         if !response.cached && clients.cache_options.enabled.write() {
                             let _ = start_cache_write(
-                                &clients.clickhouse_connection_info,
+                                &clients.cache_manager,
                                 cache_key,
                                 CacheData {
                                     output: NonStreamingCacheData {
@@ -538,6 +554,15 @@ impl ModelConfig {
                             );
                         }
 
+                        // Collect raw response entries from failed providers for fallback reporting
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                if let Some(entries) = error.extract_raw_response_entries() {
+                                    response.failed_raw_response.extend(entries);
+                                }
+                            }
+                        }
+
                         return Ok(response);
                     }
                     Err(error) => {
@@ -545,7 +570,7 @@ impl ModelConfig {
                     }
                 }
             }
-            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            Err(Error::new(ErrorDetails::AllModelProvidersFailed {
                 provider_errors,
             }))
         };
@@ -563,7 +588,7 @@ impl ModelConfig {
                     Err(Error::new(ErrorDetails::ModelTimeout {
                         model_name: model_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -601,8 +626,10 @@ impl ModelConfig {
                         stream: stream.instrument(Span::current()),
                         raw_request,
                         model_provider_name: "tensorzero::relay".into(),
+                        provider_type: "tensorzero::relay".into(),
                         cached: false,
                         model_inference_id: Uuid::now_v7(),
+                        failed_raw_response: vec![],
                     },
                     messages: request.messages.clone(),
                 });
@@ -624,16 +651,38 @@ impl ModelConfig {
 
                 // This future includes a call to `peek_first_chunk`, so applying
                 // `streaming_ttft_timeout` is correct.
+                let start = tokio::time::Instant::now();
                 let response_fut =
                     self.streaming_provider_request(model_provider_request, provider, clients);
-                let response = if let Some(timeout) = provider.streaming_ttft_timeout() {
-                    tokio::time::timeout(timeout, response_fut)
+
+                // Compute the effective pre-TTFT deadline from both ttft_ms and total_ms.
+                // If both are set, use the earlier deadline. The error kind reflects which
+                // timeout was responsible.
+                let total_timeout = provider.streaming_total_timeout();
+                let ttft_timeout = provider.streaming_ttft_timeout();
+                let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
+                    (Some(ttft), Some(total)) => {
+                        if ttft <= total {
+                            Some((start + ttft, ttft, TimeoutKind::StreamingTtft))
+                        } else {
+                            Some((start + total, total, TimeoutKind::StreamingTotal))
+                        }
+                    }
+                    (Some(ttft), None) => Some((start + ttft, ttft, TimeoutKind::StreamingTtft)),
+                    (None, Some(total)) => {
+                        Some((start + total, total, TimeoutKind::StreamingTotal))
+                    }
+                    (None, None) => None,
+                };
+
+                let response = if let Some((deadline, timeout, kind)) = pre_ttft_timeout {
+                    tokio::time::timeout_at(deadline, response_fut)
                         .await
                         .unwrap_or_else(|_: Elapsed| {
                             Err(Error::new(ErrorDetails::ModelProviderTimeout {
                                 provider_name: provider_name.to_string(),
                                 timeout,
-                                streaming: true,
+                                kind,
                             }))
                         })
                 } else {
@@ -641,34 +690,94 @@ impl ModelConfig {
                 };
 
                 match response {
-                    Ok(response) => return Ok(response),
+                    Ok(mut response) => {
+                        // Collect raw response entries from failed providers for fallback reporting
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                if let Some(entries) = error.extract_raw_response_entries() {
+                                    response.response.failed_raw_response.extend(entries);
+                                }
+                            }
+                        }
+                        // Wrap the post-TTFT stream with the remaining total deadline
+                        if let Some(total_timeout) = total_timeout {
+                            let deadline = start + total_timeout;
+                            let span = response.response.stream.span().clone();
+                            let inner = response.response.stream.into_inner();
+                            let provider_name = provider_name.to_string();
+                            let wrapped = stream_with_deadline(inner, deadline, move || {
+                                Error::new(ErrorDetails::ModelProviderTimeout {
+                                    provider_name,
+                                    timeout: total_timeout,
+                                    kind: TimeoutKind::StreamingTotal,
+                                })
+                            });
+                            response.response.stream = wrapped.peekable().instrument(span);
+                        }
+                        return Ok(response);
+                    }
                     Err(error) => {
                         provider_errors.insert(provider_name.to_string(), error);
                     }
                 }
             }
-            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            Err(Error::new(ErrorDetails::AllModelProvidersFailed {
                 provider_errors,
             }))
         };
         // See the corresponding `non_streaming.total_ms` timeout in the `infer`
         // method above for more details.
-        if let Some(timeout) = self.timeouts.streaming.ttft_ms {
-            let timeout = Duration::from_millis(timeout);
-            tokio::time::timeout(timeout, run_all_models)
+        let start = tokio::time::Instant::now();
+
+        // Compute the effective pre-TTFT deadline from both ttft_ms and total_ms.
+        let ttft_timeout = self.timeouts.streaming.ttft_ms.map(Duration::from_millis);
+        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let total_timeout = streaming_total_ms.map(Duration::from_millis);
+        let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
+            (Some(ttft), Some(total)) => {
+                if ttft <= total {
+                    Some((start + ttft, ttft, TimeoutKind::StreamingTtft))
+                } else {
+                    Some((start + total, total, TimeoutKind::StreamingTotal))
+                }
+            }
+            (Some(ttft), None) => Some((start + ttft, ttft, TimeoutKind::StreamingTtft)),
+            (None, Some(total)) => Some((start + total, total, TimeoutKind::StreamingTotal)),
+            (None, None) => None,
+        };
+
+        let mut result = if let Some((deadline, timeout, kind)) = pre_ttft_timeout {
+            tokio::time::timeout_at(deadline, run_all_models)
                 .await
-                // Convert the outer `Elapsed` error into a TensorZero error,
-                // so that it can be handled by the `match response` block below
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::ModelTimeout {
                         model_name: model_name.to_string(),
                         timeout,
-                        streaming: true,
+                        kind,
                     }))
                 })
         } else {
             run_all_models.await
+        }?;
+
+        // Wrap the post-TTFT stream with the remaining total deadline
+        if let Some(total_ms) = streaming_total_ms {
+            let total_timeout = Duration::from_millis(total_ms);
+            let deadline = start + total_timeout;
+            let span = result.response.stream.span().clone();
+            let inner = result.response.stream.into_inner();
+            let model_name = model_name.to_string();
+            let wrapped = stream_with_deadline(inner, deadline, move || {
+                Error::new(ErrorDetails::ModelTimeout {
+                    model_name,
+                    timeout: total_timeout,
+                    kind: TimeoutKind::StreamingTotal,
+                })
+            });
+            result.response.stream = wrapped.peekable().instrument(span);
         }
+
+        Ok(result)
     }
 
     pub async fn start_batch_inference<'request>(
@@ -697,6 +806,7 @@ impl ModelConfig {
                     return Ok(StartBatchModelInferenceResponse::new(
                         response,
                         provider_name.clone(),
+                        Arc::from(provider.provider_type()),
                     ));
                 }
                 Err(error) => {
@@ -704,7 +814,7 @@ impl ModelConfig {
                 }
             }
         }
-        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+        Err(Error::new(ErrorDetails::AllModelProvidersFailed {
             provider_errors,
         }))
     }
@@ -731,7 +841,7 @@ fn wrap_provider_stream(
     let span = stream.span().clone();
     let mut stream = stream.into_inner();
     let cache_key = model_request.get_cache_key()?;
-    let clickhouse_info = clients.clickhouse_connection_info.clone();
+    let cache_manager = clients.cache_manager.clone();
     let tool_config = model_request
         .request
         .tool_config
@@ -808,7 +918,7 @@ fn wrap_provider_stream(
 
         if write_to_cache && !errored {
             let _ = start_cache_write_streaming(
-                &clickhouse_info,
+                &cache_manager,
                 cache_key,
                 buffer,
                 &raw_request,
@@ -886,6 +996,10 @@ impl ModelProvider {
         Some(Duration::from_millis(self.timeouts.streaming.ttft_ms?))
     }
 
+    fn streaming_total_timeout(&self) -> Option<Duration> {
+        Some(Duration::from_millis(self.timeouts.streaming.total_ms?))
+    }
+
     /// The name to report in the OTEL `gen_ai.system` attribute
     fn genai_system_name(&self) -> &'static str {
         self.provider_type()
@@ -894,37 +1008,40 @@ impl ModelProvider {
     /// The provider type string (e.g., "openai", "anthropic")
     pub fn provider_type(&self) -> &'static str {
         match &self.config {
-            ProviderConfig::Anthropic(_) => "anthropic",
-            ProviderConfig::AWSBedrock(_) => "aws_bedrock",
-            ProviderConfig::AWSSagemaker(_) => "aws_sagemaker",
-            ProviderConfig::Azure(_) => "azure",
-            ProviderConfig::Fireworks(_) => "fireworks",
-            ProviderConfig::GCPVertexAnthropic(_) => "gcp_vertex_anthropic",
-            ProviderConfig::GCPVertexGemini(_) => "gcp_vertex_gemini",
-            ProviderConfig::GoogleAIStudioGemini(_) => "google_ai_studio_gemini",
-            ProviderConfig::Groq(_) => "groq",
-            ProviderConfig::Hyperbolic(_) => "hyperbolic",
-            ProviderConfig::Mistral(_) => "mistral",
-            ProviderConfig::OpenAI(_) => "openai",
-            ProviderConfig::OpenRouter(_) => "openrouter",
-            ProviderConfig::Together(_) => "together",
-            ProviderConfig::VLLM(_) => "vllm",
-            ProviderConfig::XAI(_) => "xai",
-            ProviderConfig::TGI(_) => "tgi",
-            ProviderConfig::SGLang(_) => "sglang",
-            ProviderConfig::DeepSeek(_) => "deepseek",
+            ProviderConfig::Anthropic(_) => crate::providers::anthropic::PROVIDER_TYPE,
+            ProviderConfig::AWSBedrock(_) => crate::providers::aws_bedrock::PROVIDER_TYPE,
+            ProviderConfig::AWSSagemaker(_) => crate::providers::aws_sagemaker::PROVIDER_TYPE,
+            ProviderConfig::Azure(_) => crate::providers::azure::PROVIDER_TYPE,
+            ProviderConfig::Fireworks(_) => crate::providers::fireworks::PROVIDER_TYPE,
+            ProviderConfig::GCPVertexAnthropic(_) => {
+                crate::providers::gcp_vertex_anthropic::PROVIDER_TYPE
+            }
+            ProviderConfig::GCPVertexGemini(_) => {
+                crate::providers::gcp_vertex_gemini::PROVIDER_TYPE
+            }
+            ProviderConfig::GoogleAIStudioGemini(_) => {
+                crate::providers::google_ai_studio_gemini::PROVIDER_TYPE
+            }
+            ProviderConfig::Groq(_) => crate::providers::groq::PROVIDER_TYPE,
+            ProviderConfig::Hyperbolic(_) => crate::providers::hyperbolic::PROVIDER_TYPE,
+            ProviderConfig::Mistral(_) => crate::providers::mistral::PROVIDER_TYPE,
+            ProviderConfig::OpenAI(_) => crate::providers::openai::PROVIDER_TYPE,
+            ProviderConfig::OpenRouter(_) => crate::providers::openrouter::PROVIDER_TYPE,
+            ProviderConfig::Together(_) => crate::providers::together::PROVIDER_TYPE,
+            ProviderConfig::VLLM(_) => crate::providers::vllm::PROVIDER_TYPE,
+            ProviderConfig::XAI(_) => crate::providers::xai::PROVIDER_TYPE,
+            ProviderConfig::TGI(_) => crate::providers::tgi::PROVIDER_TYPE,
+            ProviderConfig::SGLang(_) => crate::providers::sglang::PROVIDER_TYPE,
+            ProviderConfig::DeepSeek(_) => crate::providers::deepseek::PROVIDER_TYPE,
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(_) => "dummy",
+            ProviderConfig::Dummy(_) => crate::providers::dummy::PROVIDER_TYPE,
         }
     }
 
     /// The API type used by this provider (e.g., ChatCompletions, Responses)
     pub fn api_type(&self) -> ApiType {
         match &self.config {
-            ProviderConfig::OpenAI(provider) => match provider.api_type() {
-                OpenAIAPIType::ChatCompletions => ApiType::ChatCompletions,
-                OpenAIAPIType::Responses => ApiType::Responses,
-            },
+            ProviderConfig::OpenAI(provider) => provider.api_type().into(),
             // All other providers use ChatCompletions API
             _ => ApiType::ChatCompletions,
         }
@@ -1220,6 +1337,7 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        reasoning_format: Option<String>,
     },
     Hyperbolic {
         model_name: String,
@@ -1239,6 +1357,7 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        prompt_mode: Option<String>,
     },
     OpenAI {
         model_name: String,
@@ -1501,6 +1620,7 @@ impl UninitializedProviderConfig {
             UninitializedProviderConfig::Groq {
                 model_name,
                 api_key_location,
+                reasoning_format,
             } => ProviderConfig::Groq(GroqProvider::new(
                 model_name,
                 GroqKind
@@ -1509,6 +1629,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                reasoning_format,
             )),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
@@ -1525,6 +1646,7 @@ impl UninitializedProviderConfig {
             UninitializedProviderConfig::Mistral {
                 model_name,
                 api_key_location,
+                prompt_mode,
             } => ProviderConfig::Mistral(MistralProvider::new(
                 model_name,
                 MistralKind
@@ -1533,6 +1655,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                prompt_mode,
             )),
             UninitializedProviderConfig::OpenAI {
                 model_name,
@@ -2624,6 +2747,7 @@ impl ShorthandModelConfig for ModelConfig {
                 GroqKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                None,
             )),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
                 model_name,
@@ -2636,6 +2760,7 @@ impl ShorthandModelConfig for ModelConfig {
                 MistralKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                None,
             )),
             "openai" => {
                 if let Some(stripped_model_name) = model_name.strip_prefix("responses::") {
@@ -2769,7 +2894,7 @@ mod tests {
     use std::borrow::Cow;
     use std::sync::Arc;
 
-    use crate::cache::CacheEnabledMode;
+    use crate::cache::{CacheEnabledMode, CacheManager};
     use crate::config::with_skip_credential_validation;
     use crate::rate_limiting::ScopeInfo;
     use crate::tool::ToolCallConfig;
@@ -2832,6 +2957,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -2910,7 +3036,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
@@ -2918,6 +3044,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -2968,6 +3095,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(tags.clone()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new(
                 Arc::new(rate_limit_config),
@@ -3063,6 +3191,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3203,15 +3332,17 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: TensorzeroHttpClient::new_testing().unwrap(),
-            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             credentials: Arc::new(api_keys.clone()),
             cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::Off,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3231,8 +3362,10 @@ mod tests {
                     mut stream,
                     raw_request,
                     model_provider_name,
+                    provider_type: _,
                     cached: _,
                     model_inference_id: _,
+                    failed_raw_response: _,
                 },
             messages: _input,
         } = model_config
@@ -3298,7 +3431,7 @@ mod tests {
         };
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
@@ -3306,6 +3439,7 @@ mod tests {
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3379,15 +3513,17 @@ mod tests {
             timeouts: Default::default(),
             skip_relay: false,
         };
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: TensorzeroHttpClient::new_testing().unwrap(),
-            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             credentials: Arc::new(api_keys.clone()),
             cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::Off,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3407,8 +3543,10 @@ mod tests {
                     mut stream,
                     raw_request,
                     model_provider_name,
+                    provider_type: _,
                     cached: _,
                     model_inference_id: _,
+                    failed_raw_response: _,
                 },
             messages: _,
         } = model_config
@@ -3485,6 +3623,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3524,7 +3663,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
@@ -3550,6 +3689,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3569,13 +3709,14 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                     }
@@ -3618,6 +3759,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -3656,7 +3798,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
@@ -3682,6 +3824,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),

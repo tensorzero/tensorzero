@@ -58,6 +58,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         clickhouse,
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
         HashSet::new(), // available_tools

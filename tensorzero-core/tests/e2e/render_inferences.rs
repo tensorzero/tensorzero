@@ -36,6 +36,42 @@ pub async fn test_render_samples_empty() {
     assert!(rendered_inferences.is_empty());
 }
 
+/// Test that render_samples skips inferences with None input (e.g. TTLed data).
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_render_samples_skips_none_input() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
+        function_name: "basic_test".to_string(),
+        variant_name: "test".to_string(),
+        input: None,
+        output: Some(vec![]),
+        episode_id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+        timestamp: Utc::now(),
+        dispreferred_outputs: vec![],
+        tags: HashMap::new(),
+        extra_body: Some(Default::default()),
+        inference_params: Some(Default::default()),
+        processing_time_ms: None,
+        ttft_ms: None,
+    })];
+
+    let rendered_inferences = client
+        .experimental_render_samples(
+            stored_inferences,
+            HashMap::from([("basic_test".to_string(), "test".to_string())]),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        rendered_inferences.is_empty(),
+        "Inferences with None input should be skipped"
+    );
+}
+
 /// Test that the render_samples function drops the stored inference when the variants map is empty.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
@@ -46,7 +82,7 @@ pub async fn test_render_samples_no_function() {
     let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: StoredInput {
+        input: Some(StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
@@ -54,16 +90,16 @@ pub async fn test_render_samples_no_function() {
                     text: "Hello, world!".to_string(),
                 })],
             }],
-        },
-        output: vec![],
+        }),
+        output: Some(vec![]),
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_params: ToolCallConfigDatabaseInsert::default(),
+        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
-        extra_body: Default::default(),
-        inference_params: Default::default(),
+        extra_body: Some(Default::default()),
+        inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
     })];
@@ -86,7 +122,7 @@ pub async fn test_render_samples_no_variant() {
     let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: StoredInput {
+        input: Some(StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
@@ -94,16 +130,16 @@ pub async fn test_render_samples_no_variant() {
                     text: "Hello, world!".to_string(),
                 })],
             }],
-        },
-        output: vec![],
+        }),
+        output: Some(vec![]),
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_params: ToolCallConfigDatabaseInsert::default(),
+        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
-        extra_body: Default::default(),
-        inference_params: Default::default(),
+        extra_body: Some(Default::default()),
+        inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
     })];
@@ -137,7 +173,7 @@ pub async fn test_render_samples_missing_variable() {
     let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
-        input: StoredInput {
+        input: Some(StoredInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "foo".to_string(),
                 "bar".into(),
@@ -148,16 +184,16 @@ pub async fn test_render_samples_missing_variable() {
                     text: "Hello, world!".to_string(),
                 })],
             }],
-        },
-        output: vec![],
+        }),
+        output: Some(vec![]),
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_params: ToolCallConfigDatabaseInsert::default(),
+        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
-        extra_body: Default::default(),
-        inference_params: Default::default(),
+        extra_body: Some(Default::default()),
+        inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
     })];
@@ -183,7 +219,7 @@ pub async fn test_render_samples_normal() {
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
-            input: StoredInput {
+            input: Some(StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
@@ -194,23 +230,23 @@ pub async fn test_render_samples_normal() {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
-            },
-            output: vec![],
+            }),
+            output: Some(vec![]),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_params: ToolCallConfigDatabaseInsert::default(),
+            tool_params: Some(ToolCallConfigDatabaseInsert::default()),
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
-            extra_body: Default::default(),
-            inference_params: Default::default(),
+            extra_body: Some(Default::default()),
+            inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
         }),
         StoredInferenceDatabase::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
-            input: StoredInput {
+            input: Some(StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
@@ -225,29 +261,29 @@ pub async fn test_render_samples_normal() {
                         )])),
                     })],
                 }],
-            },
-            output: JsonInferenceOutput {
+            }),
+            output: Some(JsonInferenceOutput {
                 parsed: Some(json!({})),
                 raw: Some("{}".to_string()), // This should not be validated
-            },
+            }),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            output_schema: json!({}), // This should be taken as-is
+            output_schema: Some(json!({})), // This should be taken as-is
             timestamp: Utc::now(),
             dispreferred_outputs: vec![JsonInferenceOutput {
                 parsed: Some(json!({})),
                 raw: Some("{}".to_string()), // This should not be validated
             }],
             tags: HashMap::new(),
-            extra_body: Default::default(),
-            inference_params: Default::default(),
+            extra_body: Some(Default::default()),
+            inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
         }),
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
-            input: StoredInput {
+            input: Some(StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
@@ -258,8 +294,8 @@ pub async fn test_render_samples_normal() {
                         text: "Hello, world!".to_string(),
                     })],
                 }],
-            },
-            output: vec![ContentBlockChatOutput::ToolCall(
+            }),
+            output: Some(vec![ContentBlockChatOutput::ToolCall(
                 InferenceResponseToolCall {
                     name: Some("get_temperature".to_string()),
                     arguments: Some(json!({"location": "Tokyo"})),
@@ -267,10 +303,10 @@ pub async fn test_render_samples_normal() {
                     raw_name: "get_temperature".to_string(),
                     raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
                 },
-            )],
+            )]),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_params: ToolCallConfigDatabaseInsert::new_for_test(
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![Tool::Function(FunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
@@ -284,21 +320,21 @@ pub async fn test_render_samples_normal() {
                 },
                 ToolChoice::Auto,
                 None,
-            ),
+            )),
             timestamp: Utc::now(),
             dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
                 text: "Hello, world!".to_string(),
             })]],
             tags: HashMap::new(),
-            extra_body: Default::default(),
-            inference_params: Default::default(),
+            extra_body: Some(Default::default()),
+            inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
         }),
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
-            input: StoredInput {
+            input: Some(StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
                     "Dr. Mehta".into(),
@@ -331,16 +367,16 @@ pub async fn test_render_samples_normal() {
                         ))),
                     ],
                 }],
-            },
-            output: vec![],
+            }),
+            output: Some(vec![]),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_params: ToolCallConfigDatabaseInsert::default(),
+            tool_params: Some(ToolCallConfigDatabaseInsert::default()),
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
-            extra_body: Default::default(),
-            inference_params: Default::default(),
+            extra_body: Some(Default::default()),
+            inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
         }),
@@ -504,7 +540,7 @@ pub async fn test_render_samples_template_no_schema() {
         function_name: "basic_test_template_no_schema".to_string(),
         variant_name: "test".to_string(),
         timestamp: Utc::now(),
-        input: StoredInput {
+        input: Some(StoredInput {
             system: Some(System::Text("My system message".to_string())),
             messages: vec![
                 StoredInputMessage {
@@ -530,15 +566,15 @@ pub async fn test_render_samples_template_no_schema() {
                     ],
                 },
             ],
-        },
-        output: vec![],
+        }),
+        output: Some(vec![]),
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_params: ToolCallConfigDatabaseInsert::default(),
+        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
-        extra_body: Default::default(),
-        inference_params: Default::default(),
+        extra_body: Some(Default::default()),
+        inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
     })];

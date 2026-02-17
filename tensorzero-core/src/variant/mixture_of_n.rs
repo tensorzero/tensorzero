@@ -229,7 +229,7 @@ impl Variant for MixtureOfNConfig {
                 stream_inference_from_non_stream(inference_result, inference_params)
             }
             InferenceOrStreamResult::Stream(stream, model_used_info) => {
-                Ok((stream, model_used_info))
+                Ok((stream, *model_used_info))
             }
         }
     }
@@ -323,7 +323,7 @@ enum InferenceOrStreamResult {
     NonStream(InferenceResult),
     /// We only produce `InferenceOrStreamResult::Stream` if the user requested a streaming inference,
     /// and the fuser successfully starts a stream.
-    Stream(InferenceResultStream, ModelUsedInfo),
+    Stream(InferenceResultStream, Box<ModelUsedInfo>),
 }
 
 /// Constructs an `infer_stream` response `(InferenceResultStream, ModelUsedInfo)`,
@@ -355,6 +355,7 @@ pub fn stream_inference_from_non_stream(
     let model_used_info = ModelUsedInfo {
         model_name: model_inference_result.model_name.clone(),
         model_provider_name: model_inference_result.model_provider_name.clone(),
+        provider_type: model_inference_result.provider_type.clone(),
         raw_request: model_inference_result.raw_request.clone(),
         inference_params: inference_params.clone(),
         // Preserve the raw response from the candidate we chose (rather than attempting
@@ -375,6 +376,7 @@ pub fn stream_inference_from_non_stream(
         },
         cached: model_inference_result.cached,
         model_inference_id: model_inference_result.id,
+        failed_raw_response: model_inference_result.failed_raw_response.clone(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage), raw_usage_entries)?;
     Ok((stream, model_used_info))
@@ -602,7 +604,7 @@ impl MixtureOfNConfig {
             )
             .await
             .map(|(stream, model_used_info)| {
-                InferenceOrStreamResult::Stream(stream, model_used_info)
+                InferenceOrStreamResult::Stream(stream, Box::new(model_used_info))
             })
         } else {
             inner_fuse_candidates(
@@ -956,7 +958,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheEnabledMode, CacheManager, CacheOptions},
         config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
@@ -1182,11 +1184,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1217,11 +1221,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1271,11 +1277,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1309,11 +1317,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1388,11 +1398,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1423,11 +1435,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider1".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1483,6 +1497,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),

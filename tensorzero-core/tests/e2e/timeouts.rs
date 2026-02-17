@@ -54,7 +54,7 @@ async fn test_variant_timeout_non_streaming() {
                         "secs": 0,
                         "nanos": 400000000
                     },
-                    "streaming": false
+                    "kind": "non_streaming_total"
                 }
             }
         })
@@ -98,7 +98,7 @@ async fn test_variant_timeout_streaming() {
                         "secs": 0,
                         "nanos": 500000000
                     },
-                    "streaming": true
+                    "kind": "streaming_ttft"
                 }
             }
         })
@@ -111,6 +111,25 @@ async fn test_variant_timeout_slow_second_chunk_streaming() {
     slow_second_chunk_streaming(json!({
         "function_name": "basic_test_variant_timeout",
         "variant_name": "slow_second_chunk",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    }))
+    .await;
+}
+
+#[tokio::test]
+async fn test_variant_total_timeout_streaming() {
+    streaming_total_timeout(json!({
+        "function_name": "basic_test_variant_timeout",
+        "variant_name": "slow_second_chunk_total_timeout",
         "episode_id": Uuid::now_v7(),
         "input": {
             "messages": [
@@ -278,7 +297,7 @@ async fn test_model_provider_timeout_non_streaming() {
         json!({
             "error": "All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `non_streaming.total_ms` timeout (400ms)",
             "error_json": {
-                "ModelProvidersExhausted": {
+                "AllModelProvidersFailed": {
                     "provider_errors": {
                         "slow": {
                             "ModelProviderTimeout": {
@@ -287,7 +306,7 @@ async fn test_model_provider_timeout_non_streaming() {
                                     "secs": 0,
                                     "nanos": 400000000
                                 },
-                                "streaming": false
+                                "kind": "non_streaming_total"
                             }
                         }
                     }
@@ -328,7 +347,7 @@ async fn test_model_provider_timeout_streaming() {
         json!({
             "error": "All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `streaming.ttft_ms` timeout (500ms)",
             "error_json": {
-                "ModelProvidersExhausted": {
+                "AllModelProvidersFailed": {
                     "provider_errors": {
                         "slow": {
                             "ModelProviderTimeout": {
@@ -337,7 +356,7 @@ async fn test_model_provider_timeout_streaming() {
                                     "secs": 0,
                                     "nanos": 500000000
                                 },
-                                "streaming": true
+                                "kind": "streaming_ttft"
                             }
                         }
                     }
@@ -353,6 +372,25 @@ async fn test_model_provider_timeout_slow_second_chunk_streaming() {
     slow_second_chunk_streaming(json!({
         "function_name": "basic_test_timeout",
         "variant_name": "slow_second_chunk",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+    }))
+    .await;
+}
+
+#[tokio::test]
+async fn test_model_provider_total_timeout_streaming() {
+    streaming_total_timeout(json!({
+        "function_name": "basic_test_timeout",
+        "variant_name": "slow_second_chunk_total_timeout",
         "episode_id": Uuid::now_v7(),
         "input": {
             "messages": [
@@ -562,6 +600,60 @@ async fn slow_second_chunk_streaming(payload: Value) {
     );
 }
 
+/// Tests that `streaming.total_ms` fires mid-stream.
+/// The `slow_second_chunk` model produces the first chunk immediately but delays 2s on the second.
+/// With `total_ms = 500`, the stream should be cut off before the second chunk arrives.
+async fn streaming_total_timeout(payload: Value) {
+    let start = Instant::now();
+    let mut response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut saw_data_chunk = false;
+    let mut saw_error = false;
+
+    while let Some(event) = response.next().await {
+        let chunk = event.unwrap();
+        println!("chunk: {chunk:?}");
+        if let Event::Message(event) = chunk {
+            if event.data == "[DONE]" {
+                break;
+            }
+            let event_json = serde_json::from_str::<Value>(&event.data).unwrap();
+            if event_json.get("error").is_some() {
+                saw_error = true;
+                let error_msg = event_json["error"].as_str().unwrap();
+                assert!(
+                    error_msg.contains("streaming.total_ms"),
+                    "Expected error message to contain `streaming.total_ms`, got: {error_msg}"
+                );
+            } else {
+                saw_data_chunk = true;
+            }
+        }
+    }
+
+    assert!(
+        saw_data_chunk,
+        "Expected at least one data chunk before the timeout"
+    );
+    assert!(
+        saw_error,
+        "Expected a mid-stream error event from the total timeout"
+    );
+
+    // The stream should have been cut off well before 2 seconds (the slow_second_chunk delay).
+    // With a 500ms total_ms, we expect roughly 500ms-1s total.
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_millis(1800),
+        "streaming_total_timeout should complete in under 1.8s, but took {elapsed:?}"
+    );
+}
+
 // Model timeout tests
 
 // Test timeouts that occur at both the model and model-provider level
@@ -665,7 +757,7 @@ async fn test_model_timeout_non_streaming() {
                         "secs": 0,
                         "nanos": 400000000
                     },
-                    "streaming": false
+                    "kind": "non_streaming_total"
                 }
             }
         })
@@ -709,7 +801,7 @@ async fn test_model_timeout_streaming() {
                         "secs": 0,
                         "nanos": 500000000
                     },
-                    "streaming": true
+                    "kind": "streaming_ttft"
                 }
             }
         })
@@ -728,6 +820,25 @@ async fn test_model_timeout_slow_second_chunk_streaming() {
                 {
                     "role": "user",
                     "content": "Hello, world!",
+                }
+            ]
+        },
+        "stream": true,
+    }))
+    .await;
+}
+
+#[tokio::test]
+async fn test_model_total_timeout_streaming() {
+    streaming_total_timeout(json!({
+        "function_name": "basic_test_model_timeout",
+        "variant_name": "slow_second_chunk_total_timeout",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
                 }
             ]
         },

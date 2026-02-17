@@ -5,6 +5,7 @@
 
 use async_trait::async_trait;
 use autopilot_client::GatewayListEventsResponse;
+use std::sync::Arc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
@@ -15,7 +16,9 @@ use tensorzero::{
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::db::ConfigQueries;
-use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::delegating_connection::{
+    DelegatingDatabaseConnection, DelegatingDatabaseQueries,
+};
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::datasets::v1::types::{
@@ -70,6 +73,7 @@ impl TensorZeroClient for EmbeddedClient {
             &self.app_state.http_client,
             self.app_state.clickhouse_connection_info.clone(),
             self.app_state.postgres_connection_info.clone(),
+            self.app_state.cache_manager.clone(),
             self.app_state.deferred_tasks.clone(),
             self.app_state.rate_limiting_manager.clone(),
             internal_params,
@@ -397,10 +401,12 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         params: tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams,
     ) -> Result<super::OptimizationJobHandle, TensorZeroClientError> {
+        let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+            Arc::new(self.app_state.get_delegating_database());
         tensorzero_optimizers::endpoints::launch_optimization_workflow(
             &self.app_state.http_client,
             self.app_state.config.clone(),
-            &self.app_state.clickhouse_connection_info,
+            &db,
             params,
         )
         .await

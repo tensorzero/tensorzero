@@ -257,6 +257,7 @@ async fn test_comment_feedback_validation_disabled() {
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
         HashSet::new(), // available_tools
@@ -1564,6 +1565,7 @@ async fn test_float_feedback_validation_disabled() {
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
         HashSet::new(), // available_tools
@@ -1905,6 +1907,7 @@ async fn test_boolean_feedback_validation_disabled() {
         Arc::new(config),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,

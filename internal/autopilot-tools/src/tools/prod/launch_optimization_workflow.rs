@@ -418,6 +418,7 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
 
 #[async_trait]
 impl TaskTool for LaunchOptimizationWorkflowTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,

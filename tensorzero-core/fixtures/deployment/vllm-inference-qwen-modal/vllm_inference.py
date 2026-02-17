@@ -2,12 +2,12 @@ import modal
 
 vllm_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install("vllm==0.9.1", "huggingface_hub[hf_transfer]==0.32.1")
+    .pip_install("vllm==0.15.1", "huggingface_hub[hf_transfer]==0.34.0")
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
 )
 
 MODELS_DIR = "/models"
-MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
+MODEL_NAME = "Qwen/Qwen3-1.7B"
 MINUTES = 60
 VLLM_PORT = 8000
 
@@ -15,12 +15,12 @@ hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=Tru
 vllm_cache_vol = modal.Volume.from_name("vllm-cache", create_if_missing=True)
 
 N_GPU = 1
-app = modal.App(name="vllm-inference-qwen")
+app = modal.App(name="vllm-qwen3-inference")
 
 
 @app.function(
     image=vllm_image,
-    gpu=f"T4:{N_GPU}",
+    gpu=f"L4:{N_GPU}",
     scaledown_window=5 * MINUTES,
     volumes={
         "/root/.cache/huggingface": hf_cache_vol,
@@ -46,9 +46,11 @@ def vllm_inference():
         str(VLLM_PORT),
         "--api-key",
         os.environ["VLLM_API_KEY"],
+        "--enable-auto-tool-choice",
         "--tool-call-parser",
         "hermes",
-        "--enable-auto-tool-choice",
+        "--reasoning-parser",
+        "qwen3",
         "--dtype",
         "half",
     ]

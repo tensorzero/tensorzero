@@ -100,6 +100,7 @@ pub async fn start_gateway_expect_failure(
             cli_bind_address,
         ])
         .env_remove("RUST_LOG")
+        .env_remove("TENSORZERO_GATEWAY_BIND_ADDRESS")
         .kill_on_drop(true);
 
     let mut child = builder.spawn().unwrap();
@@ -154,6 +155,7 @@ async fn start_gateway_impl(
         ])
         // Make sure we don't inherit `RUST_LOG` from the outer `cargo test/nextest` invocation
         .env_remove("RUST_LOG")
+        .env_remove("TENSORZERO_GATEWAY_BIND_ADDRESS")
         .kill_on_drop(true);
 
     if let Some(cli_addr) = cli_bind_address {
